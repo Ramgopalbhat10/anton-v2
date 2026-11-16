@@ -2,7 +2,7 @@ import { isLocalAddress } from './browser-step.ts';
 import { fetchForPage, type PageRequest, type PageResponse } from './page-fetch.ts';
 import { previewsView, type Preview } from './previews.ts';
 
-/** An HTTP check from Anton's server, not a browser or a guarantee that an iframe can render. */
+/** From Anton's server, not a browser: not a guarantee that an iframe can render. */
 export async function checkPreviewResponse(
 	preview: Preview,
 	fetcher: (request: PageRequest) => Promise<PageResponse> = (request) => fetchForPage(request, { timeoutMs: 10_000, responseMode: 'preview' }),
@@ -27,7 +27,7 @@ export async function checkPreviewResponse(
 	}
 }
 
-/** The configured port and its exact Preview URL, checked without starting the task's machine. */
+/** Never starts the task's machine. */
 export async function checkPreview(id: string, port: number) {
 	const view = await previewsView(id);
 	if (!view.live) return { live: false as const, detail: 'The sandbox is not running; checking Preview does not start it.' };

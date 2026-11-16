@@ -6,10 +6,7 @@ import { sparesWaiting } from '../sandbox/spares.ts';
 
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 
-/**
- * Where sandboxes run and which are up now. `others` counts sandboxes in the
- * provider that are no task of this Anton, such as another install's sharing the app.
- */
+/** `others` counts sandboxes in the provider that are no task of this Anton, such as another install's sharing the app. */
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
 
 export async function computeView(): Promise<ComputeView> {
@@ -25,7 +22,6 @@ export async function computeView(): Promise<ComputeView> {
 	};
 }
 
-/** Stops every task's sandbox, each saving a checkpoint first, as Stop does. */
 export async function stopAllSandboxes(): Promise<{ stopped: number }> {
 	const { running } = await computeView();
 	await Promise.all(running.map((task) => stopSession(task.id)));

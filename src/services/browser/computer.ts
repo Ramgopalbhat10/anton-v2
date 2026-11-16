@@ -11,30 +11,18 @@ import { addressToUrl, screenshotFile } from './browser-step.ts';
 import { liveMachine, machineFor } from '../sandbox/workspace.ts';
 import { untilAborted } from './step-deadline.ts';
 
-/**
- * The Computer panel and the agent's computer: a desktop inside the task's
- * sandbox, one screen that you watch and take over, and that the agent's
- * computer subagent drives with xdotool; and the sandbox's headless browser,
- * which the panel shows through its live view (`browser.ts`) and you take
- * over the same way. Viewing never starts the sandbox; Start computer, the
- * agent, or Resume does.
- */
+/** Viewing never starts the sandbox; Start computer, the agent, or Resume does. */
 
 export type ComputerView = {
-	/** The task's sandbox runs. */
 	live: boolean;
-	/** Its desktop runs. */
 	running: boolean;
-	/** Its browser runs, for the panel to show through the live view. */
 	browser: boolean;
 	screen: { width: number; height: number };
-	/** The agent is using the computer, or did a moment ago. */
 	agentBusy: boolean;
-	/** You took over: agent steps stop until you hand it back. */
 	userControl: boolean;
 };
 
-/** The view, with a fresh address to connect to: a credential, so only Anton's own UI gets it. */
+/** The address is a credential, so only Anton's own UI gets it. */
 export type ComputerConnection = ComputerView & { url: string };
 
 const changed = (id: string) => announce({ kind: 'task', id, what: 'computer' });
@@ -43,29 +31,21 @@ async function requireTask(id: string) {
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 }
 
-/** Whether the machine's desktop runs, in one command. */
 export async function isDesktopRunning(machine: Machine, signal?: AbortSignal): Promise<boolean> {
 	signal?.throwIfAborted();
 	return (await machine.exec(desktopRunning(desktopLayout(machine.root)), { signal })).exitCode === 0;
 }
 
-/** One desktop startup per machine; individual waiters may stop waiting without cancelling it. */
+/** Waiters may stop waiting without cancelling it. */
 const desktopStarts = new Map<string, Promise<boolean>>();
 
-/**
- * When each machine's desktop was last seen running. Every sandbox browser step
- * makes sure of the desktop, and asking the machine is a command each time (most
- * of a second on Modal), so one seen this recently is taken as still running.
- * Turning the computer off forgets it.
- */
+/** Asking the machine is a command (most of a second on Modal), so a desktop seen this recently is taken as still running. */
 const desktopSeen = new Map<string, number>();
 const DESKTOP_SEEN_MS = 30_000;
 const desktopKey = (machine: Machine) => `${machine.id}:${machine.root}`;
 
-/** Asks the machine again at the next step whether its desktop runs. */
 export const forgetDesktop = (machine: Machine) => void desktopSeen.delete(desktopKey(machine));
 
-/** Starts the desktop unless it runs; says whether it started it. */
 export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Promise<boolean> {
 	signal?.throwIfAborted();
 	const key = desktopKey(machine);
@@ -90,7 +70,6 @@ export async function ensureDesktop(machine: Machine, signal?: AbortSignal): Pro
 	return untilAborted(start, signal);
 }
 
-/** The display the machine's desktop is on, for programs started on it. */
 export const displayOf = (machine: Machine): string => desktopLayout(machine.root).display;
 
 // ---- Who drives ----
@@ -101,7 +80,6 @@ const takingControl = new Set<string>();
 // If cancellation cannot confirm the browser stopped, never hand the screen to another driver.
 const unsafeScreens = new Set<string>();
 
-// While the agent acts, and for a few seconds after, the panel says it is using the computer.
 const BUSY_MS = 8_000;
 const agentSteps = new Map<string, { running: number; at: number; quiet?: ReturnType<typeof setTimeout> }>();
 
@@ -112,15 +90,9 @@ export function agentBusy(id: string): boolean {
 
 export const userHasControl = (id: string): boolean => userControl.has(id) || takingControl.has(id) || unsafeScreens.has(id);
 
-/** Each task's last step, so the next waits for it. */
 const queues = new Map<string, Promise<unknown>>();
 
-/**
- * Runs one agent step with the panel told the agent is at the computer: when
- * the first starts, and once the quiet spell after the last ends. Steps run one
- * at a time in the order they were called: a model may call several at once,
- * and their clicks and keystrokes must not interleave.
- */
+/** One step at a time in call order: a model may call several at once, and their clicks and keystrokes must not interleave. */
 export async function asAgentStep<T>(id: string, work: () => Promise<T>): Promise<T> {
 	const step = agentSteps.get(id) ?? { running: 0, at: 0 };
 	clearTimeout(step.quiet);
@@ -147,15 +119,9 @@ export async function asAgentStep<T>(id: string, work: () => Promise<T>): Promis
 	}
 }
 
-/** Tasks whose sandbox browser an open panel was told about; told again once the computer is turned off. */
 const browsing = new Set<string>();
 
-/**
- * Runs a sandbox browser step in the same queue as computer steps, so taking
- * over stops both. The browser is headless and needs no desktop: the panel
- * shows it through its live view, and the first step that starts it tells an
- * open panel to look.
- */
+/** Same queue as computer steps, so taking over stops both. The browser is headless and needs no desktop. */
 export function browseOnComputer(
 	id: string,
 	getMachine: () => Promise<Machine>,
@@ -185,7 +151,6 @@ export function browseOnComputer(
 
 // ---- What the routes call ----
 
-/** Whether the desktop and the browser run, in one command. */
 async function screens(machine: Machine): Promise<{ running: boolean; browser: boolean }> {
 	const result = await machine.exec(`(${desktopRunning(desktopLayout(machine.root))}) && printf desktop; (${browserRunning(machine)}) && printf browser; true`);
 	const said = text(result.stdout);
@@ -197,7 +162,7 @@ async function viewOf(id: string, machine: Machine | null): Promise<ComputerView
 	return { live: Boolean(machine), running, browser, screen: { ...SCREEN }, agentBusy: agentBusy(id), userControl: userControl.has(id) };
 }
 
-/** The panel's view. Never starts the sandbox or the desktop. */
+/** Never starts the sandbox or the desktop. */
 export async function computerView(id: string): Promise<ComputerView> {
 	await requireTask(id);
 	return viewOf(id, await liveMachine(id));
@@ -211,13 +176,11 @@ async function connection(id: string, machine: Machine): Promise<ComputerConnect
 	return { ...(await viewOf(id, machine)), url };
 }
 
-/** Start computer: starts the sandbox if it is not running, then its desktop, and connects. */
 export async function startComputer(id: string): Promise<ComputerConnection> {
 	await requireTask(id);
 	return connection(id, await machineFor(id));
 }
 
-/** A fresh address for the panel to connect to the running sandbox's desktop, starting the desktop if needed. */
 export async function connectComputer(id: string): Promise<ComputerConnection> {
 	await requireTask(id);
 	const machine = await liveMachine(id);
@@ -225,7 +188,7 @@ export async function connectComputer(id: string): Promise<ComputerConnection> {
 	return connection(id, machine);
 }
 
-/** A fresh address for the panel to watch the sandbox browser at, and to drive it once you take over. Never starts anything. */
+/** Never starts anything. */
 export async function connectBrowser(id: string): Promise<ComputerConnection> {
 	await requireTask(id);
 	const machine = await liveMachine(id);
@@ -235,12 +198,7 @@ export async function connectBrowser(id: string): Promise<ComputerConnection> {
 	return { ...(await viewOf(id, machine)), url };
 }
 
-/**
- * Turn off: closes the desktop and everything open on it, while the sandbox
- * runs on for the task. With nothing else running, the sandbox then stops
- * itself after the idle minutes in Settings, as it does without a desktop.
- * Not while the agent is using the computer.
- */
+/** The sandbox runs on and stops itself after its idle minutes. Not while the agent is using the computer. */
 export async function stopComputer(id: string): Promise<ComputerView> {
 	await requireTask(id);
 	const machine = await liveMachine(id);
@@ -257,7 +215,6 @@ export async function stopComputer(id: string): Promise<ComputerView> {
 	return viewOf(id, machine);
 }
 
-/** Take over (you drive, the agent waits) or hand back to the agent. */
 export async function setComputerControl(id: string, driver: 'user' | 'agent', maxWaitMs = 15_000): Promise<ComputerView> {
 	await requireTask(id);
 	if (driver === 'user') {
@@ -284,7 +241,6 @@ export async function setComputerControl(id: string, driver: 'user' | 'agent', m
 	return viewOf(id, await liveMachine(id));
 }
 
-/** The screen as you see it, to draw on: a PNG, base64. */
 export async function computerScreenshot(id: string): Promise<{ data: string; width: number; height: number }> {
 	await requireTask(id);
 	const machine = await liveMachine(id);
@@ -297,28 +253,22 @@ export async function computerScreenshot(id: string): Promise<{ data: string; wi
 export const COMPUTER_ACTIONS = ['look', 'open', 'click', 'double_click', 'right_click', 'move', 'drag', 'type', 'key', 'scroll', 'wait', 'launch'] as const;
 export type ComputerAction = (typeof COMPUTER_ACTIONS)[number];
 
-/** One step, with every position already in screen pixels. */
 export type ComputerInput = {
 	action: ComputerAction;
 	x?: number;
 	y?: number;
-	/** For drag: where to let go. */
 	toX?: number;
 	toY?: number;
 	text?: string;
-	/** For key: xdotool key names joined by +, such as ctrl+s, Return or alt+F4. */
+	/** xdotool key names joined by +, such as ctrl+s, Return or alt+F4. */
 	keys?: string;
 	direction?: 'up' | 'down' | 'left' | 'right';
-	/** For scroll: wheel clicks. */
 	amount?: number;
 	ms?: number;
-	/** For open: a web page to show in a browser window on the screen. */
 	url?: string;
-	/** For launch: a program to start on the screen, such as `xterm`. */
 	command?: string;
 };
 
-/** Opens a page in a browser window on the screen, the desktop's Web Browser. */
 const openPage = (machine: Machine, url: string) => `${quote(browserCommand(desktopLayout(machine.root)))} ${quote(url)}`;
 
 const within = (value: number, max: number) => Math.min(max - 1, Math.max(0, Math.round(value)));
@@ -330,7 +280,6 @@ function point(input: ComputerInput, x = input.x, y = input.y): string {
 
 const WHEEL = { up: 4, down: 5, left: 6, right: 7 } as const;
 
-/** The xdotool command for one step; look and wait do nothing on the screen. */
 export function inputCommand(input: ComputerInput): string | null {
 	switch (input.action) {
 		case 'look':
@@ -364,7 +313,6 @@ export function inputCommand(input: ComputerInput): string | null {
 	}
 }
 
-/** The program a step starts on the screen, for open and launch. */
 function programOf(machine: Machine, input: ComputerInput): string | null {
 	if (input.action === 'open') {
 		if (!input.url?.trim()) throw new InvalidInputError('open needs a url');
@@ -373,7 +321,6 @@ function programOf(machine: Machine, input: ComputerInput): string | null {
 	return input.action === 'launch' ? (input.command ?? null) : null;
 }
 
-/** The whole screen as a PNG. */
 export async function captureScreen(machine: Machine, signal?: AbortSignal): Promise<Uint8Array> {
 	signal?.throwIfAborted();
 	const result = await machine.exec(`import -silent -window root -display ${displayOf(machine)} png:-`, { timeoutMs: 30_000, signal });
@@ -381,19 +328,13 @@ export async function captureScreen(machine: Machine, signal?: AbortSignal): Pro
 	return result.stdout;
 }
 
-/** The title of the window that has the focus, or null. */
 export async function focusedWindow(machine: Machine): Promise<string | null> {
 	const result = await machine.exec(`DISPLAY=${displayOf(machine)} xdotool getactivewindow getwindowname 2>/dev/null`);
 	return result.exitCode === 0 ? text(result.stdout).trim() || null : null;
 }
 
-/** How long the screen gets to settle after an action before its picture is taken. */
 const SETTLE_MS = { open: 3000, launch: 2500, type: 300, key: 600 } as Partial<Record<ComputerAction, number>>;
 
-/**
- * Does one step on the machine's desktop (started if needed), then returns
- * the screen as it is now. Positions are screen pixels.
- */
 export async function act(machine: Machine, input: ComputerInput, signal?: AbortSignal): Promise<{ png: Uint8Array; window: string | null }> {
 	await ensureDesktop(machine, signal);
 	signal?.throwIfAborted();
@@ -413,7 +354,6 @@ export async function act(machine: Machine, input: ComputerInput, signal?: Abort
 	return { png, window };
 }
 
-/** Saves a screen to the task's outputs, for the Library; returns its path as the agent sees it. */
 export async function saveScreen(machine: Machine, name: string, png: Uint8Array): Promise<string> {
 	const file = screenshotFile(name);
 	await machine.exec(`mkdir -p ${quote(`${machine.root}/outputs/screenshots`)}`);

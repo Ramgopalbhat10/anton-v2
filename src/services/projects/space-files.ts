@@ -13,14 +13,8 @@ import { logProblem } from '../../core/log.ts';
 import { downloadInto } from '../sandbox/machine-download.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 
-/**
- * Files you add to a project's Library: kept in the object store, and copied
- * into every thread's machine beside the repo, at `../project-files`, so each
- * thread can read them. A thread without a machine reads them with
- * `read_project_file` instead.
- */
+// Copied into every thread's machine at `../project-files`; a thread without a machine reads them with `read_project_file`.
 const prefix = (spaceId: string) => `spaces/${spaceId}/files/`;
-/** Where the files sit in a machine, beside the repo and the outputs. */
 export const PROJECT_FILES = 'project-files';
 
 export type SpaceFile = { path: string; size: number; modifiedAt: string };
@@ -48,7 +42,6 @@ function isSafePath(path: string): boolean {
 
 const fileName = (name: string) => safeRelativePath(uploadName(name));
 
-/** Each running machine of the project's threads, for copying a file in or out. */
 async function liveThreadMachines(spaceId: string): Promise<Machine[]> {
 	const threads = await listThreadRecords(spaceId);
 	const machines = await Promise.all(threads.filter((thread) => thread.machineState).map((thread) => liveMachine(thread.id).catch(() => null)));
@@ -83,21 +76,13 @@ export async function readSpaceFile(spaceId: string, rawPath: string): Promise<U
 
 async function writeInto(machine: Machine, path: string, bytes: Uint8Array): Promise<void> {
 	const target = `${machine.root}/${PROJECT_FILES}/${path}`;
-	// A file can sit in a folder, as a deleted thread's kept files do.
 	await machine.exec(`mkdir -p ${quote(target.slice(0, target.lastIndexOf('/')))}`);
 	await writeMachineFile(machine, target, bytes);
 }
 
-/** The folder a deleted thread's files are kept in, named for it as the Library names its folder under From threads. */
 export const keptFolder = (title: string) => `From threads/${title.replace(/[^\w.\- ]+/g, '_').trim() || 'Untitled'}`;
 
-/**
- * Keeps the files a deleted thread saved in its Library, which go with it
- * otherwise, as project files in a folder named for it: they stay where the
- * project's Library showed them, and every thread can read them. Threads
- * running now get them when their sandbox is next set up; until then
- * `read_project_file` reads them.
- */
+/** Otherwise they go with the thread; kept in a folder named for it, so they stay where the project's Library showed them. */
 export async function keepThreadFiles(spaceId: string, title: string, files: Array<{ path: string; bytes: Uint8Array }>): Promise<string[]> {
 	if (!files.length) return [];
 	const existing = (await listSpaceFiles(spaceId)).map((file) => file.path);
@@ -114,11 +99,7 @@ export async function keepThreadFiles(spaceId: string, title: string, files: Arr
 	return kept;
 }
 
-/**
- * What a machine's `../project-files` held as last matched with the Library: each file's size and time in the
- * machine, and the Library copy's time then. Kept in the machine beside the folder, so it is gone exactly when
- * the folder is, and compares the machine's own clock with itself and the Library's with itself.
- */
+/** Kept in the machine beside the folder, so it is gone exactly when the folder is, and compares each clock only with itself. */
 type Seen = Record<string, { size: number; mtimeMs: number; libraryAt: number }>;
 
 const seenFile = (machine: Machine) => `${machine.root}/.anton-project-files.json`;
@@ -135,7 +116,7 @@ async function readSeen(machine: Machine): Promise<Seen> {
 
 const writeSeen = (machine: Machine, seen: Seen) => writeMachineFile(machine, seenFile(machine), new TextEncoder().encode(JSON.stringify(seen)));
 
-/** One thread's copies in and out, one after another, so a save and a copy never read the same record at once. */
+/** So a save and a copy never read the same record at once. */
 const syncing = new Map<string, Promise<unknown>>();
 
 function oneAtATime<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
@@ -147,7 +128,6 @@ function oneAtATime<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
 	return next;
 }
 
-/** `notes/plan.md` as `notes/plan (Thread title).md`, for a change that met a newer one from another thread. */
 function besideName(path: string, title: string): string {
 	const slash = path.lastIndexOf('/');
 	const dot = path.lastIndexOf('.');
@@ -156,13 +136,7 @@ function besideName(path: string, title: string): string {
 	return `${base} (${from})${ext}`;
 }
 
-/**
- * Saves what a thread added or changed in `../project-files` to the project's Library, so every thread,
- * now or later, starts with it: a journal kept day after day, a ledger, notes. A file is saved when it
- * differs from what the machine last matched with the Library; one changed in the Library by another thread
- * since is kept beside it under the thread's name instead, so neither change is lost. A file deleted in the
- * machine stays in the Library, which is where project files are deleted. Returns the paths saved.
- */
+/** A file changed in the Library by another thread since is kept beside it under the thread's name, so neither change is lost. Deleting in the machine does not delete it. */
 export function saveSpaceFiles(machine: Machine, sessionId: string): Promise<string[]> {
 	return oneAtATime(sessionId, () => saveChanged(machine, sessionId));
 }
@@ -193,9 +167,8 @@ async function saveChanged(machine: Machine, sessionId: string): Promise<string[
 		const bytes = await readMachineFile(machine, `${machine.root}/${PROJECT_FILES}/${file.path}`);
 		let target = path;
 		if (libraryAt !== undefined && libraryAt !== before?.libraryAt) {
-			// The Library's copy changed since this machine last matched it, or the machine has no record of
-			// matching it. The same bytes are a file put in from the Library, as an upload does; other bytes may
-			// be another thread's save: keep both.
+			// The Library's copy changed since this machine last matched it: the same bytes came from the Library; other bytes may be
+			// another thread's save, so both are kept.
 			const current = await readSpaceFile(spaceId, path);
 			if (current && Buffer.from(current).equals(Buffer.from(bytes))) {
 				seen[path] = { size: file.size, mtimeMs: file.mtimeMs, libraryAt };
@@ -220,12 +193,7 @@ async function saveChanged(machine: Machine, sessionId: string): Promise<string[
 	return saved;
 }
 
-/**
- * Puts a project's files into a thread's machine; run each time the machine is set up or resumed, which is
- * every message to a thread with a sandbox. What the thread changed there is saved to the Library first, so a
- * copy never writes over it. A file the machine holds as it last matched the Library is left as it is, so a
- * running machine costs a listing rather than a copy of every file.
- */
+/** What the thread changed is saved first, so a copy never writes over it. A file unchanged since the last match is left, so a running machine costs a listing. */
 export function copySpaceFiles(machine: Machine, sessionId: string): Promise<void> {
 	return oneAtATime(sessionId, async () => {
 		const session = await getSessionRecord(sessionId);
@@ -256,7 +224,6 @@ export function copySpaceFiles(machine: Machine, sessionId: string): Promise<voi
 		const removed = present.filter((file) => !inLibrary.has(file.path) && seen[file.path]?.size === file.size && seen[file.path]?.mtimeMs === file.mtimeMs);
 		if (removed.length) await machine.exec(`cd ${quote(dir)} && rm -f -- ${removed.map((file) => quote(file.path)).join(' ')}`);
 		if (written.length) {
-			// The times the machine gave the files just written, read back from it.
 			const now = new Map((await listMachineFiles(machine, dir)).map((file) => [file.path, file]));
 			for (const path of written) {
 				const file = now.get(path);
@@ -267,7 +234,6 @@ export function copySpaceFiles(machine: Machine, sessionId: string): Promise<voi
 	});
 }
 
-/** A project file as text from `offset`, PDFs and office documents converted: the list when no path is given. */
 export async function readSpaceFileForAgent(spaceId: string, rawPath?: string, offset = 0): Promise<string> {
 	const files = await listSpaceFiles(spaceId);
 	if (!rawPath) return files.length ? files.map((file) => `${file.path} (${file.size.toLocaleString()} bytes)`).join('\n') : 'The project has no files yet.';
@@ -277,7 +243,6 @@ export async function readSpaceFileForAgent(spaceId: string, rawPath?: string, o
 	return documentSlice(path, bytes, offset, 'read the next part with read_project_file');
 }
 
-/** The same for a project's thread, which may have no machine yet. */
 export async function readProjectFileForAgent(sessionId: string, rawPath?: string, offset = 0): Promise<string> {
 	const session = await getSessionRecord(sessionId);
 	if (!session?.spaceId) return 'This task is not part of a project, so it has no project files.';

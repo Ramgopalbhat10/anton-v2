@@ -17,19 +17,15 @@ import { createSession, deleteSession, getSession, listThreads, stopSession } fr
 import { keepThreadFiles } from './space-files.ts';
 import { deletedThreads, noteDeleted } from './deleted-threads.ts';
 
-/** Instructions every thread and the coordinator read; long enough for a real brief, short enough to send each turn. */
 export const MAX_INSTRUCTIONS = 16_000;
-/** Notes the agents save about the project, as for a repository. */
 export const MAX_SPACE_MEMORY = 8_000;
 
 export type SpaceRepo = { id: string; repoFullName: string; defaultBranch: string };
 
-/** A project as the page shows it: its repositories by name, and its threads counted by state. */
 export type SpaceView = Space & {
 	repos: SpaceRepo[];
 	counts: Record<ThreadState, number>;
 	threads: number;
-	/** The newest thread's last activity, or when the project was made. */
 	activeAt: string;
 };
 
@@ -64,7 +60,7 @@ export async function spaceView(id: string): Promise<SpaceView> {
 	return present(await existing(id));
 }
 
-/** Only repositories Anton already knows, so every thread can start on one. A project may have none: its threads are then chats. */
+/** Only repositories Anton already knows, so every thread can start on one. */
 async function knownRepos(ids: string[]): Promise<string[]> {
 	const known = new Set((await listProjects()).map((project) => project.id));
 	const unknown = ids.filter((id) => !known.has(id));
@@ -93,7 +89,7 @@ export type SpaceChange = Partial<{
 	coordinatorReasoning: Reasoning | null;
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
-	/** The whole map is replaced at once; a null entry follows Settings › General. */
+	/** Replaced whole; a null entry follows Settings › General. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
 	maxParallel: number;
 	autonomy: Autonomy;
@@ -129,14 +125,12 @@ export async function editSpace(id: string, change: SpaceChange): Promise<SpaceV
 	return spaceView(id);
 }
 
-/** Removes the project and stops its coordinator; its threads stay as tasks of their own. */
 export async function removeSpace(id: string): Promise<void> {
 	await existing(id);
 	await stopAgent(id);
 	await deleteSpaceRecord(id);
 }
 
-/** A thread named by its id or the start of it, as the coordinator sees them. */
 export async function findThread(spaceId: string, ref: string): Promise<Session> {
 	const wanted = ref.trim().replace(/^\[|\]$/g, '').replace(/^id:/, '');
 	const threads = await listThreads(spaceId);
@@ -151,10 +145,8 @@ export async function findThread(spaceId: string, ref: string): Promise<Session>
 	throw new NotFoundError(`No thread ${ref} in this project`);
 }
 
-/** `projectId` null, or `repo` "none", starts a thread with no repository: a chat, as every thread of a project without repositories is. */
-/** Without a `title`, the thread is named from its brief by a fast model. `automationId` is the routine that starts it. */
+/** `projectId` null, or `repo` "none", starts a chat. Without a `title`, the thread is named from its brief by a fast model. */
 export type ThreadInput = {
-	/** Chosen by the page that starts it, so it can open the thread at once. */
 	id?: string;
 	title: string;
 	brief: string;
@@ -168,7 +160,6 @@ export type ThreadInput = {
 
 const NO_REPO = new Set(['none', 'no repository', 'chat']);
 
-/** The repository a new thread works on: the one named, or the project's first; none for a chat. */
 async function repoFor(space: Space, input: ThreadInput): Promise<string | undefined> {
 	if (input.projectId === null) return undefined;
 	if (input.projectId) {
@@ -186,14 +177,7 @@ async function repoFor(space: Space, input: ThreadInput): Promise<string | undef
 	return space.repoIds[0];
 }
 
-/**
- * Starts a thread: a task on one of the project's repositories, or a chat
- * when it has none, given its brief as its first message. When the project already has as many threads
- * working as it allows, or is paused, the thread waits as queued and starts
- * when a slot frees. Handing the brief over (the agent's model, skills and
- * connectors loaded first) takes seconds; with `wait` false this returns once
- * the thread has its slot, working or queued, and the brief follows behind.
- */
+/** Queued when the project is at its limit or paused. With `wait` false this returns once the thread has its slot, and the brief follows. */
 export async function startThread(spaceId: string, input: ThreadInput, { wait = true }: { wait?: boolean } = {}): Promise<Session> {
 	const space = await existing(spaceId);
 	if (space.state === 'archived') throw new ConflictError('The project is archived; restore it to start threads');
@@ -221,20 +205,14 @@ export async function startThread(spaceId: string, input: ThreadInput, { wait = 
 	return getSession(thread.id);
 }
 
-/**
- * Threads given their brief that have not shown as working yet: dispatching
- * returns before the runtime says the reply runs, so they hold their slot
- * until then, or a minute at most.
- */
+/** Dispatching returns before the runtime says the reply runs, so they hold their slot until then, or a minute at most. */
 const launching = new Map<string, number>();
 const LAUNCH_MS = 60_000;
 
-/** The thread finished a reply, so it no longer holds a slot as launching. */
 export function launched(threadId: string): void {
 	launching.delete(threadId);
 }
 
-/** A message to a thread with the images attached to it as project files: as pictures, or described for a model that cannot see. */
 async function sendWithPictures(spaceId: string, threadId: string, message: string, model: string): Promise<void> {
 	const { images, note } = await projectPictures(spaceId, threadId, message, model);
 	await sendToAgent(threadId, note ? `${message}\n\n${note}` : message, 'coder', images);
@@ -242,15 +220,9 @@ async function sendWithPictures(spaceId: string, threadId: string, message: stri
 
 const draining = new Map<string, Promise<unknown>>();
 
-/** The threads a pass gave a slot, each with its brief, and what to call when it is turned away. */
 type Claimed = { thread: Session; brief: string; turnedAway: () => void };
 
-/**
- * One pass over the project's queue: `claimed` once each free slot has its
- * thread (shown as working from then on), `started` once each has its brief.
- * Passes claim one at a time per project, so two never fill the same slot;
- * handing briefs over runs behind, as it waits on the agent's setup.
- */
+/** Passes claim one at a time per project, so two never fill the same slot; handing briefs over runs behind. */
 function drainPass(spaceId: string, finishing?: string): { claimed: Promise<void>; started: Promise<void> } {
 	const previous = draining.get(spaceId) ?? Promise.resolve();
 	const claimed = previous.then(() => claim(spaceId, finishing));
@@ -259,10 +231,7 @@ function drainPass(spaceId: string, finishing?: string): { claimed: Promise<void
 	return { claimed: claimed.then(() => undefined, () => undefined), started };
 }
 
-/**
- * Starts queued threads, oldest first, while the project has free slots.
- * `finishing` is a thread whose reply is ending: it still counts as working until its reply settles, but its slot is free.
- */
+/** `finishing` still counts as working until its reply settles, but its slot is free. */
 export function drainQueue(spaceId: string, finishing?: string): Promise<void> {
 	return drainPass(spaceId, finishing).started;
 }
@@ -290,7 +259,7 @@ async function claim(spaceId: string, finishing?: string): Promise<Claimed[]> {
 	return claimed;
 }
 
-/** Gives each claimed thread its brief, in order; one turned away puts its brief back with the rest, so they start once the reason (a spending cap, a restore) is gone. */
+/** One turned away puts its brief back, so they start once the reason (a spending cap, a restore) is gone. */
 async function handOver(spaceId: string, claimed: Claimed[]): Promise<void> {
 	for (const [index, { thread, brief }] of claimed.entries()) {
 		try {
@@ -308,7 +277,6 @@ async function handOver(spaceId: string, claimed: Claimed[]): Promise<void> {
 	announce({ kind: 'space', id: spaceId, what: 'threads' });
 }
 
-/** Sends a thread a message as if you typed it: the card's next-step buttons, and the coordinator's follow-ups. */
 export async function nudgeThread(spaceId: string, threadId: string, text: string): Promise<Session> {
 	const record = await getSessionRecord(threadId);
 	if (!record || record.spaceId !== spaceId) throw new NotFoundError('No such thread in this project');
@@ -325,7 +293,6 @@ export async function nudgeThread(spaceId: string, threadId: string, text: strin
 	return getSession(threadId);
 }
 
-/** Moves a task into a project as a thread, or out of one; a task's repository joins the project's, and a chat stays a chat. */
 export async function moveToSpace(threadId: string, spaceId: string | null): Promise<Session> {
 	const record = await getSessionRecord(threadId);
 	if (!record) throw new NotFoundError('Session not found');
@@ -340,18 +307,10 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 	return getSession(threadId);
 }
 
-/** Each task's delete in progress, which a second press joins rather than keeping its files in the Library twice. */
+/** A second press joins it rather than keeping its files in the Library twice. */
 const deleting = new Map<string, Promise<{ kept: string[] }>>();
 
-/**
- * Deletes a task. A project's thread goes as in Claude's projects: a resolved
- * one is the project's record and is reopened before it can be deleted; any
- * other leaves the project, its sidebar row and its cards in the
- * coordinator's feed. The files it saved in its Library are kept, as project
- * files in a folder named for it, since the coordinator may have passed them
- * on and nothing else would bring them back; delete them from the Library.
- * Returns where they were kept.
- */
+/** A resolved thread is reopened before it can be deleted. Its Library files are kept as project files, since the coordinator may have passed them on. */
 export function deleteTask(id: string): Promise<{ kept: string[] }> {
 	let deletion = deleting.get(id);
 	if (!deletion) {
@@ -385,7 +344,6 @@ async function removeTask(id: string): Promise<{ kept: string[] }> {
 		logProblem('warn', 'Could not tell the coordinator a thread was deleted', error, id),
 	);
 	announce({ kind: 'space', id: record.spaceId, what: 'threads' });
-	// Its slot is free for a queued thread.
 	await drainQueue(record.spaceId);
 	return { kept };
 }
@@ -393,13 +351,11 @@ async function removeTask(id: string): Promise<{ kept: string[] }> {
 export type SpaceUsage = {
 	today: number;
 	month: number;
-	/** Each thread's spend this month; the coordinator's under the project's own id. */
 	byThread: Array<{ id: string; title: string; tokens: number; cost: number }>;
 	byModel: Array<{ key: string | null; tokens: number; cost: number }>;
 	daily: Array<{ day: string; tokens: number; cost: number }>;
 };
 
-/** What the project has spent this month, by thread and model, and each day. */
 export async function spaceUsage(id: string, now = new Date()): Promise<SpaceUsage> {
 	await existing(id);
 	const month = startOfToday(now);

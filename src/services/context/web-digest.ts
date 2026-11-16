@@ -10,37 +10,28 @@ import { cutHeadAndTail, cutResult, keepResult, limitFor, MORE_TOOL, resultText 
 import { recordUsage } from '../models/usage.ts';
 
 /*
- * A long web search or fetch, read for the agent by a fast model (the TextModel
- * port, Settings › General's background models, else ANTON_WEB_DIGEST_MODEL) against the call's own objective, the way
- * Claude Code's fetch answers a prompt rather than handing back the page. The
- * agent's conversation takes the digest, a few KB, in place of 40KB of
- * excerpts it would send again with every call after; the whole result is kept
- * for `read_full_result`. A subagent, which has no `read_full_result`, takes
- * the digest alone. Without a text model, with `off`, without an objective, or
- * when the model fails or is slow, the result is cut as any other.
+ * A long web search or fetch is read by a fast model against the call's objective, as Claude Code's fetch does; the
+ * conversation takes the few-KB digest instead of 40KB it would resend with every call. Otherwise it is cut as any result.
  */
 
 export const WEB_TOOLS = new Set(['mcp__web__web_search', 'mcp__web__web_fetch']);
-/** How much of the result the model reads: past this, the rest is still kept whole. */
+/** Past this, the rest is still kept whole. */
 const MAX_READ = 120_000;
 /** About 6KB of digest: enough for the facts, quotes and code a call was after. */
 const MAX_TOKENS = 1_500;
 /** Past this the agent is better off with the cut result than waiting. */
 const DIGEST_MS = 8_000;
-/** About what a digest comes to, against the cut result it replaces. */
 const DIGEST_CHARS = 2_500;
-/** The later calls a result is assumed to ride along with, read from the prompt cache, after the one that first sends it. */
+/** After the one that first sends it, read from the prompt cache. */
 const LATER_CALLS = 5;
 
-/** Calls whose objective is waiting for their result; a call that never ends is dropped with the oldest. */
 const KEEP_CALLS = 200;
 
 type Event = { type: string; toolName?: string; toolCallId?: string; args?: unknown };
 
-/** What each running web call is for, by call id: the runtime's interceptor sees the call's id but not its arguments. */
+/** The runtime's interceptor sees the call's id but not its arguments. */
 const objectives = new Map<string, string>();
 
-/** The objective and queries a web call gives, as one brief; null when it gives neither. */
 export function objectiveOf(args: unknown): string | null {
 	const { objective, search_queries: queries } = (args ?? {}) as { objective?: unknown; search_queries?: unknown };
 	const lines: string[] = [];
@@ -50,7 +41,7 @@ export function objectiveOf(args: unknown): string | null {
 	return lines.length ? lines.join('\n') : null;
 }
 
-/** Notes what a web call is for as it starts. Runs in the event observer; never throws. */
+/** Runs in the event observer; never throws. */
 export function recordWebCall(event: Event): void {
 	if (event.type !== 'tool_start' || !event.toolCallId || !WEB_TOOLS.has(event.toolName ?? '')) return;
 	const objective = objectiveOf(event.args);
@@ -74,13 +65,7 @@ export const digestPrompt = (toolName: string, objective: string, text: string) 
 		'</result>',
 	].join('\n');
 
-/**
- * Whether reading a result out costs less than the task's model sending its cut form: what the digest model charges to
- * read it and write about 1K tokens, against the tokens it saves at the task model's price, first written to the prompt
- * cache and then read from it. A cache write never counts for less than input: Gemini lists its cache's storage
- * there, below its input price. On a model as cheap as the digest model, or one with no price (a plan), it never pays,
- * and the cut result costs no extra seconds either.
- */
+/** A cache write never counts for less than input (Gemini lists its cache's storage there). On a plan, with no price, it never pays. */
 export function digestPays(task: Pick<ModelInfo, 'price'> | undefined, digest: Pick<ModelInfo, 'price'> | undefined, readChars: number, savedChars: number): boolean {
 	if (!task || !digest || savedChars <= 0) return false;
 	const dollars = (perMillion: number, chars: number) => ((perMillion || 0) * chars) / 4 / 1e6;
@@ -93,10 +78,6 @@ const note = (id: string | null, total: number) =>
 	`\n\n[The result ran to ${total.toLocaleString('en-US')} characters; above is what bears on the call's objective, read out by a fast model. ` +
 	(id ? `For the result itself, call ${MORE_TOOL} with id "${id}" and offset 0.]` : 'For anything it left out, call the tool again with a narrower objective.]');
 
-/**
- * A web call's long result as the conversation takes it: a digest against its objective when a model can write one
- * in time and it costs less than the tokens it saves (`digestPays`), else the cut result (for a subagent, its start and end). The digest's call counts on the task's spend.
- */
 export async function digestResult<T>(
 	conversation: string,
 	toolCallId: string,

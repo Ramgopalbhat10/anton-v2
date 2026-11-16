@@ -20,23 +20,15 @@ import { getMcpServer, getMcpSignIn, setMcpSignIn } from '../../db/mcp-servers.t
 import { appOrigin } from './connectors.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * Signing in to a remote MCP server with OAuth, the way its spec has clients
- * do it, so a server such as Linear or Notion is connected with a button
- * rather than a pasted token. The MCP SDK's `auth()` does the protocol:
- * discovery from the server's protected-resource metadata, registering Anton
- * as an app (dynamic client registration, or a client you paste for a server
- * that has none), PKCE, and the code exchange. This module keeps what it
- * learns per server, on Anton's server only, and renews the token before each
- * message, so the agent's connections get a plain bearer token, as with a
- * pasted one, and the token never reaches a sandbox, a view or the model.
+/*
+ * OAuth sign-in to remote MCP servers; the MCP SDK's `auth()` does the protocol. Tokens are kept and renewed on Anton's
+ * server, and the agent's connections get a plain bearer token, so it never reaches a sandbox, a view or the model.
  */
 
-/** What Anton keeps of a server's sign-in, in its `oauth_json`. */
 type SignIn = {
-	/** Anton as an app of the server's sign-in: registered by Anton, or pasted by you (`pasted`). */
+	/** `pasted` when you made it, for a server that does not let apps register themselves. */
 	client?: StoredOAuthClientInformation;
-	/** The address the client was registered with; a client registered for another address of Anton's is registered again. */
+	/** A client registered for another address of Anton's is registered again. */
 	clientRedirect?: string;
 	pasted?: boolean;
 	discovery?: OAuthDiscoveryState;
@@ -46,37 +38,26 @@ type SignIn = {
 	problem?: string | null;
 };
 
-/** How a server's sign-in looks to the browser: never its tokens or client secret. */
+/** Never its tokens or client secret. */
 export type McpSignInView = { state: 'signed-in' | 'needed' | 'none'; since: string | null; problem: string | null; clientId: string | null; pastedClient: boolean };
 
 export const MCP_CALLBACK_PATH = '/api/mcp-servers/callback';
 const LOGIN_TTL_MS = 10 * 60_000;
-/** A token this close to expiring is renewed first, so a call the agent makes with it does not fail halfway. */
 const RENEW_EARLY_MS = 5 * 60_000;
 
-/**
- * fetch for the SDK's sign-in. Hono's Node server swaps the global Response
- * for its own once it serves a request, so fetch's answers stop being
- * `instanceof Response`; the SDK checks that to read a server's refusal, and
- * would report "[object Response]" in place of the server's reason.
- */
+/** Hono's Node server swaps the global Response once it serves, so `instanceof Response` fails in the SDK and it reports "[object Response]". */
 const signInFetch: FetchLike = async (url, init) => {
 	const response = await fetch(url, init);
 	if ((response as unknown) instanceof Response) return response;
 	return new Response(response.body, { status: response.status, statusText: response.statusText, headers: response.headers });
 };
 
-/**
- * A client you pasted, as the SDK should send it. A server that lists no ways
- * to send the secret gets it in the form, as GitHub's documents, rather than
- * the SDK's Basic header.
- */
+/** A server that lists no ways to send the secret gets it in the form, as GitHub's documents, rather than the SDK's Basic header. */
 function pastedClient(client: StoredOAuthClientInformation, metadata: AuthorizationServerMetadata | undefined): StoredOAuthClientInformation {
 	if (!client.client_secret || metadata?.token_endpoint_auth_methods_supported?.length) return client;
 	return { ...client, token_endpoint_auth_method: 'client_secret_post' };
 }
 
-/** The server's sign-in needs you: it was refused, or it has run out with nothing to renew it. */
 export class McpSignInNeeded extends Error {
 	override name = 'McpSignInNeeded';
 }
@@ -92,10 +73,7 @@ export async function signInView(name: string): Promise<McpSignInView> {
 	return { state: signIn.tokens ? 'signed-in' : 'none', since: signIn.signedInAt ?? null, problem: null, clientId, pastedClient: Boolean(signIn.pasted) };
 }
 
-/**
- * The SDK's view of one server's sign-in. Each leg of a sign-in (and each
- * renewal) works on a copy of what is kept, saved back once the leg is done.
- */
+/** Each leg of a sign-in (and each renewal) works on a copy of what is kept, saved back once the leg is done. */
 class ServerSignIn implements OAuthClientProvider {
 	authorizationUrl: URL | null = null;
 	readonly loginState = randomBytes(16).toString('base64url');
@@ -200,10 +178,9 @@ async function existingServer(name: string) {
 
 const UNREACHABLE = /fetch failed|ENOTFOUND|ECONNREFUSED|timed out/i;
 
-/** The server signs in with GitHub, which lets no app register itself. */
+/** GitHub lets no app register itself. */
 const signsInWithGitHub = (data: SignIn) => URL.canParse(data.discovery?.authorizationServerUrl ?? '') && new URL(data.discovery?.authorizationServerUrl ?? '').hostname === 'github.com';
 
-/** What went wrong, in words you can act on. */
 function explain(error: unknown, data: SignIn = {}): string {
 	const message = error instanceof Error ? error.message : String(error);
 	if (error instanceof RegistrationRejectedError) {
@@ -226,12 +203,6 @@ function explain(error: unknown, data: SignIn = {}): string {
 	return message;
 }
 
-/**
- * Starts signing in to a server: Anton finds where it signs in, registers
- * itself there if it must, and returns the address to send the browser to.
- * `client` is one you made in the service's settings, for a server that does
- * not let apps register themselves.
- */
 export async function beginMcpSignIn(name: string, origin: string, client?: { clientId: string; clientSecret?: string | null } | null): Promise<{ url: string | null }> {
 	const server = await existingServer(name);
 	const redirect = `${appOrigin(origin)}${MCP_CALLBACK_PATH}`;
@@ -269,7 +240,6 @@ export async function beginMcpSignIn(name: string, origin: string, client?: { cl
 	return { url: String(provider.authorizationUrl) };
 }
 
-/** Finishes a sign-in when the server sends the browser back with a code; returns the server's name. */
 export async function finishMcpSignIn(query: URLSearchParams): Promise<string> {
 	dropStale();
 	const login = logins.get(query.get('state') ?? '');
@@ -293,7 +263,6 @@ export async function finishMcpSignIn(query: URLSearchParams): Promise<string> {
 	return login.name;
 }
 
-/** Forgets a server's sign-in, keeping a client you pasted for it. */
 export async function signOutOfMcpServer(name: string): Promise<void> {
 	await existingServer(name);
 	const data = await stored(name);
@@ -301,7 +270,6 @@ export async function signOutOfMcpServer(name: string): Promise<void> {
 	announce({ kind: 'connectors' });
 }
 
-/** Forgets everything about a server's sign-in, for a server pointed somewhere else. */
 export async function forgetMcpSignIn(name: string): Promise<void> {
 	await setMcpSignIn(name, null);
 }
@@ -314,11 +282,7 @@ async function markNeeded(name: string, data: SignIn, problem: string): Promise<
 	throw new McpSignInNeeded(problem);
 }
 
-/**
- * The server's access token for the agent's connections, renewed first when
- * it is about to run out (one renewal shared by everyone asking). Null when
- * the server has no sign-in; McpSignInNeeded when it needs you again.
- */
+/** One renewal shared by everyone asking. Null without a sign-in; McpSignInNeeded when it needs you again. */
 export async function mcpAccessToken(name: string, url: string): Promise<string | null> {
 	const data = await stored(name);
 	if (data.problem) throw new McpSignInNeeded(data.problem);
@@ -357,7 +321,6 @@ export async function mcpAccessToken(name: string, url: string): Promise<string 
 	return pending;
 }
 
-/** For tests: forget sign-ins in progress. */
 export function resetMcpSignInsForTests(): void {
 	logins.clear();
 	renewing.clear();

@@ -13,17 +13,9 @@ import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import type { MergeMethod, PullRequestDetail, PullRequestState } from '../../core/ports.ts';
 import { announce } from '../../core/changes.ts';
 
-/** The number at the end of a pull request's URL. */
 const numberOf = (url: string) => Number(/\/pull\/(\d+)/.exec(url)?.[1] ?? 0);
 
-/**
- * Commits the task's work, sends its branch to the host and opens (or finds)
- * the pull request. Anton pushes through the host's API with its own
- * credentials, so they never enter the machine the agent works in. Each push
- * is then reviewed, when reviews are on, and its checks watched. Once the
- * task's pull request has merged, the next one starts on a new branch from
- * the base as it is now (`branchAfterMerge`).
- */
+/** Pushes through the host's API with Anton's own credentials, so they never enter the agent's machine. */
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {
 	let session = await getSessionRecord(id);
 	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to open a pull request on.');
@@ -70,7 +62,6 @@ export async function openPullRequest(id: string, input: { title: string; body: 
 
 export type PullRequestView = { url: string; state: PullRequestState | null };
 
-/** The task's pull request and its state on the git host, or null before one is opened. */
 export async function pullRequestView(id: string): Promise<PullRequestView | null> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -85,10 +76,8 @@ export async function pullRequestView(id: string): Promise<PullRequestView | nul
 	return { url: session.prUrl, state };
 }
 
-/** A pull request in the task's list: `current` is the one the task works on now. */
 export type PullRequestItem = PullRequestRecord & { current: boolean };
 
-/** Every pull request the task opened, newest first; its current one carries its latest state. */
 export async function pullRequestsOf(id: string): Promise<PullRequestItem[]> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -105,7 +94,6 @@ async function recordOf(id: string, number: number): Promise<PullRequestRecord> 
 	return record;
 }
 
-/** Resolve only PRs belonging to the task, including old tasks without a history record. */
 async function detailRecord(id: string, number: number) {
 	const record = await getPullRequestRecord(id, number);
 	const session = record ? null : await getSessionRecord(id);
@@ -114,13 +102,11 @@ async function detailRecord(id: string, number: number) {
 	return { record, url };
 }
 
-/** Lightweight metadata for chat, without the PR panel's checks and discussion. */
 export async function pullRequestMetadata(id: string, number: number) {
 	const { url } = await detailRecord(id, number);
 	return getProviders().git.pullRequestMetadata(url);
 }
 
-/** What the PR panel shows of one of the task's pull requests, read from the host; its state is kept as read. */
 export async function pullRequestDetail(id: string, number: number): Promise<PullRequestDetail> {
 	const { record, url } = await detailRecord(id, number);
 	const detail = await getProviders().git.pullRequestDetail(url);
@@ -128,16 +114,12 @@ export async function pullRequestDetail(id: string, number: number): Promise<Pul
 	return detail;
 }
 
-/** The pull request's whole diff, as the host shows it. */
 export async function pullRequestDiff(id: string, number: number): Promise<string> {
 	const { url } = await detailRecord(id, number);
 	return getProviders().git.pullRequestDiff(url);
 }
 
-/**
- * Merges one of the task's own pull requests on the host, squashing by default, as long as its head is still
- * the one you saw (`sha`). The task then counts it merged, and its next pull request starts afresh.
- */
+/** Only while its head is still the one you saw (`sha`). */
 export async function mergePullRequest(id: string, number: number, input: { method?: MergeMethod; sha?: string } = {}): Promise<PullRequestDetail> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');

@@ -1,24 +1,17 @@
 import { cutResult, keepResult, MORE_TOOL, partAt, resultText } from './tool-results.ts';
 
 /*
- * A skill as the agent takes it on activation. The runtime's `activate_skill`
- * answers with the skill's instructions and a line per supporting file, each
- * naming the file's whole packaged path: a skill with a hundred files lists
- * 40KB of paths, which then ride along with every later call. The list is
- * given once per folder instead, every file still named. Instructions past
- * 32KB keep their first 16KB and a list of the sections after it, each read
- * with `read_full_result` from where it starts.
+ * The runtime's `activate_skill` lists each supporting file's whole path, 40KB for a hundred files, riding along with every
+ * later call; here the list is given once per folder. Instructions past 32KB keep 16KB and a list of later sections.
  */
 
 const LIST_START = 'Supporting skill resources are available but are not loaded into context unless needed:\n<skill_resources>\n';
 const LIST_END = '</skill_resources>';
 const ENTRY = /^- (.+?) → read_skill_resource (.+)$/;
-/** Instructions up to this size are kept whole: most skills' are. */
 const WHOLE_INSTRUCTIONS = 32_768;
-/** How much of longer instructions is kept before the list of what follows. */
 const INSTRUCTIONS_HEAD = 16_384;
 
-/** The supporting-file list, once per folder; null when it is not in the shape the runtime writes. */
+/** Null when it is not in the shape the runtime writes. */
 export function groupResources(list: string): string | null {
 	const files: string[] = [];
 	let base: string | null = null;
@@ -42,7 +35,6 @@ export function groupResources(list: string): string | null {
 	return `Supporting skill resources are available but are not loaded into context unless needed. Read one with read_skill_resource ${base}/<path>, the path as listed (folder, then file name):\n<skill_resources>\n${lines.join('\n')}\n`;
 }
 
-/** Long instructions' start, then each later section's heading and where it starts in the whole result. */
 function headAndSections(text: string, from: number, to: number, toolCallId: string): string {
 	const head = partAt(text, from, INSTRUCTIONS_HEAD);
 	const end = from + head.length;
@@ -54,10 +46,7 @@ function headAndSections(text: string, from: number, to: number, toolCallId: str
 	);
 }
 
-/**
- * An activated skill's result with its supporting files listed once per folder and, for an agent that can read on
- * (`conversation`), instructions past 32KB in parts, else cut as any long result. A subagent's is never cut.
- */
+/** A subagent's is never cut. */
 export function skillInParts<T>(result: T, toolCallId: string, conversation: string | null): T {
 	const text = resultText(result);
 	if (text === null) return result;

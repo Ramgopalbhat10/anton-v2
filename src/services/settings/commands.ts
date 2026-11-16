@@ -1,7 +1,6 @@
 import { InvalidInputError } from '../../core/errors.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 
-/** A saved prompt, typed as `/name` in the composer. */
 export type Command = { name: string; prompt: string };
 
 const NAME = /^[a-z0-9][a-z0-9-]*$/;

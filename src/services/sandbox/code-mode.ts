@@ -17,36 +17,21 @@ import { secretsToHide } from '../secrets/secrets.ts';
 import { grepTask, taskPaths, taskText } from './task-files.ts';
 import { liveMachine } from './workspace.ts';
 
-/**
- * Code mode: the agent writes one short JavaScript program that calls tools,
- * and only what the program prints or returns comes back to it, so many
- * reads, searches or lookups cost one turn and a short answer. Programs run
- * in a fresh QuickJS VM on Anton's side that can reach nothing but the
- * functions handed to it: the read-only repo, the task's MCP servers and the
- * decision model. In a workspace the sandbox's own shell already does this
- * for files and commands.
- *
- * Programs also reach the MCP servers of the connectors that are on (unless a
- * server opts out), read as each program starts: the agent finds their tools
- * with `connector_tools` or `search_tools()`, never in run_script's
- * description, which stays the same whichever connectors are on, so turning
- * one on or off keeps the cached prompt. The built-in web search is a direct
- * tool as well.
+/*
+ * Code mode: the agent writes one short JavaScript program that calls tools, and only what it prints or returns comes back.
+ * Programs run in a fresh QuickJS VM on Anton's side that reaches only the functions handed to it. Connector servers are
+ * read as each program starts and found with `connector_tools` or `search_tools()`, never in run_script's description,
+ * so turning one on or off keeps the cached prompt.
  */
 
 const TIMEOUT_MS = 60_000;
-/** Enough to glue tool results together; a runaway program fails inside its VM instead of growing Anton. */
+/** A runaway program fails inside its VM instead of growing Anton. */
 const MEMORY_BYTES = 64 * 1024 * 1024;
-/** What goes back to the model is cut to this, keeping its start and end. */
 const MAX_RESULT_CHARS = 20_000;
-/** Decision model calls one program runs at a time; the rest wait their turn. */
 const DECISIONS_AT_ONCE = 4;
 const SEARCH_RESULTS = 8;
 
-/**
- * Where a program runs: a chat or plan before its workspace reads the repo's snapshot (`true`), a repository task its
- * files wherever its read, grep and glob read them (`'task'`); a subagent may have no MCP servers.
- */
+/** `repo: true` reads the repo's snapshot (a chat, or a plan before its workspace); `'task'` reads wherever read, grep and glob read now. */
 export type ScriptScope = { repo: boolean | 'task'; mcp: boolean };
 
 const REPO = { type: 'string', description: "Another GitHub repository to read (a chat's only one), as owner/name, optionally @branch, tag or commit" };
@@ -56,7 +41,6 @@ const FILTER = {
 	repo: REPO,
 };
 
-/** The repository at the task's base commit, or another named by repo: the same files list_files, read_file and search_code read. */
 function repoTools(id: string): CodemodeTool[] {
 	return [
 		{
@@ -83,7 +67,6 @@ function repoTools(id: string): CodemodeTool[] {
 	];
 }
 
-/** A repository task's files, read where its read, grep and glob read them now (`task-files.ts`), under the same names. */
 function taskRepoTools(id: string): CodemodeTool[] {
 	return [
 		{
@@ -114,10 +97,8 @@ function taskRepoTools(id: string): CodemodeTool[] {
 	];
 }
 
-/** The repository tools a program has in `scope`. */
 const repoToolsIn = (id: string, scope: ScriptScope['repo']): CodemodeTool[] => (scope === 'task' ? taskRepoTools(id) : scope ? repoTools(id) : []);
 
-/** http_request, the same tool as the agent's own, for a task with sealed secrets: several reads in one program. */
 function httpTools(id: string): CodemodeTool[] {
 	if (!sealedSecretsFor(id).length) return [];
 	return [
@@ -149,7 +130,6 @@ function httpTools(id: string): CodemodeTool[] {
 const QUESTIONS_TYPE = 'Record<string, { type: "yes-no"; instructions: string } | { type: "choice"; instructions: string; options: Record<string, string> }>';
 const ANSWERS_TYPE = 'Promise<Record<string, { yes: number } | { choice: string; probabilities: Record<string, number> }>>';
 
-/** The decision model, at most a few calls at a time. */
 function decideGlobal(id: string): CodemodeTool {
 	let running = 0;
 	const waiting: Array<() => void> = [];
@@ -175,26 +155,20 @@ function decideGlobal(id: string): CodemodeTool {
 	};
 }
 
-/** Whether programs can reach any MCP server: web search, or a connector's server that has not opted out, on or off for now. */
 function reachesServers(id: string): boolean {
 	return mcpServersFor(id).length > 0 || connectorsFor(id).some((connector) => connector.kind === 'mcp' && connector.codeMode);
 }
 
-/** The servers a program reaches, read as it starts: web search, and the connectors' servers that are on, unless one opted out. */
 export async function scriptServers(id: string): Promise<McpServer[]> {
 	const connected = connectorsFor(id).some((connector) => connector.kind === 'mcp') ? await enabledMcpServers() : [];
 	return [...mcpServersFor(id), ...connected].filter((server) => server.codeMode !== false);
 }
 
-/**
- * Whether the agent connects to this server itself. With code mode on, only web search and servers that
- * opted out of code mode do; the rest are reached through run_script.
- */
+/** With code mode on, only web search and servers that opted out of code mode are direct; the rest go through run_script. */
 export function directServer(server: McpServer, scripts: boolean): boolean {
 	return !scripts || server.codeMode === false || isWebServer(server);
 }
 
-/** What a program reads back from an MCP call: its structured result, else its text, with images and files named rather than dropped silently. */
 function mcpValue(result: McpCallResult, tool: string): unknown {
 	const text = (result.content ?? [])
 		.map((part) => {
@@ -222,7 +196,6 @@ function mcpTool(server: McpServer, tool: McpTool): CodemodeTool {
 	};
 }
 
-/** The task's MCP tools for one program; a server that cannot be reached leaves its tools out. */
 async function mcpTools(id: string): Promise<CodemodeTool[]> {
 	const lists = await Promise.all(
 		(await scriptServers(id)).map(async (server) => {
@@ -237,7 +210,6 @@ async function mcpTools(id: string): Promise<CodemodeTool[]> {
 	return lists.flat();
 }
 
-/** Finds tools a program can call by words in their names, descriptions and arguments; the best matches come back declared in full. */
 function searchGlobal(tools: () => CodemodeTool[]): CodemodeTool {
 	return {
 		name: 'search_tools',
@@ -265,15 +237,11 @@ function searchGlobal(tools: () => CodemodeTool[]): CodemodeTool {
 	};
 }
 
-/** Whether run_script has anything to offer: the repo, the decision model or an MCP server. */
 export function hasScriptTools(id: string, scope: ScriptScope): boolean {
 	return Boolean(scope.repo) || hasDecisionModel() || (scope.mcp && reachesServers(id)) || httpTools(id).length > 0;
 }
 
-/**
- * The run_script tool's description. It names no connector's tools and does not change when one is turned on or
- * off, so the cached prompt stays valid.
- */
+/** Names no connector's tools, so turning one on or off keeps the cached prompt. */
 export function scriptToolDescription(id: string, scope: ScriptScope): string {
 	const globals = [...(hasDecisionModel() ? [decideGlobal(id)] : []), ...(scope.mcp ? [searchGlobal(() => [])] : [])];
 	const declared = renderDeclarations({ tools: [...repoToolsIn(id, scope.repo), ...httpTools(id)], globals });
@@ -297,7 +265,6 @@ export function scriptToolDescription(id: string, scope: ScriptScope): string {
 	].join('\n\n');
 }
 
-/** Text items, the return value and any error, as the model reads them. */
 function resultText(result: CodemodeResult): string {
 	const printed = result.output.flatMap((item) => (item.type === 'text' ? [item.text] : [`[${item.mimeType} image left out]`]));
 	const value = result.ok ? (result.value === undefined ? [] : [typeof result.value === 'string' ? result.value : JSON.stringify(result.value, null, 1)]) : [];
@@ -308,7 +275,6 @@ function resultText(result: CodemodeResult): string {
 	return `${text.slice(0, half)}\n… ${text.length - MAX_RESULT_CHARS} characters left out; return less …\n${text.slice(-half)}`;
 }
 
-/** Each call the program makes is told to `onCalls` as it starts and ends, the whole list each time. */
 function watched(tool: CodemodeTool, calls: ScriptCall[], told: () => void): CodemodeTool {
 	return {
 		...tool,
@@ -332,10 +298,7 @@ function watched(tool: CodemodeTool, calls: ScriptCall[], told: () => void): Cod
 	};
 }
 
-/**
- * A program saved in the task's workspace, such as a skill's script, with `args` declared ahead of it, so a long
- * program runs without the model writing it out again each time. Only files inside the workspace.
- */
+/** `args` are declared ahead of it, so a long program runs without the model writing it out again. Only files inside the workspace. */
 export async function scriptFromFile(id: string, file: string, args: Record<string, unknown> = {}): Promise<string> {
 	const machine = await liveMachine(id);
 	if (!machine) throw new Error('A file runs only in a running workspace. Start it first (any command does, or start_workspace in a chat), or pass the program as code.');
@@ -359,7 +322,6 @@ export function workspacePath(root: string, cwd: string, file: string): string {
 
 type RunOptions = ScriptScope & { signal?: AbortSignal; onCalls?: (calls: ScriptCall[]) => void };
 
-/** Runs one program for a task and returns what the model reads back. */
 export async function runScript(id: string, code: string, { repo, mcp, signal, onCalls }: RunOptions): Promise<string> {
 	const calls: ScriptCall[] = [];
 	const told = () => onCalls?.(calls.map((call) => ({ ...call })));

@@ -8,40 +8,13 @@ import { readOutput, saveOutput } from "../git/checkpoints.ts";
 import { inlineAssets } from "./page-assets.ts";
 
 /*
- * Pages the agent writes with `render_html`: one self-contained HTML document,
- * shown in the thread and kept in the Library under renders/. A page never
- * reaches the network itself:
- *
- * - The page is served with a CSP that sandboxes it (a unique origin, no
- *   cookies, no popups) and allows no requests: inline script and style, and
- *   data: or blob: images and fonts.
- * - It sits in a frame inside a small frame page of Anton's own, whose CSP
- *   lets its frame load only this origin, so the page can't send anything out
- *   by moving itself to another address either.
- *
- * The frame page passes messages between the page and the thread, in the MCP
- * Apps protocol's terms (JSON-RPC over postMessage): the page's height, links
- * to open (the thread asks first), and text for the composer.
- *
- * A page that calls a web API (a dashboard polling prices, say) gets a fetch()
- * that hands the request to its frame page, which has Anton make it
- * (src/services/browser/page-fetch.ts): public addresses only, without anyone's
- * cookies, and not at all with Settings › General › Pages reach the web off.
- * Going through Anton, a request works whether or not the API allows other
- * origins, which most don't for a sandboxed page's.
- *
- * A page keeps its state on Anton's side, so every copy of it shows the same
- * thing: the one in the thread, one opened in a tab of its own, and the one in
- * the Library. The page sets and reads it through `window.anton` (or, when it
- * keeps none, its form fields are kept for it); the frame page saves it and,
- * told of a save by another copy (by the thread, or by the server's events
- * when it has a tab of its own), hands the page the new state. The page itself
- * still reaches nothing: the frame page, Anton's own, does the requests.
+ * Pages from `render_html` never reach the network themselves: a CSP sandboxes them (unique origin, no requests), and they
+ * sit in a frame page of Anton's own whose CSP lets its frame load only this origin. A page's fetch() goes through the frame
+ * page to Anton (`browser/page-fetch.ts`). State is kept on Anton's side so every copy of a page shows the same.
  */
 
 export const RENDER_DIR = "renders";
 export const MAX_RENDER_BYTES = 512 * 1024;
-/** The most a page's state takes, its value and fields together. */
 export const MAX_STATE_BYTES = 256 * 1024;
 
 export const PAGE_CSP = [
@@ -75,7 +48,6 @@ const NETWORK_GUIDE = {
   off: "It has no network: no CDN scripts, fonts, images or fetch calls. Draw charts with inline SVG or <canvas>, and embed any image as a data: URL.",
 };
 
-/** What a page can rely on from the thread: the theme as CSS variables, and the rules of its frame; `network` with Pages reach the web on. */
 export const pageGuide = (network: boolean) => [
   "Write one complete, self-contained HTML document with inline <style> and <script>.",
   network ? NETWORK_GUIDE.on : NETWORK_GUIDE.off,
@@ -86,7 +58,6 @@ export const pageGuide = (network: boolean) => [
   "The page is a small app the user comes back to, and every copy of it (in the thread, in a tab of its own, in the Library) shows the same state. Keep whatever the user does that should last (entries, choices, progress, a game's score) with window.anton.setState(value), any JSON value; start from window.anton.state (null at first), and redraw from window.anton.onStateChange(function (state) { … }) when another copy changes it. localStorage is kept with the page the same way, so a page written for it works too; cookies are not available. A page that keeps no state either way has its form fields' values kept for it.",
 ].join(" ");
 
-/** Variables the page gets before the thread sends its own, so its first paint is already right. */
 const FALLBACK_THEME: Record<string, string> = {
   "--text-primary": "#ededef",
   "--text-secondary": "#a1a1aa",
@@ -126,27 +97,9 @@ const BASE_CSS =
   ":where(input,progress){accent-color:var(--accent)}:where(a){color:var(--accent-text)}" +
   ":where(table){border-collapse:collapse}:where(th,td){padding:6px 10px;border-bottom:1px solid var(--border);text-align:left}:where(th){color:var(--text-secondary);font-weight:500}";
 
-/**
- * Runs first in the page: applies the thread's theme, reports the page's
- * height as it changes, sends link clicks to the thread to open, and gives
- * the page `window.anton.send`.
- */
 const BOOTSTRAP = `(function(){var p=window.parent,s=document.getElementById("anton-theme"),n=0,h=-1;function post(m,q){p.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}function theme(v){if(!v||typeof v!=="object")return;var c=":root{";for(var k in v){if(/^--[a-z0-9-]+$/.test(k))c+=k+":"+String(v[k]).replace(/[;{}<>]/g,"")+";"}s.textContent=c+"}"}window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.data;if(d&&d.jsonrpc==="2.0"&&d.method==="ui/notifications/host-context-changed"&&d.params&&d.params.styles)theme(d.params.styles.variables)});function size(){var r=document.documentElement,v=Math.ceil(Math.max(r.scrollHeight,document.body?document.body.scrollHeight:0));if(v===h)return;h=v;post("ui/notifications/size-changed",{height:v})}if(window.ResizeObserver){var o=new ResizeObserver(size);o.observe(document.documentElement);document.addEventListener("DOMContentLoaded",function(){if(document.body)o.observe(document.body)})}window.addEventListener("load",size);document.addEventListener("DOMContentLoaded",size);document.addEventListener("click",function(e){if(!e.isTrusted)return;var a=e.target&&e.target.closest?e.target.closest("a[href]"):null,u;if(!a)return;try{u=new URL(a.getAttribute("href"),document.baseURI)}catch(x){return}if(u.href.split("#")[0]===location.href.split("#")[0])return;e.preventDefault();if(/^https?:$/.test(u.protocol))post("ui/open-link",{url:u.href})},true);window.anton={send:function(t){if(typeof t==="string"&&t.trim())post("ui/message",{role:"user",content:[{type:"text",text:t.slice(0,4000)}]})}};post("ui/notifications/initialized",{})})();`;
 
-/**
- * Runs next: `window.anton.state`, `setState` and `onStateChange`, starting
- * from the state served with the page. A page that never uses them has its
- * form fields kept instead: their values are saved after you change them, and
- * set (with input and change events, so the page redraws) when it opens or
- * another copy changes them. Changes from elsewhere wait while one of yours is
- * on its way, so typing is never overwritten.
- *
- * A sandboxed page has no localStorage of its own (reading it throws), and an
- * app written for a browser often keeps everything there. So the page gets one
- * that is kept with its state: it starts from what was saved, saves each
- * change, and takes other copies' changes with a storage event, as a browser
- * tells other tabs. sessionStorage lasts as long as the page is open.
- */
+/** A page that never uses `window.anton.state` has its form fields kept instead. A sandboxed page's localStorage throws, so it gets one kept with its state. */
 const STATE_BOOTSTRAP = `(function(){
 var p=window.parent,a=window.anton,seed=window.__antonPage||{},state=seed.state===undefined?null:seed.state,fields=seed.fields||{},own=false,applying=false,listeners=[],timer=0;
 try{delete window.__antonPage}catch(x){}
@@ -173,13 +126,7 @@ window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.dat
 window.addEventListener("load",function(){setTimeout(function(){if(!own&&Object.keys(fields).length)apply(fields);post("anton/state/ready",{version:Number(seed.version)||0})},0)});
 })();`.replace(/\n/g, "");
 
-/**
- * Runs last: the page's fetch() for http and https addresses hands the request
- * to the frame page, which has Anton make it (src/services/browser/page-fetch.ts), and
- * resolves with a Response built from what comes back, so code written for a
- * browser's fetch works unchanged. Other addresses (data:, blob:) still go to
- * the browser's own fetch, which the page's CSP refuses.
- */
+/** Other addresses (data:, blob:) still go to the browser's own fetch, which the page's CSP refuses. */
 const NET_BOOTSTRAP = `(function(){
 var p=window.parent,own=window.fetch,Native=window.Response,n=0,waiting={};
 function post(m,q){p.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
@@ -188,7 +135,6 @@ window.addEventListener("message",function(e){if(e.source!==p)return;var d=e.dat
 window.fetch=function(input,init){return new Promise(function(resolve,reject){var req;try{req=new Request(input,init)}catch(x){reject(x);return}if(!/^https?:/i.test(req.url)){resolve(own.call(window,req));return}var sig=req.signal;if(sig&&sig.aborted){reject(aborted(sig));return}var hs=[];req.headers.forEach(function(v,k){hs.push([k,v])});var m=req.method;(m==="GET"||m==="HEAD"?Promise.resolve(null):req.arrayBuffer()).then(function(b){if(sig&&sig.aborted){reject(aborted(sig));return}var id=++n,off=function(){};if(sig){var stop=function(){if(waiting[id]){delete waiting[id];reject(aborted(sig))}};sig.addEventListener("abort",stop);off=function(){sig.removeEventListener("abort",stop)}}waiting[id]={resolve:resolve,reject:reject,off:off,url:req.url,head:m==="HEAD"};post("anton/fetch",{id:id,url:req.url,method:m,headers:hs,body:b&&b.byteLength?b:null})},reject)})};
 })();`.replace(/\n/g, "");
 
-/** What a page starts from: its saved state, as a script that can't end early or be read as markup. */
 type Seed = { state: unknown; fields: Record<string, unknown>; storage?: Record<string, string>; version: number };
 
 function seedScript(seed: Seed): string {
@@ -196,7 +142,7 @@ function seedScript(seed: Seed): string {
   return `<script>window.__antonPage=${json}</script>`;
 }
 
-/** Puts the theme and the bootstrap first in the document, ahead of anything the page has, so its own styles still win. */
+/** Ahead of anything the page has, so its own styles still win. */
 export function injectBootstrap(html: string, seed: Seed = { state: null, fields: {}, storage: {}, version: 0 }): string {
   const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${BASE_CSS}</style><style id="anton-theme"></style>${seedScript(seed)}<script>${BOOTSTRAP}</script><script>${STATE_BOOTSTRAP}</script><script>${NET_BOOTSTRAP}</script>`;
   const opening = /<head(\s[^>]*)?>/i.exec(html);
@@ -223,7 +169,6 @@ function slug(title: string): string {
 
 export type RenderRef = { path: string; title: string; height: number };
 
-/** Keeps the page in the Library and returns where the thread finds it. */
 export async function saveRender(
   id: string,
   input: { title: string; html: string; height?: number },
@@ -250,7 +195,6 @@ export async function saveRender(
   return { path, title, height };
 }
 
-/** Any HTML file in a task's Library shows as a page: the agent's under renders/, and any other it or you saved. */
 export function isRenderPath(path: string): boolean {
   if (path.length > 400 || !/\.html?$/i.test(path)) return false;
   try {
@@ -260,7 +204,6 @@ export function isRenderPath(path: string): boolean {
   }
 }
 
-/** A name for a page with no title kept: the file's, without the suffix render_html adds. */
 export function pageTitle(path: string): string {
   const name = (path.split("/").pop() ?? path)
     .replace(/\.html?$/i, "")
@@ -270,7 +213,6 @@ export function pageTitle(path: string): string {
   return name ? name[0].toUpperCase() + name.slice(1) : "Page";
 }
 
-/** The page, ready to serve: the files it names from its Library put into it, its bootstrap added, and its state as it stands. */
 export async function renderPage(id: string, path: string): Promise<string> {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   const [bytes, saved] = await Promise.all([readOutput(id, path), getPageState(id, path)]);
@@ -279,13 +221,11 @@ export async function renderPage(id: string, path: string): Promise<string> {
   return injectBootstrap(html, saved);
 }
 
-/** A page's state, for a copy that heard it changed. */
 export async function pageState(id: string, path: string) {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   return getPageState(id, path);
 }
 
-/** Field values a page's form controls hold: strings or checked states, by a key the page's bootstrap gives each. */
 function checkFields(value: unknown): Record<string, string | boolean> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new InvalidInputError("Fields are an object.");
   const entries = Object.entries(value);
@@ -296,7 +236,6 @@ function checkFields(value: unknown): Record<string, string | boolean> {
   return value as Record<string, string | boolean>;
 }
 
-/** What a page put in its localStorage: string values by key. */
 function checkStorage(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new InvalidInputError("Storage is an object.");
   const entries = Object.entries(value);
@@ -307,10 +246,7 @@ function checkStorage(value: unknown): Record<string, string> {
   return value as Record<string, string>;
 }
 
-/**
- * Saves a copy's change to the page's state and tells every other copy, by
- * `from`, the id the saving copy gave itself, so it can skip its own echo.
- */
+/** `from` is the id the saving copy gave itself, so it can skip its own echo. */
 export async function savePageState(id: string, path: string, body: unknown): Promise<{ version: number }> {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   if (!(await getSessionRecord(id))) throw new NotFoundError("Session not found");
@@ -327,16 +263,7 @@ export async function savePageState(id: string, path: string, body: unknown): Pr
   return { version };
 }
 
-/**
- * Runs in the frame page: passes messages between the page and whatever holds
- * it, and keeps the page's state. Saves are batched (a burst of typing is one
- * request) and sent on as the frame closes. A change elsewhere is fetched and
- * handed to the page, except while a save of this copy's is waiting or on its
- * way: that save is newer, and the copy fetches again once it lands. Inside
- * Anton the thread says when the state changed; in a tab of its own the frame
- * page listens to the server's events itself. It also makes the page's web
- * requests, through Anton, and hands back what they answered.
- */
+/** Saves are batched and sent on as the frame closes. A change elsewhere is not fetched while this copy's save is pending: that save is newer. */
 const FRAME_SCRIPT = `var f=document.getElementById("page"),url="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-state?path="+encodeURIComponent(PAGE.path),furl="/api/sessions/"+encodeURIComponent(PAGE.id)+"/page-fetch?path="+encodeURIComponent(PAGE.path),me=Math.random().toString(36).slice(2),known=-1,pending=null,flying=false,stale=false,timer=0,alone=window.parent===window;
 function toPage(m,q){if(f.contentWindow)f.contentWindow.postMessage({jsonrpc:"2.0",method:m,params:q},"*")}
 function pull(){if(pending||flying){stale=true;return}fetch(url,{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(s){if(!s||!(s.version>known))return;if(pending||flying){stale=true;return}known=s.version;toPage("anton/state/changed",{state:s.state,fields:s.fields,storage:s.storage})}).catch(function(){})}
@@ -352,7 +279,6 @@ if(alone&&window.EventSource){var events=new EventSource("/api/events"),dropped=
 
 const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
-/** The frame page around a page: it holds the page in a sandboxed frame, passes messages between it and the thread, and keeps its state. */
 export function renderFrame(
   id: string,
   path: string,
@@ -366,7 +292,6 @@ export function renderFrame(
   return { html, csp: frameCsp(nonce) };
 }
 
-/** The frame page, named for its page: the title the agent gave it, or its file's. */
 export async function pageFrame(id: string, path: string): Promise<{ html: string; csp: string }> {
   if (!isRenderPath(path)) throw new NotFoundError("Not a page");
   return renderFrame(id, path, (await getPageTitle(id, path)) ?? pageTitle(path));

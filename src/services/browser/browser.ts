@@ -6,10 +6,6 @@ import type { Machine } from '../../core/ports.ts';
 import { quote, run } from '../../core/shell.ts';
 import { addressToUrl, BROWSER_SOURCE, clipSnapshot, screenshotFile } from './browser-step.ts';
 
-/**
- * Runs inside the machine: opens the page in headless Chromium, saves a
- * PNG, and prints what the page said about itself.
- */
 const SCRIPT = `
 const { chromium } = require('playwright');
 const { url, out, width, height, fullPage } = JSON.parse(process.argv[2]);
@@ -34,7 +30,7 @@ const { url, out, width, height, fullPage } = JSON.parse(process.argv[2]);
 });
 `;
 
-/** Installs the browser on first use; sandbox images built since the browser was added already have it. */
+/** Sandbox images built since the browser was added already have it. */
 const ENSURE_BROWSER = `
 command -v node >/dev/null || { echo "The screenshot tool needs Node.js in the sandbox." >&2; exit 3; }
 export NODE_PATH="$(npm root -g)"
@@ -46,7 +42,6 @@ if [ "$(id -u)" = 0 ] && command -v apt-get >/dev/null; then playwright install 
 export type ScreenshotInput = { url: string; name?: string; fullPage?: boolean; width?: number; height?: number };
 export type Screenshot = { path: string; title: string; status: number | null; errors: string[] };
 
-/** Screenshots a page from inside the machine into its outputs, so it shows in the Library. */
 export async function takeScreenshot(machine: Machine, input: ScreenshotInput): Promise<Screenshot> {
 	await run(machine, ENSURE_BROWSER, { timeoutMs: 10 * 60_000 });
 	const file = screenshotFile(input.name || 'shot');
@@ -62,16 +57,7 @@ export async function takeScreenshot(machine: Machine, input: ScreenshotInput): 
 	return { path: `../outputs/${file}`, ...report };
 }
 
-/**
- * The browser server's live view, for the Computer panel: a WebSocket that
- * sends the tab as JPEG frames from Chromium's screencast, and takes your
- * mouse and keyboard when you have taken over. The sandbox browser used to
- * run on the Computer's desktop so you could watch it, and every step waited
- * on that desktop (a minute or more to start, and a check on each step); it
- * now runs headless, and only a panel that is watching costs anything.
- * WebSocket framing is written out here, as the sandbox has Playwright but
- * no WebSocket server package. Expects `page` and `idle` from the server.
- */
+/** Sends the tab as JPEG frames from Chromium's screencast. WebSocket framing is written out, as the sandbox has no WebSocket server package. */
 const LIVE_VIEW = `
 const viewers = new Set();
 let cast = null;
@@ -237,11 +223,7 @@ function listenLive(port) {
 }
 `;
 
-/**
- * Runs inside the machine and keeps one browser tab open between the agent's
- * steps, so a page keeps its state while the agent clicks and types through
- * it. Takes commands over a Unix socket and quits after a quiet spell.
- */
+/** Keeps one tab open between steps over a Unix socket, and quits after a quiet spell. */
 const SERVER = `
 const http = require('http');
 const fs = require('fs');
@@ -423,7 +405,7 @@ http.createServer((request, response) => {
 if (livePort) listenLive(Number(livePort));
 `;
 
-/** Sends one command to the browser and prints its answer; exits 4 when no browser is running. */
+/** Exits 4 when no browser is running. */
 const CLIENT = `
 const http = require('http');
 const [socket, command] = process.argv.slice(2);
@@ -444,21 +426,15 @@ export type BrowserAction = 'open' | 'click' | 'type' | 'select' | 'press' | 'ho
 export type BrowserInput = {
 	action: BrowserAction;
 	url?: string;
-	/** A ref from the page's description (`e12`), or a Playwright selector: `role=button[name="Save"]`, `text=Sign in`, `label=Email` or CSS. */
 	target?: string;
-	/** For run: the body of an async function given `page`, Playwright's API for the tab. */
 	code?: string;
-	/**
-	 * For run: asked, with the element's name, before a click (or Enter) on something named with a risky word;
-	 * the run stops when it answers no. Never sent anywhere: it stays with the caller.
-	 */
+	/** Never sent anywhere: it stays with the caller. */
 	ask?: (name: string) => Promise<boolean>;
 	text?: string;
 	submit?: boolean;
 	key?: string;
 	amount?: number;
 	ms?: number;
-	/** Saves a PNG of the page after the action, under this name. */
 	screenshot?: string;
 	fullPage?: boolean;
 	width?: number;
@@ -469,37 +445,30 @@ export type BrowserState = {
 	url: string;
 	title: string;
 	status: number | null;
-	/** Why the action failed, such as no element matching the target; the page is described as it is anyway. */
 	problem: string | null;
-	/** A nonfatal limitation to pass on to the agent. */
 	notice?: string;
 	errors: string[];
 	screenshot: string | null;
-	/** The page's accessibility tree as YAML: roles, names and text, which is what the agent targets. */
 	snapshot: string;
-	/** Where the page is scrolled to (`StepResult.view`), for telling a step that only scrolled from one that did nothing. */
 	view?: string;
-	/** For run: what the code returned, as text, and what it logged. */
 	result?: string;
 	logs?: string[];
 };
 
-/** The browser's files for one machine. Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
+/** Under /tmp, as a socket path must be short; named by the machine, as local machines share /tmp. */
 function browserFiles(machine: Machine) {
 	const base = `/tmp/anton-browser-${createHash('sha256').update(machine.root).digest('hex').slice(0, 10)}`;
 	return { socket: `${base}.sock`, pid: `${base}.pid`, log: `${base}.log`, server: `${base}-server.cjs`, client: `${base}-client.cjs` };
 }
 
-/** The live view's port, a thousand above the desktop's socket, so it is named by the machine the same way. */
+/** A thousand above the desktop's socket, so it is named by the machine the same way. */
 export const browserLivePort = (machine: Machine): number => desktopLayout(machine.root).socketPort + 1000;
 
-/** Whether the machine's browser server runs, as one shell test with no side effects. */
 export function browserRunning(machine: Machine): string {
 	const { socket, pid } = browserFiles(machine);
 	return `[ -S ${socket} ] && [ -f ${pid} ] && kill -0 "$(cat ${pid})" 2>/dev/null`;
 }
 
-/** An address for the Computer panel to watch the browser's tab at, or null when the browser does not run or the provider has no way in. */
 export async function browserLiveUrl(machine: Machine): Promise<string | null> {
 	if ((await machine.exec(browserRunning(machine))).exitCode !== 0) return null;
 	return machine.socketUrl(browserLivePort(machine));
@@ -508,7 +477,6 @@ export async function browserLiveUrl(machine: Machine): Promise<string | null> {
 /** The browser could not be stopped, so nobody else may safely drive its screen yet. */
 export class BrowserStopError extends Error {}
 
-/** Stops the machine's browser and waits for it to leave before another driver can act. */
 export async function closeBrowser(machine: Machine): Promise<void> {
 	const { pid, socket } = browserFiles(machine);
 	servers.delete(machineKey(machine));
@@ -528,19 +496,15 @@ rm -f ${socket}`);
 	if (result.exitCode !== 0) throw new BrowserStopError(result.stderr.trim() || 'The sandbox browser did not stop.');
 }
 
-/**
- * Machines whose browser is installed and whose client is written. Each is a
- * command in the machine (a second or more on Modal, Playwright loaded to check
- * it), so a step after the first sends its command alone.
- */
+/** Checking is a command in the machine (a second or more on Modal), so a step after the first sends its command alone. */
 const prepared = new Set<string>();
-/** Machines whose browser server is this build's, with the token for its command connection: checked on the first step, and again after it starts anew. */
+/** Checked on the first step, and again after it starts anew. */
 const servers = new Map<string, string>();
 
-/** A command connection to a machine's browser server, through the live view's port: a step costs a message there, not a process started in the machine. */
+/** Through the live view's port: a step costs a message there, not a process started in the machine. */
 type Channel = { request: (body: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>; close: () => void };
 const channels = new Map<string, Promise<Channel | null>>();
-/** A command the connection could not send at all, so it is safe to send another way. */
+/** So it is safe to send another way. */
 class NotSent extends Error {}
 
 function dropChannel(key: string) {
@@ -549,7 +513,6 @@ function dropChannel(key: string) {
 	void open?.then((channel) => channel?.close()).catch(() => undefined);
 }
 
-/** Connects to the browser server's command connection, or null when the provider has no way in or it does not answer. */
 async function connectChannel(machine: Machine, token: string): Promise<Channel | null> {
 	const base = await machine.socketUrl?.(browserLivePort(machine)).catch(() => null);
 	if (!base) return null;
@@ -607,7 +570,6 @@ async function connectChannel(machine: Machine, token: string): Promise<Channel 
 		close: () => socket.close(),
 	};
 }
-/** This build of the server script, which a step checks the running one against. */
 const SERVER_VERSION = createHash('sha256').update(SERVER).digest('hex').slice(0, 12);
 const machineKey = (machine: Machine) => `${machine.id}:${machine.root}`;
 
@@ -619,11 +581,6 @@ async function prepare(machine: Machine, signal?: AbortSignal): Promise<void> {
 	prepared.add(machineKey(machine));
 }
 
-/**
- * One step in the machine's browser: open a page, click, type and so on, then
- * describe the page. The tab stays open between steps; the first step starts
- * the browser.
- */
 export async function browse(machine: Machine, input: BrowserInput, signal?: AbortSignal): Promise<BrowserState> {
 	signal?.throwIfAborted();
 	try {
@@ -645,7 +602,6 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 		const key = machineKey(machine);
 		const sendOnce = (body: Record<string, unknown>) => machine.exec(`node ${files.client} ${files.socket} ${quote(JSON.stringify(body))}`, { timeoutMs: 120_000, signal });
 		type Answer = Partial<BrowserState> & { pending?: { run: string; name: string }; version?: string; token?: string };
-		/** One command through a process in the machine, starting the server when none runs. */
 		const viaExec = async (body: Record<string, unknown>): Promise<Answer> => {
 			let result = await sendOnce(body);
 			signal?.throwIfAborted();
@@ -679,7 +635,6 @@ export async function browse(machine: Machine, input: BrowserInput, signal?: Abo
 			servers.set(key, running.version === SERVER_VERSION ? (running.token ?? '') : '');
 		}
 		const token = servers.get(key);
-		/** One command, over the command connection when there is one, else through a process in the machine. */
 		const send = async (body: Record<string, unknown>): Promise<Answer> => {
 			if (token) {
 				if (!channels.has(key)) channels.set(key, connectChannel(machine, token).catch(() => null));

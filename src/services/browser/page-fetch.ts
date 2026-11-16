@@ -9,22 +9,10 @@ import { generalSettings } from '../models/general.ts';
 import { isRenderPath } from '../artifacts/renders.ts';
 
 /*
- * The requests a page makes (src/services/artifacts/renders.ts). The page itself still
- * reaches nothing: its bootstrap gives it a fetch() that hands each request to
- * its frame page, Anton's own, which sends it here, and Anton makes it. So a
- * page can call any public API, whether or not that API allows other origins
- * (CORS), and nothing else:
- *
- * - only http and https, to addresses on the public internet: the address is
- *   checked as the connection is made, at every redirect, so a name that
- *   resolves to this machine, its private network or a cloud metadata service
- *   is refused, even when it changes between lookups;
- * - with no cookies of the user's or Anton's: the page's own headers, less
- *   those that would speak for someone else (Cookie, Origin, Referer, Host);
- * - within limits: a megabyte up, five down, twenty seconds, eight at a time
- *   for each task.
- *
- * Settings › General › Pages reach the web (`pageNetwork`) turns it off.
+ * Requests a rendered page makes go through Anton, so a page can call any public API regardless of CORS, and nothing else:
+ * - only http(s) to public addresses, checked as each connection is made and at every redirect (so DNS rebinding fails);
+ * - none of the user's or Anton's cookies, and no Cookie, Origin, Referer or Host from the page;
+ * - a megabyte up, five down, twenty seconds, eight at a time per task.
  */
 
 export const MAX_REQUEST_BYTES = 1024 * 1024;
@@ -35,7 +23,6 @@ const MAX_AT_ONCE = 8;
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
 const USER_AGENT = 'Mozilla/5.0 (compatible; Anton page)';
 
-/** A request Anton refused or could not complete, said so to the page. */
 export class PageFetchError extends Error {
 	readonly status: number;
 	constructor(message: string, status = 502) {
@@ -79,7 +66,6 @@ for (const [network, bits] of [
 ] as const)
 	NOT_PUBLIC.addSubnet(network, bits, 'ipv6');
 
-/** Whether an address is on the public internet: not this machine, a private or link-local network, or a reserved range. */
 export function isPublicAddress(address: string): boolean {
 	const family = isIP(address);
 	if (!family) return false;
@@ -88,7 +74,7 @@ export function isPublicAddress(address: string): boolean {
 
 type Allow = (address: string) => boolean;
 
-/** Resolves a name to its allowed addresses alone, so the connection can only be made to one of them. */
+/** Resolves to allowed addresses only, so the connection can only be made to one of them. */
 function guardedLookup(allow: Allow) {
 	return (hostname: string, options: { family?: number | string; all?: boolean; hints?: number }, callback: (...args: unknown[]) => void) => {
 		const family = options.family === 'IPv4' ? 4 : options.family === 'IPv6' ? 6 : Number(options.family) || 0;
@@ -102,7 +88,7 @@ function guardedLookup(allow: Allow) {
 	};
 }
 
-/** Headers a page may not send: they would speak for the user, for Anton or for the connection. */
+/** They would speak for the user, for Anton or for the connection. */
 const DROPPED_REQUEST = new Set([
 	'host',
 	'cookie',
@@ -123,7 +109,7 @@ const DROPPED_REQUEST = new Set([
 	'via',
 	'forwarded',
 ]);
-/** Headers the page doesn't get back: cookies it couldn't keep, and the encoding Anton already undid. */
+/** Cookies it couldn't keep, and the encoding Anton already undid. */
 const DROPPED_RESPONSE = new Set(['set-cookie', 'set-cookie2', 'content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive']);
 
 export type PageRequest = { url: string; method: string; headers: Array<[string, string]>; body: Uint8Array | null };
@@ -161,7 +147,6 @@ function send(url: URL, method: string, headers: Record<string, string>, body: U
 	});
 }
 
-/** The response's body, decoded as the browser would, up to the limit. */
 async function readBody(response: IncomingMessage, limit: number): Promise<Uint8Array> {
 	const encoding = String(response.headers['content-encoding'] ?? '').trim().toLowerCase();
 	const decoder =
@@ -183,7 +168,7 @@ async function readBody(response: IncomingMessage, limit: number): Promise<Uint8
 	return new Uint8Array(Buffer.concat(chunks));
 }
 
-/** Read a small error explanation without letting a streaming or broken body hide its HTTP status. */
+/** Without letting a streaming or broken body hide its HTTP status. */
 async function readErrorPrefix(response: IncomingMessage): Promise<Uint8Array> {
 	const encoding = String(response.headers['content-encoding'] ?? '').trim().toLowerCase();
 	const decoder = encoding === 'gzip' || encoding === 'x-gzip' ? createGunzip() : encoding === 'deflate' ? createInflate() : encoding === 'br' ? createBrotliDecompress() : null;
@@ -216,11 +201,7 @@ async function readErrorPrefix(response: IncomingMessage): Promise<Uint8Array> {
 	});
 }
 
-/**
- * Makes a page's request from Anton, following redirects as a browser would.
- * `allow` decides which addresses it may connect to; tests widen it to this machine.
- * Preview checks need status and headers, not a whole body; read only a bounded error prefix.
- */
+/** `allow` decides which addresses it may connect to; tests widen it. Preview checks read only a bounded error prefix. */
 export async function fetchForPage(
 	request: PageRequest,
 	{ allow = isPublicAddress, timeoutMs = TIMEOUT_MS, maxBytes = MAX_RESPONSE_BYTES, responseMode = 'full' }: { allow?: Allow; timeoutMs?: number; maxBytes?: number; responseMode?: 'full' | 'preview' } = {},
@@ -279,7 +260,6 @@ function parseUrl(value: string): URL {
 	return url;
 }
 
-/** What the frame page sends: the request, its body in base64. */
 function checkRequest(input: unknown): PageRequest {
 	const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
 	if (typeof value.url !== 'string' || value.url.length > 8192) throw new InvalidInputError('A request needs a URL.');
@@ -305,7 +285,6 @@ function checkRequest(input: unknown): PageRequest {
 
 const running = new Map<string, number>();
 
-/** A page's request, made for it: the task's page, with Pages reach the web on, a few at a time. Its body comes back in base64. */
 export async function pageFetch(id: string, path: string, input: unknown) {
 	if (!isRenderPath(path)) throw new NotFoundError('Not a page');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');

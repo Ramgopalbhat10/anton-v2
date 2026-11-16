@@ -17,19 +17,11 @@ import type { Machine } from '../../core/ports.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 
-/**
- * Where a task's files are read from, best first: its running machine, its
- * last checkpoint, or the commit it started from. Viewing never starts a
- * machine.
- */
+/** Best first. Viewing never starts a machine. */
 export type Source = 'live' | 'saved' | 'base';
 
 export type FileTree = { source: Source; at: string | null; paths: string[]; changes: FileChange[] };
-/**
- * What Changes shows. `unpushed` (the default) is the work the host lacks: the diff from the commit Anton last
- * pushed, or the whole branch before any push, so it empties once a pull request has everything. `branch` is
- * everything since the task began, pushed or not.
- */
+/** `unpushed` is the work the host lacks, so it empties once a pull request has everything; `branch` is everything since the task began. */
 export type ChangesScope = 'unpushed' | 'branch';
 export type ChangesView = {
 	source: Source;
@@ -37,7 +29,6 @@ export type ChangesView = {
 	branch: string;
 	baseBranch: string;
 	scope: ChangesScope;
-	/** The commit the unpushed diff starts from; null before anything was pushed. */
 	pushedSha: string | null;
 	patch: string;
 	log: LogEntry[];
@@ -46,13 +37,11 @@ export type OutputsView = {
 	source: Source;
 	at: string | null;
 	outputs: Array<Omit<SavedOutput, 'key'>>;
-	/** Files you deleted that the Library no longer has, so a reply that showed one says so. */
 	deleted: string[];
 };
 
 type Context = {
 	id: string;
-	/** Empty for a chat, whose scratch folder starts empty. */
 	repo: string;
 	baseSha: string;
 	pushedSha: string | null;
@@ -63,13 +52,9 @@ type Context = {
 	source: Source;
 };
 
-/** Tasks whose pushed commit was looked up on the host, so a task that has none is asked once. */
 const lookedUp = new Set<string>();
 
-/**
- * Where the task's branch stands on the host, for a pull request opened before Anton kept what it pushed:
- * the branch's head, or the pull request's once a merge deleted the branch. Kept, so it is asked once.
- */
+/** For a pull request opened before Anton kept what it pushed; the pull request's head once a merge deleted the branch. */
 async function pushedHead(session: SessionRecord, repo: string): Promise<string | null> {
 	if (!session.prUrl || session.review || !repo || lookedUp.has(session.id)) return null;
 	lookedUp.add(session.id);
@@ -103,7 +88,6 @@ async function context(id: string): Promise<Context> {
 	};
 }
 
-/** The repo tree at a commit, cached forever because commits never change; a chat's starts with none. */
 async function baseTree(repo: string, sha: string): Promise<string[]> {
 	if (!repo) return [];
 	const { store, git } = getProviders();
@@ -134,7 +118,6 @@ const trees: Record<Source, (ctx: Context) => Promise<Omit<FileTree, 'source' | 
 	base: async (ctx) => ({ paths: await baseTree(ctx.repo, ctx.baseSha), changes: [] }),
 };
 
-/** Files offered before a task exists, from the selected repository branch. Never acquires a machine. */
 export async function projectFiles(projectId: string, branch?: string): Promise<string[]> {
 	const project = await getProject(projectId);
 	if (!project) throw new NotFoundError('Project not found');
@@ -163,14 +146,12 @@ export async function readFile(id: string, rawPath: string): Promise<Uint8Array>
 	return readMachineFile(ctx.machine, `${repoDir(ctx.machine)}/${path}`);
 }
 
-/** Marks the commits a checkpoint saved before it kept which were pushed: the pushed one and every one older. */
 function markPushed(log: LogEntry[], pushedSha: string | null): LogEntry[] {
 	if (!pushedSha || log.some((entry) => entry.pushed !== undefined)) return log;
 	const at = log.findIndex((entry) => entry.sha === pushedSha);
 	return at === -1 ? log : log.map((entry, index) => ({ ...entry, pushed: index >= at }));
 }
 
-/** The checkpoint's unpushed work, when it was saved knowing what was pushed. */
 async function savedUnpushed(ctx: Context): Promise<string> {
 	const checkpoint = ctx.checkpoint;
 	if (!checkpoint) return '';
@@ -194,8 +175,6 @@ export async function changesView(id: string, scope: ChangesScope = 'unpushed'):
 	return { ...header, pushedSha: ctx.pushedSha, patch, log: markPushed(ctx.checkpoint?.log ?? [], ctx.pushedSha) };
 }
 
-/** Outputs come from storage, so they are listed the same way whether or not the machine runs. */
-/** What the machine wrote, as its last checkpoint copied it, and what was saved straight to storage. */
 function library(checkpoint: Checkpoint | null, saved: SavedOutput[]): OutputsView['outputs'] {
 	const fromMachine = checkpoint?.outputs ?? [];
 	const all = [...fromMachine, ...saved.filter((output) => !fromMachine.some((other) => other.path === output.path))];
@@ -210,22 +189,14 @@ export async function outputsView(id: string): Promise<OutputsView> {
 	return { source: ctx.source, at: ctx.checkpoint?.at ?? null, outputs, deleted: removed.filter((path) => !kept.has(path)) };
 }
 
-/** The task's Library as stored, without asking its machine: for the Artifacts page. */
 export async function storedOutputs(id: string): Promise<OutputsView['outputs']> {
 	const [checkpoint, saved] = await Promise.all([readCheckpoint(id), savedOutputs(id)]);
 	return library(checkpoint, saved);
 }
 
-/** The largest file the Library takes as an upload. */
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-/** The largest output read from a running sandbox before it is saved. */
 const MAX_LIVE_OUTPUT_BYTES = 50 * 1024 * 1024;
 
-/**
- * Adds a file you upload to the task's Library, under `uploads/`. With a
- * sandbox running it also goes into the outputs folder there, so the agent
- * can read it.
- */
 export async function uploadOutput(id: string, name: string, bytes: Uint8Array, contentType?: string): Promise<string> {
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
 	if (bytes.length > MAX_UPLOAD_BYTES) throw new InvalidInputError('Files up to 20 MB can be added to the Library.');
@@ -241,10 +212,6 @@ export async function uploadOutput(id: string, name: string, bytes: Uint8Array, 
 	return path;
 }
 
-/**
- * Saves a file to the task's Library at `path` (under outputs), and into its machine's outputs folder
- * when one runs, so the agent's shell can read it at once: what http_request wrote to a file.
- */
 export async function saveToLibrary(id: string, rawPath: string, bytes: Uint8Array, contentType?: string): Promise<string> {
 	const path = safeRelativePath(rawPath);
 	if (bytes.length > MAX_LIVE_OUTPUT_BYTES) throw new InvalidInputError('Files up to 50 MB can be saved to the Library.');
@@ -258,7 +225,6 @@ export async function saveToLibrary(id: string, rawPath: string, bytes: Uint8Arr
 	return path;
 }
 
-/** Removes a file from the task's Library, from its sandbox too when one runs. */
 export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	const path = safeRelativePath(rawPath);
 	const machine = await liveMachine(id);
@@ -269,12 +235,7 @@ export async function removeOutput(id: string, rawPath: string): Promise<void> {
 	announce({ kind: 'task', id, what: 'files' });
 }
 
-/**
- * A file in the task's Library. Outputs the agent writes in its sandbox reach
- * storage at the end of its reply (a checkpoint), so one it made this reply,
- * such as a screenshot it just took, is read from the running sandbox until
- * then; a stopped one is never started for it.
- */
+/** Outputs reach storage at a reply's end, so one made this reply is read from the running sandbox until then; a stopped one is never started. */
 export async function readOutputFile(id: string, rawPath: string): Promise<Uint8Array | null> {
 	const path = safeRelativePath(rawPath);
 	const saved = await readOutput(id, path);

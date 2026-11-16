@@ -15,31 +15,23 @@ import { sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from '../secrets/secrets.ts';
 
 /*
- * A spare is a sandbox started while a new task is still being typed, so it is set up by the time you send it.
- * The page chooses the task's id before the task exists, and the spare runs under that id: when the task is made,
- * its machine is already there to be found. It is set up to the base branch's head and marked as a spare, and the
- * task only moves it to its own branch. Nothing but Anton's setup ever runs on a spare, as no task has its id yet.
- * One the page stops asking for (cleared, sent elsewhere, the tab gone) is stopped after `config.spareWaitMs`.
+ * A spare is a sandbox started while a new task is typed, under the id the page chose for the task, so the task finds it.
+ * It is set up to the base branch's head and marked as a spare; nothing but Anton's setup ever runs on it.
  */
 
-/**
- * A set-up spare: the machine as acquired (its connection open, so the task's first command is quick) and its marker.
- * `released` is set when it is let go, so a setup still under way stops rather than finishing for nobody.
- */
+/** `released` is set when it is let go, so a setup still under way stops rather than finishing for nobody. */
 export type SetUpSpare = { acquired: Acquired; marker: string };
 type Spare = { projectId: string; seenAt: number; ready: Promise<SetUpSpare | null>; released: boolean };
 
 const spares = new Map<string, Spare>();
-/** Task ids whose spare was let go, so a late ask for one starts nothing. The page picks a new id after it lets one go. */
+/** So a late ask for one starts nothing; the page picks a new id after it lets one go. */
 const released = new Set<string>();
 const RELEASED_KEPT = 500;
-/** No more than this many sandboxes wait on drafts at a time, whatever the pages ask. */
 const MAX_SPARES = 3;
 const SWEEP_MS = 15_000;
 const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const PREFIX = 'spare:';
-/** The ready marker of a spare for `taskId`, set up at `sha`. */
 export const spareMarker = (taskId: string, sha: string) => `${PREFIX}${taskId}:${sha}`;
 
 export function parseSpareMarker(marker: string): { taskId: string; sha: string } | null {
@@ -50,10 +42,7 @@ export function parseSpareMarker(marker: string): { taskId: string; sha: string 
 
 const sandbox = (): SandboxProvider => getProviders().sandbox;
 
-/**
- * Starts a spare for a task about to be sent on the repo, or keeps the one it has: the page asks again while the
- * draft stays. Returns whether one is starting or ready. A second draft on the same repo lets the first one's go.
- */
+/** The page asks again while the draft stays. A second draft on the same repo lets the first one's go. */
 export async function wakeSpare(input: { projectId: string; taskId: string; branch?: string }): Promise<{ waking: boolean }> {
 	const { projectId, taskId } = input;
 	if (!config.wakeSandbox || !TASK_ID.test(taskId) || released.has(taskId)) return { waking: false };
@@ -105,7 +94,6 @@ async function startSpare(project: Project, taskId: string, branch: string | und
 	return { acquired, marker };
 }
 
-/** Stops a draft's spare, as when its text is cleared or its page closes. */
 export function releaseSpare(taskId: string): void {
 	const spare = spares.get(taskId);
 	released.add(taskId);
@@ -118,10 +106,7 @@ export function releaseSpare(taskId: string): void {
 		.catch((error: unknown) => logProblem('warn', 'Could not stop a sandbox woken for a draft', error));
 }
 
-/**
- * Hands a new task the spare started for it, waiting for its setup if it is still under way, so the task never starts
- * a second sandbox beside it. A spare for another repo, or for a task that runs on this server, is stopped instead.
- */
+/** Waits for its setup if it is under way, so the task never starts a second sandbox beside it. A spare for another repo or a host task is stopped. */
 export async function claimSpare(session: SessionRecord): Promise<SetUpSpare | null> {
 	const spare = spares.get(session.id);
 	if (!spare) return null;
@@ -133,10 +118,7 @@ export async function claimSpare(session: SessionRecord): Promise<SetUpSpare | n
 	return null;
 }
 
-/**
- * Puts a set-up spare on its task's branch in one command, when the task starts where the spare was set up. Returns
- * false when the base moved since (a newer commit, another branch): the task then sets it up as one from an image.
- */
+/** False when the base moved since; the task then sets it up as one from an image. */
 export async function finishSpare(machine: Machine, marker: string, session: SessionRecord): Promise<boolean> {
 	if (parseSpareMarker(marker)?.sha !== session.baseSha) return false;
 	await run(machine, `git checkout -q -B ${quote(session.branch)} && printf %s ${quote(session.id)} > ${quote(readyFile(machine))}`, { cwd: repoDir(machine) });
@@ -145,7 +127,6 @@ export async function finishSpare(machine: Machine, marker: string, session: Ses
 
 let sweeping: NodeJS.Timeout | undefined;
 
-/** Stops spares the page stopped asking for; the sweep ends when none are left. */
 function sweepSoon(): void {
 	sweeping ??= setInterval(() => {
 		const now = Date.now();
@@ -158,5 +139,4 @@ function sweepSoon(): void {
 	sweeping.unref();
 }
 
-/** Drafts with a sandbox waiting, for tests and the Compute view. */
 export const sparesWaiting = (): string[] => [...spares.keys()];

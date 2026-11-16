@@ -1,11 +1,5 @@
-/*
- * What the agent's two browsers share: one step, and one run of code, written
- * once. The sandbox's browser server runs this source as part of its script,
- * and the Browser panel's shared browser runs it on Anton's side, so a step
- * behaves the same in both.
- */
+// The sandbox's browser server and the Browser panel's browser run this same source, so a step behaves the same in both.
 
-/** A page described this long is cut, so one step never floods the agent's context. */
 export const MAX_SNAPSHOT = 15_000;
 
 export function clipSnapshot(snapshot: string): string {
@@ -14,19 +8,15 @@ export function clipSnapshot(snapshot: string): string {
 
 export const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 
-/** Where a step's screenshot goes in the task's outputs: unique per call, so an earlier one in the conversation never shows a later image. */
+/** Unique per call, so an earlier one in the conversation never shows a later image. */
 export const screenshotFile = (name: string) => `screenshots/${slug(name) || 'page'}-${Date.now()}.png`;
 
-/** The local machine's own addresses, which only a browser inside the sandbox can reach. */
+/** Only a browser inside the sandbox can reach these. */
 export const isLocalAddress = (url: string | undefined) => Boolean(url && /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(url.trim()));
 
-/**
- * A raw file on GitHub's file hosts: plain text with nothing to act on, which web_fetch reads in a second and a
- * browser renders as one long page (one such step once hung for 22 minutes). The browser tool sends it to web_fetch.
- */
+/** web_fetch reads these in a second; a browser renders one long page (one such step once hung for 22 minutes). */
 export const isRawFile = (url: string | undefined) => Boolean(url && /^(https?:\/\/)?(raw\.githubusercontent\.com|gist\.githubusercontent\.com)\//i.test(url.trim()));
 
-/** What was typed as an address as a URL: a host gets https, a local one http, anything else is searched for. */
 export function addressToUrl(input: string): string {
 	const text = input.trim();
 	if (!text) return 'about:blank';
@@ -36,36 +26,23 @@ export function addressToUrl(input: string): string {
 	return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
 
-/** Words on a control that make a click on it worth asking about before it happens: it may buy, send, post or delete. */
 export const RISKY_WORDS =
 	/\b(buy|pay|purchase|order|checkout|check out|place|submit|send|post|publish|delete|remove|destroy|confirm|subscribe|unsubscribe|book|reserve|transfer|donate|sign up|register|create|save|apply|accept|tweet|reply|comment|invite|share|cancel|archive|merge|deploy|approve|install|withdraw|deposit|logout|log out|sign out)\b/i;
 
-/**
- * What a step reports, before the caller adds console errors and a screenshot. `view` is where the page and
- * its scrolled areas are scrolled to: a click that only scrolls (a table of contents, a "go to" link) leaves
- * the accessibility tree as it was, and this is how a caller still sees that it did something. A run of code
- * also reports what the code returned and logged.
- */
+/** `view` is where the page and its scrolled areas are scrolled to: a click that only scrolls leaves the tree as it was. */
 export type StepResult = { url: string; title: string; status: number | null; problem: string | null; snapshot: string; view?: string; result?: string; logs?: string[] };
 
-/** How many iframes a step describes, and how much of each, on a Playwright too old to describe them itself. */
+/** On a Playwright too old to describe iframes itself. */
 export const MAX_FRAMES = 5;
 const FRAME_CHARS = 4_000;
 
-/** Roles whose elements keep their ref in a page's description, as the ones an agent acts on; any element styled as clickable keeps its ref too. */
+/** Any element styled as clickable keeps its ref too. */
 const REF_ROLES = [
 	'button', 'link', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'checkbox', 'radio', 'switch', 'option', 'treeitem',
 	'textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'listbox', 'columnheader', 'gridcell', 'iframe',
 ];
 
-/**
- * The page facade a run's code gets as `page`, as source: Playwright's own API, for the
- * parts a script on a web page needs, where every call goes through `call(op)` to the
- * real page. It is plain JavaScript that also runs in a QuickJS VM, so the Browser
- * panel can run model-written code without giving it Anton's process. RegExps and
- * functions (for evaluate) are sent as their source and rebuilt on the other side;
- * a function is only ever run in the web page.
- */
+/** Plain JavaScript that also runs in a QuickJS VM. RegExps and functions are sent as source and rebuilt; a function only ever runs in the web page. */
 const PAGE_FACADE = `function antonPage(call) {
 	const known = { url: '' };
 	const enc = (value) => {
@@ -115,23 +92,12 @@ const PAGE_FACADE = `function antonPage(call) {
 	return page;
 }`;
 
-/** The facade's source, for a caller that runs a run's code somewhere else (the Browser panel's QuickJS VM). */
 export const RUN_FACADE = PAGE_FACADE;
 
 /**
- * The browser's shared source, as plain JavaScript declarations:
- *
- * - `browserStep(page, command)` does one action, waits for a page it loaded to settle, and
- *   describes the page as an accessibility tree. With a Playwright that has AI snapshots, each
- *   element the agent acts on carries a ref (`[ref=e12]`, `[ref=f1e3]` in an iframe) that a
- *   step targets as `e12`, and iframes are described in place. On an older Playwright, a
- *   page's own tree shows an iframe only as "- iframe", so each iframe big enough to use has
- *   its tree added after the page's, under "- iframe [frame=N]:".
- * - `browserRun(page, command, ask, execute)` runs model-written code against the page facade
- *   above: several steps in one call, answering with what the code returned. `execute` runs
- *   the code (`antonNodeExecute` where the code may run in the same process, the sandbox's own;
- *   a QuickJS VM on Anton's side). A click (or Enter) on an element whose name has a risky word
- *   asks `ask(name)` first, and stops the run when it says no.
+ * `browserStep` does one action and describes the page; with AI snapshots each element carries a ref (`e12`, `f1e3` in an
+ * iframe), otherwise iframes' trees are added after the page's under "- iframe [frame=N]:". `browserRun` runs model-written
+ * code against the facade; a click on an element named with a risky word asks `ask(name)` first.
  */
 export const BROWSER_SOURCE = `
 const ANTON_MAX_SNAPSHOT = ${MAX_SNAPSHOT};
@@ -528,10 +494,8 @@ async function browserRun(page, command, ask, execute) {
 `;
 
 export type BrowserCommand = Record<string, unknown>;
-/** Runs a run's code: in this process (`antonNodeExecute`) or in a VM. `call` sends one facade call to the page. */
 export type RunExecute = (code: string, call: (op: unknown) => Promise<unknown>) => Promise<{ value: unknown; logs?: string[] }>;
 
-/** The shared source as functions in this process, for the Browser panel's browser and for tests. */
 export function browserFunctions<Page = unknown>(): {
 	browserStep: (page: Page, command: BrowserCommand) => Promise<StepResult>;
 	browserRun: (page: Page, command: BrowserCommand, ask: ((name: string) => Promise<boolean>) | undefined, execute: RunExecute) => Promise<StepResult>;

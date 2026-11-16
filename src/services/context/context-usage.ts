@@ -7,39 +7,27 @@ import { backgroundModel, backgroundReasoning, compactionCeilingFor, generalSett
 import { logProblem } from '../../core/log.ts';
 import { findModel, loadedModels } from '../models/models.ts';
 
-/**
- * How full each task's context window is, and with what. The runtime tells
- * Anton, for every model call, the request it sent (system prompt, tools,
- * messages) and the tokens the provider counted. The request is measured by
- * size, split into the parts below, and scaled so the parts add up to the
- * provider's own count, which is what the runtime compacts on.
- */
+/** The request is measured by size per part and scaled so the parts add up to the provider's own count, which the runtime compacts on. */
 
 export type ContextPart = 'messages' | 'tools' | 'systemPrompt' | 'skills' | 'mcpTools';
 
 type Snapshot = {
-	/** `<gateway>/<model>`, the way tasks name their model. */
 	model: string;
-	/** Tokens the provider counted for the last call: its whole input plus its reply, the runtime's measure of the context. */
+	/** The last call's whole input plus its reply: the runtime's measure of the context. */
 	used: number;
-	/** The parts' relative sizes, in estimated tokens, before scaling to `used`. */
 	estimates: Record<ContextPart, number>;
 	at: string;
 };
 
 export type ContextView = {
 	model: string | null;
-	/** The model's context window in tokens; 0 when unknown. */
 	window: number;
 	used: number;
-	/** Where the runtime compacts the conversation: the window less room kept for the next reply, or the ceiling from Settings › General. */
+	/** The window less room kept for the next reply, or the ceiling from Settings › General. */
 	autocompactAt: number;
 	parts: Array<{ key: ContextPart; tokens: number }>;
 	at: string | null;
-	/**
-	 * Every model call the task made and the tokens they processed in all. Each call re-reads the
-	 * conversation, so this grows much faster than `used`, which is what the window holds now.
-	 */
+	/** Each call re-reads the conversation, so this grows much faster than `used`. */
 	task: { calls: number; tokens: number };
 };
 
@@ -59,7 +47,6 @@ type ContextEvent = {
 	response?: { usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; totalTokens?: number } };
 };
 
-/** The skills list the runtime adds to the system prompt, under its own heading. */
 function splitSkills(prompt: string): { skills: string; rest: string } {
 	const start = prompt.indexOf('## Available Skills');
 	if (start === -1) return { skills: '', rest: prompt };
@@ -85,14 +72,11 @@ export function measureRequest(input: ModelRequestInput): Record<ContextPart, nu
 /** The runtime's name for an agent's main conversation; a subagent's task gets a session of its own. */
 export const MAIN_SESSION = 'default';
 
-/** An event of the coding agent's main conversation, not a subagent's or the reviewer's. */
 export const onMainCoder = (event: Pick<ContextEvent, 'instanceId' | 'taskId' | 'session' | 'agentName'>) =>
 	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === MAIN_SESSION) && (!event.agentName || /^coder$/i.test(event.agentName));
 
-/** The coding agent's own calls in its main conversation, not a subagent's, the reviewer's, or a compaction's. */
 const isTaskCall = (event: ContextEvent) => onMainCoder(event) && event.purpose === 'agent';
 
-/** Requests seen, waiting for their call to finish; keyed by task and turn. */
 const pending = new Map<string, Record<ContextPart, number>>();
 const key = (id: string) => `context.${id}`;
 
@@ -118,14 +102,10 @@ export async function recordContext(event: ContextEvent): Promise<void> {
 		at: new Date().toISOString(),
 	};
 	await setSetting(key(id), snapshot).catch((error: unknown) => logProblem('warn', 'Context usage not kept', error, id));
-	// Each model turn: its context and its spend moved, nothing else about the task did.
 	announce({ kind: 'task', id, what: 'usage' });
 }
 
-/**
- * The runtime keeps room for the next reply: up to 20K tokens, no more than the model can write, and a third of a small window.
- * With a ceiling (Settings › General) that comes first, the rest of the window is kept too, so it compacts there.
- */
+/** As the runtime keeps it: up to 20K tokens, no more than the model can write, and a third of a small window. A ceiling that comes first keeps the rest too. */
 export function compactionReserve(window: number, maxOutput: number | null, ceiling: number | null = null): number {
 	let reserve = Math.min(20_000, maxOutput && maxOutput > 0 ? maxOutput : 20_000);
 	if (window > 0 && reserve * 2 >= window) reserve = Math.max(1024, Math.floor(window / 3));
@@ -133,35 +113,15 @@ export function compactionReserve(window: number, maxOutput: number | null, ceil
 	return reserve;
 }
 
-/**
- * How much of the latest conversation a compaction keeps word for word: a fifth of the context it compacts
- * at, from the runtime's 8K up to 40K. The runtime keeps 8K, about the last few tool results, so a coding
- * agent compacted mid-task lost the files and test output it was working from and spent its next calls
- * reading them again. A compaction starts the prompt cache over whatever it keeps, so keeping more costs
- * nothing then, and every call after reads it from the cache.
- */
+/** The runtime's 8K kept only the last few tool results, so an agent compacted mid-task re-read its files. The cache starts over anyway, so keeping more costs nothing. */
 export function keptAfterCompaction(compactsAt: number): number {
 	return Math.min(40_000, Math.max(8_000, Math.floor(compactsAt / 5)));
 }
 
-/**
- * The effort a compaction summary is written at by the conversation's own model, when Settings › General names
- * no compaction model. Flue writes it at `high`. The summary call shares no prefix with the conversation, so none
- * of it is read from the prompt cache, and the reply waits for it: a frontier model thinking hard over 200K
- * tokens kept a task still for minutes in the middle of its work. A summary extracts what happened and decides
- * nothing, so it needs little thinking. The task's own model still writes it, as the one model certain to be
- * reachable on the task's plan or gateway and billed where the task is.
- */
+/** Flue writes at `high`; the summary shares no cache prefix and the reply waits for it, so a frontier model over 200K tokens stalled tasks for minutes. */
 export const COMPACTION_SUMMARY_EFFORT: Reasoning = 'low';
 
-/**
- * The runtime's compaction for an agent on `model`: at the ceiling set in Settings › General when that
- * comes before the window fills (Claude Code's models have a ceiling of their own), else at the runtime's
- * own point, keeping what `keptAfterCompaction` says; and the summary written by the compaction model
- * chosen there (a faster one makes compacting quicker) at the effort chosen with it, else by the agent's
- * own at `COMPACTION_SUMMARY_EFFORT`. For a model of unknown window the point is left to the runtime.
- * Read while the agent renders, from the model list last fetched.
- */
+/** For a model of unknown window the point is left to the runtime. Read while the agent renders, from the model list last fetched. */
 export function compactionFor(
 	model: string,
 	ceiling = compactionCeilingFor(unrouted(model)),
@@ -179,7 +139,6 @@ export function compactionFor(
 	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens, ...summary } : { reserveTokens: reserve, keepRecentTokens, ...summary };
 }
 
-/** Shares `total` across the parts by their estimated sizes, in whole tokens that add up exactly. */
 export function scaleParts(estimates: Record<ContextPart, number>, total: number): Array<{ key: ContextPart; tokens: number }> {
 	const order: ContextPart[] = ['messages', 'tools', 'systemPrompt', 'skills', 'mcpTools'];
 	const sum = order.reduce((acc, part) => acc + estimates[part], 0);

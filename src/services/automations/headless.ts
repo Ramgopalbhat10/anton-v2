@@ -6,16 +6,10 @@ import { scheduleWatchedPullRequests, watchRunningChecks } from '../git/pr-watch
 import { runAutomaticReviews } from '../git/review-tasks.ts';
 import { resolveIdleThreads } from '../projects/thread-reports.ts';
 
-/**
- * How often Anton looks for labeled issues, news on its pull requests and pull requests to review.
- * A pull request whose checks run is read far more often (`pr-watch.ts`), and a GitHub webhook,
- * when set up, has it read the moment anything happens; this round is the safety net under both.
- */
+/** The safety net under `pr-watch.ts` and a GitHub webhook, which read a pull request sooner. */
 const POLL_MS = 5 * 60_000;
-/** How often it looks for scheduled routines that are due, so each starts within a minute of its time. */
 const SCHEDULE_MS = 60_000;
 
-/** Work that starts without anyone typing. Mostly polling, since a personal server often has no public URL for webhooks. */
 export function scheduleHeadlessWork(): void {
 	// A slow round (many pull requests, a slow GitHub) is never overlapped by the next one.
 	let busy = false;

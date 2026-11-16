@@ -10,7 +10,7 @@ import { machineFor } from '../sandbox/workspace.ts';
 
 export type RestoreResult = { at: string; skipped: string[] };
 
-/** Puts changed files back as they are at `baseSha` (the base commit, or the last push); files added since are removed. */
+/** `baseSha` is the base commit or the last push; files added since are removed. */
 async function resetToBase(machine: Machine, baseSha: string, files: FileChange[]): Promise<void> {
 	const added = files.filter((file) => file.status === 'A').map((file) => file.path);
 	const existing = files.filter((file) => file.status !== 'A').map((file) => file.path);
@@ -19,18 +19,13 @@ async function resetToBase(machine: Machine, baseSha: string, files: FileChange[
 	await eachBatch(machine, `git restore --source=${baseSha} --worktree`, existing);
 }
 
-/** Tasks whose files are being restored; their agent takes no new messages until it finishes. */
 const restoring = new Set<string>();
 
 export function isRestoring(id: string): boolean {
 	return restoring.has(id);
 }
 
-/**
- * Puts the task's files back as they were at a checkpoint. Commits stay; only
- * the working tree changes. The state before the restore is checkpointed
- * first, so the restore itself can be undone from the timeline.
- */
+/** Commits stay; only the working tree changes. The state before is checkpointed first, so the restore can be undone. */
 export async function restoreCheckpoint(id: string, at: string): Promise<RestoreResult> {
 	if (isWorking(id)) throw new ConflictError('Stop the agent before restoring a checkpoint');
 	if (restoring.has(id)) throw new ConflictError('A restore is already running');
@@ -52,12 +47,7 @@ export async function restoreCheckpoint(id: string, at: string): Promise<Restore
 	}
 }
 
-/**
- * Puts one changed file back as it is at the base commit, removing it if the
- * task added it; with `to: 'pushed'`, as it was at the last push instead, so
- * only the unpushed edits go. Checkpointed before and after, so the timeline
- * can undo it.
- */
+/** With `to: 'pushed'`, only the unpushed edits go. Checkpointed before and after, so the timeline can undo it. */
 export async function revertFile(id: string, rawPath: string, to: 'base' | 'pushed' = 'base'): Promise<void> {
 	const path = safeRelativePath(rawPath);
 	if (isWorking(id)) throw new ConflictError('Stop the agent before reverting a file');

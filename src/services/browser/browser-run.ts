@@ -1,18 +1,12 @@
 import { CodemodeSandbox } from '@earendil-works/pi-codemode';
 import { RUN_FACADE, type RunExecute } from './browser-step.ts';
 
-/** The longest a run of code may take in all; each call it makes on the page has its own short timeout. */
+/** Each call it makes on the page has its own short timeout. */
 export const RUN_MS = 120_000;
-/** What the code returned, as the agent reads it, and its console output, cut to this. */
 export const RUN_RESULT_CHARS = 4_000;
 const MEMORY_BYTES = 64 * 1024 * 1024;
 
-/**
- * Runs a run's code for the Browser panel, whose page Anton drives from its own
- * process: in a fresh QuickJS VM that can reach nothing but `__call`, the page
- * facade's one way to the real page, so model-written code never runs in Anton.
- * A function the code passes to evaluate goes to the page as source and runs there.
- */
+/** In a fresh QuickJS VM that reaches only `__call`, so model-written code never runs in Anton. A function passed to evaluate runs in the page. */
 export const quickjsExecute: RunExecute = async (code, call) => {
 	const sandbox = new CodemodeSandbox({
 		timeoutMs: RUN_MS,
@@ -29,7 +23,6 @@ export const quickjsExecute: RunExecute = async (code, call) => {
 	}
 };
 
-/** A run's answer as the agent reads it: what the code returned and logged, each cut. */
 export function codeReport(result: string | undefined, logs: string[] | undefined): { result: string; logs?: string[] } {
 	const text = result ?? '';
 	const cut = text.length > RUN_RESULT_CHARS ? `${text.slice(0, RUN_RESULT_CHARS)}… (cut at ${RUN_RESULT_CHARS} characters; return less)` : text;

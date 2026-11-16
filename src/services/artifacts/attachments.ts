@@ -9,14 +9,7 @@ import { findModel } from '../models/models.ts';
 import { describeImage } from '../models/vision.ts';
 import { listSpaceFiles, readSpaceFile, uploadSpaceFile } from '../projects/space-files.ts';
 
-/**
- * Files attached to a message from a composer. A task's go into its Library
- * under `uploads/` (and its sandbox's outputs folder, now or when it starts);
- * the coordinator's and a new thread's go into the project's Library, which
- * every thread reads. Each comes back with its text for the message, cut at
- * `INLINE_CHARS`; the agent reads the rest with `read_attachment` or
- * `read_project_file`.
- */
+/** A task's attachments go into its Library under `uploads/`; a project's into the project's Library. The message carries text up to this. */
 export const INLINE_CHARS = 20_000;
 
 async function described(name: string, path: string, bytes: Uint8Array): Promise<AttachedFile> {
@@ -41,10 +34,7 @@ export async function attachToProject(spaceId: string, name: string, bytes: Uint
 
 const INCOGNITO_CHARS = 60_000;
 
-/**
- * A file attached to an incognito message: read as text for the message and nothing more.
- * It is never stored, so there is no original for the agent to open and no read_attachment.
- */
+/** Never stored, so there is no original for the agent to open and no read_attachment. */
 export async function incognitoAttachment(name: string, bytes: Uint8Array): Promise<AttachedFile> {
 	const doc = await cachedDocumentText(name, bytes).catch((error: unknown) => {
 		logProblem('warn', `Could not read ${name} as text`, error);
@@ -55,7 +45,6 @@ export async function incognitoAttachment(name: string, bytes: Uint8Array): Prom
 	return { name, path: name, size: bytes.length, kind: doc?.kind ?? documentKind(name), text, cut: null };
 }
 
-/** A file attached to one of the task's messages, as text from `offset`: for `read_attachment`. */
 export async function readAttachment(id: string, rawPath: string, offset = 0): Promise<string> {
 	// The agent may name it as its sandbox sees it, under the outputs folder.
 	const path = safeRelativePath(rawPath.trim().replace(/^(\.\.\/)?outputs\//, ''));
@@ -67,7 +56,6 @@ export async function readAttachment(id: string, rawPath: string, offset = 0): P
 	return documentSlice(path.slice(path.lastIndexOf('/') + 1), bytes, offset, 'read the next part with read_attachment');
 }
 
-/** A file already in the project's Library, described as an attachment: for the coordinator handing a thread the files its work needs. */
 export async function projectAttachment(spaceId: string, rawName: string): Promise<AttachedFile> {
 	const name = safeRelativePath(rawName.trim().replace(/^(\.\.\/)?project-files\//, ''));
 	const bytes = await readSpaceFile(spaceId, name);
@@ -75,17 +63,10 @@ export async function projectAttachment(spaceId: string, rawName: string): Promi
 	return described(name, name, bytes);
 }
 
-/** At most this many files go with one message to a thread. */
 const MAX_THREAD_FILES = 10;
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/**
- * The project files a message from the coordinator to a thread carries: the
- * ones it lists, the ones its words name, and, when it names none, the files
- * the user attached to the message it is answering. A thread sees nothing of
- * the coordinator's conversation, so a reference image the coordinator only
- * described in words would otherwise never reach it.
- */
+/** A thread sees nothing of the coordinator's conversation, so with none named the files the user attached to the message it answers go along. */
 export async function filesForThread(spaceId: string, message: string, listed: string[] = [], answering = ''): Promise<string[]> {
 	const clean = (name: string) => name.trim().replace(/^(\.\.\/)?project-files\//, '');
 	const names = new Set(listed.map(clean).filter(Boolean));
@@ -97,17 +78,10 @@ export async function filesForThread(spaceId: string, message: string, listed: s
 }
 
 const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
-/** As the composer sends images. */
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 4;
 
-/**
- * The pictures a message to a project's thread carries as project files (a
- * brief with images attached), read from the project's Library: they go with
- * the message as images when the thread's model can see. A model that cannot
- * gets each one described by the vision model instead, as a note to add to
- * the message.
- */
+/** A model that cannot see gets each one described by the vision model instead, as a note. */
 export async function projectPictures(spaceId: string, threadId: string, message: string, model: string): Promise<{ images: DeliveredImage[]; note: string }> {
 	const typeOf = (name: string) => IMAGE_TYPES[/\.(\w+)$/.exec(name)?.[1]?.toLowerCase() ?? ''];
 	const wanted = splitAttachments(message)

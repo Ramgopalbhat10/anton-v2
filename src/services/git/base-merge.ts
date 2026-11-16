@@ -9,10 +9,9 @@ import { bringCommit, hasCommit, OFFLINE_GIT } from './host-commits.ts';
 import { logProblem } from '../../core/log.ts';
 import { machineFor } from '../sandbox/workspace.ts';
 
-/** The base a merge brought in, kept in the machine until the merge is committed. */
+/** Kept in the machine until the merge is committed. */
 const PENDING = '.git/anton-merged-base';
 
-/** Files a merge left in conflict, by path. */
 export async function conflictedFiles(machine: Machine): Promise<string[]> {
 	const out = await run(machine, 'git diff --name-only --diff-filter=U', { cwd: repoDir(machine), env: OFFLINE_GIT });
 	return out.split('\n').filter(Boolean);
@@ -20,13 +19,7 @@ export async function conflictedFiles(machine: Machine): Promise<string[]> {
 
 const list = (paths: string[]) => paths.map((path) => `- ${path}`).join('\n');
 
-/**
- * Merges the latest base branch from the host into the task branch, for a
- * pull request that no longer merges cleanly. The machine has no
- * credentials, so the base's files come through the host's API
- * (`bringCommit`); git then merges as usual and leaves any conflicts in the
- * files for the agent to resolve and commit.
- */
+/** The machine has no credentials, so the base's files come through the host's API (`bringCommit`); conflicts are left for the agent. */
 export async function mergeBaseBranch(id: string): Promise<string> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -79,11 +72,7 @@ export async function mergeBaseBranch(id: string): Promise<string> {
 	].join('\n');
 }
 
-/**
- * Once the task branch contains the base a merge brought in, the task's
- * changes are measured from there, so its diff and reviews leave out what
- * the base already had.
- */
+/** From then on the task's changes are measured from that base, so its diff and reviews leave out what the base already had. */
 export async function settleMergedBase(id: string, machine: Machine): Promise<void> {
 	const cwd = repoDir(machine);
 	const pending = await machine.exec(`cat ${PENDING}`, { cwd });
@@ -97,17 +86,9 @@ export async function settleMergedBase(id: string, machine: Machine): Promise<vo
 const SHA = /^[0-9a-f]{40}$/;
 
 /**
- * The base the agent brought in with git of its own: `git fetch origin main && git merge`, a fast-forward or a
- * rebase, where the repository lets its machine fetch. That leaves no note for `settleMergedBase`, so the task's
- * change was still measured from where it began and held everything the base had gained: a thread asked to take the
- * latest main and analyse, changing nothing, ended its reply with a hundred files of other pull requests as its
- * change, and was sent back to check them against its request.
- *
- * The machine says which commit the branch shares with the base it fetched (its `origin/<base>`, or what it last
- * fetched); the host says whether that commit is on the base branch, since the machine is the agent's. Only a commit
- * past the task's base that the branch already holds moves it, so a merge left in conflict, a branch that never
- * took the base in, and a machine that fetched nothing change nothing. Never throws: the change is then measured as
- * it was.
+ * For a base the agent fetched and merged with its own git, which leaves no note for `settleMergedBase`; without this a
+ * thread that only took the latest main ended with a hundred files of other pull requests as its change. The host, not
+ * the agent's machine, says whether the shared commit is on the base branch. Never throws.
  */
 export async function settleFetchedBase(id: string, machine: Machine): Promise<void> {
 	try {
@@ -133,23 +114,14 @@ export async function settleFetchedBase(id: string, machine: Machine): Promise<v
 	}
 }
 
-/** The task's next branch after a merged pull request: `-v2`, then `-v3`, and so on. */
 export function nextBranch(branch: string): string {
 	const numbered = /^(.*)-v(\d+)$/.exec(branch);
 	return numbered ? `${numbered[1]}-v${Number(numbered[2]) + 1}` : `${branch}-v2`;
 }
 
-/** Where the work the host lacks is kept while the branch moves. */
 const CARRIED = '.git/anton-carried.patch';
 
-/**
- * Once a task's pull request has merged, its next pull request starts on a
- * new branch from the base as it is now, holding only the work since the
- * merged one. A squash merge puts that work on the base as a commit of its
- * own, so pushing more to the old branch would offer it all again. The
- * unpushed work is carried over as a patch; files both sides changed are
- * left in conflict for the agent, as a merge would.
- */
+/** A squash merge puts the work on the base as a new commit, so pushing more to the old branch would offer it all again. Unpushed work is carried over as a patch. */
 export async function branchAfterMerge(id: string, machine: Machine): Promise<{ branch: string; conflicts: string[] }> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -177,7 +149,6 @@ export async function branchAfterMerge(id: string, machine: Machine): Promise<{ 
 	const conflicts = await conflictedFiles(machine);
 	await run(machine, `rm -f ${CARRIED}`, { cwd });
 	if (carried.exitCode !== 0 && conflicts.length === 0) throw new Error(`Could not carry the work over to ${branch}: ${carried.stderr.trim().slice(-1000)}`);
-	// The merged pull request stays in the task's list; the next one opens from the new branch.
 	await updateSession(id, { branch, baseSha: head, pushedSha: null, prUrl: null, pullRequestJson: null });
 	return { branch, conflicts };
 }

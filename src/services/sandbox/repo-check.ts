@@ -15,54 +15,31 @@ import { envFor, secretsToHide } from '../secrets/secrets.ts';
 import { liveMachine } from './workspace.ts';
 
 /*
- * The repository's check: a command the user sets per repository (a type check
- * or lint), run in the task's sandbox after the agent changes files. The prompts
- * ask the agent to check its work, but nothing ran a check by itself: in a
- * 20-task benchmark five failures were near misses a type check would have
- * caught, and the agent found a type error it made only when it next chose to
- * run the checker, often many steps later, having built on the mistake.
- *
- * It never starts a sandbox and never holds the agent up: a finished `edit`,
- * `write`, `apply_patch` or `bash` call (the main agent's or a subagent's, from
- * the runtime's events) marks the task changed, and after a short quiet the
- * check runs on the machine if it is already running, in the server's
- * background. One runs at a time; a change while it runs makes it run once
- * more after. The script compares a fingerprint of the working tree with the
- * one the last run saw before it runs the command, so a `bash` that only read
- * costs one short command and no check. The agent hears only of a failure (once
- * for the same failure), a pass after a failure it was told of, and a timeout,
- * at the end of its next command's result; nothing at all with no command set.
- * At the end of a reply that changed files, `checkGate` waits for the check of
- * the last change and sends the reply back once for a failure.
+ * The repository's check (a type check or lint the user sets) runs on the machine, if already running, after a quiet
+ * following a file-changing tool call. It never starts a sandbox or holds the agent up. In a 20-task benchmark five
+ * failures were near misses a type check would have caught. The agent hears only news, at the end of its next command's
+ * result; `checkGate` sends a reply back once for a failure of its last change.
  */
 
-/** How long the check runs before it is stopped: a type check or lint takes seconds; a whole suite is what this is not for. */
+/** A type check or lint takes seconds; a whole suite is what this is not for. */
 export const CHECK_TIMEOUT_MS = 3 * 60_000;
-/** The check starts this long after the last change, so a step's burst of edits causes one run. */
+/** So a step's burst of edits causes one run. */
 export const QUIET_MS = 2_000;
-/** Where each task's fingerprint, process id and log are kept, in the machine. */
 export const CHECK_DIR = '/tmp/anton-check';
-/** How long `timeout` gives the check to end after its TERM before it is killed. */
 const KILL_GRACE_S = 10;
-/** A notice's digest, at most: it rides on a command's result, and on every later model call with it. */
+/** It rides on a command's result, and on every later model call with it. */
 const NOTICE_CHARS = 1_500;
-/** Each of a notice digest's two parts, the failure-looking lines and the last lines. */
 const NOTICE_PART_CHARS = 650;
-/** Times a reply is sent back for the check's failures, at most. */
 export const MAX_CHECK_SENDS = 2;
-/** A command as a notice names it. */
 const COMMAND_CHARS = 60;
-/** Tasks whose check state is kept in memory; the oldest go first. */
 const KEEP_TASKS = 200;
 
-/** The tool calls that may have changed the task's files: the file tools of either profile, and any command. */
 const TRIGGERS: ReadonlySet<string> = new Set([...FILE_CHANGE_TOOLS, 'bash']);
 
-/** What a task's check needs of its repository and record, or null when it has none to run. */
 export type CheckSettings = { command: string; baseSha: string; env: Record<string, string> };
 
 export type Deps = {
-	/** The task's machine only if it is running: a check never starts a sandbox. */
+	/** A check never starts a sandbox. */
 	live: (id: string) => Promise<Machine | null>;
 	settings: (id: string) => Promise<CheckSettings | null>;
 	secrets: (id: string) => Promise<Record<string, string>>;
@@ -72,7 +49,7 @@ export type Deps = {
 	timeoutMs: number;
 };
 
-/** A repository task's check command, unless it is planning, reviewing or on this server, which `watchRepoCheck` also rules out. */
+/** None while planning, reviewing or on this server, which `watchRepoCheck` also rules out. */
 async function settingsOf(id: string): Promise<CheckSettings | null> {
 	const session = await getSessionRecord(id);
 	if (!session?.projectId || session.planMode || session.review || session.runOn === 'host') return null;
@@ -96,7 +73,6 @@ const defaults: Deps = {
 
 let deps: Deps = defaults;
 
-/** Replaces what the check runs on (tests give it a local machine and short times); returns what puts the defaults back. */
 export function setRepoCheckDeps(next: Partial<Deps>): () => void {
 	deps = { ...defaults, ...next };
 	return () => {
@@ -110,29 +86,21 @@ type Result = {
 	seen: Seen;
 	log: string;
 	hide: (text: string) => string;
-	/** The failure, by a hash of its digest without its timings, so the same failure is told once. */
+	/** A hash of its digest without its timings, so the same failure is told once. */
 	key: string;
 };
 
 type TaskCheck = {
-	/** A repository task with its sandbox, outside plan mode and review and not on this server, as its agent last rendered. */
 	eligible: boolean;
-	/** The quiet before the next run, while it waits. */
 	timer: ReturnType<typeof setTimeout> | null;
-	/** The run in flight, and the machine it runs on, to stop it. */
 	run: Promise<void> | null;
 	machine: Machine | null;
-	/** The task changed while a run was in flight: it runs once more after. */
 	again: boolean;
 	/** The tree the last run's command left may hold the agent's changes made while it ran, so the next run does not skip on it. */
 	mixed: boolean;
-	/** The run in flight was stopped: its result is not told. */
 	stopping: boolean;
-	/** The latest run that ran the command. */
 	last: Result | null;
-	/** What the next command result ends with, and what the agent has then been told. */
 	notice: { text: string; told: string | undefined } | null;
-	/** Runs that ran the command, for tests. */
 	runs: number;
 };
 
@@ -151,10 +119,7 @@ function entryFor(id: string): TaskCheck {
 	return found;
 }
 
-/**
- * Whether the task's changes are checked, from its agent as it renders: a repository task outside plan mode and review
- * that does not run on this server. A chat, an incognito chat, a plan or a review is never checked.
- */
+/** A chat, an incognito chat, a plan or a review is never checked. */
 export function watchRepoCheck(id: string, on: boolean): void {
 	if (on) {
 		entryFor(id).eligible = true;
@@ -169,7 +134,6 @@ export function watchRepoCheck(id: string, on: boolean): void {
 
 type ToolEvent = { type: string; instanceId?: string; agentName?: string; toolName?: string };
 
-/** A runtime event: a finished call of a tool that may change files marks its task changed. Runs in the event observer; never throws. */
 export function noteRepoCheckEvent(event: ToolEvent): void {
 	if (event.type !== 'tool' || !event.instanceId || !event.toolName || !TRIGGERS.has(event.toolName)) return;
 	// The reviewer of a task's pushes shares its id and only reads.
@@ -177,7 +141,6 @@ export function noteRepoCheckEvent(event: ToolEvent): void {
 	noteRepoChange(event.instanceId);
 }
 
-/** The task's files may have changed: its check runs after a quiet, or once more after the run in flight. */
 export function noteRepoChange(id: string): void {
 	const own = tasks.get(id);
 	if (!own?.eligible) return;
@@ -216,16 +179,9 @@ function begin(id: string, own: TaskCheck): void {
 const fileName = (id: string) => id.replace(/[^\w.-]/g, '_');
 
 /**
- * The check as the machine runs it, in one command: a fingerprint of the working tree (its commit, its status with
- * untracked files, its diff, and its untracked files' sizes and times) is compared with the ones the last run saw,
- * and when it is the same the script says so and ends. Else the fingerprint is kept before the command runs, and
- * another after it: what a command writes (build output, caches) is no change of the agent's, so the next run is
- * skipped when the tree is as the agent left it for the last run or as that run's command left it, unless the agent
- * changed files while that command ran (`mixed`), when the tree it left holds the agent's changes too. A
- * task's first fingerprint, on a tree still at its base commit with nothing changed, is kept without a run: there
- * is no change of the agent's to check yet. The command runs in a session of its own under `timeout`, which stops
- * its whole process group at the limit; its output goes to a log, and the script prints its exit code, whether it
- * timed out or was stopped, and the log's digest, as background jobs do.
+ * One command. The working tree's fingerprint (commit, status, diff, untracked sizes and times) is compared with the last
+ * run's before and after its command, so what the command writes (build output, caches) is no change of the agent's;
+ * `mixed` means the agent changed files while that command ran. A first fingerprint at the base commit is kept without a run.
  */
 export function checkScript(command: string, options: { dir: string; name: string; cwd: string; seconds: number; base: string; mixed?: boolean }): string {
 	const { dir, name, cwd, seconds, base, mixed = false } = options;
@@ -254,7 +210,7 @@ export function checkScript(command: string, options: { dir: string; name: strin
 	].join('\n');
 }
 
-/** Stops a running check's whole process group, marked first so its run is not told; its fingerprint goes, so the next change is checked. */
+/** Marked first so its run is not told; its fingerprint goes, so the next change is checked. */
 function killScript(dir: string, name: string): string {
 	return [
 		`f=${quote(`${dir}/${name}`)}; : > "$f.stopped" 2>/dev/null; rm -f "$f.fp" "$f.after"`,
@@ -266,7 +222,7 @@ function killScript(dir: string, name: string): string {
 	].join('\n');
 }
 
-/** A failure's identity: its digest with timings and clock times taken out, as a rerun prints them differently. */
+/** Timings and clock times taken out, as a rerun prints them differently. */
 function keyOf(seen: Seen, hide: (text: string) => string): string {
 	const body = hide(`${seen.failures}\n${seen.tail}`)
 		.replace(/\d+(\.\d+)?\s?(ms|s|m)\b/g, '#')
@@ -314,13 +270,11 @@ const shortCommand = (result: Pick<Result, 'command' | 'hide'>) => {
 	return line.length > COMMAND_CHARS ? `${line.slice(0, COMMAND_CHARS - 1)}…` : line;
 };
 
-/** The digest a notice carries, within its bound. */
 function noticeDigest(result: Result): string {
 	const digest = digestOf(result.seen, result.log, result.hide, NOTICE_PART_CHARS);
 	return digest.length > NOTICE_CHARS ? `${digest.slice(0, NOTICE_CHARS - 1)}…` : digest;
 }
 
-/** What the next command result says of a run, given what the agent was last told: only news, and never good news it did not need. */
 function noticeFor(result: Result, told: string | undefined): TaskCheck['notice'] {
 	if (result.status === 'failed') {
 		if (told === result.key) return null;
@@ -339,10 +293,7 @@ function noticeFor(result: Result, told: string | undefined): TaskCheck['notice'
 	return null;
 }
 
-/**
- * The line a command's result ends with when the check has news since the agent last heard: a failure (once for the
- * same failure), a pass after a failure it was told of, or a timeout; empty otherwise, and always with no check command.
- */
+/** A failure (once for the same failure), a pass after a failure it was told of, or a timeout; empty otherwise. */
 export function checkNotice(id: string): string {
 	const own = tasks.get(id);
 	if (!own?.notice) return '';
@@ -354,14 +305,12 @@ export function checkNotice(id: string): string {
 	return line;
 }
 
-/** A new reply: whether it changed the tree, and what it was sent back for, start over. What the agent was told stays. */
 export function startCheckGate(id: string): void {
 	changeGate(id, (state) => {
 		state.check = { told: state.check.told, ran: false, sent: [], sends: 0 };
 	});
 }
 
-/** Waits for the quiet and the run in flight, and the run a change during it causes, at most the check's own time and a little more. */
 async function settle(id: string, own: TaskCheck, signal?: AbortSignal): Promise<void> {
 	const deadline = Date.now() + deps.timeoutMs + (KILL_GRACE_S + 20) * 1000;
 	while ((own.timer || own.run) && !signal?.aborted) {
@@ -376,10 +325,8 @@ async function settle(id: string, own: TaskCheck, signal?: AbortSignal): Promise
 type Call = { tool: string };
 
 /**
- * At the end of a reply that changed the tree: waits for the check of its last change, and when that fails sends the
- * reply back with the digest, to fix what the change broke or say the failure was there before it. Once a reply for a
- * failure and at most `MAX_CHECK_SENDS` times a reply; never on an aborted reply or one that ends on `ask` or
- * `propose_plan`. A timeout is not a failure of the change and sends nothing back. Null at once with no check.
+ * Sends the reply back once per failure, at most `MAX_CHECK_SENDS` times, to fix what it broke or say it was there before.
+ * Never on an aborted reply or one ending on `ask` or `propose_plan`; a timeout sends nothing back.
  */
 export async function checkGate(id: string, calls: readonly Call[], context: { signal?: AbortSignal } = {}): Promise<string | null> {
 	if (context.signal?.aborted) return null;
@@ -404,7 +351,7 @@ export async function checkGate(id: string, calls: readonly Call[], context: { s
 	);
 }
 
-/** Stops the task's check: the quiet and a run in flight, whose result is not told. A stopped reply leaves no check running. */
+/** A stopped reply leaves no check running; the result of a run in flight is not told. */
 export async function stopRepoCheck(id: string): Promise<void> {
 	const own = tasks.get(id);
 	if (!own) return;
@@ -418,23 +365,19 @@ export async function stopRepoCheck(id: string): Promise<void> {
 	await own.run;
 }
 
-/** Forgets a deleted task's check, stopping one in flight; nothing of it stays in memory. */
 export function forgetRepoCheck(id: string): void {
 	void stopRepoCheck(id);
 	tasks.delete(id);
 }
 
-/** Settles once the task has no check waiting or running: for tests. */
 export async function settledRepoCheck(id: string): Promise<void> {
 	const own = tasks.get(id);
 	while (own && (own.timer || own.run)) await (own.run ?? delay(5));
 }
 
-/** How many times the task's check ran its command, and its latest result: for tests. */
 export function repoCheckRuns(id: string): { runs: number; last: Result['status'] | null } {
 	const own = tasks.get(id);
 	return { runs: own?.runs ?? 0, last: own?.last?.status ?? null };
 }
 
-/** Whether the task's check state is in memory: for tests. */
 export const hasRepoCheck = (id: string): boolean => tasks.has(id);

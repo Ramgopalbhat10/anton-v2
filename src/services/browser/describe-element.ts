@@ -1,10 +1,5 @@
-/*
- * Runs inside the Browser panel's page, through the Chrome DevTools Protocol,
- * with `this` the element picked (or a text node in it). Kept apart so tests
- * can run it against a DOM. A plain string, as it is sent to the page as is.
- */
+// Runs in the Browser panel's page over CDP, with `this` the element picked; a plain string, as it is sent to the page as is.
 
-/** What the element is, where it sits, and the React components around it. */
 export const DESCRIBE_ELEMENT = `function () {
 	const el = this.nodeType === 1 ? this : this.parentElement;
 	if (!el) return null;

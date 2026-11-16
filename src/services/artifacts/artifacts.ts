@@ -4,26 +4,18 @@ import { storedOutputs } from './files.ts';
 import { ADDED_FILES, addedFiles } from './added-files.ts';
 import { isRenderPath, pageTitle } from './renders.ts';
 
-/*
- * Everything the agent made, across every task: the Artifacts page. Each
- * task's Library is read from storage once and kept in the database until it
- * changes (checkpoints.ts forgets it then), so the page reads one table.
- * Files you added yourself (uploads/) are yours, not artifacts.
- */
+/** Each task's Library is read from storage once and kept in the database until it changes (checkpoints.ts forgets it), so the page reads one table. */
 
 export type Artifact = {
 	sessionId: string;
 	path: string;
-	/** A page's title as the agent gave it; a file's name otherwise. */
 	title: string;
 	size: number;
 	mtimeMs: number;
 	task: { title: string; spaceId: string | null; chat: boolean };
-	/** You added it on the Artifacts page; it is from no task. */
 	added?: boolean;
 };
 
-/** How many tasks' storage is read at once when filling in the ones not yet listed. */
 const READS_AT_ONCE = 8;
 
 async function eachLimited<T>(items: T[], limit: number, work: (item: T) => Promise<void>): Promise<void> {

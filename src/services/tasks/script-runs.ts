@@ -2,16 +2,10 @@ import { announce } from '../../core/changes.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * What each run_script program called, for the thread: the runtime only shows
- * the program and its result, so Anton keeps each call (tool, a short input,
- * how it went) as it happens, keyed by the run_script call's id. Kept in
- * memory while it runs and saved per task, so a reload still shows it.
- */
+/** The runtime shows only a run_script program and its result, so Anton keeps each call it made, keyed by the run_script call's id. */
 
 export type ScriptCall = { tool: string; input: string; state: 'running' | 'done' | 'failed'; durationMs: number | null };
 
-/** A task keeps its latest programs; each program its first calls. */
 const MAX_SCRIPTS = 40;
 const MAX_CALLS = 100;
 const MAX_INPUT = 160;
@@ -38,7 +32,6 @@ function scriptsOf(id: string): Promise<Record<string, ScriptCall[]>> {
 	return pending;
 }
 
-/** A call's input in one short line, as the thread shows it. */
 export function shortInput(input: unknown): string {
 	let text: string;
 	try {
@@ -77,7 +70,6 @@ function changed(id: string) {
 	);
 }
 
-/** Records the calls one program has made so far. */
 export async function noteScriptCalls(id: string, toolCallId: string, calls: ScriptCall[]): Promise<void> {
 	const kept = await scriptsOf(id);
 	if (!(toolCallId in kept)) {
@@ -88,12 +80,10 @@ export async function noteScriptCalls(id: string, toolCallId: string, calls: Scr
 	changed(id);
 }
 
-/** Each program's calls, by its run_script call's id. */
 export function scriptCalls(id: string): Promise<Record<string, ScriptCall[]>> {
 	return scriptsOf(id);
 }
 
-/** Forgets a deleted task's programs. */
 export async function forgetScriptCalls(id: string): Promise<void> {
 	scripts.delete(id);
 	clearTimeout(saving.get(id));

@@ -15,17 +15,9 @@ import { modelFor } from '../tasks/sessions.ts';
 import { recordUsage } from '../models/usage.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 
-/*
- * Images the agent makes with generate_image, through the ImageModel port
- * (OpenRouter's image models). The task's own model only writes the prompt,
- * so a model that cannot draw, or a plan whose route offers no image tool
- * (ChatGPT's, Claude Code's), still makes images. Each one is kept in the
- * Library under images/ and drawn in the thread, and its cost is counted on
- * the task like any model call.
- */
+// The task's own model only writes the prompt, so a model that cannot draw, or a plan with no image tool, still makes images.
 
 export const IMAGE_DIR = 'images';
-/** The most images one call starts from; models take more, but a prompt rarely needs them. */
 export const MAX_REFERENCES = 4;
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
 
@@ -36,12 +28,10 @@ const EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/jpeg': '
 
 export const imagesAvailable = (): boolean => Boolean(getProviders().images);
 
-/** The image models the key may use, for Settings › General; empty without a key. */
 export async function imageModels(): Promise<ImageModelInfo[]> {
 	return (await getProviders().images?.list()) ?? [];
 }
 
-/** The model an image is drawn with: the task's own when it is an image model, else Settings › General's, else ANTON_IMAGE_MODEL. */
 export async function imageModelFor(id: string): Promise<string> {
 	const listed = await imageModels().catch(() => []);
 	const task = modelFor(id).model;
@@ -49,7 +39,7 @@ export async function imageModelFor(id: string): Promise<string> {
 	return (await generalSettings()).imageModel ?? config.imageModel;
 }
 
-/** A Library path as the agent may write it: `../outputs/images/a.png` and `images/a.png` are the same file. */
+/** `../outputs/images/a.png` and `images/a.png` are the same file. */
 const libraryPath = (path: string) => path.trim().replace(/^(\.\.\/)?outputs\//, '');
 
 async function reference(id: string, path: string): Promise<ImageReference> {
@@ -66,10 +56,6 @@ export type ImageRequest = { prompt: string; name?: string; from?: string[]; asp
 
 export type MadeImage = { path: string; model: string; note: string };
 
-/**
- * Makes one image and keeps it in the Library: in the sandbox's outputs folder
- * when the task has one, so its code can use the file, else in storage.
- */
 export async function generateImage(id: string, request: ImageRequest, signal?: AbortSignal): Promise<MadeImage> {
 	const images = getProviders().images;
 	if (!images) throw new Error(NO_KEY);

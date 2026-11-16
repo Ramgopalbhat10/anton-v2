@@ -3,7 +3,6 @@ import type { Machine } from '../../core/ports.ts';
 import { quote, text } from '../../core/shell.ts';
 import { getProviders } from '../../providers/index.ts';
 
-/** An object in the store to put in a machine, at `target` (absolute), and its size there when it is known. */
 export type Download = { key: string; target: string; size?: number };
 
 /** Long enough for a slow sandbox to start every transfer, short enough that a link seen in the machine soon stops working. */
@@ -13,11 +12,7 @@ const PARALLEL = 8;
 /** curl's config syntax: a double-quoted string, in which a backslash escapes. */
 const configString = (value: string) => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n')}"`;
 
-/**
- * Has the machine fetch the files from the store itself, in parallel, with links that read one object each and
- * expire: one command, and the bytes never pass through this server, whose own link to the sandbox can be slow.
- * The links go on stdin, not the command line. Returns the targets it put whole, as curl reports each transfer.
- */
+/** The bytes never pass through this server, whose link to the sandbox can be slow. The links go on stdin, not the command line. */
 async function fetchInMachine(machine: Machine, files: Download[]): Promise<Set<string>> {
 	const store = getProviders().store;
 	if (!store.signedUrl) return new Set();
@@ -40,7 +35,6 @@ async function fetchInMachine(machine: Machine, files: Download[]): Promise<Set<
 	return done;
 }
 
-/** The slower way, through this server: each file read from the store and written in one command, a few at a time. */
 async function copyThrough(machine: Machine, files: Download[]): Promise<string[]> {
 	const store = getProviders().store;
 	const missing: string[] = [];
@@ -59,11 +53,7 @@ async function copyThrough(machine: Machine, files: Download[]): Promise<string[
 	return missing;
 }
 
-/**
- * Puts objects from the store into the machine. The machine fetches them itself when the store can make links and
- * the machine has curl; whatever it did not get whole (no curl, a sandbox that may not reach the store, a failed
- * transfer) is copied through this server. Returns the targets whose object is not in the store.
- */
+/** Whatever the machine did not get whole (no curl, no route to the store, a failed transfer) is copied through this server. Returns the targets not in the store. */
 export async function downloadInto(machine: Machine, files: Download[]): Promise<string[]> {
 	if (!files.length) return [];
 	const done = await fetchInMachine(machine, files);

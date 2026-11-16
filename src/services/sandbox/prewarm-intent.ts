@@ -5,19 +5,12 @@ import { releaseSpare } from './spares.ts';
 import { prewarmMachine } from './workspace.ts';
 
 /*
- * Whether a repository task's sandbox is started ahead of the agent. A sandbox takes a minute or two to start cold,
- * so a task that will run commands or change files starts one as its reply begins (and a new task's starts while it
- * is typed, as a spare). A question about the code needs none: the agent reads the repository without a sandbox. A
- * live run's 14-second answer to a question still cloned the repository and installed its packages, which on Modal is
- * paid for. So the decision model reads the message first, in about a second, while the agent's first call is under
- * way: a message it judges likely to need commands or changes is prewarmed as before; one it judges a question is not,
- * and the spare woken for its draft is let go at once rather than left to stop on its own two minutes later. Leaning to
- * prewarm: a sandbox started for a question costs a few minutes of a machine, one missed costs the user a cold start.
+ * A cold sandbox takes a minute or two, but a question about the code needs none and on Modal is paid for. The decision
+ * model reads the message (about a second, beside the agent's first call) and only a likely question skips the prewarm.
+ * It leans to prewarm: a needless sandbox costs a few machine minutes, a missed one costs the user a cold start.
  */
 
-/** Below this probability, by the decision model, that the message needs a sandbox, none is started. */
 export const PREWARM_AT = 0.25;
-/** What the decision model reads of the message. */
 const REQUEST_CHARS = 2_000;
 
 type Deps = {
@@ -27,7 +20,6 @@ type Deps = {
 	byIntent: boolean;
 };
 
-/** The decision model's probability that answering the message needs commands or file changes; null with none, or when it fails. */
 async function sandboxLikely(id: string, request: string): Promise<number | null> {
 	const answers = await decide(
 		id,
@@ -47,10 +39,7 @@ async function sandboxLikely(id: string, request: string): Promise<number | null
 
 const defaults: Deps = { prewarm: prewarmMachine, release: releaseSpare, judge: sandboxLikely, byIntent: config.prewarmByIntent };
 
-/**
- * As a repository task's reply starts without a workspace: prewarms its sandbox unless the message (`request`, null for
- * a reply that no user message started) reads as a question that needs none. Never throws; it runs behind the reply.
- */
+/** `request` is null for a reply no user message started. Never throws; it runs behind the reply. */
 export async function prewarmFor(id: string, request: string | null, deps: Partial<Deps> = {}): Promise<'prewarmed' | 'skipped'> {
 	const d = { ...defaults, ...deps };
 	try {

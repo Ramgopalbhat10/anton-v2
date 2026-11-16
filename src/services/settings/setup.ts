@@ -9,15 +9,8 @@ import { withTimeout } from './connections.ts';
 import { connectKey, disconnect, gateways, loadGatewayKey, plansSignedIn } from '../models/subscriptions.ts';
 
 /*
- * Settings › Connections as Anton's setup: for each slot it depends on (its
- * models, code host, sandboxes, storage, database, decision model and web
- * search) the providers it can use, the values each needs, and where each
- * value comes from now (saved here, the server's environment, or nowhere).
- * Values are checked before they are kept, and a secret is never sent back,
- * only its last four characters.
- *
- * Models keep their keys where Settings › Subscriptions does; every other
- * value is saved in data/anton.env under its environment variable
+ * Settings › Connections. Values are checked before they are kept, and a secret is never sent back, only its last four
+ * characters. Models keep their keys where Settings › Subscriptions does; every other value is saved in data/anton.env
  * (`saved-env.ts`). Slots marked `live` apply at once; the rest at the next start.
  */
 
@@ -172,22 +165,18 @@ const SLOTS: Slot[] = [
 	},
 ];
 
-/** A field as the page sees it: where its value comes from, and the value itself unless it is a secret, whose last four characters stand in. */
+/** A secret's last four characters stand in for its value. */
 export type FieldView = { env: string; label: string; secret: boolean; optional: boolean; fallback: string | null; source: 'saved' | 'environment' | null; value: string | null; hint: string | null };
 export type OptionView = { id: string; label: string; fields: FieldView[] };
-/** `provider` is the one the next start uses; `restart` says it or a value differs from what runs now; `saved` that something was saved here, which Remove takes away. */
+/** `restart`: it or a value differs from what runs now; `saved`: something was saved here, which Remove takes away. */
 export type SlotView = { id: string; name: string; required: boolean; live: boolean; provider: string | null; restart: boolean; saved: boolean; options: OptionView[] };
 export type SetupView = { slots: SlotView[]; plans: string[]; canRunTasks: boolean };
 
-/** A name's value as the next start reads it: saved here, else the environment's. */
 const next = (env: string): string => savedValue(env) ?? environmentValue(env);
 const namesOf = (slot: Slot): string[] => [...new Set(slot.options.flatMap((option) => [...Object.keys(option.set ?? {}), ...option.fields.map((field) => field.env)]))];
 const hint = (value: string) => (value.length > 8 ? value.slice(-4) : null);
 
-/**
- * Whether the next start runs a slot differently from now: another provider, or another value for one of its
- * fields (defaults included), so an unset variable and the value it defaults to read as the same.
- */
+/** Defaults included, so an unset variable and the value it defaults to read as the same. */
 function waitsForRestart(slot: Slot): boolean {
 	if (slot.live) return false;
 	const now = slot.current(bootValue);
@@ -213,7 +202,6 @@ function fieldView(field: Field): FieldView {
 	};
 }
 
-/** The Models slot: the gateways billed per token, each keyed where Settings › Subscriptions keeps them. */
 function modelsView(): SlotView {
 	const list = gateways();
 	const keyed = list.find((gateway) => gateway.key.source());
@@ -280,7 +268,6 @@ function optionOf(slot: Slot, id: string): Option {
 	return option;
 }
 
-/** The values a check runs with: what was typed, else what the next start would read, else the field's default. */
 function candidate(option: Option, typed: Values): Values {
 	const values: Values = {};
 	const missing: string[] = [];
@@ -293,10 +280,8 @@ function candidate(option: Option, typed: Values): Values {
 	return values;
 }
 
-/** Why a check failed, as a sentence the page shows. */
 const failure = (error: unknown) => new InvalidInputError(error instanceof Error ? error.message : String(error));
 
-/** Checks a provider with these values, keeping none of them; answers what it found, or throws with why it failed. */
 export async function testSlot(slotId: string, provider: string, typed: Values): Promise<{ detail: string }> {
 	if (slotId === 'models') return { detail: await testGateway(provider, typed) };
 	const option = optionOf(slotOf(slotId), provider);
@@ -321,10 +306,6 @@ async function testGateway(id: string, typed: Values): Promise<string> {
 	return `${gateway.account.name} accepted the key.`;
 }
 
-/**
- * Checks, then keeps: the provider's choice and each value typed (a blank one keeps what is there). Answers
- * what the check found and whether it waits for a restart.
- */
 export async function saveSlot(slotId: string, provider: string, typed: Values): Promise<{ detail: string; restart: boolean }> {
 	if (slotId === 'models') {
 		const key = Object.values(typed)[0]?.trim();
@@ -349,7 +330,6 @@ export async function saveSlot(slotId: string, provider: string, typed: Values):
 	return { detail, restart: waitsForRestart(slot) };
 }
 
-/** Forgets what was saved for a slot (a gateway's key, for Models), so the environment's values apply again. */
 export async function clearSlot(slotId: string, provider: string): Promise<void> {
 	if (slotId === 'models') {
 		await disconnect(provider);

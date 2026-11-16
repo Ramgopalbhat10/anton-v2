@@ -1,17 +1,8 @@
-/*
- * An HTML file in a Library is often one of several: index.html beside its
- * styles.css, app.js and images. A page is served with no network (see
- * renders.ts), so those files never load and the page shows unstyled and
- * dead. Before it is served, each file the page names by a path in its own
- * Library is put into the page itself: stylesheets as <style>, scripts as
- * inline <script>, and images and fonts (in the page or its stylesheets) as
- * data: URLs. Anything outside the Library, or on the web, stays as it was and
- * is still blocked.
- */
+// A page is served with no network (renders.ts), so the files it names from its own Library are put into it before it
+// is served. Anything outside the Library, or on the web, stays as it was and is still blocked.
 
 type Read = (path: string) => Promise<Uint8Array | null>;
 
-/** The most of a page's own files put into it, together and each. */
 export const MAX_INLINED_BYTES = 8 * 1024 * 1024;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 
@@ -34,12 +25,7 @@ const TYPES: Record<string, string> = {
 	webm: 'video/webm',
 };
 
-/**
- * The Library path a reference in a file at `from` names, or null when it
- * names nothing there (the web, an anchor, a data: URL, or outside the
- * Library). A path from the site's root, as a built app writes /assets/app.js,
- * is read from the page's own folder, where its build put it.
- */
+/** A path from the site's root (/assets/app.js) is read from the page's own folder, where its build put it. */
 export function resolveAsset(from: string, ref: string, root = from): string | null {
 	const trimmed = ref.trim();
 	const href = trimmed.replace(/[?#].*$/, '');
@@ -70,7 +56,6 @@ function toBase64(bytes: Uint8Array): string {
 	return Buffer.from(bytes).toString('base64');
 }
 
-/** Puts the files a page names from its own Library into the page, so it works with no network. */
 export async function inlineAssets(html: string, path: string, read: Read): Promise<string> {
 	let budget = MAX_INLINED_BYTES;
 	const cache = new Map<string, Promise<Uint8Array | null>>();
@@ -95,7 +80,6 @@ export async function inlineAssets(html: string, path: string, read: Read): Prom
 		});
 	const text = new TextDecoder();
 
-	// Stylesheets the page links: their own images and fonts go in too.
 	let out = await replaceAsync(html, /<link\b[^>]*>/gi, async (tag) => {
 		const rel = valueOf(attr(tag, 'rel'))?.toLowerCase() ?? '';
 		const href = valueOf(attr(tag, 'href'));
@@ -113,7 +97,6 @@ export async function inlineAssets(html: string, path: string, read: Read): Prom
 		}
 		return tag;
 	});
-	// Scripts it loads by src, in place and in order, with their other attributes (type="module", defer).
 	out = await replaceAsync(out, /<script\b([^>]*)>\s*<\/script\s*>/gi, async (tag, attributes: string) => {
 		const src = valueOf(attr(` ${attributes}`, 'src'));
 		const file = src ? resolveAsset(path, src) : null;
@@ -126,7 +109,6 @@ export async function inlineAssets(html: string, path: string, read: Read): Prom
 			.trim();
 		return `<script${rest ? ` ${rest}` : ''}>${text.decode(bytes).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--')}</script>`;
 	});
-	// Images, and the media and posters the page names.
 	out = await replaceAsync(out, /<(img|source|video|audio|input)\b[^>]*>/gi, async (tag) => {
 		let next = tag;
 		for (const name of ['src', 'poster']) {
@@ -136,7 +118,6 @@ export async function inlineAssets(html: string, path: string, read: Read): Prom
 		}
 		return next;
 	});
-	// Styles written in the page, and on its elements.
 	out = await replaceAsync(out, /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, async (_whole, open: string, body: string, close: string) => `${open}${await css(body, path)}${close}`);
 	return out;
 }

@@ -12,42 +12,23 @@ import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';
 import { type TodoList, todoReminded, todosFor } from './todos.ts';
 
 /*
- * The last check before a reply ends: whether it ends with work the request
- * asked for left undone. A model that judged a job too large stopped and said
- * so ("The requested implementation is not complete. No source files were
- * changed."), minutes into a reply that may run hours, and every other check
- * let it end: the todo reminder had fired, the agent's own check of its change
- * had found the work missing and said so, and an empty diff was never
- * reviewed. Six of eleven failures in a benchmark run were such replies, not
- * wrong answers. So a reply that says work is open, for a reason other than
- * something only the user can give, is sent back to do it.
- *
- * The decision model reads the reply's end, the request and the open todo
- * steps; without one (or when it fails), a plain rule does: the reply worked,
- * and its last words declare the work incomplete or the todo list was left
- * open after its reminder, and it neither ends on a question nor names
- * something it needs from the user. A few rounds at most, and from the second
- * on only while the last round changed something, so a reply that cannot go
- * on is never held in a loop.
+ * Sends back a reply that says requested work is left undone, for a reason other than something only the user can give.
+ * Six of eleven failures in a benchmark run were such replies, not wrong answers. The decision model judges; without one a
+ * plain rule does. From the second round on only while the last round changed something, so it never loops.
  */
 
-/** Rounds a reply may be sent back, at most; the runtime fails a reply past 32 finish cycles. */
+/** The runtime fails a reply past 32 finish cycles. */
 export const MAX_ROUNDS = 3;
-/** How sure the decision model must be that the reply leaves work undone. */
 const UNDONE = 0.6;
-/** The tools that work in the sandbox; their count is a chat's progress, as it has no diff. */
+/** A chat has no diff, so its sandbox tool calls are its progress. */
 const SANDBOX_TOOLS = new Set(['bash', 'run_in_background', ...FILE_CHANGE_TOOLS]);
-/**
- * Tools that show a reply did work, not only read and answer. A repository task has no start_workspace (its first
- * command starts its sandbox); chats and reviews still do. Reading, with any of the read tools, is not work.
- */
+/** A repository task has no start_workspace (its first command starts its sandbox); chats and reviews still do. Reading is not work. */
 const WORK_TOOLS = new Set([...SANDBOX_TOOLS, 'update_todos', 'start_workspace', 'open_pull_request', 'task']);
-/** What the decision model reads of the request and the reply. */
 const REQUEST_CHARS = 2_000;
 const REPLY_CHARS = 3_000;
 const REVIEW_CHARS = 2_000;
 
-/** Words that declare requested work not done. Narrow on purpose: a final line such as "the pull request remains open" is not one. */
+/** Narrow on purpose: a final line such as "the pull request remains open" is not one. */
 const INCOMPLETE = new RegExp(
 	[
 		String.raw`\bnot (?:yet )?(?:been )?(?:complete|completed|finished|implemented)\b`,
@@ -61,7 +42,6 @@ const INCOMPLETE = new RegExp(
 	].join('|'),
 	'i',
 );
-/** Words that name something only the user can give, which a reply may rightly stop for. */
 const NEEDS_USER = new RegExp(
 	[
 		String.raw`\b(?:needs?|requires?|waiting (?:on|for)|blocked (?:on|by)|depends on) (?:you|your)\b`,
@@ -73,9 +53,8 @@ const NEEDS_USER = new RegExp(
 
 type Call = { tool: string };
 export type GateContext = {
-	/** A task with no repository: its progress is its sandbox work, as it has no diff. */
 	chat: boolean;
-	/** Whether the task has a sandbox now; a chat without one only answered and is never sent back. */
+	/** A chat without a sandbox only answered and is never sent back. */
 	workspace: boolean;
 	signal?: AbortSignal;
 };
@@ -87,14 +66,12 @@ type Deps = {
 	reminded: (id: string) => boolean;
 	request: (id: string) => string | undefined;
 	elapsed: (id: string) => number | null;
-	/** The reviewer's points and what the reply had said before them, when the finish review was the last to send it back. */
 	reviewed: (id: string) => Reviewed | null;
 	limitMs: number;
 };
 
 type Reviewed = { points: string; before: string };
 
-/** The last send-back's review points and the reply's report before them, when the finish review sent the reply back last. */
 function lastReview(id: string): Reviewed | null {
 	const last = lastSendBack(id);
 	return last?.gate === 'review' ? { points: last.points ?? '', before: last.before ?? '' } : null;
@@ -102,30 +79,20 @@ function lastReview(id: string): Reviewed | null {
 
 const defaults: Deps = { patch: taskPatch, todos: todosFor, ending: replyEnding, messages: replyMessages, reminded: todoReminded, request: requestFor, elapsed: (id) => replyElapsed(id), reviewed: lastReview, limitMs: config.replyTimeoutMs };
 
-/**
- * A new reply may be sent back again. Each task's rounds in the reply in hand, what its work stood at when last sent
- * back and how many messages the reply had said then (only those after are its end now), are kept with its checks.
- */
 export function startCompletionGate(id: string): void {
 	changeGate(id, (state) => {
 		state.round = undefined;
 	});
 }
 
-/** Whether the reply's last words end on a question, as a reply that asks the user something does. */
 const endsAsking = (text: string) => /\?[\s*_`)"'’”]*$/.test(text);
 
-/**
- * The plain rule, for when no decision model answers: a reply that worked, and says the work is not done or left its
- * list open after the reminder, without ending on a question or naming something it needs from the user. A reply that
- * only read and answered is left alone, as an answer may well say what some code does not do.
- */
+/** A reply that only read and answered is left alone, as an answer may well say what some code does not do. */
 export function undoneByRule(text: string, open: number, reminded: boolean, worked: boolean): boolean {
 	if (!worked || endsAsking(text) || NEEDS_USER.test(text)) return false;
 	return INCOMPLETE.test(text) || (reminded && open > 0);
 }
 
-/** The decision model's verdict, or null when there is none or it failed. */
 async function undoneByModel(id: string, request: string | undefined, text: string, open: string[], reviewed: Reviewed | null): Promise<boolean | null> {
 	const answers = await decide(
 		id,
@@ -133,9 +100,8 @@ async function undoneByModel(id: string, request: string | undefined, text: stri
 			request: request?.slice(0, REQUEST_CHARS) ?? '',
 			reply: text.slice(-REPLY_CHARS),
 			openTodoSteps: open.join('\n'),
-			// A reply the finish review sent back ends on its answer to the reviewer, which says little of the whole request:
-			// what the reply had reported before the review is read with it. A live run's reply that had done all three parts
-			// of its request, and ended explaining why it turned down a reviewer's point, was otherwise judged as work undone.
+			// A reply the finish review sent back ends on its answer to the reviewer, so what it reported before the review is read
+			// with it; otherwise a live run's finished reply that turned down a reviewer's point was judged as work undone.
 			...(reviewed ? { reviewerPoints: reviewed.points.slice(0, REVIEW_CHARS), replyBeforeReview: reviewed.before.slice(-REPLY_CHARS) } : {}),
 		},
 		{
@@ -155,7 +121,7 @@ async function undoneByModel(id: string, request: string | undefined, text: stri
 	return yes === null ? null : yes >= UNDONE;
 }
 
-/** What the agent is told when sent back. No scolding and no request again: the agent has it, and the finish review repeats it where it must. */
+/** No scolding and no request again: the agent has it, and the finish review repeats it where it must. */
 export function carryOn(elapsed: number | null, limitMs: number, open: number): string {
 	const time =
 		elapsed === null ? `A reply may run for up to ${hoursText(limitMs)}` : `This reply has run ${elapsedText(elapsed)} of the ${hoursText(limitMs)} it may run`;
@@ -166,13 +132,7 @@ export function carryOn(elapsed: number | null, limitMs: number, open: number): 
 	);
 }
 
-/**
- * At the end of a reply that ends with requested work left undone, and not for something only the user can give:
- * what to tell the agent so it carries on; null otherwise. Never on a reply ending on `ask` or `propose_plan`, an
- * aborted one, an incognito chat or a chat that has no sandbox. At most `MAX_ROUNDS` a reply, and from the second
- * round on only when the last one changed the task's diff (a chat's: its sandbox work). Each round lets the finish
- * review read the change again, once it is a change it has not read. Plan mode and review tasks are left out by the caller.
- */
+/** Never on `ask` or `propose_plan`, an aborted reply, an incognito chat or a chat without a sandbox. Plan mode and review tasks are left out by the caller. */
 export async function completionGate(id: string, calls: readonly Call[], context: GateContext, deps: Partial<Deps> = {}): Promise<string | null> {
 	const d = { ...defaults, ...deps };
 	const { chat, workspace, signal } = context;
@@ -183,8 +143,7 @@ export async function completionGate(id: string, calls: readonly Call[], context
 	const round = gate(id).round;
 	if (round && round.rounds >= MAX_ROUNDS) return null;
 	try {
-		// After a send-back, what the reply said before it is stale: a short "Done." would otherwise be read with the
-		// earlier message that said the work was not done, and the reply sent back again for words it had moved past.
+		// After a send-back, what the reply said before it is stale: a short "Done." would otherwise be read with the earlier "not done".
 		const text = d.ending(id, round?.seen ?? 0);
 		const list = await d.todos(id);
 		const open = list?.todos.filter((todo) => todo.status !== 'completed').map((todo) => todo.content) ?? [];

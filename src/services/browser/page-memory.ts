@@ -1,20 +1,11 @@
-/**
- * What the agent's browser tool has already shown it, so a step answers with
- * what changed rather than the whole page again. Every step's answer stays in
- * the subagent's conversation and is read again on each later call, so a page
- * described in full at every step is most of a browsing job's tokens. Here a
- * page the agent has seen comes back as "unchanged", or as the lines that
- * changed with a little context; anything else, or `full`, comes back whole.
- */
+// Every step's answer is read again on each later call, so a page seen before comes back as "unchanged" or as its changed lines.
 
-/** Pages remembered per browser (a task's panel or sandbox browser), and browsers remembered in all. */
 const PAGES_PER_BROWSER = 12;
 const BROWSERS = 200;
-/** Lines of unchanged context around each change. */
 const CONTEXT = 2;
-/** A diff longer than this share of the page is no saving; the page comes back whole. */
+/** Past this the diff is no saving; the page comes back whole. */
 const MAX_DIFF_SHARE = 0.6;
-/** Pages longer than this many lines are not diffed line by line (the comparison is quadratic); they come back whole or unchanged. */
+/** The comparison is quadratic. */
 const MAX_DIFF_LINES = 1500;
 
 type Seen = { snapshot: string; step: number };
@@ -24,7 +15,6 @@ const browsers = new Map<string, Browser>();
 function browserOf(key: string): Browser {
 	let browser = browsers.get(key);
 	if (browser) {
-		// Most recently used last, so the oldest is the first to go.
 		browsers.delete(key);
 	} else {
 		browser = { pages: new Map(), steps: 0 };
@@ -34,10 +24,9 @@ function browserOf(key: string): Browser {
 	return browser;
 }
 
-/** Where on a page a step's answer is about: the address without its fragment, which never changes what is shown. */
+/** The fragment never changes what is shown. */
 const pageOf = (url: string) => url.replace(/#.*$/, '');
 
-/** Line-level edit script: for each line of `after`, whether it is new; and the lines of `before` that are gone. */
 function diffLines(before: string[], after: string[]): { added: boolean[]; removed: Array<{ at: number; line: string }> } {
 	const n = before.length;
 	const m = after.length;
@@ -67,7 +56,6 @@ function diffLines(before: string[], after: string[]): { added: boolean[]; remov
 	return { added, removed };
 }
 
-/** The changes as hunks: `+` for new lines, `-` for gone ones, unchanged lines around them for where they sit. */
 function hunks(before: string[], after: string[]): { text: string; changed: number } {
 	const { added, removed } = diffLines(before, after);
 	const changed = added.filter(Boolean).length + removed.length;
@@ -93,11 +81,6 @@ function hunks(before: string[], after: string[]): { text: string; changed: numb
 	return { text: out.join('\n'), changed };
 }
 
-/**
- * The page description to give the agent for this step in browser `key`:
- * the snapshot itself the first time or with `full`, else a note that it is
- * unchanged, or its changes.
- */
 export function pageForAgent(key: string, url: string, snapshot: string, full = false): string {
 	const browser = browserOf(key);
 	const step = ++browser.steps;
@@ -117,7 +100,6 @@ export function pageForAgent(key: string, url: string, snapshot: string, full = 
 	return `(Changes since ${ago}, as a diff of the page description: + new, - gone, unchanged lines for context. Use look for the whole page.)\n${text}`;
 }
 
-/** Forgets what a browser has shown, as when its page was replaced by the user. */
 export function forgetPages(key: string): void {
 	browsers.delete(key);
 }

@@ -1,6 +1,5 @@
 import { type Change, onChange } from '../../core/changes.ts';
 
-/** What `streamChanges` writes to: Hono's server-sent events stream. */
 export type ChangeStream = {
 	readonly aborted: boolean;
 	onAbort(listener: () => void): void;
@@ -8,16 +7,10 @@ export type ChangeStream = {
 	write(text: string): Promise<unknown>;
 };
 
-/** A comment line often enough that proxies (Cloudflare closes idle streams at 100 s) keep the stream open. */
+/** Cloudflare closes idle streams at 100 s. */
 export const HEARTBEAT_MS = 25_000;
 
-/**
- * Sends an open page each change as it happens, and a comment line when
- * there are none. A change that lands while earlier ones are still being
- * written goes out right after them: waiting for the next change or the
- * heartbeat instead would leave a page showing a finished reply as still
- * being written, its question locked, for up to the heartbeat.
- */
+/** A change that lands while earlier ones are being written goes out right after them, not at the next heartbeat. */
 export async function streamChanges(stream: ChangeStream, heartbeatMs = HEARTBEAT_MS): Promise<void> {
 	const queue: Change[] = [];
 	let wake: (() => void) | null = null;

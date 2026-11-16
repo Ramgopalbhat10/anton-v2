@@ -1,14 +1,7 @@
 import type { AgentNow } from '../../core/agent-now.ts';
 import { announce } from '../../core/changes.ts';
 
-/**
- * What each task's agent is doing this moment. The conversation stream shows
- * a step only once it is whole, so a file the model is still writing, or a
- * long think, leaves the thread quiet for as long as it takes. The runtime's
- * live events say more (a model call starting, its thinking and text, a tool
- * call's input as it streams, the tools running) and are never replayed, so
- * Anton keeps the latest in memory and announces it whole.
- */
+// The runtime's live events (model calls, thinking, streaming tool input) are never replayed, so the latest is kept in memory and announced whole.
 
 export type { AgentNow };
 
@@ -28,38 +21,29 @@ type NowEvent = {
 
 type Live = {
 	now: AgentNow | null;
-	/** Tools running, in the order they started. */
 	running: Map<string, { tool: string; detail: string | null; since: string }>;
-	/** Tool calls the model is writing: the start of each one's input, for what it is about, and its length so far. */
 	writing: Map<string, { tool: string; head: string; chars: number }>;
-	/** The announcement waiting to go out: a change soon, or growth on the next beat. */
 	timer: { handle: ReturnType<typeof setTimeout>; settling: boolean } | null;
-	/** What the last announcement said, so growth alone waits for the next beat. */
 	said: string;
 };
 
 const tasks = new Map<string, Live>();
 
-/** Changes of state go out after this, so a step that ends as the next begins is said once. */
+/** So a step that ends as the next begins is said once. */
 const SETTLE_MS = 200;
-/** Growth of a file being written goes out at most this often. */
 const GROWTH_MS = 1000;
-/** Enough of a tool call's input to find what it is about. */
 const HEAD_CHARS = 2000;
 
 /** The runtime's name for an agent's main conversation; a subagent's task gets a session of its own. */
 const MAIN_SESSION = 'default';
 
-/** The coding agent's own conversation: not a subagent's, nor the reviewer's. */
 const isMain = (event: NowEvent) =>
 	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === MAIN_SESSION) && (!event.agentName || /^coder$/i.test(event.agentName));
 
-/** What the agent is doing now in a task, or null when it is not working or Anton has not heard since it started. */
 export function agentNow(id: string): AgentNow | null {
 	return tasks.get(id)?.now ?? null;
 }
 
-/** A string field of a tool's input, read whole or from the start of its JSON while it streams. */
 function inputField(input: unknown, head: string, key: string): string | null {
 	if (input && typeof input === 'object' && typeof (input as Record<string, unknown>)[key] === 'string') return (input as Record<string, string>)[key];
 	const match = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(head);
@@ -71,10 +55,8 @@ function inputField(input: unknown, head: string, key: string): string | null {
 	}
 }
 
-/** The first file a patch names, from its start while it streams. */
 const PATCHED_FILE = /\*\*\* (?:Add|Update|Delete) File: ([^\n]+)\n/;
 
-/** The few words that say what a tool call is for: its file (a patch's first), its command's first line, or its subagent. */
 export function detailOf(tool: string, input: unknown, head = ''): string | null {
 	const path = inputField(input, head, 'path') ?? (tool === 'apply_patch' ? (PATCHED_FILE.exec(inputField(input, head, 'input') ?? '')?.[1]?.trim() ?? null) : null);
 	if (path) return path.replace(/^\.\//, '');
@@ -97,13 +79,11 @@ function liveOf(id: string): Live {
 	return live;
 }
 
-/** The same state, word for word, keeps its start; a new one starts now. */
 function set(live: Live, next: Omit<AgentNow, 'since'>, at: string): void {
 	const same = live.now && live.now.what === next.what && live.now.tool === next.tool && live.now.detail === next.detail;
 	live.now = { ...next, since: same ? live.now!.since : at };
 }
 
-/** After a tool ends, the next running one, or the model reading what came back. */
 function afterTool(live: Live, at: string): void {
 	const last = [...live.running.values()].pop();
 	if (last) live.now = { what: 'running', tool: last.tool, detail: last.detail, chars: 0, since: last.since };
@@ -131,7 +111,7 @@ function say(id: string, live: Live): void {
 	live.timer = { handle, settling: changed };
 }
 
-/** Records one runtime event about the coding agent's main conversation. Runs in the event observer; never throws. */
+/** Runs in the event observer; never throws. */
 export function recordAgentNow(event: NowEvent): void {
 	if (!isMain(event)) return;
 	const id = event.instanceId!;

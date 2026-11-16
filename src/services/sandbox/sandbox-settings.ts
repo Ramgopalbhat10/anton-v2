@@ -3,23 +3,18 @@ import { config } from '../../config.ts';
 import { retireDefaultWarmImages } from '../../db/projects.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 
-/** Regions a sandbox can be pinned to; Modal charges more for a pinned one. */
+/** Modal charges more for a pinned sandbox. */
 export const REGIONS = ['us', 'eu', 'ap'] as const;
 export type Region = (typeof REGIONS)[number];
 
-/** What every new sandbox gets, unless its repository sets its own base image. */
 export type SandboxSettings = {
 	cpu: number;
 	memoryMiB: number;
 	idleMinutes: number;
 	lifetimeHours: number;
-	/** Null lets the provider choose. */
 	region: Region | null;
-	/** Domains sandboxes may reach; empty allows all. */
 	allowedDomains: string[];
-	/** Null uses ANTON_BASE_IMAGE. */
 	baseImage: string | null;
-	/** Prepared repo images older than this are rebuilt on the next task. */
 	warmImageDays: number;
 };
 
@@ -34,12 +29,12 @@ export const defaultSandboxSettings = (): SandboxSettings => ({
 	warmImageDays: config.warmImageDays,
 });
 
-/** Saved settings over the defaults, so a field added later has a value. */
+/** Over the defaults, so a field added later has a value. */
 export async function sandboxSettings(): Promise<SandboxSettings> {
 	return { ...defaultSandboxSettings(), ...(await getSetting<Partial<SandboxSettings>>(KEY, {})) };
 }
 
-/** Saves them; a new default base image retires the prepared images built from the old one. */
+/** A new default base image retires the prepared images built from the old one. */
 export async function setSandboxSettings(next: SandboxSettings): Promise<SandboxSettings> {
 	const before = await sandboxSettings();
 	await setSetting(KEY, next);
@@ -50,7 +45,7 @@ export async function setSandboxSettings(next: SandboxSettings): Promise<Sandbox
 /** Setup clones and fetches from GitHub inside the sandbox, so an allowlist always keeps it reachable. */
 const GIT_HOST_DOMAINS = ['github.com', '*.github.com', '*.githubusercontent.com'];
 
-/** A repository can ask for a full VM (Settings › Repositories); everything else runs in a container. */
+/** A repository can ask for a full VM; everything else runs in a container. */
 export function resourcesFrom(settings: SandboxSettings, runtime: SandboxRuntime = 'container'): SandboxResources {
 	return {
 		runtime,

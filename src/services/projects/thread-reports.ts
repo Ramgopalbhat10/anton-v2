@@ -10,26 +10,15 @@ import { finishesWork } from '../replies/reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
 import { getSession } from '../tasks/sessions.ts';
 
-/**
- * How threads tell their coordinator what changed. A thread that finishes a
- * reply, or whose pull request changes, is noted; notes from one project are
- * gathered for a short while and sent as one message, and only a change of
- * state is sent, so a thread that follows up on CI three times reports once
- * when it goes green. Working and queued are not news when the coordinator
- * started them; a thread you or a routine started is reported as it starts,
- * so the coordinator knows of it and its feed shows it at once.
- */
+/** Notes are batched per project and only a change of state is sent, so a thread that follows up on CI three times reports once. */
 export const REPORT_DELAY_MS = 20_000;
-/** The start of a reply kept for the card and the report. */
 const MAX_REPLY = 4_000;
 
 const pending = new Map<string, Set<string>>();
 const timers = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> }>();
-/** Who started a thread, when the coordinator did not: you, with the brief you gave it, or a routine. */
 export type Starter = { by: 'you'; brief: string } | { by: 'routine'; routine: string };
-/** Threads the coordinator did not start, by who did: news to the coordinator. */
 const starts = new Map<string, Starter>();
-/** A thread the coordinator did not start is reported a moment after it starts (threads started together go as one), so the feed shows it as it begins. */
+/** Threads started together go as one. */
 export const START_REPORT_DELAY_MS = 1_000;
 
 const QUIET: ThreadState[] = ['working', 'queued'];
@@ -39,7 +28,6 @@ const body = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;
 const prNumber = (url: string) => /\/pull\/(\d+)/.exec(url)?.[1];
 const clip = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text).trim();
 
-/** One thread's line in a report, as the coordinator reads it and the feed shows it; `started` says who just started it, when the coordinator did not. */
 export function reportLine(thread: Session, state: ThreadState, started?: Starter): string {
 	const pr = thread.prUrl && thread.pullRequest ? ` pr="#${prNumber(thread.prUrl) ?? '?'} ${thread.pullRequest.state}${thread.pullRequest.checks ? `, checks ${thread.pullRequest.checks}` : ''}"` : '';
 	const asks = state === 'waiting' && thread.asking ? ` asks="${attr(thread.asking)}"` : '';
@@ -52,7 +40,6 @@ export function reportLine(thread: Session, state: ThreadState, started?: Starte
 	return text ? `${open}>${body(text)}</thread>` : `${open}/>`;
 }
 
-/** The message the coordinator gets; the feed shows it as a quiet row. */
 export function reportMessage(lines: string[]): string {
 	return `<thread-reports>\n${lines.join('\n')}\n</thread-reports>`;
 }
@@ -82,11 +69,9 @@ async function flush(spaceId: string): Promise<void> {
 	await sendToAgent(spaceId, reportMessage(lines), 'coordinator').catch((error: unknown) => logProblem('warn', 'Could not report threads to the coordinator', error));
 }
 
-/** Notes that a task may have changed state: done once its pull request is merged or closed, and for a project's thread, news the coordinator hears of once the batch goes out. */
 export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (!record) return;
-	// A merged or closed pull request is the task's last step.
 	const pr = record.prUrl ? record.pullRequest : null;
 	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) await updateSession(id, { resolvedAt: new Date().toISOString() });
 	if (!record.spaceId) return;
@@ -102,13 +87,11 @@ export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Prom
 	timers.set(spaceId, { at, timer });
 }
 
-/** You or a routine started the thread, not the coordinator: it hears of it in a moment, with who did, and the feed shows it. */
 export async function threadStarted(id: string, starter: Starter): Promise<void> {
 	starts.set(id, starter);
 	await threadChanged(id, START_REPORT_DELAY_MS);
 }
 
-/** Sends every waiting report now (tests, and shutting down). */
 export async function flushReports(): Promise<void> {
 	for (const [spaceId, { timer }] of [...timers]) {
 		clearTimeout(timer);
@@ -116,11 +99,6 @@ export async function flushReports(): Promise<void> {
 	}
 }
 
-/**
- * At the end of any task's reply: keeps what it said and marks it done when
- * the reply finished the work; a project's thread also frees its slot for a
- * queued thread and is noted for the coordinator.
- */
 export async function threadFinished(id: string, reply: string | null): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (!record) return;
@@ -132,16 +110,7 @@ export async function threadFinished(id: string, reply: string | null): Promise<
 	await drainQueue(record.spaceId, id);
 }
 
-/**
- * A task whose reply delivered what it was asked is done: resolved, as a
- * person would mark it, and reopened by the next message it is given. Only
- * one that would otherwise sit idle: a task that asks you something, waits
- * in the queue or has a pull request open stays as it is (a pull request
- * resolves its task once merged or closed). A scheduled routine's run is done
- * once it replies without asking you anything, since delivering is all a run does,
- * even when its reply offers more; any other task is judged by the decision
- * model, so an answer or an offer of a next step leaves it open.
- */
+/** Only one that would sit idle; a scheduled run is done once it replies without asking; any other is judged by the decision model. */
 async function closeIfFinished(id: string, reply: string): Promise<void> {
 	const task = await getSession(id);
 	// This runs once the reply has settled; a task working again was sent a message meanwhile, which reopens it anyway.
@@ -150,15 +119,13 @@ async function closeIfFinished(id: string, reply: string): Promise<void> {
 	if (done && !isWorking(id)) await updateSession(id, { resolvedAt: new Date().toISOString() });
 }
 
-/** A run of a scheduled routine; a labeled issue's task is there to open a pull request, so it is judged as any other. */
+/** A labeled issue's task is there to open a pull request, so it is judged as any other. */
 async function scheduledRun(task: Session): Promise<boolean> {
 	return task.automationId ? (await getAutomation(task.automationId))?.kind === 'schedule' : false;
 }
 
-/** How long an idle task stays open before it resolves itself. */
 export const IDLE_RESOLVE_MS = 7 * 24 * 60 * 60_000;
 
-/** Resolves tasks idle for a week; their branches and files stay. Run by the headless poll. */
 export async function resolveIdleThreads(now = Date.now()): Promise<number> {
 	let resolved = 0;
 	for (const record of await listSessionRecords()) {

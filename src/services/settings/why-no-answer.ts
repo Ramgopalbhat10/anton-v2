@@ -1,13 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { connect } from 'node:net';
 
-/*
- * Why a service gave no answer in time, found by retracing the first two
- * steps of the request on their own: the name lookup and the connection.
- * Node looks names up on a small pool of threads, so a slow resolver stalls
- * every new request from this server, which a check of one service alone
- * cannot tell from that service being down.
- */
+// Node looks names up on a small thread pool, so a slow resolver stalls every request, which one service's check cannot tell from that service being down.
 
 const STEP_MS = 5_000;
 /** A lookup slower than this is the problem, not the service. */
@@ -46,7 +40,6 @@ async function firstThatConnects(addresses: string[], port: number): Promise<voi
 	throw last;
 }
 
-/** A sentence for a check that timed out on `url`: which step was slow, and what that means. */
 export async function whyNoAnswer(url: string, waitedMs: number): Promise<string> {
 	const { hostname, port, protocol } = new URL(url);
 	const head = `${hostname} did not answer within ${seconds(waitedMs)}.`;

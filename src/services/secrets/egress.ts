@@ -5,31 +5,20 @@ import type { Duplex } from 'node:stream';
 import tls from 'node:tls';
 
 /*
- * How a request the agent asks for leaves Anton's server (`http-request.ts`).
- * With a proxy, such as a small box with the fixed IP an API allows, it opens
- * a CONNECT tunnel through it and speaks TLS to the API inside the tunnel: the
- * proxy relays bytes it cannot read, so the secrets in the request never show
- * to it. An https:// proxy is reached over TLS as well, so its own password
- * travels encrypted too. Without one, the request goes straight out.
- *
- * Connections are kept open for a little while and reused, one pool per proxy
- * and target: opening a tunnel costs a TLS handshake with the proxy, the
- * CONNECT and a TLS handshake with the API, several round trips that a far
- * proxy turns into seconds. A read that finds its kept connection closed by
- * the other end is sent again once; anything else is never resent, since an
- * order may have gone through.
+ * Through a proxy, a CONNECT tunnel with TLS to the API inside it, so the proxy never sees the secrets; an https:// proxy's
+ * own password travels encrypted too. Connections are pooled per proxy and target (a far proxy makes a new tunnel cost
+ * seconds). Only a request whose kept connection was closed under us is resent; anything else may have gone through.
  */
 
 const TIMEOUT_MS = 30_000;
 const MAX_BYTES = 32 * 1024 * 1024;
-/** How long an idle connection is kept: well under what servers and proxies allow, so it is rarely closed under us. */
+/** Well under what servers and proxies allow, so it is rarely closed under us. */
 const IDLE_MS = 20_000;
 
 export class EgressError extends Error {}
 
 export type ProxyParts = { secure: boolean; host: string; port: number; auth: string | null };
 
-/** A proxy address: http(s)://user:password@host:port. */
 export function proxyParts(address: string): ProxyParts {
 	if (!URL.canParse(address)) throw new EgressError('The proxy address is not a URL, such as https://anton:password@1-2-3-4.sslip.io');
 	const url = new URL(address);
@@ -38,7 +27,6 @@ export function proxyParts(address: string): ProxyParts {
 	return { secure: url.protocol === 'https:', host: url.hostname, port: Number(url.port) || (url.protocol === 'https:' ? 443 : 80), auth };
 }
 
-/** The proxy's address without its password, to show. */
 export function proxyLabel(address: string): string {
 	try {
 		const parts = proxyParts(address);
@@ -51,10 +39,8 @@ export function proxyLabel(address: string): string {
 export type EgressRequest = { url: URL; method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal };
 export type EgressResponse = { status: number; headers: Record<string, string>; body: Buffer };
 
-/** Certificates to trust besides the system's, for the target and for an https:// proxy: for tests. */
 export type TlsTrust = { ca?: string | Buffer; proxyCa?: string | Buffer };
 
-/** Opens a tunnel to `target` (host:port) through the proxy, resolved once the proxy says it is open. */
 function openTunnel(proxy: ProxyParts, target: string, trust: TlsTrust, signal: AbortSignal): Promise<net.Socket> {
 	return new Promise((resolve, reject) => {
 		const socket: net.Socket = proxy.secure
@@ -114,7 +100,6 @@ function readAll(response: IncomingMessage): Promise<EgressResponse> {
 	});
 }
 
-/** Keeps connections to one target through one proxy: each new one is a tunnel with TLS to the target inside it. */
 class TunnelAgent extends https.Agent {
 	private readonly proxy: ProxyParts;
 	private readonly trust: TlsTrust;
@@ -147,7 +132,7 @@ class TunnelAgent extends https.Agent {
 
 const agents = new Map<string, http.Agent>();
 
-/** The pool for this proxy, target scheme and trust; a test's own certificates get a pool of their own. */
+/** A test's own certificates get a pool of their own. */
 function agentFor(proxy: ProxyParts | null, secure: boolean, trust: TlsTrust): http.Agent {
 	const key = JSON.stringify([proxy, secure, String(trust.ca ?? ''), String(trust.proxyCa ?? '')]);
 	const kept = agents.get(key);
@@ -161,16 +146,15 @@ function agentFor(proxy: ProxyParts | null, secure: boolean, trust: TlsTrust): h
 	return agent;
 }
 
-/** Closes every kept connection: when a proxy's address or password changes, and in tests. */
 export function closeEgressConnections() {
 	for (const agent of agents.values()) agent.destroy();
 	agents.clear();
 }
 
-/** A kept connection the other end had closed: the request never reached it. */
+/** The request never reached it. */
 const closedUnderUs = (error: NodeJS.ErrnoException, reused: boolean) => reused && (error.code === 'ECONNRESET' || error.code === 'EPIPE' || /socket hang up/i.test(error.message));
 
-/** Sends one request, through `proxy` when one is given (https:// targets only), else straight out. Redirects are not followed. */
+/** `proxy` is for https:// targets only. Redirects are not followed. */
 export async function egressFetch(proxy: ProxyParts | null, request: EgressRequest, trust: TlsTrust = {}): Promise<EgressResponse> {
 	const { url } = request;
 	const secure = url.protocol === 'https:';

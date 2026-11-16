@@ -4,26 +4,17 @@ import { saveToLibrary } from '../artifacts/files.ts';
 import { assertKeepable, hostAllowed, keepFromAnswer, type OpenSecret, openSecrets } from './sealed-secrets.ts';
 
 /*
- * The agent's http_request tool: one HTTP request sent from Anton's server,
- * with sealed secrets filled in here (`sealed-secrets.ts`). The agent writes
- * `{{secret:NAME}}` where a value goes and `{{totp:NAME}}` where the current
- * code of a TOTP secret goes; it never sees either. A secret goes only to the
- * hosts it allows, over https, through its proxy; its value is hidden in what
- * comes back, and a value the answer holds (a token) can be kept as a sealed
- * secret of its own instead of being shown.
+ * Sealed secrets are filled in here (`{{secret:NAME}}`, `{{totp:NAME}}`); the agent never sees them. A secret goes only to
+ * its hosts, over https, through its proxy; its value is hidden in what comes back.
  */
 
 const PLACEHOLDER = /\{\{(secret|totp):([A-Za-z0-9_]+)\}\}/g;
-/** Characters of the answer's body the agent is shown; the rest is cut. */
 const MAX_SHOWN = 100_000;
 /** Below this a value is too likely to be ordinary text to hide everywhere, so only where it stands alone is it hidden. */
 const MIN_HIDDEN = 4;
-/** A TOTP code about to change is waited out, so the server sees one that is still good. */
+/** So the server sees a code that is still good. */
 const TOTP_MARGIN_MS = 3_000;
-/**
- * The answer's headers the agent is shown: what it acts on (the type, where a redirect points, how
- * long to wait, rate limits, a download's name). CDN, gateway and security headers only take room.
- */
+/** CDN, gateway and security headers only take room. */
 const SHOWN_HEADERS = /^(content-type|content-disposition|location|retry-after|www-authenticate|(x-)?rate-?limit-.+|x-request-id)$/i;
 
 export type HttpRequestInput = {
@@ -31,9 +22,8 @@ export type HttpRequestInput = {
 	method?: string;
 	headers?: Record<string, string>;
 	body?: string;
-	/** Values of the answer to keep as sealed secrets: `from` is a dotted path in its JSON body, or `header:<name>`. */
+	/** `from` is a dotted path in its JSON body, or `header:<name>`. */
 	save?: Array<{ name: string; from: string }>;
-	/** Writes the answer's body (secrets hidden) to this file in the task's Library instead of showing it: for a large download. */
 	toFile?: string;
 };
 
@@ -45,7 +35,6 @@ const wait = (ms: number, signal?: AbortSignal) =>
 		signal?.addEventListener('abort', () => (clearTimeout(timer), reject(new EgressError('Stopped'))), { once: true });
 	});
 
-/** Every form a value may come back in: as it is, URL-encoded, and escaped in JSON. */
 function formsOf(value: string): string[] {
 	return [...new Set([value, encodeURIComponent(value), JSON.stringify(value).slice(1, -1)])].filter((form) => form.length >= MIN_HIDDEN);
 }
@@ -55,20 +44,17 @@ function hider(secrets: Array<{ name: string; value: string }>): (text: string) 
 	return (text) => pairs.reduce((out, [form, name]) => out.replaceAll(form, `[${name} hidden]`), text);
 }
 
-/** The first of `a|b|c` the answer has, so an answer whose shape is not settled can still be kept. */
 function pick(response: EgressResponse, text: string, from: string): string {
 	const choices = from.split('|').map((choice) => choice.trim()).filter(Boolean);
 	for (const choice of choices.slice(0, -1)) {
 		try {
 			return pickOne(response, text, choice);
 		} catch {
-			// The next one, then.
 		}
 	}
 	return pickOne(response, text, choices.at(-1) ?? from);
 }
 
-/** A dotted path into JSON (`data.token`, `items.0.id`), or `header:<name>`. */
 function pickOne(response: EgressResponse, text: string, from: string): string {
 	if (from.startsWith('header:')) {
 		const value = response.headers[from.slice(7).trim().toLowerCase()];
@@ -90,11 +76,7 @@ function substitute(text: string, secrets: Map<string, OpenSecret>, codes: Map<s
 	return text.replace(PLACEHOLDER, (_, kind: string, name: string) => (kind === 'totp' ? codes.get(name)! : secrets.get(name)!.value));
 }
 
-/** Sends the request and returns what the agent may read of the answer. */
-/**
- * `maxShown` is for callers that are code rather than the model, such as a routine's gate reading the whole
- * market's quotes: the cut keeps a model's context small, and a script has no context to keep.
- */
+/** `maxShown` is for callers that are code, such as a routine's gate: the cut keeps a model's context small. */
 export async function httpRequest(
 	taskId: string,
 	input: HttpRequestInput,

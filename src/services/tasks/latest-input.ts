@@ -7,14 +7,8 @@ import { appDb } from '../../db/client.ts';
 import { updateSession } from '../../db/sessions.ts';
 import { logProblem } from '../../core/log.ts';
 
-/** Long inputs are kept to what a card can show. */
 const MAX_LENGTH = 2000;
 
-/**
- * Keeps a task's latest input: one you typed, a follow-up, or an
- * automation's prompt. The coding agent calls this for every message it is
- * given (`useLatestInput` in `src/agents/coder/index.ts`).
- */
 export async function recordLatestInput(id: string, text: string, at = new Date(), delivered = true): Promise<void> {
 	// Attached files show by name, not by the text they carry.
 	const message = splitAttachments(text);
@@ -26,7 +20,6 @@ export async function recordLatestInput(id: string, text: string, at = new Date(
 	);
 }
 
-/** The message in a stored submission: a bare string, or `{ kind: 'user', body }`. */
 export function bodyOf(payload: string): string | null {
 	const message = (JSON.parse(payload) as { message?: unknown }).message;
 	if (typeof message === 'string') return message;
@@ -34,12 +27,7 @@ export function bodyOf(payload: string): string | null {
 	return user?.kind === 'user' && typeof user.body === 'string' ? user.body : null;
 }
 
-/**
- * Fills in the latest input of tasks from before it was kept, from the
- * runtime's own record of the messages it accepted (`flue.db`). Best effort,
- * once at start: nothing else in Anton reads the runtime's tables, so if their
- * shape changes, older tasks simply keep showing their first message.
- */
+/** Best effort, once at start: if the runtime's table shape changes, older tasks keep showing their first message. */
 export async function backfillLatestInputs(file = path.join(config.dataDir, 'flue.db')): Promise<number> {
 	if (!existsSync(file)) return 0;
 	const db = await appDb();

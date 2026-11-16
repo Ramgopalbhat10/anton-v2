@@ -1,9 +1,8 @@
 import { getSetting, setSetting } from '../../db/settings.ts';
 
-/** A thread the user deleted, as its coordinator still hears of it: its words live on in the coordinator's history. */
 export type DeletedThread = { id: string; title: string; lastReply: string | null; at: string };
 const deletedKey = (spaceId: string) => `deleted-threads.${spaceId}`;
-/** The latest few, for a week: long enough to catch a follow-up meant for one, short enough to keep the state block small. */
+/** For a week: long enough to catch a follow-up meant for one, short enough to keep the state block small. */
 const DELETED_KEPT = 5;
 const DELETED_DAYS = 7;
 

@@ -2,18 +2,13 @@ import { getSessionJoins, setSessionJoins } from '../../db/sessions.ts';
 import { logProblem } from '../../core/log.ts';
 
 /**
- * A message sent while the agent works joins the reply in hand: the agent
- * reads it at the next step and answers within that reply. The runtime lists
- * such a message after the whole reply, so a thread could only show it below
- * the answer it got. Anton notes where the agent read it, after which tool
- * call of the reply (and whether the reply had already said its last words),
- * from the runtime's events, and the thread shows the message there.
+ * The runtime lists a message sent mid-reply after the whole reply; Anton notes from its events after which tool call
+ * the agent read it (and whether the reply had already said its last words), so the thread shows it there.
  */
 export type Join = { text: string; afterTool: string; final: boolean; at: string };
 
-/** Enough of a message to tell it from the others in its thread; the page compares the same length. */
+/** The page compares the same length. */
 export const JOIN_TEXT = 500;
-/** A task keeps the latest; older ones are long scrolled past. */
 const MAX_JOINS = 50;
 
 type JoinEvent = {
@@ -26,16 +21,13 @@ type JoinEvent = {
 	message?: { role?: string; content?: unknown };
 };
 
-/** Where each task's reply in hand stands: its latest tool call, and whether a step since then ended without one. */
 const replies = new Map<string, { tool: string; final: boolean }>();
 
-/** The coding agent's own conversation: not a subagent's, nor the reviewer's. */
 const isMain = (event: JoinEvent) =>
 	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === 'default') && (!event.agentName || /^coder$/i.test(event.agentName));
 
 const callsTools = (content: unknown) => Array.isArray(content) && content.some((block) => block && typeof block === 'object' && /tool/i.test(String((block as { type?: unknown }).type)));
 
-/** Follows the reply in hand from the runtime's events. Runs in the event observer; never throws. */
 export function recordJoinEvent(event: JoinEvent): void {
 	if (event.type === 'submission_settled') {
 		if (event.instanceId) replies.delete(event.instanceId);
@@ -61,15 +53,9 @@ export async function joinsFor(id: string): Promise<Join[]> {
 	}
 }
 
-/** Each task's latest joins write: the next waits for it, so two messages never read and write the list at once. */
+/** The next write waits for this one, so two messages never read and write the list at once. */
 const writing = new Map<string, Promise<void>>();
 
-/**
- * For each message the agent is given: one given once the reply in hand has
- * run a tool joined that reply there, and is noted. A message that starts a
- * reply has nothing before it. Where it joined is read as it is called; the
- * write may finish later.
- */
 export function noteDelivery(id: string, text: string, at = new Date()): Promise<void> {
 	const reply = replies.get(id);
 	if (!reply) return Promise.resolve();
