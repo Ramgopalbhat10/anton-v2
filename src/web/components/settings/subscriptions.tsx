@@ -425,27 +425,87 @@ function Command({ text, label }: { text: string; label: string }) {
 	);
 }
 
+/** Waiting for the code Claude's page shows once you approve, which Claude Code on the server trades for its sign-in. */
+function ClaudePending({ subscription, finish }: { subscription: Subscription; finish: ReturnType<typeof useClaudeFinish> }) {
+	const saved = useSaved();
+	const [code, setCode] = useState('');
+	const login = subscription.login!;
+	const cancel = useMutation({ mutationFn: () => api.cancelSubscriptionLogin(subscription.id), onSuccess: saved });
+	return (
+		<>
+			<CardSection label="Finish signing in" hint="Paste the code">
+				<ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-small leading-[18px] text-(--text-2)">
+					<li>
+						Approve Claude Code in the Claude tab.{' '}
+						<a href={login.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-(--accent-text) hover:underline">
+							Open it again
+							<Icon icon={ExternalLink} size={11} />
+						</a>
+					</li>
+					<li>Claude then shows a code. Copy it and paste it here.</li>
+				</ol>
+				<form
+					className="flex flex-wrap items-center gap-2"
+					onSubmit={(event) => {
+						event.preventDefault();
+						finish.mutate(code);
+					}}
+				>
+					<input
+						value={code}
+						onChange={(event) => setCode(event.target.value)}
+						placeholder="Code from Claude"
+						aria-label="Code from Claude"
+						autoComplete="off"
+						spellCheck={false}
+						className={`${FIELD} min-w-[240px] flex-1 font-mono text-small`}
+					/>
+					<Btn type="submit" size="sm" variant="primary" disabled={!code.trim() || finish.isPending}>
+						{finish.isPending ? 'Connecting…' : 'Connect'}
+					</Btn>
+				</form>
+				<SaveState pending={finish.isPending} success={false} error={finish.error ?? cancel.error} />
+			</CardSection>
+			<CardFooter caption={`Started ${age(login.startedAt)} ago · expires after 10 min`}>
+				<Btn size="sm" variant="ghost" disabled={cancel.isPending || finish.isPending} onClick={() => cancel.mutate()}>
+					Cancel
+				</Btn>
+			</CardFooter>
+		</>
+	);
+}
+
+/** Hands Claude Code the code; held by the card, so a refused code's message stays after the sign-in ends. */
+function useClaudeFinish(subscription: Subscription) {
+	const saved = useSaved();
+	return useMutation({ mutationFn: (code: string) => api.finishSubscriptionLogin(subscription.id, code), onSuccess: saved });
+}
+
 /**
  * A Claude plan, run by Claude Code on Anton's server. Claude Code signs in
- * through its own flow, so the card shows the command to run once there, and
- * what Claude Code then says about the account; Anton never holds the token.
+ * through its own flow: Anton starts it, opens Claude to approve in a new tab,
+ * and passes back the code Claude shows. Anton never holds the token.
  */
 function ClaudePlan({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
+	const signIn = useSignIn(subscription);
+	const finish = useClaudeFinish(subscription);
+	const [confirming, setConfirming] = useState(false);
 	const refresh = useMutation({ mutationFn: () => api.refreshSubscriptionModels(subscription.id), onSuccess: saved });
+	const disconnect = useMutation({ mutationFn: () => api.disconnectSubscription(subscription.id), onSuccess: saved });
 	const connected = subscription.state === 'connected';
-	const status = STATUS[subscription.state];
+	const pending = !connected && Boolean(subscription.login);
+	const status = pending ? { tone: 'accent' as const, label: 'Signing in' } : STATUS[subscription.state];
 	const { enabled, countAtApiPrices } = subscription.options;
-	const signOut = subscription.signIn?.replace(/ login$/, ' logout');
 	return (
 		<Card
 			icon={Bot}
 			title={`${subscription.name} plan`}
-			sub={subscription.email ?? 'through Claude Code'}
+			sub={subscription.email ?? (pending ? 'waiting for approval' : 'through Claude Code')}
 			label={`${subscription.name} plan`}
 			status={
-				<Status tone={status.tone} pulse={connected}>
-					{connected ? 'Connected' : subscription.state === 'expired' ? 'Needs attention' : status.label}
+				<Status tone={status.tone} pulse={connected || pending}>
+					{connected ? 'Connected' : subscription.state === 'expired' && !pending ? 'Needs attention' : status.label}
 				</Status>
 			}
 		>
@@ -465,6 +525,8 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 				>
 					Billed to your {subscription.name} plan's usage, not per token.
 				</Lead>
+			) : pending ? (
+				<Lead title="Waiting for Claude">Approve Claude Code in the Claude tab, then paste the code it shows.</Lead>
 			) : subscription.state === 'expired' ? (
 				<Lead title="Claude Code cannot use your plan">
 					<span className="text-(--bad)">{subscription.problem}</span>
@@ -502,34 +564,57 @@ function ClaudePlan({ subscription }: { subscription: Subscription }) {
 					) : null}
 					{subscription.windows?.length ? <Windows windows={subscription.windows} /> : null}
 					<Models subscription={subscription} />
-					<PlanSettings subscription={subscription} error={refresh.error} />
-					{signOut ? (
-						<CardSection label="Sign out on the server">
-							<Command text={signOut} label="Command that signs Claude Code out" />
-						</CardSection>
-					) : null}
+					<PlanSettings subscription={subscription} error={refresh.error ?? disconnect.error} />
 				</>
+			) : pending ? (
+				<ClaudePending subscription={subscription} finish={finish} />
 			) : (
-				<CardSection label="Sign in on the server" hint="Once">
-					<Note info="Over ssh, for example. Claude Code shows a link: open it, approve, and paste the code it gives you back into the shell.">
-						Run this in a shell where Anton runs, then check again.
+				<CardSection label="Sign in with Claude" hint="Once">
+					<Note info="Claude Code runs the sign-in on this server and keeps the token to itself. Anton only passes it the code Claude shows.">
+						Opens Claude in a new tab. Approve there, then paste the code it shows.
 					</Note>
-					{subscription.signIn ? <Command text={subscription.signIn} label="Command that signs Claude Code in" /> : null}
-					<SaveState pending={refresh.isPending} success={false} error={refresh.error} />
+					<div>
+						<Btn
+							size="sm"
+							variant="primary"
+							icon={ExternalLink}
+							disabled={signIn.isPending}
+							onClick={() => {
+								finish.reset();
+								signIn.mutate(window.open('', '_blank'));
+							}}
+						>
+							{signIn.isPending ? 'Opening Claude…' : 'Sign in with Claude'}
+						</Btn>
+					</div>
+					<SaveState pending={signIn.isPending || refresh.isPending} success={false} error={finish.error ?? signIn.error ?? refresh.error} />
 				</CardSection>
 			)}
-			<CardFooter
-				caption={
-					<Caption className="inline-flex items-center gap-1.5">
-						For your own use only
-						<InfoTip>Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</InfoTip>
-					</Caption>
-				}
-			>
-				<Btn size="sm" variant={connected ? 'ghost' : 'primary'} icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-					{refresh.isPending ? 'Checking…' : 'Check again'}
-				</Btn>
-			</CardFooter>
+			{pending ? null : (
+				<CardFooter
+					caption={
+						<Caption className="inline-flex items-center gap-1.5">
+							For your own use only
+							<InfoTip>Anthropic lets you sign in to its unmodified Claude Code with your own plan, not share it with others.</InfoTip>
+						</Caption>
+					}
+				>
+					<Btn size="sm" variant="ghost" icon={RotateCw} disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+						{refresh.isPending ? 'Checking…' : 'Check again'}
+					</Btn>
+					{connected ? (
+						<Btn
+							size="sm"
+							variant={confirming ? 'danger' : 'dangerGhost'}
+							disabled={disconnect.isPending}
+							onClick={() => (confirming ? disconnect.mutate() : setConfirming(true))}
+							onBlur={() => setConfirming(false)}
+						>
+							{disconnect.isPending ? 'Signing out…' : confirming ? 'Click again to sign out' : 'Sign out'}
+						</Btn>
+					) : null}
+				</CardFooter>
+			)}
 		</Card>
 	);
 }

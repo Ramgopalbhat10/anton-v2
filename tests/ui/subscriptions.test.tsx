@@ -92,9 +92,14 @@ describe('Subscriptions', () => {
 
 	const claude = plan({ id: 'claude', name: 'Claude', kind: 'runtime', gateway: 'claude-code', signIn: 'CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth login' });
 
-	it('shows a Claude plan with the command that signs Claude Code in on the server', async () => {
+	it('signs Claude Code in from the browser: opens Claude in a new tab, then passes back the code it shows', async () => {
+		const claudePending = { url: 'https://claude.com/cai/oauth/authorize?code=true&x=1', redirectUri: 'https://platform.claude.com/oauth/code/callback', listening: false, startedAt: new Date().toISOString() };
+		const signedIn = { ...claude, state: 'connected' as const, email: 'ada@example.com', models: [planModel('claude-code/claude-opus-5', 'Claude Opus 5')] };
 		api.subscriptions.mockResolvedValue({ subscriptions: [plan(), claude] });
-		api.refreshSubscriptionModels.mockResolvedValue(claude);
+		api.beginSubscriptionLogin.mockResolvedValue({ ...claude, login: claudePending });
+		api.finishSubscriptionLogin.mockResolvedValue(signedIn);
+		const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
+		const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
 		page();
 		const tabs = within(await screen.findByRole('tablist', { name: 'Plans' })).getAllByRole('tab');
 		expect(tabs.map((tab) => [tab.getAttribute('aria-selected'), tab.querySelector('svg title')?.textContent])).toEqual([
@@ -102,14 +107,38 @@ describe('Subscriptions', () => {
 			['false', 'Anthropic'],
 		]);
 		expect(screen.getByRole('tab', { name: 'Claude' })).toBe(tabs[1]);
-		expect(screen.queryByLabelText('Command that signs Claude Code in')).toBeNull();
 		fireEvent.click(tabs[1]);
-		const command = await screen.findByLabelText('Command that signs Claude Code in');
-		expect(command.textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth login');
-		expect(screen.getByText('Sign in on the server')).toBeTruthy();
+		expect(screen.queryByLabelText('Command that signs Claude Code in')).toBeNull();
 		expect(screen.getByText(/For your own use only/)).toBeTruthy();
-		fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
-		await waitFor(() => expect(api.refreshSubscriptionModels).toHaveBeenCalledWith('claude'));
+
+		fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Claude' }));
+		expect(open).toHaveBeenCalledWith('', '_blank');
+		await waitFor(() => expect(tab.location.href).toBe(claudePending.url));
+		expect(api.beginSubscriptionLogin).toHaveBeenCalledWith('claude');
+
+		const code = await screen.findByLabelText('Code from Claude');
+		expect(screen.getByText('Signing in')).toBeTruthy();
+		fireEvent.change(code, { target: { value: 'abc#state' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		await waitFor(() => expect(api.finishSubscriptionLogin).toHaveBeenCalledWith('claude', 'abc#state'));
+		expect(await screen.findByText('1 model on your plan')).toBeTruthy();
+		open.mockRestore();
+	});
+
+	it('keeps a refused code’s message after the sign-in ends', async () => {
+		const claudePending = { url: 'https://claude.com/cai/oauth/authorize?code=true', redirectUri: '', listening: false, startedAt: new Date().toISOString() };
+		api.subscriptions.mockResolvedValue({ subscriptions: [{ ...claude, login: claudePending }] });
+		api.finishSubscriptionLogin.mockRejectedValue(new Error('Login failed: Request failed with status code 400. Sign in again for a new code.'));
+		const { client: queries } = page();
+		fireEvent.change(await screen.findByLabelText('Code from Claude'), { target: { value: 'wrong' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		await waitFor(() => expect(api.finishSubscriptionLogin).toHaveBeenCalledWith('claude', 'wrong'));
+		expect(await screen.findByText(/Sign in again for a new code/)).toBeTruthy();
+		// The server ended that sign-in: the card goes back to its button and still says why.
+		api.subscriptions.mockResolvedValue({ subscriptions: [claude] });
+		await queries.invalidateQueries({ queryKey: ['subscriptions'] });
+		expect(await screen.findByRole('button', { name: 'Sign in with Claude' })).toBeTruthy();
+		expect(screen.getByText(/Sign in again for a new code/)).toBeTruthy();
 	});
 
 	it('shows a signed-in Claude plan’s account and models, and warns when it bills extra usage', async () => {
@@ -128,9 +157,13 @@ describe('Subscriptions', () => {
 		expect(screen.getByText('max', { selector: 'dd' })).toBeTruthy();
 		expect(screen.getByText('2.5.0', { selector: 'dd' })).toBeTruthy();
 		expect(screen.getByText(/calls now bill extra usage/)).toBeTruthy();
-		expect(screen.getByLabelText('Command that signs Claude Code out').textContent).toBe('CLAUDE_CONFIG_DIR=/data/claude-code /opt/claude auth logout');
-		expect(screen.getByText(/For your own use only/).textContent).not.toContain('auth logout');
-		expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+		expect(screen.getByRole('img', { name: 'Anton linked to your Claude plan' })).toBeTruthy();
+		expect(screen.queryByLabelText('Command that signs Claude Code out')).toBeNull();
+		api.disconnectSubscription.mockResolvedValue(claude);
+		fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		expect(api.disconnectSubscription).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole('button', { name: 'Click again to sign out' }));
+		await waitFor(() => expect(api.disconnectSubscription).toHaveBeenCalledWith('claude'));
 	});
 
 	it('opens ChatGPT in a new tab during the click, then finishes with the pasted address', async () => {

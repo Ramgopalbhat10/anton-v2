@@ -507,6 +507,17 @@ export type RuntimeConversation = {
 };
 
 /**
+ * One sign-in the program is running: approve at `url`, and the vendor's page
+ * shows a code that `complete` passes to the program. Anton relays the code
+ * only; the program trades it for its token and keeps that to itself.
+ */
+export type RuntimeSignIn = {
+	url: string;
+	complete(code: string): Promise<void>;
+	cancel(): void;
+};
+
+/**
  * A vendor's own agent program (Claude Code) that Anton drives as a model,
  * signed in through the program's own flow. Anton never sees its token: it
  * hands the program Anton's tools and runs every call the program makes.
@@ -520,6 +531,10 @@ export type AgentRuntime = {
 	readonly gateway: string;
 	/** The command to run once on the server to sign in, in the program's own flow. */
 	readonly signInCommand: string;
+	/** Starts the program's own sign-in from Anton: it gives the address to approve at, then takes the code the vendor's page shows. */
+	signIn?(): Promise<RuntimeSignIn>;
+	/** Signs the program out through its own command. */
+	signOut?(): Promise<void>;
 	/** Read again with `fresh`; otherwise the last answer is reused for a few minutes. */
 	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
 	listModels(): Promise<SubscriptionModel[]>;

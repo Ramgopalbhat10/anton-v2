@@ -1,3 +1,4 @@
+import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -16,6 +17,7 @@ import {
 	type RuntimeConversation,
 	type RuntimeConversationOptions,
 	type RuntimeEvent,
+	type RuntimeSignIn,
 	type RuntimeUsage,
 	type SubscriptionModel,
 } from '../../core/ports.ts';
@@ -87,6 +89,87 @@ function bundledExecutable(): string | null {
 		}
 	}
 	return null;
+}
+
+/** The address `claude auth login` prints for signing in with no browser on its machine. */
+const SIGN_IN_URL = /https:\/\/\S+\/oauth\/authorize\?\S+/;
+/** How long Claude Code may take to print that address, and to trade the code once it has it. */
+const SIGN_IN_START_MS = 30_000;
+const SIGN_IN_FINISH_MS = 60_000;
+
+const plainText = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+
+/** Claude Code's last words, such as "Login failed: Request failed with status code 400". */
+function lastLine(output: string): string {
+	const lines = plainText(output)
+		.split(/[\r\n]+/)
+		.map((line) => line.replace(/^.*Paste code here if prompted >\s*/, '').trim())
+		.filter(Boolean);
+	return lines.at(-1) ?? 'Claude Code stopped without saying why.';
+}
+
+/**
+ * Runs `claude auth login` with no terminal. It prints the address to approve
+ * at (the one for a machine with no browser, whose page shows a code), then
+ * reads that code from stdin, trades it for its token and keeps the token in
+ * its own config directory. `BROWSER` is a no-op, so nothing opens on the server.
+ */
+export function startSignIn(
+	executable: string,
+	configDir: string,
+	start: (command: string, args: string[], env: Record<string, string>) => ChildProcessWithoutNullStreams = (command, args, env) =>
+		spawn(command, args, { env, stdio: 'pipe' }),
+): Promise<RuntimeSignIn> {
+	const child = start(executable, ['auth', 'login', '--claudeai'], { ...childEnv(configDir), BROWSER: 'true' });
+	let output = '';
+	const exited = new Promise<number | null>((resolve) => {
+		child.once('exit', (code) => resolve(code));
+		child.once('error', (error) => {
+			output += `\n${error.message}`;
+			resolve(-1);
+		});
+	});
+	let done = false;
+	void exited.then(() => (done = true));
+	const read = (chunk: Buffer) => (output += chunk.toString());
+	child.stdout.on('data', read);
+	child.stderr.on('data', read);
+	const stop = () => {
+		if (!done) child.kill();
+	};
+	return new Promise<RuntimeSignIn>((resolve, reject) => {
+		const fail = (message: string) => {
+			stop();
+			reject(new Error(message));
+		};
+		const timer = setTimeout(() => fail('Claude Code did not give a sign-in address in time.'), SIGN_IN_START_MS);
+		const look = () => {
+			const url = plainText(output).match(SIGN_IN_URL)?.[0];
+			if (!url) return;
+			clearTimeout(timer);
+			child.stdout.off('data', look);
+			resolve({
+				url,
+				cancel: stop,
+				complete: async (code) => {
+					if (done) throw new Error('This sign-in has ended.');
+					child.stdin.end(`${code.trim()}\n`);
+					const late = new Promise<'late'>((settle) => setTimeout(settle, SIGN_IN_FINISH_MS, 'late').unref());
+					const result = await Promise.race([exited, late]);
+					if (result === 'late') {
+						stop();
+						throw new Error('Claude Code did not finish signing in in time.');
+					}
+					if (result !== 0) throw new Error(lastLine(output));
+				},
+			});
+		};
+		child.stdout.on('data', look);
+		void exited.then(() => {
+			clearTimeout(timer);
+			reject(new Error(lastLine(output)));
+		});
+	});
 }
 
 /** A single-reader queue: what the SDK reads Anton's messages from, and what Anton reads its events from. */
@@ -511,6 +594,24 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		name: 'Claude',
 		gateway: GATEWAY,
 		signInCommand: `CLAUDE_CONFIG_DIR=${options.configDir} ${executable ?? 'claude'} auth login`,
+		signIn: async () => {
+			const started = await startSignIn(executable ?? 'claude', options.configDir);
+			return {
+				...started,
+				complete: async (code) => {
+					await started.complete(code);
+					probed = null;
+				},
+			};
+		},
+		signOut: () =>
+			new Promise<void>((resolve, reject) => {
+				execFile(executable ?? 'claude', ['auth', 'logout'], { env: childEnv(options.configDir), timeout: SIGN_IN_START_MS }, (error, stdout, stderr) => {
+					probed = null;
+					if (error) reject(new Error(lastLine(`${stdout}${stderr}`) || error.message));
+					else resolve();
+				});
+			}),
 		status: async (fresh) => {
 			try {
 				return (await probeCached(fresh)).status;

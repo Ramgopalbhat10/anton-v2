@@ -9,6 +9,7 @@ import type {
 	KeyPlan,
 	ModelInfo,
 	PlanWindow,
+	RuntimeSignIn,
 	SubscriptionCredential,
 	SubscriptionLogin,
 	SubscriptionModel,
@@ -405,6 +406,52 @@ function endAttempt(id: string): void {
 	attempts.delete(id);
 }
 
+/** A sign-in Claude Code is running on the server, waiting for the code Claude's page shows; one per runtime, in memory. */
+type RuntimeAttempt = { signIn: RuntimeSignIn; startedAt: number; timer: NodeJS.Timeout; finishing?: Promise<void> };
+const runtimeAttempts = new Map<string, RuntimeAttempt>();
+
+function endRuntimeAttempt(id: string): void {
+	const attempt = runtimeAttempts.get(id);
+	if (!attempt) return;
+	clearTimeout(attempt.timer);
+	attempt.signIn.cancel();
+	runtimeAttempts.delete(id);
+}
+
+async function beginRuntimeLogin(runtime: AgentRuntime): Promise<SubscriptionView> {
+	if (!runtime.signIn) throw new ConflictError(`${runtime.name} signs in on the server: ${runtime.signInCommand}`);
+	endRuntimeAttempt(runtime.id);
+	const signIn = await runtime.signIn().catch((error: unknown) => {
+		throw new ConflictError(`Claude Code could not start signing in: ${error instanceof Error ? error.message : String(error)}`);
+	});
+	const timer = setTimeout(() => {
+		if (runtimeAttempts.get(runtime.id)?.signIn !== signIn) return;
+		endRuntimeAttempt(runtime.id);
+		announce({ kind: 'subscriptions' });
+	}, LOGIN_TTL_MS);
+	timer.unref();
+	runtimeAttempts.set(runtime.id, { signIn, startedAt: Date.now(), timer });
+	announce({ kind: 'subscriptions' });
+	return runtimeView(runtime);
+}
+
+/** Hands Claude Code the code from Claude's page. A wrong code ends its sign-in, so a failed one starts over. */
+async function finishRuntimeLogin(runtime: AgentRuntime, code: string): Promise<SubscriptionView> {
+	const attempt = runtimeAttempts.get(runtime.id);
+	if (!attempt) throw new ConflictError('No sign-in is waiting. Start one again.');
+	attempt.finishing ??= attempt.signIn.complete(code).finally(() => {
+		if (runtimeAttempts.get(runtime.id) === attempt) endRuntimeAttempt(runtime.id);
+		announce({ kind: 'subscriptions' });
+	});
+	try {
+		await attempt.finishing;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new InvalidInputError(`${message.replace(/\.$/, '')}. Sign in again for a new code.`);
+	}
+	return refreshSubscriptionModels(runtime.id);
+}
+
 const page = (title: string, detail: string) =>
 	`<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font:15px system-ui;margin:3rem;max-width:36rem"><h1 style="font-size:20px">${title}</h1><p>${detail
 		.replace(/&/g, '&amp;')
@@ -443,6 +490,8 @@ function catchCallback(redirectUri: string, finish: (url: string) => Promise<voi
 }
 
 export async function beginLogin(id: string): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) return beginRuntimeLogin(runtime);
 	const provider = providerById(id);
 	endAttempt(id);
 	const previous = (await stored(id)).credential;
@@ -462,6 +511,12 @@ export async function beginLogin(id: string): Promise<SubscriptionView> {
 }
 
 export async function cancelLogin(id: string): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) {
+		endRuntimeAttempt(id);
+		announce({ kind: 'subscriptions' });
+		return runtimeView(runtime);
+	}
 	const provider = providerById(id);
 	endAttempt(id);
 	announce({ kind: 'subscriptions' });
@@ -476,6 +531,8 @@ async function connect(provider: SubscriptionProvider, credential: SubscriptionC
 
 /** Finishes a sign-in with the address the browser was sent back to, pasted or caught on the loopback address. */
 export async function finishLogin(id: string, callbackUrl: string): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (runtime) return finishRuntimeLogin(runtime, callbackUrl);
 	const provider = providerById(id);
 	const attempt = attempts.get(id);
 	if (!attempt) throw new ConflictError('No sign-in is waiting. Start one again.');
@@ -540,7 +597,16 @@ export async function importLogin(id: string, input: string): Promise<Subscripti
 /** Forgets the sign-in here; the vendor keeps Anton listed until you remove it there. */
 export async function disconnect(id: string): Promise<SubscriptionView> {
 	const runtime = runtimeById(id);
-	if (runtime) throw new ConflictError(`Claude Code keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
+	if (runtime) {
+		if (!runtime.signOut) throw new ConflictError(`Claude Code keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
+		endRuntimeAttempt(id);
+		await runtime.signOut().catch((error: unknown) => {
+			throw new ConflictError(`Claude Code could not sign out: ${error instanceof Error ? error.message : String(error)}`);
+		});
+		await save(id, { models: [], modelsAt: null });
+		announce({ kind: 'models' });
+		return refreshSubscriptionModels(id);
+	}
 	const keyed = keyPlanById(id);
 	if (keyed) {
 		// The key itself stays valid until you delete it on the vendor's dashboard.
@@ -701,6 +767,7 @@ async function withTokens(models: SubscriptionModel[]): Promise<SubscriptionView
 /** A plan Claude Code runs: what it says about its sign-in, and the models it offered last. */
 export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionView> {
 	const [current, status] = await Promise.all([stored(runtime.id), runtime.status()]);
+	const attempt = runtimeAttempts.get(runtime.id);
 	const [models, windows] = status.signedIn
 		? await Promise.all([withTokens(await freshModels(runtimePlan(runtime), current)), runtime.windows?.() ?? Promise.resolve(null)])
 		: [[], null];
@@ -718,7 +785,9 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		models,
 		monthTokens: models.reduce((sum, model) => sum + model.tokens, 0),
 		modelsAt: current.modelsAt === null ? null : new Date(current.modelsAt).toISOString(),
-		login: null,
+		login: attempt
+			? { url: attempt.signIn.url, redirectUri: new URL(attempt.signIn.url).searchParams.get('redirect_uri') ?? '', listening: false, startedAt: new Date(attempt.startedAt).toISOString() }
+			: null,
 		plan: status.plan,
 		version: status.version,
 		signIn: runtime.signInCommand,

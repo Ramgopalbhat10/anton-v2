@@ -360,38 +360,28 @@ function MarkShapes() {
 
 /**
  * Anton on the left, your plan on the right (its vendor's logo when there is
- * one), joined through a key in the middle: lit, with the wire carrying a flow
- * both ways, when you are signed in; open, the plug pulled, when you are not.
+ * one), joined by a plug in the middle: pushed into its socket, the wires lit
+ * and carrying a flow, when you are signed in; pulled out when you are not.
  */
 export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
+	// Signed in, the plug moves right and the socket left until the prongs sit in it.
+	const plugX = linked ? 125.5 : 118.5;
+	const socketX = linked ? 141.5 : 148.5;
+	const prong = linked ? 'var(--accent-text)' : 'var(--text-4)';
 	return (
 		<Art w={280} h={112} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
-			{linked ? (
-				<>
-					<Glow cx={140} cy={46} r={70} />
-					<Wire d="M86 46 H124" lit />
-					<Wire d="M156 46 H194" lit />
-				</>
-			) : (
-				<>
-					<Wire d="M86 46 H118" broken />
-					<Wire d="M162 46 H194" broken />
-				</>
-			)}
-			{/* The key between them: a check when signed in, an open plug when not. */}
-			{linked ? (
-				<g>
-					<rect x={124.5} y={34.5} width={31} height={23} rx={11.5} fill="var(--accent-soft)" stroke="var(--accent-line)" />
-					<path d="M133.5 46 l4 4 l9 -8.5" stroke="var(--accent-text)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-				</g>
-			) : (
-				<g>
-					<rect x={118.5} y={40.5} width={13} height={11} rx={2.5} fill="var(--bg-active)" stroke={EDGE} />
-					<line x1={131} x2={135} y1={43.5} y2={43.5} stroke="var(--text-4)" strokeLinecap="round" />
-					<line x1={131} x2={135} y1={48.5} y2={48.5} stroke="var(--text-4)" strokeLinecap="round" />
-					<rect x={148.5} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke={ink(14)} strokeDasharray="2 2" />
-				</g>
-			)}
+			<Wire d={`M86 46 H${plugX - 0.5}`} lit={linked} broken={!linked} />
+			<Wire d={`M${socketX + 13.5} 46 H194`} lit={linked} broken={!linked} />
+			<g>
+				<line x1={plugX + 12.5} x2={plugX + 16.5} y1={43.5} y2={43.5} stroke={prong} strokeLinecap="round" />
+				<line x1={plugX + 12.5} x2={plugX + 16.5} y1={48.5} y2={48.5} stroke={prong} strokeLinecap="round" />
+				<rect x={plugX} y={40.5} width={13} height={11} rx={2.5} fill={linked ? 'var(--accent-soft)' : 'var(--bg-active)'} stroke={linked ? 'var(--accent-line)' : EDGE} />
+				{linked ? (
+					<rect x={socketX} y={40.5} width={13} height={11} rx={2.5} fill="var(--accent-soft)" stroke="var(--accent-line)" />
+				) : (
+					<rect x={socketX} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke={ink(14)} strokeDasharray="2 2" />
+				)}
+			</g>
 			{/* Anton. */}
 			<Tile x={30} y={18} w={56} h={56} r={12} lit={linked} />
 			<g transform="translate(40 28) scale(2.15) translate(-3.5 -5.7)">
