@@ -141,6 +141,7 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/db/` | libSQL client, versioned migrations, queries |
 | `src/agents/coder/` | The Flue agent (`index.ts`), its prompts, subagents and tools |
 | `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
-| `src/app.ts` | HTTP routes |
+| `src/app.ts` | HTTP entry: boot work, error handling, and the route modules mounted in order |
+| `src/routes/` | HTTP routes, one Hono module per area |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
 | `src/web/` | React UI |

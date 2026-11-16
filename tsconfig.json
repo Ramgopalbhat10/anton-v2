@@ -32,6 +32,7 @@
 		"src/flue",
 		"src/lib",
 		"src/providers",
+		"src/routes",
 		"src/services",
 		"tests"
 	],
