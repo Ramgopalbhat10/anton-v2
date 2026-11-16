@@ -347,10 +347,10 @@ export function ChangesArt({ className, branch, base }: { className?: string; br
 function MarkShapes() {
 	return (
 		<>
-			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#9EE1F3" />
-			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#3FB6D8" />
-			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#17627A" />
-			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round" />
+			<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#A5A8FF" />
+			<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#6E72F7" />
+			<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#4547B8" />
+			<path d="M7.03 14.28v2.13M9.87 15.92v2.13" stroke="#0A0A0B" strokeWidth="1.75" strokeLinecap="round" />
 		</>
 	);
 }
@@ -535,10 +535,10 @@ export function Logo({ size = 20, className }: { size?: number; className?: stri
 	return (
 		<svg aria-hidden width={size} height={size} viewBox="3.5 5.7 17 17" className={cn('anton-logo shrink-0 overflow-visible', className)}>
 			<g className="al-cube">
-				<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#9EE1F3" />
-				<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#3FB6D8" />
-				<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#17627A" />
-				<g className="al-eyes" stroke="#06181F" strokeWidth="1.75" strokeLinecap="round">
+				<polygon points="12,6 19.1,10.1 12,14.2 4.9,10.1" fill="#A5A8FF" />
+				<polygon points="4.9,10.1 12,14.2 12,22.4 4.9,18.3" fill="#6E72F7" />
+				<polygon points="12,14.2 19.1,10.1 19.1,18.3 12,22.4" fill="#4547B8" />
+				<g className="al-eyes" stroke="#0A0A0B" strokeWidth="1.75" strokeLinecap="round">
 					<path className="al-eye" d="M7.03 14.28v2.13" />
 					<path className="al-eye" d="M9.87 15.92v2.13" />
 				</g>
