@@ -79,7 +79,8 @@ export const threadActiveAt = (thread: Session) => [thread.checkpointAt, thread.
 /** One line about the thread: its question when it waits on you, else its last words, else its brief. */
 export function threadLine(thread: Session, markdown = false): string {
 	if (thread.status === 'error') return thread.errorMessage ?? 'The thread failed.';
-	if (thread.asking) return thread.asking;
+	// A resolved thread is done: a question left from before it closed is not its line any more.
+	if (thread.asking && !thread.resolvedAt) return thread.asking;
 	const text = thread.lastReply ?? thread.brief ?? thread.lastInput ?? '';
 	// A heading only names what follows, so the first line of prose is preferred.
 	const lines = text.split('\n').filter((entry) => entry.trim() && !/^\s*(?:---+|\|)/.test(entry));

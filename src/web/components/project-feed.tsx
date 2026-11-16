@@ -192,6 +192,44 @@ function ActionRow({ icon, children, failed }: { icon: typeof Send; children: Re
 	);
 }
 
+/**
+ * Something the coordinator wrote somewhere else (a message to a thread, a note to memory): one quiet
+ * pill saying where, as thread reports are, that opens to what it wrote. A long message stays out of
+ * the conversation's way until you ask for it.
+ */
+function NoteRow({ icon, failed, text, thread, children }: { icon: typeof Send; failed?: boolean; text: string; thread?: Session; children: ReactNode }) {
+	const [open, setOpen] = useState(false);
+	const openThread = useOpenThread();
+	return (
+		<div className="flex min-w-0 flex-col gap-1">
+			<button
+				type="button"
+				aria-expanded={open}
+				disabled={!text}
+				onClick={() => setOpen((current) => !current)}
+				className={cn(
+					'flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-control bg-(--bg-raised) pr-2.5 pl-1.5 text-left text-small shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)',
+					failed ? 'text-(--bad)' : 'text-(--text-3) hover:text-(--text-2)',
+				)}
+			>
+				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-3) transition-transform duration-(--t-fast)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
+				<Icon icon={failed ? CircleAlert : icon} size={12} className={cn('shrink-0', !failed && 'text-(--text-3)')} />
+				<span className="min-w-0 truncate">{children}</span>
+			</button>
+			{open ? (
+				<div className="ml-3 flex flex-col items-start gap-1.5 border-l border-(--line) py-1 pl-3">
+					<p className="m-0 max-h-60 max-w-full overflow-y-auto text-small leading-[18px] break-words whitespace-pre-wrap text-(--text-2)">{text}</p>
+					{thread ? (
+						<button type="button" onClick={() => openThread(thread)} className="rounded-inner text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
+							Open the thread
+						</button>
+					) : null}
+				</div>
+			) : null}
+		</div>
+	);
+}
+
 type Suggestion = { title: string; brief: string; repo?: string };
 
 /** Threads the coordinator proposes: a numbered list, Start on each, Start all below. */
@@ -308,16 +346,16 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 		}
 		case 'message_thread':
 			return (
-				<ActionRow icon={Send} failed={failed}>
-					{/* A thread deleted since is gone from the list; the coordinator then starts a new one. */}
-					{failed ? 'Not sent' : 'Sent'} to <span className="text-(--text-2)">{target?.title ?? (failed ? 'a deleted thread' : 'a thread')}</span>: {field(part.input, 'message')}
-				</ActionRow>
+				// A thread deleted since is gone from the list; the coordinator then starts a new one.
+				<NoteRow icon={Send} failed={failed} thread={target} text={field(part.input, 'message')}>
+					{failed ? 'Not sent' : 'Sent'} to <span className="text-(--text-2)">{target?.title ?? (failed ? 'a deleted thread' : 'a thread')}</span>
+				</NoteRow>
 			);
 		case 'remember':
 			return (
-				<ActionRow icon={Bookmark} failed={failed}>
-					Saved to memory: {field(part.input, 'note')}
-				</ActionRow>
+				<NoteRow icon={Bookmark} failed={failed} text={field(part.input, 'note')}>
+					Saved to memory
+				</NoteRow>
 			);
 		case 'resolve_thread':
 			return <ActionRow icon={Check} failed={failed}>Resolved {target?.title ?? 'a thread'}</ActionRow>;

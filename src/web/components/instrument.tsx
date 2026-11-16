@@ -148,9 +148,9 @@ export function CardFooter({ caption, children }: { caption?: ReactNode; childre
 	);
 }
 
-/** The darker inset a chart or illustration sits in. */
+/** The darker inset a chart sits in; with `grid`, a drawing's place, which has no fill: the drawing sits straight on the card. */
 export function Well({ children, className, grid }: { children: ReactNode; className?: string; grid?: boolean }) {
-	return <div className={cn('in-well overflow-hidden', grid && 'in-grid', className)}>{children}</div>;
+	return <div className={cn(!grid && 'in-well', 'overflow-hidden', className)}>{children}</div>;
 }
 
 /**

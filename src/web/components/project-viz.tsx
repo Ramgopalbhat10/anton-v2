@@ -595,7 +595,7 @@ export function ProjectRoute({ space }: { space: Space }) {
 		{ title: 'Done', note: 'merged and resolved' },
 	];
 	return (
-		<div className="in-well in-grid flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
+		<div className="flex flex-col gap-2 px-3 pt-6 pb-4 sm:px-4">
 			<ProjectRouteArt className="w-full" />
 			<ol aria-label="How the project runs" className="m-0 grid list-none grid-cols-4 p-0">
 				{stages.map((stage, index) => (

@@ -2,11 +2,12 @@ import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from 'lucide-react';
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSidebar, SidebarRail } from '@/components/chat-sidebar';
 import { CommandPalette } from '@/components/command-palette';
 import { MobileNav } from '@/components/mobile-nav';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { ResizeHandle, useStoredState } from '@/components/split-pane';
 import { ReadNotificationsOf } from '@/components/notifications';
 import { Launcher } from '@/components/launcher';
 import { MenuButton, NavContext } from '@/components/nav';
@@ -58,10 +59,18 @@ function TaskNotifications() {
 /** Where a failed dialog says so: floating in a corner, since it has no place in the page's layout. */
 const FLOATING = 'fixed right-4 bottom-4 z-50 max-w-[320px] shadow-(--sh-1)';
 
+/** The sidebar's width on a wider screen: dragged by its edge between these, back to the default on a double-click. */
+const NAV_DEFAULT = 236;
+const NAV_MIN = 200;
+const NAV_MAX = 420;
+
 export function AppShell() {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
+	const [storedWidth, setNavWidth] = useStoredState('anton.sidebarWidth', NAV_DEFAULT);
+	// A width saved under other limits, or not a number at all, comes back inside these.
+	const navWidth = Number.isFinite(storedWidth) ? Math.min(NAV_MAX, Math.max(NAV_MIN, storedWidth)) : NAV_DEFAULT;
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const navigate = useNavigate();
 	// An incognito chat shows no sidebar: its frame covers the whole page.
@@ -124,7 +133,19 @@ export function AppShell() {
 				/>
 				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
 				{incognito ? null : (
-					<div className="sg-nav-column" data-collapsed={collapsed}>
+					<div className="sg-nav-column" data-collapsed={collapsed} style={{ '--nav-w': `${navWidth}px` } as CSSProperties}>
+						{collapsed ? null : (
+							<ResizeHandle
+								label="Resize the sidebar"
+								width={navWidth}
+								min={NAV_MIN}
+								max={NAV_MAX}
+								initial={NAV_DEFAULT}
+								onResize={setNavWidth}
+								// No edge of its own: the line shows only under the pointer, the keyboard or a drag.
+								className="absolute inset-y-0 right-0 z-10 hidden w-2 before:bg-transparent md:flex"
+							/>
+						)}
 						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
 						<ErrorBoundary label="The sidebar" className="m-3">
 							<ChatSidebar
