@@ -9,7 +9,7 @@ import { connectorsView } from './connectors.ts';
 import { MAX_SEARCH, type MailApprovalView, readMailThread, requestSend, searchMail, writeDraft } from './mail.ts';
 import { mcpServerStates } from './mcp-servers.ts';
 import { callServerTool, type McpCallResult, type McpTool, serverTools } from './mcp-tools.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { secretsToHide } from './secrets.ts';
 import { requestToolApproval } from './tool-approvals.ts';
 

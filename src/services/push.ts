@@ -6,7 +6,7 @@ import type { Session } from '../core/types.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { getSession } from './sessions.ts';
 
 /**

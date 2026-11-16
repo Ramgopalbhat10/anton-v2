@@ -20,7 +20,7 @@ import { getSetting, setSetting } from '../db/settings.ts';
 import { type Gateway, getProviders } from '../providers/index.ts';
 import { openRouterKey, openRouterKeySlot } from '../providers/openrouter/key.ts';
 import { vercelKeySlot } from '../providers/vercel/key.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Plans you already pay for, from Settings › Subscriptions. Their models join

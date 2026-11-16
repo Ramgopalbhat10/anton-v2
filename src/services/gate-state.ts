@@ -1,6 +1,6 @@
 import { isIncognitoId } from '../core/incognito.ts';
 import { getGateStateRow, saveGateStateRow } from '../db/gate-state.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /*
  * What the checks at the end of a reply know of a task (`todos.ts`,

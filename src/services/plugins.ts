@@ -23,7 +23,7 @@ import type { FileHit } from '../core/ports.ts';
 import { getProviders } from '../providers/index.ts';
 import { ADDED_FILES } from './added-files.ts';
 import { readOutput } from './checkpoints.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { snapshotFiles } from './repo-snapshot.ts';
 
 /** Marketplaces offered until the user picks their own: Anthropic's skills, and Devin's catalog of plugins from many vendors. */

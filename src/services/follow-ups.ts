@@ -7,7 +7,7 @@ import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { CLEAN_MARK } from './code-review.ts';
 import { decide, yesOf } from './decisions.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { readPullRequest } from './pr-status.ts';
 
 /** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */

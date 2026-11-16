@@ -9,7 +9,7 @@ import { Coordinator } from './agents/coordinator.ts';
 import { config } from './config.ts';
 import { ConflictError, InvalidInputError, NotFoundError, statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
-import { purgeIncognito } from './db.ts';
+import { purgeIncognito } from './db/adapter.ts';
 import { getSessionRecord } from './db/sessions.ts';
 import { getSpace } from './db/spaces.ts';
 import { REASONING_LEVELS } from './core/ports.ts';
@@ -132,7 +132,7 @@ import {
 	subscriptionsView,
 } from './services/subscriptions.ts';
 import { handleTerminalUpgrade } from './services/terminal.ts';
-import { logProblem, logRuntimeEvent, recentProblems } from './services/log.ts';
+import { logProblem, logRuntimeEvent, recentProblems } from './core/log.ts';
 import { observeRuntime } from './services/runtime-observer.ts';
 import { recordWebCall } from './services/web-digest.ts';
 import { markNotifications, notificationsView, notifyFailedReply } from './services/notifications.ts';

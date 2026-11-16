@@ -3,7 +3,7 @@ import type { Machine } from '../core/ports.ts';
 import { redactor } from '../core/redact.ts';
 import { quote, text } from '../core/shell.ts';
 import { repoDir } from './git.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { secretsToHide } from './secrets.ts';
 import { liveMachine, machineFor } from './workspace.ts';
 

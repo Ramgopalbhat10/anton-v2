@@ -23,7 +23,7 @@ import { forgetGate } from './gate-state.ts';
 import { forgetRepoCheck } from './repo-check.ts';
 import { forgetSubagentRuns } from './subagent-runs.ts';
 import { findModel, reasoningFor } from './models.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { threadState } from '../core/thread-state.ts';
 import { nameTask, titleFrom } from './titles.ts';
 import { forgetNotificationsOf } from './notifications.ts';

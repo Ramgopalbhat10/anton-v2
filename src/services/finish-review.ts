@@ -6,7 +6,7 @@ import { settleFetchedBase } from './base-merge.ts';
 import { changesView } from './files.ts';
 import { changeGate, type GateState, gate, loadGate } from './gate-state.ts';
 import { otherRepoChanges } from './git.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { modelFor } from './sessions.ts';
 import { recordUsage } from './usage.ts';
 import { liveMachine } from './workspace.ts';

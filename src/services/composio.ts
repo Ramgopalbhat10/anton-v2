@@ -5,7 +5,7 @@ import { deleteComposioAccount, getComposioAccount, type ComposioAccountRow, lis
 import { getSetting, setSetting } from '../db/settings.ts';
 import { getProviders } from '../providers/index.ts';
 import { composioKeySlot } from '../providers/composio/key.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Apps connected through an apps platform (Composio, behind the AppsConnector

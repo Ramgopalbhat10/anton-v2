@@ -9,7 +9,7 @@ import { getSpace } from '../db/spaces.ts';
 import { getProviders } from '../providers/index.ts';
 import { documentSlice } from './documents.ts';
 import { MAX_UPLOAD_BYTES } from './files.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { downloadInto } from './machine-download.ts';
 import { liveMachine } from './workspace.ts';
 

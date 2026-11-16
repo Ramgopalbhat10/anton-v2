@@ -15,7 +15,7 @@ import { type SealedSecretBrief, sealedSecretBriefs } from './sealed-secrets.ts'
 import { serverTools } from './mcp-tools.ts';
 import { findModel, reasoningFor } from './models.ts';
 import { primeSkills } from './plugins.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { isRestoring } from './restore.ts';
 import { type ModelChoice, primeModel } from './sessions.ts';
 import { getSpace, type Space } from '../db/spaces.ts';

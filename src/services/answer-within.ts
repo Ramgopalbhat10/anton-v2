@@ -1,4 +1,4 @@
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Cloudflare, in front of Anton, closes a request it has waited on for 100

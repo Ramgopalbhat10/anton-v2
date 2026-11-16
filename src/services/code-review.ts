@@ -11,7 +11,7 @@ import { decide, hasDecisionModel, yesOf } from './decisions.ts';
 import { generalSettings } from './general.ts';
 import { repoDir } from './git.ts';
 import { bringCommit, OFFLINE_GIT } from './host-commits.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { machineFor } from './workspace.ts';
 
 /**

@@ -2,7 +2,7 @@ import { announce } from '../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.ts';
 import type { InstalledMcpServer, McpServer } from '../core/types.ts';
 import { deleteMcpServer, getMcpServer, listMcpServers, saveMcpServer, setMcpServerEnabled } from '../db/mcp-servers.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, signInView } from './mcp-sign-in.ts';
 import { type McpTool, serverTools } from './mcp-tools.ts';
 

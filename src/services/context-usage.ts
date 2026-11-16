@@ -4,7 +4,7 @@ import { unrouted } from '../core/model-route.ts';
 import { sessionCalls } from '../db/sessions.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { backgroundModel, backgroundReasoning, compactionCeilingFor, generalSettings } from './general.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { findModel, loadedModels } from './models.ts';
 
 /**

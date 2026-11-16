@@ -2,7 +2,7 @@ import { config } from '../config.ts';
 import { appDb } from '../db/client.ts';
 import { getProviders } from '../providers/index.ts';
 import { openRouterKeySource } from '../providers/openrouter/key.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { accessToken, agentRuntimes, loadGatewayKey, subscriptionProviders, subscriptionView } from './subscriptions.ts';
 import { whyNoAnswer } from './why-no-answer.ts';
 

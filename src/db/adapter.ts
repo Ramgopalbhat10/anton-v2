@@ -12,8 +12,8 @@ import type {
 	PutAttachmentInput,
 } from '@flue/runtime/adapter';
 import { parseSessionStorageKey } from '@flue/runtime/adapter';
-import { config } from './config.ts';
-import { INCOGNITO_PREFIX } from './core/incognito.ts';
+import { config } from '../config.ts';
+import { INCOGNITO_PREFIX } from '../core/incognito.ts';
 
 /**
  * Conversations, attachments, and accepted submissions are stored here so

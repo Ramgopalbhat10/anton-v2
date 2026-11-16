@@ -1,5 +1,5 @@
 import { getSessionJoins, setSessionJoins } from '../db/sessions.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * A message sent while the agent works joins the reply in hand: the agent
