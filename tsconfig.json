@@ -30,7 +30,6 @@
 		"src/db",
 		"src/dev",
 		"src/flue",
-		"src/lib",
 		"src/providers",
 		"src/routes",
 		"src/services",

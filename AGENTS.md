@@ -8,16 +8,18 @@ This file is an index. Read the doc for the area you change, not all of them.
 
 | Area | Code | Read |
 | --- | --- | --- |
-| Ports, providers (Modal, Docker, local, S3, GitHub, plans), Flue adapters, DB, routes | `src/core/ports.ts`, `src/providers/`, `src/flue/`, `src/db/`, `src/app.ts`, `src/routes/` | [server-and-providers](docs/architecture/server-and-providers.md) |
-| Plans, gateways, model variants, background and decision models | `src/services/models/subscriptions.ts`, `general.ts`, `decisions.ts` | [models-and-plans](docs/architecture/models-and-plans.md) |
-| Task lifecycle, sandboxes, chats, run on host, headless runs | `src/services/tasks/sessions.ts`, `agent-now.ts`, `src/services/sandbox/workspace.ts`, `task-files.ts`, `scripts/anton-run.ts` | [tasks-and-sandboxes](docs/architecture/tasks-and-sandboxes.md) |
-| Context window, cuts, pruning, compaction, reply traces | `src/services/context/context-usage.ts`, `context-prune.ts`, `response-trace.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
-| Coder, subagents, finish review, background jobs, Reviewer, skills and plugins | `src/agents/`, `src/services/tasks/subagent-runs.ts`, `src/services/replies/finish-review.ts`, `src/services/sandbox/background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
-| Browser and Computer panels | `src/services/browser/live-browser.ts`, `browser*.ts`, `computer.ts` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
-| What replies draw, Artifacts page, attachments | `src/web/components/thread.tsx`, `artifacts-page.tsx`, `attachments.tsx` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
-| Projects, coordinator, threads, project files | `src/services/projects/spaces.ts`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |
-| Connectors | `src/services/connectors/connector-tools.ts`, `settings/connectors.tsx` | [connectors](docs/architecture/connectors.md) |
-| Web UI, panels, push notifications | `src/web/`, `src/services/notify/push.ts` | [web-ui](docs/architecture/web-ui.md) |
+| Ports, providers (Modal, Docker, local, S3, GitHub, plans), Flue adapters, DB, setup | `src/core/ports.ts`, `src/providers/`, `src/flue/`, `src/db/`, `src/services/settings/setup.ts` | [server-and-providers](docs/architecture/server-and-providers.md) |
+| HTTP entry and routes (mount order matters) | `src/app.ts`, `src/routes/`, `src/server.ts` | [server-and-providers](docs/architecture/server-and-providers.md) |
+| Plans, gateways, model variants, background and decision models | `src/services/models/subscriptions.ts`, `src/services/models/general.ts`, `src/services/models/decisions.ts` | [models-and-plans](docs/architecture/models-and-plans.md), [claude-code-plan](docs/architecture/claude-code-plan.md) |
+| Task lifecycle, sandboxes, chats, run on host, headless runs | `src/services/tasks/`, `src/services/sandbox/`, `src/services/automations/`, `scripts/anton-run.ts` | [tasks-and-sandboxes](docs/architecture/tasks-and-sandboxes.md) |
+| Context window, cuts, pruning, compaction, reply traces | `src/services/context/`, `src/services/replies/compaction-pin.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
+| Coder, subagents, checks at a reply's end, background jobs, Reviewer, skills | `src/agents/coder/`, `src/agents/reviewer.ts`, `src/services/replies/`, `src/services/sandbox/background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
+| Browser and Computer panels | `src/services/browser/` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
+| What replies draw, Artifacts page, attachments | `src/web/components/thread.tsx`, `src/web/components/artifacts-page.tsx`, `src/services/artifacts/` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
+| Projects, coordinator, threads, project files | `src/services/projects/`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |
+| Connectors | `src/services/connectors/`, `src/web/components/settings/connectors.tsx` | [connectors](docs/architecture/connectors.md) |
+| Web UI, panels, push notifications | `src/web/`, `src/services/notify/` | [web-ui](docs/architecture/web-ui.md) |
+| Dev tooling, Flue patches, UI fixture, backups | `scripts/`, `litestream.yml` | [development](docs/architecture/development.md) |
 
 ## Rules
 
@@ -30,6 +32,8 @@ Reasons and details: [rules](docs/architecture/rules.md).
 - Storage cleanup removes only what this database deleted.
 - Nothing a page or message waits on fetches a vendor's model list when one is in hand.
 - Services never import the agents; Anton's own messages go through `sendToAgent`.
+- No re-export `index.ts` barrels; import files directly with explicit `.ts` extensions. Only agent entry files carry `'use agent'`.
+- Comments only for invariants, outside systems' quirks, security reasons and traps.
 - Keep this file an index: put new detail in the area's doc and add a row here only for a new area.
 
 ## Commands
