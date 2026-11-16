@@ -8,7 +8,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-activity-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { isWorking, noteSending, onIdle, recordAgentEvent } = await import('../src/services/activity.ts');
+const { isWorking, noteSending, onIdle, recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 function listen() {
@@ -78,7 +78,7 @@ test("idle listeners hear when a task's last response finishes, not before", () 
 });
 
 test('work that follows a reply waits for it to settle, and runs at once for a task not working', async () => {
-	const { whenIdle } = await import('../src/services/activity.ts');
+	const { whenIdle } = await import('../src/services/tasks/activity.ts');
 	const ran: string[] = [];
 	whenIdle('idle-task', () => ran.push('idle-task'));
 	assert.deepEqual(ran, ['idle-task']);

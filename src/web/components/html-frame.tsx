@@ -8,8 +8,8 @@ import { theme, useTheme } from '@/lib/theme';
 
 /*
  * A page the agent wrote with render_html, in the thread. It loads inside
- * Anton's frame page (src/services/renders.ts), sandboxed, reaching the web
- * only through Anton (src/services/page-fetch.ts); the two speak the MCP Apps protocol over postMessage. The
+ * Anton's frame page (src/services/artifacts/renders.ts), sandboxed, reaching the web
+ * only through Anton (src/services/browser/page-fetch.ts); the two speak the MCP Apps protocol over postMessage. The
  * frame takes the page's height as it reports it, opens links only after
  * asking, and puts text the page hands over into the composer, unsent. When
  * another copy of the page (a tab of its own, the Library, Artifacts) saves

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { countReplyCall, finishReply, replyFacts, replyTotal, startReply } from '../src/services/response-usage.ts';
+import { countReplyCall, finishReply, replyFacts, replyTotal, startReply } from '../src/services/models/response-usage.ts';
 
 const usage = (input: number, output: number, cacheRead = 0) => ({ input, output, cacheRead, cacheWrite: 0, totalTokens: input + output + cacheRead, cost: { total: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
 const turn = (patch: Record<string, unknown>, used: ReturnType<typeof usage>) => ({ type: 'turn', instanceId: 'task', agentName: 'Coder', session: 'default', response: { usage: used }, ...patch });

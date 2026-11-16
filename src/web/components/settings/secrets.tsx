@@ -167,7 +167,7 @@ function SealedRow({ secret, onEdit }: { secret: SealedSecret; onEdit: () => voi
 
 /**
  * Secrets the agent can use but never read: it names one in http_request and Anton fills it in on this server,
- * only for the hosts it allows. None reaches a sandbox, a shell or the model (src/services/sealed-secrets.ts).
+ * only for the hosts it allows. None reaches a sandbox, a shell or the model (src/services/secrets/sealed-secrets.ts).
  */
 function Sealed() {
 	const view = useQuery({ queryKey: ['sealed-secrets'], queryFn: api.sealedSecrets });

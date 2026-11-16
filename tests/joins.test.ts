@@ -8,7 +8,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-joins-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { joinsFor, noteDelivery, recordJoinEvent } = await import('../src/services/joins.ts');
+const { joinsFor, noteDelivery, recordJoinEvent } = await import('../src/services/tasks/joins.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 

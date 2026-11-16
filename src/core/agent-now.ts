@@ -1,6 +1,6 @@
 /**
  * What a task's agent is doing this moment, for the line at the foot of its
- * thread (src/services/agent-now.ts keeps it from the runtime's live events).
+ * thread (src/services/tasks/agent-now.ts keeps it from the runtime's live events).
  */
 export type AgentNow = {
 	/**

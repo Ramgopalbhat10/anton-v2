@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { forgetPages, pageForAgent } from '../src/services/page-memory.ts';
+import { forgetPages, pageForAgent } from '../src/services/browser/page-memory.ts';
 
 const page = (items: string[]) => ['- banner:', '  - link "Home"', '- main:', ...items.map((item) => `  - listitem: ${item}`), '- contentinfo:', '  - text: Footer'].join('\n');
 const list = Array.from({ length: 30 }, (_, index) => `Story ${index + 1}`);

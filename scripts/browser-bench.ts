@@ -3,10 +3,10 @@ import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import type { Page } from 'playwright-core';
-import { codeReport, quickjsExecute } from '../src/services/browser-run.ts';
-import { addressToUrl, browserFunctions, type BrowserCommand, clipSnapshot } from '../src/services/browser-step.ts';
-import { browserPrompt, browserToolDescription } from '../src/services/browser-tool-text.ts';
-import { forgetPages, pageForAgent } from '../src/services/page-memory.ts';
+import { codeReport, quickjsExecute } from '../src/services/browser/browser-run.ts';
+import { addressToUrl, browserFunctions, type BrowserCommand, clipSnapshot } from '../src/services/browser/browser-step.ts';
+import { browserPrompt, browserToolDescription } from '../src/services/browser/browser-tool-text.ts';
+import { forgetPages, pageForAgent } from '../src/services/browser/page-memory.ts';
 
 /**
  * Runs the browser subagent's tool on public sites with a real model and grades

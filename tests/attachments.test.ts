@@ -9,10 +9,10 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { attachmentBlock, splitAttachments, withAttachments } = await import('../src/core/attachments.ts');
-const { documentText } = await import('../src/services/documents.ts');
-const { attachToProject, attachToTask, INLINE_CHARS, projectAttachment, projectPictures, readAttachment } = await import('../src/services/attachments.ts');
-const { copyLibrary } = await import('../src/services/checkpoints.ts');
-const { readSpaceFileForAgent } = await import('../src/services/space-files.ts');
+const { documentText } = await import('../src/services/artifacts/documents.ts');
+const { attachToProject, attachToTask, INLINE_CHARS, projectAttachment, projectPictures, readAttachment } = await import('../src/services/artifacts/attachments.ts');
+const { copyLibrary } = await import('../src/services/git/checkpoints.ts');
+const { readSpaceFileForAgent } = await import('../src/services/projects/space-files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');

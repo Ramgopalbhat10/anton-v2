@@ -30,7 +30,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * `reasoning`; the summary is written at that effort (`off` without reasoning),
  * and at `high` when none was picked. With no compaction model the summary is
  * the conversation's own model's, at the `reasoning` Anton passes without a
- * model (`COMPACTION_SUMMARY_EFFORT` in src/services/context-usage.ts), else at
+ * model (`COMPACTION_SUMMARY_EFFORT` in src/services/context/context-usage.ts), else at
  * `high`.
  *
  * Waiting on a busy database. Litestream writes to and checkpoints flue.db

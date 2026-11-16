@@ -65,10 +65,10 @@ const { config } = await import('../src/config.ts');
 config.prepareImages = false;
 config.prewarmSandbox = false;
 const { upsertProject } = await import('../src/db/projects.ts');
-const sessions = await import('../src/services/sessions.ts');
-const files = await import('../src/services/task-files.ts');
-const runner = await import('../src/services/agent-runner.ts');
-const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
+const sessions = await import('../src/services/tasks/sessions.ts');
+const files = await import('../src/services/sandbox/task-files.ts');
+const runner = await import('../src/services/tasks/agent-runner.ts');
+const { runScript, scriptToolDescription } = await import('../src/services/sandbox/code-mode.ts');
 
 const project = await upsertProject('acme/demo', 'main');
 const session = await sessions.createSession({ projectId: project.id, title: 'Question' });

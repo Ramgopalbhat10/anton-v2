@@ -13,7 +13,7 @@ const { getSessionRecord, insertSession, updateSession } = await import('../src/
 const { appDb } = await import('../src/db/client.ts');
 const { insertToolApproval } = await import('../src/db/tool-approvals.ts');
 const { onChange } = await import('../src/core/changes.ts');
-const notifications = await import('../src/services/notifications.ts');
+const notifications = await import('../src/services/notify/notifications.ts');
 
 const project = await upsertProject('acme/demo', 'main');
 const base = { projectId: project.id, model: 'x', reasoning: null, branch: 'b', baseBranch: 'main', baseSha: 'abc', planMode: false };

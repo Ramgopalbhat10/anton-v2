@@ -1,7 +1,7 @@
 /*
  * A reply's trace: every model call and tool call it made, its subagents'
  * too, on one clock. Recorded on the server from the runtime's events
- * (`src/services/response-trace.ts`) and drawn by the trace modal in the
+ * (`src/services/context/response-trace.ts`) and drawn by the trace modal in the
  * thread (`src/web/components/trace-modal.tsx`), so both read these types.
  */
 

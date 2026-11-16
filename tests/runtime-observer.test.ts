@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FlueEventSubscriber } from '@flue/runtime';
-import { observeRuntime } from '../src/services/runtime-observer.ts';
+import { observeRuntime } from '../src/services/tasks/runtime-observer.ts';
 
 test('reloading the app replaces its observer and stale cleanup cannot remove the new listener', async () => {
 	const listeners = new Set<FlueEventSubscriber>();
@@ -16,7 +16,7 @@ test('reloading the app replaces its observer and stale cleanup cannot remove th
 	const old = observeRuntime(() => {
 		oldDeliveries++;
 	}, subscribe);
-	const modulePath = '../src/services/runtime-observer.ts?reload';
+	const modulePath = '../src/services/tasks/runtime-observer.ts?reload';
 	const fresh = await import(modulePath);
 	const current = fresh.observeRuntime(() => {
 		newDeliveries++;

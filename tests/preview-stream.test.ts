@@ -3,8 +3,8 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
-import { checkPreviewResponse } from '../src/services/preview-check.ts';
-import { fetchForPage } from '../src/services/page-fetch.ts';
+import { checkPreviewResponse } from '../src/services/browser/preview-check.ts';
+import { fetchForPage } from '../src/services/browser/page-fetch.ts';
 
 test('Preview reports HTTP headers for large and streaming responses and keeps a bounded error prefix', async (t) => {
 	const server = createServer((req, res) => {

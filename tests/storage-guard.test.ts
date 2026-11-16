@@ -13,7 +13,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { useDatabase } = await import('../src/db/client.ts');
 const { getProviders } = await import('../src/providers/index.ts');
-const { cleanUpStorage } = await import('../src/services/storage.ts');
+const { cleanUpStorage } = await import('../src/services/settings/storage.ts');
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 
 test('cleanup never removes tasks this database does not know: storage shared with another server, or a database not restored yet', async () => {

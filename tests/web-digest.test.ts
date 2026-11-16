@@ -10,11 +10,11 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { digestPays, digestResult, objectiveOf, recordWebCall } = await import('../src/services/web-digest.ts');
-const { readFullResult } = await import('../src/services/tool-results.ts');
+const { digestPays, digestResult, objectiveOf, recordWebCall } = await import('../src/services/context/web-digest.ts');
+const { readFullResult } = await import('../src/services/context/tool-results.ts');
 const { toolResultCutInterceptor } = await import('../src/flue/tool-result-cut.ts');
 const { config } = await import('../src/config.ts');
-const { loadedModels } = await import('../src/services/models.ts');
+const { loadedModels } = await import('../src/services/models/models.ts');
 
 /** The task's model and the digest model, priced per million tokens as OpenRouter lists them. */
 const priced = (id: string, input: number, output: number, cacheRead: number, cacheWrite = input) =>

@@ -66,7 +66,7 @@ const host: Pick<GitHost, 'getRepo' | 'resolveRef' | 'archive' | 'file' | 'searc
 };
 const { setProviders } = await import('../src/providers/index.ts');
 setProviders({ git: host as GitHost, sandbox: {} as SandboxProvider, store: {} as ObjectStore, models: {} as ModelCatalog });
-const { catalog, installPlugin, pluginFile, pluginSkillsFor, previewPlugin, primeSkills, searchGitHub } = await import('../src/services/plugins.ts');
+const { catalog, installPlugin, pluginFile, pluginSkillsFor, previewPlugin, primeSkills, searchGitHub } = await import('../src/services/settings/plugins.ts');
 const { savePlugin } = await import('../src/db/plugins.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 

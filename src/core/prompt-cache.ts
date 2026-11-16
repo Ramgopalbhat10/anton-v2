@@ -3,7 +3,7 @@ import { cacheShare, cacheVerdict, type CacheVerdict, type ModelSpan, type Trace
 
 /*
  * How long a provider keeps a prompt cache, and why a model call missed it.
- * The pruner (src/services/context-prune.ts) waits on a warm cache and clears
+ * The pruner (src/services/context/context-prune.ts) waits on a warm cache and clears
  * freely on a cold one, so it needs the first; `npm run cache:misses` needs
  * both, to tell a miss the render caused (a changed system prompt or tool
  * list) from one the provider's cache did on its own.

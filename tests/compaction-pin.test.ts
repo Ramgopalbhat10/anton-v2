@@ -8,10 +8,10 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-compaction-pin-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { noteCompaction, pinnedMessage, takePinned } = await import('../src/services/compaction-pin.ts');
-const { changeTodos, writeTodos } = await import('../src/services/todos.ts');
-const { noteRequest } = await import('../src/services/finish-review.ts');
-const { gate, loadGate } = await import('../src/services/gate-state.ts');
+const { noteCompaction, pinnedMessage, takePinned } = await import('../src/services/replies/compaction-pin.ts');
+const { changeTodos, writeTodos } = await import('../src/services/replies/todos.ts');
+const { noteRequest } = await import('../src/services/replies/finish-review.ts');
+const { gate, loadGate } = await import('../src/services/replies/gate-state.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 

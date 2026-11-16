@@ -5,7 +5,7 @@ import type { Join } from '@/lib/api';
  * Puts each message sent while the agent worked where the agent read it. The
  * runtime lists such a message after the whole reply it joined, so it would
  * read as asked after it was answered; Anton notes after which tool call the
- * agent read it (src/services/joins.ts), and the reply is cut there, its first
+ * agent read it (src/services/tasks/joins.ts), and the reply is cut there, its first
  * part, your message, then the rest of the reply.
  */
 

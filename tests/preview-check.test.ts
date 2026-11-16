@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
-import { checkPreviewResponse } from '../src/services/preview-check.ts';
-import { fetchForPage, type PageRequest } from '../src/services/page-fetch.ts';
+import { checkPreviewResponse } from '../src/services/browser/preview-check.ts';
+import { fetchForPage, type PageRequest } from '../src/services/browser/page-fetch.ts';
 
 const preview = { port: 43127, url: 'https://task.w.modal.host', listening: true };
 

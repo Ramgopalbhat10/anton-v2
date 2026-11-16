@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CLOCK_AFTER_MS, CLOCK_EVERY_MS, elapsedNote, elapsedText, hoursText, replyElapsed, startReplyClock } from '../src/services/reply-clock.ts';
+import { CLOCK_AFTER_MS, CLOCK_EVERY_MS, elapsedNote, elapsedText, hoursText, replyElapsed, startReplyClock } from '../src/services/replies/reply-clock.ts';
 
 const MIN = 60_000;
 

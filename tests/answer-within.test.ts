@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { answerWithin } from '../src/services/answer-within.ts';
+import { answerWithin } from '../src/services/tasks/answer-within.ts';
 import { recentProblems } from '../src/core/log.ts';
 
 test('work that ends in time answers with its result', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PREWARM_AT, prewarmFor } from '../src/services/prewarm-intent.ts';
+import { PREWARM_AT, prewarmFor } from '../src/services/sandbox/prewarm-intent.ts';
 
 const fakes = (likely: number | null) => {
 	const did: string[] = [];

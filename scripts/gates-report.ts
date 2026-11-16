@@ -7,7 +7,7 @@ import { runTasks } from './tool-mix.ts';
  * How often each check at a reply's end sent a reply back, and how often the
  * agent then changed a file or ran anything: a send-back after which the agent
  * only talked was most likely not needed. Each reply keeps its send-backs in
- * its metadata (`sendBacks`, src/services/send-backs.ts); this reads them from
+ * its metadata (`sendBacks`, src/services/replies/send-backs.ts); this reads them from
  * a running Anton, as `tool:mix` does.
  *
  *   npm run gates:report                               # every task

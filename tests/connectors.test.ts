@@ -12,9 +12,9 @@ delete process.env.GOOGLE_CLIENT_SECRET;
 const { setProviders } = await import('../src/providers/index.ts');
 const { googleSignIn } = await import('../src/providers/google/sign-in.ts');
 const { gmailMailbox, htmlText, rawMessage, withoutQuotes } = await import('../src/providers/google/gmail.ts');
-const connectors = await import('../src/services/connectors.ts');
-const mail = await import('../src/services/mail.ts');
-const connectorTools = await import('../src/services/connector-tools.ts');
+const connectors = await import('../src/services/connectors/connectors.ts');
+const mail = await import('../src/services/connectors/mail.ts');
+const connectorTools = await import('../src/services/connectors/connector-tools.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, accounts: [googleSignIn()], mailboxes: [gmailMailbox()] });

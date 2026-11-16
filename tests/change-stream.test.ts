@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { announce } from '../src/core/changes.ts';
-import { type ChangeStream, streamChanges } from '../src/services/change-stream.ts';
+import { type ChangeStream, streamChanges } from '../src/services/tasks/change-stream.ts';
 
 /** A page's stream that takes a while to write each change, as one behind a proxy does. */
 function slowStream(writeMs: number) {

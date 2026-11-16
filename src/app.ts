@@ -20,28 +20,28 @@ import { publishUpgradeHandler } from './core/upgrades.ts';
 import { mobileApi } from './api/mobile.ts';
 import { getProviders } from './providers/index.ts';
 import { openRouterKey } from './providers/openrouter/key.ts';
-import { noteSending, recordAgentEvent, setAgentAbort } from './services/activity.ts';
-import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models.ts';
-import { artifactArchive } from './services/artifact-archive.ts';
-import { listArtifacts } from './services/artifacts.ts';
-import { ADDED_FILES, addFile } from './services/added-files.ts';
-import { hostRunnerAvailable } from './services/runners.ts';
-import { deleteSealedSecret, saveSealedSecret, sealedSecretsView } from './services/sealed-secrets.ts';
-import { pageFetch } from './services/page-fetch.ts';
-import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/renders.ts';
-import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/files.ts';
-import { profileName } from './services/profile.ts';
-import { addableRepos, addProject, branches, MAX_CHECK_COMMAND, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects.ts';
-import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox-settings.ts';
-import { imageModels, imagesAvailable } from './services/images.ts';
-import { backgroundDefaults, COMPACT_AT, DEFAULT_CLAUDE_CODE_COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/general.ts';
-import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets.ts';
-import { releaseSpare, wakeSpare } from './services/spares.ts';
-import { wakeMachine } from './services/workspace.ts';
-import { reviewQueue } from './services/reviews.ts';
-import { reviewPullRequest } from './services/review-tasks.ts';
-import { MAX_MEMORY, saveMemory } from './services/memory.ts';
-import { commands, setCommands } from './services/commands.ts';
+import { noteSending, recordAgentEvent, setAgentAbort } from './services/tasks/activity.ts';
+import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from './services/models/models.ts';
+import { artifactArchive } from './services/artifacts/artifact-archive.ts';
+import { listArtifacts } from './services/artifacts/artifacts.ts';
+import { ADDED_FILES, addFile } from './services/artifacts/added-files.ts';
+import { hostRunnerAvailable } from './services/tasks/runners.ts';
+import { deleteSealedSecret, saveSealedSecret, sealedSecretsView } from './services/secrets/sealed-secrets.ts';
+import { pageFetch } from './services/browser/page-fetch.ts';
+import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from './services/artifacts/renders.ts';
+import { changesView, fileTree, MAX_UPLOAD_BYTES, projectFiles, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from './services/artifacts/files.ts';
+import { profileName } from './services/settings/profile.ts';
+import { addableRepos, addProject, branches, MAX_CHECK_COMMAND, projects, rebuildPreparedImage, removeProject, updateSettings } from './services/projects/projects.ts';
+import { REGIONS, sandboxSettings, setSandboxSettings } from './services/sandbox/sandbox-settings.ts';
+import { imageModels, imagesAvailable } from './services/artifacts/images.ts';
+import { backgroundDefaults, COMPACT_AT, DEFAULT_CLAUDE_CODE_COMPACT_AT, DEFAULT_COMPACT_AT, defaultModel, type GeneralSettings, generalSettings, setGeneralSettings, VISUAL_REPLIES } from './services/models/general.ts';
+import { guardrails, secretsView, setGuardrails, setSharedEnv } from './services/secrets/secrets.ts';
+import { releaseSpare, wakeSpare } from './services/sandbox/spares.ts';
+import { wakeMachine } from './services/sandbox/workspace.ts';
+import { reviewQueue } from './services/git/reviews.ts';
+import { reviewPullRequest } from './services/git/review-tasks.ts';
+import { MAX_MEMORY, saveMemory } from './services/projects/memory.ts';
+import { commands, setCommands } from './services/settings/commands.ts';
 import {
 	catalog,
 	installPlugin,
@@ -55,7 +55,7 @@ import {
 	sessionSkills,
 	setEnabled,
 	setMarketplaces,
-} from './services/plugins.ts';
+} from './services/settings/plugins.ts';
 import {
 	createSession,
 	getSession,
@@ -69,55 +69,55 @@ import {
 	stopSession,
 	primeIncognitoModel,
 	forgetModelChoice,
-} from './services/sessions.ts';
-import { listCheckpoints, readCheckpointPatchAt } from './services/checkpoints.ts';
-import { previewsView } from './services/previews.ts';
-import { computerScreenshot, computerView, connectBrowser, connectComputer, setComputerControl, startComputer, stopComputer } from './services/computer.ts';
-import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/live-browser.ts';
-import { isRestoring, restoreCheckpoint, revertFile } from './services/restore.ts';
-import { recordTurnUsage, usageView } from './services/usage.ts';
-import { countReplyCall } from './services/response-usage.ts';
-import { recordTraceEvent } from './services/response-trace.ts';
-import { noteCompaction } from './services/compaction-pin.ts';
+} from './services/tasks/sessions.ts';
+import { listCheckpoints, readCheckpointPatchAt } from './services/git/checkpoints.ts';
+import { previewsView } from './services/browser/previews.ts';
+import { computerScreenshot, computerView, connectBrowser, connectComputer, setComputerControl, startComputer, stopComputer } from './services/browser/computer.ts';
+import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from './services/browser/live-browser.ts';
+import { isRestoring, restoreCheckpoint, revertFile } from './services/git/restore.ts';
+import { recordTurnUsage, usageView } from './services/models/usage.ts';
+import { countReplyCall } from './services/models/response-usage.ts';
+import { recordTraceEvent } from './services/context/response-trace.ts';
+import { noteCompaction } from './services/replies/compaction-pin.ts';
 import { getTrace } from './db/traces.ts';
-import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/subagent-runs.ts';
+import { noteRepliesStopping, recordSubagentEvent, stopSubagent, subagentRuns } from './services/tasks/subagent-runs.ts';
 import { installSubagentStop } from './flue/subagent-stop.ts';
 import { installToolResultCut } from './flue/tool-result-cut.ts';
-import { scriptCalls } from './services/script-runs.ts';
-import { noteTodoStep, todosFor } from './services/todos.ts';
-import { noteRepoCheckEvent } from './services/repo-check.ts';
-import { joinsFor, recordJoinEvent } from './services/joins.ts';
-import { answerWithin } from './services/answer-within.ts';
-import { waitingMessages } from './services/waiting.ts';
-import { agentNow, recordAgentNow } from './services/agent-now.ts';
-import { streamChanges } from './services/change-stream.ts';
-import { recordReplyText } from './services/reply-check.ts';
-import { backfillLatestInputs } from './services/latest-input.ts';
-import { contextView, recordContext } from './services/context-usage.ts';
-import { type DeliveredImage, primeAgent, primeAllAgents, primeIncognito, releaseIncognito, setAgentDelivery } from './services/agent-runner.ts';
-import { resetFollowUps } from './services/follow-ups.ts';
-import { scheduleHeadlessWork } from './services/headless.ts';
-import { scheduleIdleStops } from './services/idle-stop.ts';
-import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations.ts';
-import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/spaces.ts';
-import { threadStarted } from './services/thread-reports.ts';
-import { primeCoordinator } from './services/coordinator.ts';
-import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/space-files.ts';
-import { attachToProject, attachToTask, incognitoAttachment } from './services/attachments.ts';
-import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors.ts';
-import { decideSend, mailApprovals } from './services/mail.ts';
-import { addComposioToolkit, beginComposioConnect, composioToolkit, composioTools, composioView, disconnectComposioAccount, loadComposioKey, refreshComposioAccount, removeComposioAccount, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from './services/composio.ts';
-import { decideToolApproval, toolApprovals } from './services/tool-approvals.ts';
-import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/mcp-servers.ts';
-import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/mcp-sign-in.ts';
-import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/budget.ts';
-import { cleanUpStorage, scheduleCleanup, storageView } from './services/storage.ts';
-import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from './services/pull-requests.ts';
-import { gitHubDelivery, signedByGitHub } from './services/pr-watch.ts';
-import { requestReview } from './services/code-review.ts';
-import { computeView, stopAllSandboxes } from './services/compute.ts';
-import { connections } from './services/connections.ts';
-import { clearSlot, saveSlot, setupView, testSlot } from './services/setup.ts';
+import { scriptCalls } from './services/tasks/script-runs.ts';
+import { noteTodoStep, todosFor } from './services/replies/todos.ts';
+import { noteRepoCheckEvent } from './services/sandbox/repo-check.ts';
+import { joinsFor, recordJoinEvent } from './services/tasks/joins.ts';
+import { answerWithin } from './services/tasks/answer-within.ts';
+import { waitingMessages } from './services/tasks/waiting.ts';
+import { agentNow, recordAgentNow } from './services/tasks/agent-now.ts';
+import { streamChanges } from './services/tasks/change-stream.ts';
+import { recordReplyText } from './services/replies/reply-check.ts';
+import { backfillLatestInputs } from './services/tasks/latest-input.ts';
+import { contextView, recordContext } from './services/context/context-usage.ts';
+import { type DeliveredImage, primeAgent, primeAllAgents, primeIncognito, releaseIncognito, setAgentDelivery } from './services/tasks/agent-runner.ts';
+import { resetFollowUps } from './services/git/follow-ups.ts';
+import { scheduleHeadlessWork } from './services/automations/headless.ts';
+import { scheduleIdleStops } from './services/tasks/idle-stop.ts';
+import { addAutomation, automations, editAutomation, removeAutomation, runAutomation, setAutomationEnabled, spaceAutomations } from './services/automations/automations.ts';
+import { createSpace, deleteTask, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, moveToSpace, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from './services/projects/spaces.ts';
+import { threadStarted } from './services/projects/thread-reports.ts';
+import { primeCoordinator } from './services/projects/coordinator.ts';
+import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from './services/projects/space-files.ts';
+import { attachToProject, attachToTask, incognitoAttachment } from './services/artifacts/attachments.ts';
+import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from './services/connectors/connectors.ts';
+import { decideSend, mailApprovals } from './services/connectors/mail.ts';
+import { addComposioToolkit, beginComposioConnect, composioToolkit, composioTools, composioView, disconnectComposioAccount, loadComposioKey, refreshComposioAccount, removeComposioAccount, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from './services/connectors/composio.ts';
+import { decideToolApproval, toolApprovals } from './services/connectors/tool-approvals.ts';
+import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from './services/connectors/mcp-servers.ts';
+import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from './services/connectors/mcp-sign-in.ts';
+import { assertWithinBudget, budget, setLimits, stopIfOverBudget } from './services/models/budget.ts';
+import { cleanUpStorage, scheduleCleanup, storageView } from './services/settings/storage.ts';
+import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from './services/git/pull-requests.ts';
+import { gitHubDelivery, signedByGitHub } from './services/git/pr-watch.ts';
+import { requestReview } from './services/git/code-review.ts';
+import { computeView, stopAllSandboxes } from './services/tasks/compute.ts';
+import { connections } from './services/settings/connections.ts';
+import { clearSlot, saveSlot, setupView, testSlot } from './services/settings/setup.ts';
 import {
 	recordPlanLimit,
 	beginLogin,
@@ -130,13 +130,13 @@ import {
 	refreshSubscriptionModels,
 	setSubscriptionOptions,
 	subscriptionsView,
-} from './services/subscriptions.ts';
-import { handleTerminalUpgrade } from './services/terminal.ts';
+} from './services/models/subscriptions.ts';
+import { handleTerminalUpgrade } from './services/tasks/terminal.ts';
 import { logProblem, logRuntimeEvent, recentProblems } from './core/log.ts';
-import { observeRuntime } from './services/runtime-observer.ts';
-import { recordWebCall } from './services/web-digest.ts';
-import { markNotifications, notificationsView, notifyFailedReply } from './services/notifications.ts';
-import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sendTest, setPushOptions } from './services/push.ts';
+import { observeRuntime } from './services/tasks/runtime-observer.ts';
+import { recordWebCall } from './services/context/web-digest.ts';
+import { markNotifications, notificationsView, notifyFailedReply } from './services/notify/notifications.ts';
+import { addDevice, notePresence, pushView, recordFailedReply, removeDevice, sendTest, setPushOptions } from './services/notify/push.ts';
 
 const app = new Hono();
 
@@ -487,7 +487,7 @@ app.post('/api/push/devices', async (c) => {
 app.delete('/api/push/devices/:id', async (c) => c.json(await removeDevice(c.req.param('id'))));
 app.post('/api/push/test', async (c) => c.json(await sendTest((await body(c, v.object({ device: v.optional(v.string()) }))).device)));
 app.put('/api/push/options', async (c) => c.json(await setPushOptions(await body(c, v.object({ finished: v.boolean() })))));
-// The Notifications dialog (src/services/notifications.ts): the moments worth a look, and which you have seen.
+// The Notifications dialog (src/services/notify/notifications.ts): the moments worth a look, and which you have seen.
 app.get('/api/notifications', async (c) => c.json(await notificationsView()));
 app.post('/api/notifications/read', async (c) => {
 	const input = await body(
@@ -512,7 +512,7 @@ app.put('/api/secrets/shared', async (c) => {
 	const { env } = await body(c, v.object({ env: ENV }));
 	return c.json(await setSharedEnv(env));
 });
-// Sealed secrets: values the agent can name in http_request but never read (src/services/sealed-secrets.ts).
+// Sealed secrets: values the agent can name in http_request but never read (src/services/secrets/sealed-secrets.ts).
 app.get('/api/secrets/sealed', async (c) => c.json({ secrets: await sealedSecretsView() }));
 app.put('/api/secrets/sealed/:name', async (c) => {
 	const input = await body(
@@ -601,7 +601,7 @@ app.put('/api/models/pinned', async (c) => {
 	return c.json({ pinned: await setPinnedModels(pinned) });
 });
 
-// Plans you already pay for, signed in to with the vendor's own flow; see services/subscriptions.ts.
+// Plans you already pay for, signed in to with the vendor's own flow; see services/models/subscriptions.ts.
 app.get('/api/subscriptions', async (c) => c.json({ subscriptions: await subscriptionsView() }));
 app.put('/api/subscriptions/:id', async (c) => {
 	const options = await body(c, v.object({ enabled: v.boolean(), countAtApiPrices: v.boolean() }));
@@ -625,7 +625,7 @@ app.put('/api/subscriptions/:id/key', async (c) => {
 });
 app.post('/api/subscriptions/:id/models/refresh', async (c) => c.json(await refreshSubscriptionModels(c.req.param('id'))));
 
-// Connectors: MCP servers every task gets, accounts such as Gmail signed in to on your own OAuth client, and apps connected through Composio; see services/connectors.ts and services/composio.ts.
+// Connectors: MCP servers every task gets, accounts such as Gmail signed in to on your own OAuth client, and apps connected through Composio; see services/connectors/connectors.ts and services/connectors/composio.ts.
 app.get('/api/connectors', async (c) => c.json({ ...(await connectorsView()), mcpServers: await mcpServersView(), composio: await composioView() }));
 app.put('/api/connectors/accounts/:id/client', async (c) => {
 	const input = await body(
@@ -705,7 +705,7 @@ app.get('/api/mcp-servers/callback', async (c) => {
 	}
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
-// Composio: the project key, apps added from its catalog, and each one's Composio-hosted sign-in; see services/composio.ts.
+// Composio: the project key, apps added from its catalog, and each one's Composio-hosted sign-in; see services/connectors/composio.ts.
 const COMPOSIO_TOOLKIT = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,64}$/, 'Toolkit names use lowercase letters, digits, - and _'));
 app.put('/api/composio/key', async (c) => {
 	const { key } = await body(c, v.object({ key: v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300))) }));
@@ -1099,7 +1099,7 @@ app.get('/api/sessions/:id/scripts', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ scripts: await scriptCalls(id) });
 });
-// Emails the agent asked to send; only your Send here sends one (services/mail.ts).
+// Emails the agent asked to send; only your Send here sends one (services/connectors/mail.ts).
 app.get('/api/sessions/:id/mail', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ approvals: await mailApprovals(id) });
@@ -1109,7 +1109,7 @@ app.post('/api/sessions/:id/mail/:approval', async (c) => {
 	const { send } = await body(c, v.object({ send: v.boolean() }));
 	return c.json(await decideSend(id, c.req.param('approval'), send));
 });
-// Connector tool calls the agent asked to run; only your Run here runs one (services/tool-approvals.ts).
+// Connector tool calls the agent asked to run; only your Run here runs one (services/connectors/tool-approvals.ts).
 app.get('/api/sessions/:id/tool-approvals', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	return c.json({ approvals: await toolApprovals(id) });
@@ -1166,7 +1166,7 @@ app.get('/api/sessions/:id/output', async (c) => {
 	const path = c.req.query('path') ?? '';
 	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));
 });
-// A page the agent wrote with render_html: the frame page the thread shows, and the page inside it (src/services/renders.ts).
+// A page the agent wrote with render_html: the frame page the thread shows, and the page inside it (src/services/artifacts/renders.ts).
 app.get('/api/sessions/:id/render-frame', async (c) => {
 	const { html, csp } = await pageFrame(c.req.param('id'), c.req.query('path') ?? '');
 	return c.html(html, 200, { 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
@@ -1179,7 +1179,7 @@ app.get('/api/sessions/:id/render', async (c) => {
 // The state every open copy of a page shares: its frame page reads it after a change elsewhere, and saves the page's own changes.
 app.get('/api/sessions/:id/page-state', async (c) => c.json(await pageState(c.req.param('id'), c.req.query('path') ?? ''), 200, { 'Cache-Control': 'no-store' }));
 app.put('/api/sessions/:id/page-state', async (c) => c.json(await savePageState(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null))));
-// A request the page makes, which its frame page hands to Anton to make for it (src/services/page-fetch.ts).
+// A request the page makes, which its frame page hands to Anton to make for it (src/services/browser/page-fetch.ts).
 app.post('/api/sessions/:id/page-fetch', async (c) => c.json(await pageFetch(c.req.param('id'), c.req.query('path') ?? '', await c.req.json().catch(() => null)), 200, { 'Cache-Control': 'no-store' }));
 // Everything the agent made in every task, for the Artifacts page.
 app.get('/api/artifacts', async (c) => c.json({ artifacts: await listArtifacts() }));
@@ -1194,7 +1194,7 @@ app.post('/api/artifacts/download', async (c) => {
 	});
 });
 // A file you add on the Artifacts page: the body is the file, its name in the query. It is read and deleted as the
-// Library of src/services/added-files.ts's holder, through the routes below.
+// Library of src/services/artifacts/added-files.ts's holder, through the routes below.
 app.post('/api/artifacts', async (c) => {
 	const name = c.req.query('name') ?? '';
 	if (!name) throw new InvalidInputError('Name the file');
@@ -1216,7 +1216,7 @@ app.post('/api/sessions/:id/outputs', async (c) => {
 	const body = new Uint8Array(await c.req.arrayBuffer());
 	return c.json({ path: await uploadOutput(c.req.param('id'), name, body, c.req.header('content-type') || undefined) });
 });
-// A file attached to a message: saved to the task's Library and read as text for the message (src/services/attachments.ts).
+// A file attached to a message: saved to the task's Library and read as text for the message (src/services/artifacts/attachments.ts).
 app.post('/api/sessions/:id/attachments', async (c) => {
 	const name = c.req.query('name') ?? '';
 	if (!name) throw new InvalidInputError('Name the file');

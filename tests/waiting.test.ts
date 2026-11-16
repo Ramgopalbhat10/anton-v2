@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import { createClient } from '@libsql/client';
-import { waitingMessages } from '../src/services/waiting.ts';
+import { waitingMessages } from '../src/services/tasks/waiting.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-waiting-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
