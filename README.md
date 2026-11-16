@@ -1,10 +1,10 @@
 # Anton v2
 
-Anton v2 is a personal coding agent in the browser. You pick a GitHub repo and branch, describe the outcome, and Anton works on its own branch in its own sandbox. The right panel shows the task as it goes: **Changes**, **Terminal**, **Files** and **Library**.
+Anton v2 is a personal coding agent in the browser. You pick a GitHub repo and branch and describe the outcome; Anton works on its own branch in its own sandbox and opens a pull request. It is built on Flue 2.0 with a React UI, and is meant for one person.
 
 ## Requirements
 
-- Node.js `>=22.19` (this repo pins `.nvmrc` to 22.22.2)
+- Node.js `>=22.19` (`.nvmrc` pins 22.22.2)
 
 ```sh
 nvm use
@@ -12,136 +12,85 @@ npm install
 cp .env.example .env
 ```
 
-Every value is optional at first: on a new server, Settings › Connections walks through what Anton needs (a model key, GitHub, sandboxes, storage), tests each value and saves it to `data/anton.env`, which is read over `.env` at start. A value set in the environment shows there locked, with its variable's name.
+Every value is optional at first. On a new server, Settings › Connections walks through what Anton needs (a model key, GitHub, sandboxes, storage), tests each value and saves it to `data/anton.env`, which is read over `.env` at start. With no Modal or Tigris keys, tasks run in local folders under `data/machines/` and checkpoints go to `data/objects/`.
 
 ## Run
 
 ```sh
-npm run dev          # UI on http://127.0.0.1:43127, API on :43128
-npm test
-npm run build && npm start   # production: one port (PORT, default 3000)
+npm run dev                  # UI on http://127.0.0.1:43127, API on :43128
+npm test                     # server tests; npm run test:ui for the React components
+npm run build && npm start   # production on one port (PORT, default 3000)
 ```
 
-To run tasks without the UI, as for a small benchmark or to compare a change before and after on the same tasks, point `npm run anton:run` at a running Anton. Each task is a new task you can open in the UI, and each gives one JSON line with how it ended, its reply, how long it took, its tokens, its cost, its model calls and its largest context:
+`npm run anton:run` runs tasks against a running Anton without the UI, for benchmarks and before/after checks. Each task appears in the UI and prints one JSON line (outcome, reply, time, tokens, cost, model calls, largest context):
 
 ```sh
 npm run anton:run -- --model openrouter/deepseek/deepseek-v4.1-flash "Fix the failing test in src/date.ts"
 npm run anton:run -- --url http://127.0.0.1:43128 --project <id> --tasks tasks.jsonl --out runs.jsonl --timeout 30m --budget 2.50
 ```
 
-A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` object per line. Only `prompt` is required.
-
-With no Modal or Tigris keys, Anton runs everything locally: each task gets a folder under `data/machines/`, and checkpoints go to `data/objects/`.
-
-## How a task runs
-
-1. **Create.** Anton resolves the branch to a commit and names a task branch `anton/<title>-<id>`. Nothing starts yet.
-2. **Start.** A task starts read-only. Anton downloads the repo at the task's commit once, keeps it on its own disk, and the agent answers questions from it with `list_files`, `search_code` and `read_file`. That needs no sandbox, clone or branch. When the work needs edits, commands or a pull request, the agent calls `start_workspace`. Opening the terminal also starts the sandbox. A sandbox comes from, best first: the task's running sandbox, its snapshot from when it last stopped, the repo's warm image (dependencies installed, refreshed weekly), or a fresh clone. In both modes the agent can search the web and read pages through Parallel's free search MCP server.
-   **Plan mode** (the Plan toggle, or "Plan first" on an automation) lets the agent investigate but not change anything: file writes are refused, there is no `start_workspace` or `open_pull_request`, and it proposes a plan with `propose_plan`. Once a reply proposes one, the task waits on you with the plan, and **Approve and build** turns plan mode off and tells the agent to go ahead; turning plan mode on alone leaves nothing to approve.
-   Every task's agent also reads the repo's **memory**: short notes it saved with `remember` in earlier tasks (how to run things, conventions, gotchas), which you can edit in the repository settings.
-3. **Work.** The agent edits files in `/workspace/repo` and saves deliverables (reports, screenshots) to `/workspace/outputs`. To check a web app it runs the dev server and uses it with the `browser` tool: a Chromium tab inside the sandbox that stays open between steps, where it opens pages, clicks, types and takes screenshots, reading each page as its accessibility tree.
-4. **Checkpoint.** After every agent response, Anton saves the changed files, the patch, the commit log and the outputs to storage.
-5. **Stop.** Sandboxes stop when idle. Changes, Files and Library keep working from the checkpoint, and from the GitHub API for untouched files, without starting anything. **Resume** starts the sandbox again from its snapshot.
-6. **Pull request.** The agent calls `open_pull_request`; Anton commits in the sandbox, then rebuilds those commits on GitHub through its API (same hashes), so the token never enters a sandbox the agent has used. Anton's token is used inside a sandbox only to clone during setup, before the agent starts.
-7. **Review.** Each time the agent opens or updates a pull request, a second agent, the reviewer, reads the change in the same sandbox without changing anything. It follows the repo's `REVIEW.md` if there is one, and posts its findings on GitHub as a review with line comments. With follow-ups on, the agent then fixes them. Automatic reviews stop after three on one pull request; **Review the pull request** in the task menu asks for another, and Settings › General turns automatic reviews off.
-
-### Running on this server, sealed secrets and your own files
-
-- **Run on.** The composer's + menu has **Run on**: a task's commands run in its sandbox, or on **This server**, in a folder on the machine Anton runs on, going out from its address (`src/services/tasks/runners.ts`, the `host` provider). A task moves between them while its agent is idle: its machine stops, saving its files, and starts on the other side with them. This server is not isolated from the machine Anton runs on, so keep it for tasks you trust. Where `ANTON_SANDBOX=local`, every task already runs here and the menu does not show.
-- **Sealed secrets** (Settings › Secrets › Sealed) are values the agent can use but never read. None reaches a sandbox, a shell, a file or the model. The agent's `http_request` tool sends one HTTP request from Anton's server and fills them in there: `{{secret:NAME}}` for a value, `{{totp:NAME}}` for the current code of a TOTP secret. Each secret goes only to the hosts it lists, over https, through its proxy if it has one (an encrypted CONNECT tunnel the proxy cannot read; `scripts/trading-proxy/lightsail-launch.sh` sets one up with a fixed IP on Lightsail). Its value is hidden in the answer, and `save` keeps a value the answer holds, such as a sign-in token, as a sealed secret of its own. Values are stored encrypted with `ANTON_SECRETS_KEY`, or a key Anton makes once in its data folder. A task on This server runs as the same user as Anton and could still dig that key out, so a task in a sandbox is the safer place for one that uses sealed secrets.
-- **Your files on the Artifacts page.** **Add files** keeps files of your own beside what the agent made, such as a skill's `SKILL.md`. **+ › From Artifacts** in any composer attaches one to the message, so a task works from it.
-
-## Providers
-
-Every outside service sits behind a small interface in `src/core/ports.ts`, and each implementation lives in `src/providers/<name>/`. To swap one, add an entry to the table in `src/providers/index.ts` and choose it with an environment variable.
-
-| Port | Implementations | Chosen by |
-| --- | --- | --- |
-| `SandboxProvider` | `modal`, `docker` (a container per task on this computer, from the task's base image), `local` (a folder, no isolation) | `ANTON_SANDBOX` (default `modal` when `MODAL_TOKEN_ID` is set, else `local`) |
-| `ObjectStore` | `s3` (Tigris or any S3 API), `disk` | `ANTON_STORE` (default `s3` when `TIGRIS_SECRET_ACCESS_KEY` is set) |
-| `GitHost` | `github` | |
-| `ModelCatalog` | `openrouter` (live list from `GET /api/v1/models/user` with a key, else `/models`, cached for an hour) | |
-| `GatewayAccount` | `openrouter` (the key's limits and credits from `GET /key` and `/credits`), `vercel` (the team's credits from `GET /v1/credits`) | Settings › Subscriptions, with a key from OpenRouter or Vercel AI Gateway, else `OPENROUTER_API_KEY` / `AI_GATEWAY_API_KEY` |
-| `SubscriptionProvider` | `chatgpt` (Sign in with ChatGPT) | Settings › Subscriptions |
-| `AgentRuntime` | `claude-code` (Claude Code through the Claude Agent SDK) | Settings › Subscriptions |
-| `KeyPlan` | `opencode-go` (OpenCode Go), `cursor` (Cursor through the Cursor SDK) | Settings › Subscriptions, with a key from the vendor |
-| `PushSender` | `webpush` (Web Push with VAPID, no library) | |
-
-### Subscriptions
-
-Instead of paying per token, tasks can run on a ChatGPT Plus or Pro plan. In **Settings › Subscriptions**, sign in with ChatGPT; OpenAI only sends the browser back to `http://127.0.0.1:1455/auth/callback`, which Anton catches itself when it runs on your computer, and which you paste into the page when Anton is hosted. You can also bring a sign-in made elsewhere: run `npx @earendil-works/pi-ai@latest login openai` on a computer with a browser and paste the `auth.json` it writes. Anton keeps the sign-in in its database and renews the token as it expires.
-
-The plan's models (`openai/<model>`) come first in the model picker, marked PLAN. Their calls go to the OpenAI Responses API with your plan's token and count toward its limits; Anton records them at $0, or at API prices toward the spending caps if you switch that on. Claude Pro and Max plans work only inside Anthropic's own Claude Code, so Anton runs it on the server with its built-in tools off: Claude does the thinking and Anton runs every tool. Sign Claude Code in once with the command the Claude card shows (`CLAUDE_CONFIG_DIR=<data>/claude-code <claude> auth login`, over ssh when hosted), then press Check again. Claude Code keeps the sign-in and Anton never sees the token. The plan's models (`claude-code/<model>`) then show as PLAN like ChatGPT's. This is for your own use only, as Anthropic's terms allow; turn extra usage off at claude.ai/settings/usage so tasks stop at the plan's limit instead of billing more. Design and limits: [docs/claude-code-subscription.md](docs/claude-code-subscription.md).
-
-OpenCode Go and Cursor plans take a key instead of a sign-in: paste one made in the OpenCode Console or Cursor's dashboard into their card, and Anton checks it with the vendor before keeping it on the server (never in a sandbox). OpenCode Go's models (`opencode-go/<model>`) are called directly on OpenCode's OpenAI- and Anthropic-shaped endpoints, and the card shows the plan's five-hour, weekly and monthly limits. Cursor has no plain model endpoint, so its models (`cursor/<model>`) run through Cursor's official SDK on the server the way Claude Code does: its own tools off, Anton's tools its only ones. Cursor publishes no per-token prices for those calls, so they are recorded at $0 and only the plan's own limits apply.
-
-OpenRouter has a tab there too, though it is no plan: its models bill per token. Paste a key from openrouter.ai/settings/keys and Anton checks it with `GET /key` before keeping it on the server, then lists the models that key may use (`/models/user`, after your provider preferences and guardrails) a page at a time with a search, their prices and this month's tokens, beside the key's spending limits and the account's credits. The agents, the decision model and the computer's vision model all call OpenRouter with that key. `OPENROUTER_API_KEY` still works when no key is pasted; a pasted key wins, and disconnecting it hands back to the server's. Without either, OpenRouter models leave the model picker.
-
-Vercel AI Gateway has a tab of its own that works the same way: paste a key from your Vercel dashboard (AI Gateway › API Keys), or set `AI_GATEWAY_API_KEY`, and the gateway's tool-calling models join the picker as `vercel/<creator>/<model>`, paid from your team's AI Gateway credits (the tab shows what is left). Only the agents call it; the decision, title and vision models stay on OpenRouter.
-
-In the model picker (a task's, and New task's), every model on either gateway has two small menus beside its pin: on hover, and always on the chosen model. Picking a route on another model's row picks that model too. They pick where that task's calls go: a provider to try first (each listed with its price and, where the gateway says, its speed), or a sort over all of them by price, throughput or latency. A provider and a sort exclude each other: once one is set only its icon stays (the provider's logo or the sort's icon), the picker's button shows it too, and the choice belongs to that task alone. The gateway falls back to its default routing when the chosen provider fails (OpenRouter's `provider.order` with `allow_fallbacks`, Vercel's `providerOptions.gateway.order`), and a provider is dropped when you switch models.
-
-### On your phone
-
-Anton installs as an app: on an iPhone, open it in Safari and tap Share › Add to Home Screen; on Android or in Chrome and Edge, use Install from the browser's menu or **Settings › Notifications**. Turn notifications on there, on each device, and Anton tells it when a task asks you something, has a plan waiting for approval, or fails (and when one finishes, if you switch that on), with what it asks. Tapping one opens the task on its conversation, ready to answer or approve. Nothing is sent while an Anton window is in front of you. iPhones and iPads get notifications only from the app on the home screen (iOS 16.4 or later). Notifications go through the browser's own push service (Google's, Apple's or Mozilla's), encrypted so it cannot read them.
+A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` object per line; only `prompt` is required.
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | Model gateway, used while no OpenRouter key is pasted in Settings › Subscriptions (optional) |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway, used while no key for it is pasted in Settings › Subscriptions (optional) |
-| `ANTON_GITHUB_TOKEN` | Fine-grained token with Contents and Pull requests read/write on your repos |
-| `ANTON_GITHUB_WEBHOOK_SECRET` | Secret of a GitHub webhook pointed at `/api/github/webhook`, so pull request checks and comments arrive the moment they change (optional; see below) |
+| `OPENROUTER_API_KEY` | OpenRouter key, used while none is pasted in Settings › Subscriptions (optional) |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key, used while none is pasted (optional) |
+| `ANTON_GITHUB_TOKEN` | Fine-grained token: Contents and Pull requests read/write |
+| `ANTON_GITHUB_WEBHOOK_SECRET` | Secret for a GitHub webhook on `/api/github/webhook` (optional) |
 | `ANTON_DEFAULT_REPO` | `owner/name` added on first run (optional) |
-| `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes (`ak-…` / `as-…`) |
-| `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Checkpoints, outputs and cached trees |
-| `ANTON_DATA_DIR` | Where Anton keeps both databases, local machines and disk storage (default `./data`) |
-| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` in the data folder (optional) |
-| `ANTON_SECRETS_KEY` | Encrypts sealed secrets (default: a key Anton makes in the data folder) |
-| `ANTON_IDLE_MINUTES` | Stop a sandbox this many minutes after its agent finishes (default 5) |
-| `ANTON_DOCKER_NETWORK` | The Docker network the `docker` sandbox's tasks join; `none` keeps them offline (default: Docker's bridge) |
+| `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | Modal sandboxes |
+| `TIGRIS_ENDPOINT` / `TIGRIS_BUCKET` / `TIGRIS_ACCESS_KEY_ID` / `TIGRIS_SECRET_ACCESS_KEY` | Object storage for checkpoints, outputs and cached trees |
+| `ANTON_DATA_DIR` | Databases, local machines and disk storage (default `./data`) |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Task records on Turso instead of `anton.db` (optional) |
+| `ANTON_SECRETS_KEY` | Encrypts sealed secrets (default: a key made in the data folder) |
+| `ANTON_IDLE_MINUTES` | Idle minutes before a sandbox stops (default 5) |
+| `ANTON_DOCKER_NETWORK` | Network for `docker` sandboxes; `none` keeps them offline |
 | `ANTON_SANDBOX_CPU` / `ANTON_SANDBOX_MEMORY_MIB` | Sandbox size (default 1 CPU, 2048 MiB) |
 | `ANTON_BASE_IMAGE` | Base image for new repos (default `node:22-bookworm`) |
-| `ANTON_WEB_MCP_URL` | MCP server for the agent's `web_search` and `web_fetch` (default Parallel's free `https://search.parallel.ai/mcp`; `off` to turn off) |
-| `PARALLEL_API_KEY` | Higher rate limits for web search (optional) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Your own Google OAuth client for Gmail in Settings › Connectors, where it can be pasted instead (optional) |
+| `ANTON_WEB_MCP_URL` | MCP server for `web_search` / `web_fetch` (default Parallel's free one; `off` to disable) |
+| `PARALLEL_API_KEY` | Higher web search rate limits (optional) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Your Google OAuth client for Gmail (optional; can be pasted in Settings) |
 | `ANTON_MODEL` | Default model (default `openrouter/~deepseek/deepseek-flash-latest`) |
-| `ANTON_DECISION_MODEL` | Decision model on OpenRouter that keeps thanks-only comments from waking the agent, skips automatic reviews of documentation-only changes, and is `decide()` in code mode (default `~typesafe/jev-latest`; `off` to turn off) |
-| `ANTON_CLAUDE_CODE_PATH` | A `claude` executable to run instead of the one the Claude Agent SDK bundles (optional) |
-| `ANTON_CLAUDE_CODE_MAX_OPEN` | Claude Code conversations kept open at once; the longest idle closes first (default 3) |
-| `ANTON_PUSH_CONTACT` | A `mailto:` or `https:` address push services can reach you at about Anton's notifications (default `mailto:anton@example.com`) |
-| `TZ` | Time zone whose midnight starts a new day for the daily spending cap, e.g. `Asia/Kolkata` (default the server's) |
+| `ANTON_DECISION_MODEL` | Cheap OpenRouter model for yes/no decisions (default `~typesafe/jev-latest`; `off` to disable) |
+| `ANTON_CLAUDE_CODE_PATH` | A `claude` binary to use instead of the SDK's bundled one (optional) |
+| `ANTON_CLAUDE_CODE_MAX_OPEN` | Claude Code conversations kept open at once (default 3) |
+| `ANTON_PUSH_CONTACT` | `mailto:` or `https:` contact for push services (default `mailto:anton@example.com`) |
+| `TZ` | Time zone for the daily spending cap's midnight (default the server's) |
 
-## Pull request updates
+Which provider fills each port (`ANTON_SANDBOX`, `ANTON_STORE`, plans and gateways) is in [server-and-providers](docs/architecture/server-and-providers.md) and [models-and-plans](docs/architecture/models-and-plans.md).
 
-Anton reads its pull requests from GitHub. After each push it reads the pull request every 15 seconds until its checks finish, so the card and the agent hear about a pass or a failure within seconds, and it reads it again as soon as an agent finishes a turn, so review findings and failures that came in meanwhile go to the agent at once. Unchanged reads are conditional requests GitHub answers with a 304, which cost nothing from the rate limit. Everything else (comments from people and review bots, someone else's pushes) is picked up by a slower round every five minutes.
+## Deploy and security
 
-To hear of everything the moment it happens, add a webhook on each repository (Settings › Webhooks › Add webhook): Payload URL `https://<your Anton>/api/github/webhook`, content type `application/json`, a secret of your choosing set as `ANTON_GITHUB_WEBHOOK_SECRET`, and these events: Pull requests, Pull request reviews, Pull request review comments, Issue comments, Check runs, Check suites and Statuses. Behind an access proxy, let that one path through without a sign-in (in Cloudflare Access, a Bypass policy on an application for `/api/github/webhook`): GitHub signs every delivery with the secret, Anton refuses any that is not signed, and a delivery only tells Anton which pull request to read again from GitHub.
+Anton has no login of its own: anyone who reaches it can run code in your sandboxes and push with your token. Put it behind an access proxy (for example Cloudflare Access restricted to your email). When the proxy's tunnel runs on the same machine, start Anton with `HOST=127.0.0.1` so the tunnel is the only way in. If you set up the GitHub webhook, let only `/api/github/webhook` bypass the proxy; Anton refuses unsigned deliveries. See [SECURITY_MODEL.md](SECURITY_MODEL.md).
 
-## Backups
-
-Anton keeps its state in two SQLite files in the data folder: `anton.db` (repos, tasks, settings, usage) and `flue.db` (every conversation). Checkpoints and Library files are already in storage. To keep the databases safe too, start production with:
-
-```sh
-npm run build && npm run start:backup
-```
-
-This needs [Litestream](https://litestream.io) 0.5 or later on the server and the Tigris variables above. On start it restores both files from `db/` in the Tigris bucket when the server has none, then runs Anton under Litestream, which streams writes to the bucket every 30 seconds and uploads the last of them when the server stops cleanly. A new server with the same variables starts where the old one stopped. If the restore fails, Anton does not start, because an empty database next to your storage would lose every task. Only one server may run against a bucket at a time. Settings in `litestream.yml`.
-
-Anton has no login of its own. Deploy it behind an access proxy (for example Cloudflare Access restricted to your email): anyone who reaches it can run code in your sandboxes and push with your token. When the proxy's tunnel runs on the same machine, start Anton with `HOST=127.0.0.1` so it listens only there and the tunnel is the only way in; otherwise it listens on every interface, and anyone on the same network can reach it without the proxy.
+State lives in `anton.db` and `flue.db` in the data folder. `npm run build && npm run start:backup` runs Anton under [Litestream](https://litestream.io) (0.5+, needs the Tigris variables), which restores both files on a fresh server and streams writes to the bucket; details in [development](docs/architecture/development.md).
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `src/core/` | Ports, shared types, shell helpers, errors |
-| `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter, ChatGPT-plan, Claude Code, OpenCode Go and Cursor implementations |
-| `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
-| `src/db/` | libSQL client, versioned migrations, queries |
-| `src/agents/coder/` | The Flue agent (`index.ts`), its prompts, subagents and tools |
-| `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
-| `src/app.ts` | HTTP entry: boot work, error handling, and the route modules mounted in order |
-| `src/routes/` | HTTP routes, one Hono module per area |
+| `src/agents/coder/` | The Coder agent: entry (`index.ts`), prompts, subagents, workspace, `tools/` |
+| `src/agents/` | Coordinator and Reviewer agents, shared provider registration |
+| `src/app.ts`, `src/routes/` | Flue's HTTP entry and the Hono routes, one module per area |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
+| `src/services/tasks/` | Task lifecycle, agent runs, waiting messages, terminal, runners |
+| `src/services/sandbox/` | Machines: setup, spares, warm images, snapshot reads, background jobs |
+| `src/services/git/` | Git, checkpoints, pull requests, reviews, base merges |
+| `src/services/replies/` | Checks at a reply's end: gates, finish review, todos, asks |
+| `src/services/context/` | Context meter, pruning, tool-result cuts, reply traces |
+| `src/services/models/` | Plans, gateways, decision and vision models, usage, budget |
+| `src/services/browser/` | Browser and Computer panels, the browser tool |
+| `src/services/artifacts/` | Outputs, renders, images, attachments |
+| `src/services/projects/` | Projects (spaces), threads, coordinator state, memory |
+| `src/services/connectors/` | Connectors, MCP servers, Gmail, Composio, tool approvals |
+| `src/services/secrets/`, `settings/`, `automations/`, `notify/` | Secrets, settings and setup, headless runs, notifications |
+| `src/core/` | Ports, shared types and helpers |
+| `src/db/` | libSQL client, migrations, queries, Flue's persistence adapter |
+| `src/flue/` | Adapters into Flue: sandbox driver, model bridges, tools |
+| `src/providers/` | Port implementations (Modal, Docker, S3, GitHub, OpenRouter, plans, …) |
 | `src/web/` | React UI |
+| `scripts/` | `anton:run`, benchmarks, reports, Flue patches, Litestream start |
+| `tests/` | Server tests (`*.test.ts`) and UI tests (`tests/ui/`) |
+| `docs/architecture/` | One doc per area, indexed by [AGENTS.md](AGENTS.md) |
