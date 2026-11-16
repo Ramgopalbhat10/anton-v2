@@ -6,7 +6,7 @@ import { type ApprovalState, getApproval, insertApproval, listApprovals, type Ma
 import { accountToken, mailboxAccess, mailboxById } from './connectors.ts';
 
 /**
- * What the agent's mail tools do (src/agents/coder.ts): search and read
+ * What the agent's mail tools do (src/agents/coder/): search and read
  * conversations, write drafts, and ask to send one. Sending is never the
  * agent's to do: it asks, the thread shows the email with Send and Don't send,
  * and only that press sends it, as the draft stood when it was shown.
