@@ -2,20 +2,13 @@ import * as v from 'valibot';
 import { InvalidInputError } from '../../core/errors.ts';
 import { formulaNames, INPUT_TYPES, isInteractive, libraryPath, parseFormula, specText, UI_LIMITS, type UiNode, type UiSpec, walk } from '../../core/ui-spec.ts';
 
-/*
- * The `show` tool's check: a tree of components from the catalog in
- * src/core/ui-spec.ts, within its limits, before the thread draws it. The
- * tool's own input schema stays shallow, since some providers refuse nested
- * schemas; this check is the deep one, and what it finds goes back to the
- * agent to fix.
- */
+// The tool's input schema stays shallow, since some providers refuse nested schemas; this check is the deep one.
 
 const SHOW_TYPES = [
 	'card', 'row', 'col', 'divider', 'text', 'stat', 'badge', 'list', 'code', 'diff', 'file', 'image', 'table', 'chart', 'progress', 'timeline', 'value',
 	'button', 'choice', 'select', 'text_input', 'number', 'toggle', 'form',
 ] as const;
 
-/** The tool's input: each component's type, its fields checked by `checkSpec`. */
 export const SHOW_INPUT = v.object({
 	title: v.optional(v.pipe(v.string(), v.maxLength(200))),
 	// Open to each component's fields in so many words: a provider that constrains its output to the schema reads an
@@ -31,9 +24,7 @@ const format = v.optional(v.picklist(['text', 'number', 'percent', 'currency', '
 const cell = v.nullable(v.union([v.string(), v.number(), v.boolean()]));
 const option = v.object({ label, value: v.optional(text(200)), detail: v.optional(text(300)) });
 const options = v.pipe(v.array(option), v.minLength(1), v.maxLength(UI_LIMITS.options));
-/** Paths inside the repo or the Library: no way out of either. */
 const path = v.pipe(v.string(), v.minLength(1), v.maxLength(500), v.check((value) => !value.split('/').includes('..') && !value.startsWith('/'), 'Use a path relative to the repository or the Library'));
-/** An image's path in the Library, read through the outputs folder the agent knows it as. */
 const imagePath = v.pipe(
 	v.string(),
 	v.transform(libraryPath),
@@ -101,7 +92,6 @@ const node: v.GenericSchema<UiNode> = v.lazy(() =>
 
 const specSchema = v.object({ title: v.optional(label), children: v.pipe(v.array(node), v.minLength(1)) });
 
-/** Where in the tree an issue is, as the agent wrote it: `children[0].children[2].rows`. */
 function where(issue: v.BaseIssue<unknown>): string {
 	return (issue.path ?? [])
 		.map((item) => (typeof item.key === 'number' ? `[${item.key}]` : `.${String(item.key)}`))
@@ -109,7 +99,6 @@ function where(issue: v.BaseIssue<unknown>): string {
 		.replace(/^\./, '');
 }
 
-/** The checks the types can't make: sizes, names, formulas, and that charts and tables name real columns. */
 function problems(spec: UiSpec): string[] {
 	const found: string[] = [];
 	let count = 0;
@@ -156,7 +145,6 @@ function problems(spec: UiSpec): string[] {
 	return found;
 }
 
-/** The tree, checked; a problem throws, saying what to fix. */
 export function checkSpec(input: unknown): UiSpec {
 	if (JSON.stringify(input ?? null).length > UI_LIMITS.bytes) throw new InvalidInputError(`The card is too big; keep it under ${UI_LIMITS.bytes / 1000} KB. Show fewer rows or points.`);
 	const parsed = v.safeParse(specSchema, input);
@@ -169,7 +157,6 @@ export function checkSpec(input: unknown): UiSpec {
 	return parsed.output;
 }
 
-/** A card whose image is not in the Library would show a broken picture; the agent hears which, and fixes the path or saves the image first. */
 export async function checkImages(spec: UiSpec, inLibrary: (path: string) => Promise<boolean>): Promise<void> {
 	const images: string[] = [];
 	walk(spec.children, (item) => {
@@ -185,7 +172,6 @@ export async function checkImages(spec: UiSpec, inLibrary: (path: string) => Pro
 	}
 }
 
-/** What the tool tells the agent: what the user now sees, so it neither repeats it nor needs to see it. */
 export function shownNote(spec: UiSpec): string {
 	return [
 		'The user sees this card in the thread, drawn with components:',

@@ -1,9 +1,5 @@
-/*
- * What the browser tool and the browser subagent are told, in one place, so the
- * agent and `scripts/browser-bench.ts` read the same words.
- */
+// In one place, so the agent and `scripts/browser-bench.ts` read the same words.
 
-/** The browser tool's description, before the sentence on which browsers it has; `autopiloted` when a decision model offers do. */
 export function browserToolDescription(autopiloted: boolean): string {
 	return (
 		'Use a web page in a browser: open a URL, click, type, select, press a key, hover, scroll, go back, wait, look, or run code. ' +
@@ -24,7 +20,6 @@ export function browserToolDescription(autopiloted: boolean): string {
 	);
 }
 
-/** The browser subagent's instructions; `autopiloted` when a decision model offers do. */
 export function browserPrompt(autopiloted: boolean): string {
 	return [
 		'You are the browser specialist. You do one job on web pages for the coding agent with the browser tool, then report back.',

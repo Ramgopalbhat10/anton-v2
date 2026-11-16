@@ -28,11 +28,10 @@ import { threadState } from '../../core/thread-state.ts';
 import { nameTask, titleFrom } from './titles.ts';
 import { forgetNotificationsOf } from '../notify/notifications.ts';
 
-/** The sandbox provider is the source of truth for what is running; cached briefly. */
+/** The sandbox provider is the source of truth for what is running; cached for a few seconds. */
 let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
 const RUNNING_CACHE_MS = 5_000;
 
-/** Keys of the sandboxes running now, asked of the provider at most every few seconds. */
 export function runningKeys(): Promise<Set<string>> {
 	if (!runningCache || Date.now() - runningCache.at > RUNNING_CACHE_MS) {
 		runningCache = { at: Date.now(), keys: runningOnAll() };
@@ -40,7 +39,6 @@ export function runningKeys(): Promise<Set<string>> {
 	return runningCache.keys;
 }
 
-/** Forgets what is running, after a start or stop, and tells open pages the task list changed. */
 export function invalidateRunning(): void {
 	runningCache = undefined;
 	announce({ kind: 'sessions' });
@@ -62,28 +60,22 @@ export function present(record: SessionRecord, running: Set<string>): Session {
 /** Tasks keep plain `model` + `route`; helpers and coordinators carry the route in their model specifier. */
 export type ModelChoice = { model: string; reasoning: Reasoning; route?: ModelRoute | null };
 
-/**
- * The agent function renders synchronously, so it reads each session's
- * model, reasoning level and route from here. Filled before every prompt.
- */
+/** The agent renders synchronously, so it reads each session's model choice from here; filled before every prompt. */
 const choices = new Map<string, ModelChoice>();
 
 export function modelFor(id: string): ModelChoice {
 	return choices.get(id) ?? { model: config.model, reasoning: 'off' };
 }
 
-/** The model specifier the session's agent runs: its model, with its route when it has one (`routedId`). */
 export function agentModelFor(id: string): ModelChoice {
 	const choice = modelFor(id);
 	return { ...choice, model: routedId(choice.model, choice.route ?? null) };
 }
 
-/** Every routed specifier a session's agent may resolve, for the gateways' providers to list. */
 export function routedModels(): string[] {
 	return [...new Set([...registeredRoutedModels(), ...[...choices.values()].map((choice) => routedId(choice.model, choice.route ?? null)).filter((model) => parseRouted(model).route)])];
 }
 
-/** Loads the session's choice and the model list the agent resolves it against. */
 export async function primeModel(id: string): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (!record) return;
@@ -92,11 +84,7 @@ export async function primeModel(id: string): Promise<void> {
 	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning), ...(route ? { route } : {}) });
 }
 
-/**
- * An incognito chat's model choice, kept in memory only: it has no session record.
- * Fields left out keep what is already chosen, so the agent's own priming never
- * resets a pick the composer made.
- */
+/** Kept in memory only. Fields left out keep what is chosen, so the agent's own priming never resets the composer's pick. */
 export async function primeIncognitoModel(id: string, input: { model?: string; reasoning?: Reasoning | null; route?: ModelRoute | null } = {}): Promise<void> {
 	const current = choices.get(id);
 	const model = input.model ?? current?.model ?? config.model;
@@ -106,7 +94,6 @@ export async function primeIncognitoModel(id: string, input: { model?: string; r
 	choices.set(id, { model, reasoning, ...(route ? { route } : {}) });
 }
 
-/** Forgets an incognito chat's model choice when its window closes. */
 export function forgetModelChoice(id: string): void {
 	choices.delete(id);
 }
@@ -126,7 +113,6 @@ function slug(title: string): string {
 	);
 }
 
-/** Where a new task starts: a repository at a branch's head (or a given commit on it), or, for a chat, the empty scratch folder. */
 async function startingPoint(projectId: string | undefined, branch: string | undefined, sha: string | undefined) {
 	if (!projectId) return { projectId: null, baseBranch: SCRATCH_BRANCH, baseSha: SCRATCH_BASE };
 	const project = await getProject(projectId);
@@ -135,31 +121,22 @@ async function startingPoint(projectId: string | undefined, branch: string | und
 	return { projectId: project.id, baseBranch, baseSha: sha ?? (await getProviders().git.resolveRef(project.repoFullName, baseBranch)) };
 }
 
-/** A task on a repository, or without `projectId` a chat: no repository, and a scratch sandbox if it needs one. */
 export async function createSession(input: {
-	/** Chosen by the page that asks, so it can open the task before the task exists; a new one otherwise. */
 	id?: string;
 	projectId?: string;
 	branch?: string;
 	model?: string;
 	reasoning?: Reasoning;
-	/** Where a gateway sends the model's calls; kept only for a model on a gateway. */
 	route?: ModelRoute | null;
 	title?: string;
 	planMode?: boolean;
-	/** The project the task is a thread of. */
 	spaceId?: string;
-	/** Held until the thread can start, when the project's threads are all busy. */
 	brief?: string;
-	/** Someone else's pull request the task reviews, starting from `baseSha`, its merge base on `branch`. */
 	review?: ReviewOf;
 	prUrl?: string;
 	baseSha?: string;
-	/** The routine that starts it. */
 	automationId?: string;
-	/** The message to name the task from: a fast model gives it a short title in a moment, in place of `title`. */
 	titleFrom?: string;
-	/** Where its commands run; its sandbox unless the composer said This server. */
 	runOn?: RunOn;
 }): Promise<Session> {
 	// GitHub names the commit while the model is checked, rather than one after the other.
@@ -199,20 +176,14 @@ export async function createSession(input: {
 	return getSession(id);
 }
 
-/** An id a page chose is used once: never one a task has, or had, since storage cleanup removes what a deleted task left. */
+/** Never an id a task has or had, since storage cleanup removes what a deleted task left. */
 async function freshId(id: string): Promise<void> {
 	if ((await getSessionRecord(id)) || (await wasDeleted(id))) throw new ConflictError('A task with that id already exists');
 }
 
 const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
 
-/**
- * A new task on the same base, model and plan mode, holding the task's files
- * as they are now on a branch and sandbox of its own, so two approaches can
- * be tried side by side. The conversation and outputs stay with the original.
- * Its sandbox starts right away when there are files, so the agent works on
- * them rather than reading the base.
- */
+/** A new task holding the task's files on a branch and sandbox of its own; the conversation stays with the original. Its sandbox starts at once when there are files. */
 export async function forkSession(id: string): Promise<Session> {
 	const source = await getSessionRecord(id);
 	if (!source) throw new NotFoundError('Session not found');
@@ -233,7 +204,6 @@ export async function listSessions(): Promise<Session[]> {
 	return records.map((record) => present(record, running));
 }
 
-/** A project's threads as the page shows them, newest first. */
 export async function listThreads(spaceId: string): Promise<Session[]> {
 	const [records, running] = await Promise.all([listThreadRecords(spaceId), runningKeys()]);
 	return records.map((record) => present(record, running));
@@ -260,10 +230,7 @@ export type SessionChange = {
 	runOn?: RunOn;
 };
 
-/**
- * The route a session keeps after a change: the one asked for, else its own. A provider belongs to its
- * model, so another model leaves it to the gateway; a sort carries over to a model on a gateway.
- */
+/** A provider belongs to its model, so another model leaves it to the gateway; a sort carries over to a model on a gateway. */
 function routeAfter(record: SessionRecord | null, change: SessionChange, model: string | undefined): ModelRoute | null | undefined {
 	if ('route' in change) return change.route ?? null;
 	if (!model || !record || model === record.model) return undefined;
@@ -271,10 +238,7 @@ function routeAfter(record: SessionRecord | null, change: SessionChange, model: 
 	return record.route.sort && routable(model) ? record.route : null;
 }
 
-/**
- * Renames the task, changes its model or reasoning level, turns plan mode on or off, pins it, or marks it
- * done or open again; the agent sees a change from the next prompt.
- */
+/** The agent sees a change from the next prompt. */
 export async function editSession(id: string, change: SessionChange): Promise<Session> {
 	if (change.runOn) await moveTask(id, change.runOn);
 	const chosen = change.model && (await knownModel(change.model));
@@ -298,10 +262,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 	return getSession(id);
 }
 
-/**
- * Moves the task to its sandbox or to this server. A machine it has is stopped first, which saves its
- * files; the next start sets up on the other runner and puts them back, as a task whose sandbox is gone does.
- */
+/** A machine it has is stopped first, saving its files; the next start sets up on the other runner and puts them back. */
 async function moveTask(id: string, runOn: RunOn): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (!record) throw new NotFoundError('Session not found');
@@ -313,7 +274,6 @@ async function moveTask(id: string, runOn: RunOn): Promise<void> {
 	invalidateRunning();
 }
 
-/** The default model a failed reply can be sent again on, when the task runs on another one; null when it already runs on it. */
 export async function fallbackModel(id: string): Promise<{ model: string; name: string } | null> {
 	const [record, general] = await Promise.all([getSessionRecord(id), generalSettings()]);
 	if (!record) throw new NotFoundError('Session not found');
@@ -323,7 +283,6 @@ export async function fallbackModel(id: string): Promise<{ model: string; name: 
 	return info ? { model, name: info.name } : null;
 }
 
-/** Moves the task to the default model, at the default reasoning level as a new task would start, so its next message runs there. */
 export async function switchToFallbackModel(id: string): Promise<Session> {
 	const fallback = await fallbackModel(id);
 	if (!fallback) throw new InvalidInputError('This task already runs on the default model.');
@@ -331,20 +290,16 @@ export async function switchToFallbackModel(id: string): Promise<Session> {
 	return editSession(id, { model, route, reasoning: (await generalSettings()).reasoning });
 }
 
-/** Starts or resumes the task's machine. */
 export async function resumeSession(id: string): Promise<Session> {
 	await machineFor(id);
 	invalidateRunning();
 	return getSession(id);
 }
 
-/**
- * Each task's stop in progress. Saving its files and stopping its sandbox can take a minute or two, so a
- * second Stop, or a Delete pressed meanwhile, waits for that one rather than saving and stopping again.
- */
+/** Saving and stopping can take a minute or two, so a second Stop or a Delete meanwhile waits for this one. */
 const stopping = new Map<string, Promise<void>>();
 
-/** Saves a checkpoint, then stops the machine. Never starts one. */
+/** Never starts a machine. */
 export async function stopSession(id: string): Promise<Session> {
 	const record = await getSessionRecord(id);
 	if (!record) throw new NotFoundError('Session not found');
@@ -369,10 +324,7 @@ async function stopMachine(id: string, machineState: string | null, runOn: RunOn
 	invalidateRunning();
 }
 
-/**
- * Stops the task's machine and removes its record and saved checkpoints.
- * The pushed branch and any pull request stay on the git host.
- */
+/** The pushed branch and any pull request stay on the git host. */
 export async function deleteSession(id: string): Promise<void> {
 	await stopSession(id);
 	// Its Browser panel's browser too, which the host would otherwise keep until it idles out.

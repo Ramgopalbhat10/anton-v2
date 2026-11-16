@@ -9,13 +9,7 @@ import { getProviders } from '../../providers/index.ts';
 import { logProblem } from '../../core/log.ts';
 import { getSession } from '../tasks/sessions.ts';
 
-/**
- * Notifications that reach you with no Anton tab open: a phone with Anton on
- * its home screen, or a browser in the background. Each device you turn them
- * on for is kept with its push subscription; when a task needs you, fails,
- * or (if you ask) finishes, every device hears of it, unless an Anton window
- * is in front of you right now, where the page already shows it.
- */
+// Every device hears of a task unless an Anton window is in front of you right now, where the page already shows it.
 
 type Device = PushTarget & { name: string; addedAt: string; lastSentAt: string | null; lastError: string | null };
 type PushState = { devices: Device[]; finished: boolean };
@@ -28,10 +22,9 @@ export type PushDevice = { id: string; name: string; addedAt: string; lastSentAt
 export type PushView = { publicKey: string; devices: PushDevice[]; finished: boolean };
 
 export type NoticeKind = 'needs-you' | 'plan' | 'failed' | 'finished' | 'test';
-/** What the device's service worker shows; `url` opens when the notification is tapped. */
 export type Notice = { kind: NoticeKind; title: string; body: string; url: string; tag: string };
 
-/** A device is named in the page by a short hash of its endpoint, which is a credential of sorts and stays on the server. */
+/** The endpoint is a credential of sorts, so the page names a device by a short hash and the endpoint stays on the server. */
 export const deviceId = (endpoint: string) => createHash('sha256').update(endpoint).digest('base64url').slice(0, 16);
 
 const MAX_BODY = 180;
@@ -44,7 +37,7 @@ async function state(): Promise<PushState> {
 	return { ...EMPTY, ...(await getSetting<Partial<PushState>>(STATE_KEY, EMPTY)) };
 }
 
-/** Made once and kept, as each subscription is tied to the public key it was made with. */
+/** Kept once made: each subscription is tied to the public key it was made with. */
 async function keys(): Promise<PushKeys | null> {
 	const sender = getProviders().push;
 	if (!sender) return null;
@@ -57,16 +50,12 @@ async function keys(): Promise<PushKeys | null> {
 
 const shown = (device: Device): PushDevice => ({ id: deviceId(device.endpoint), name: device.name, addedAt: device.addedAt, lastSentAt: device.lastSentAt, lastError: device.lastError });
 
-/** The key a browser subscribes with, the devices that get notifications, and what they get. Empty `publicKey` when push is unavailable. */
 export async function pushView(): Promise<PushView> {
 	const current = await state();
 	return { publicKey: (await keys())?.publicKey ?? '', devices: current.devices.map(shown), finished: current.finished };
 }
 
-/**
- * Keeps a device's subscription, replacing the one it had. A browser makes a
- * new one when its old one expires; that one `replaces` the old and keeps its name.
- */
+/** A browser makes a new subscription when its old one expires; that one `replaces` the old and keeps its name. */
 export async function addDevice(target: PushTarget, name: string, replaces?: string): Promise<PushView> {
 	const current = await state();
 	const previous = current.devices.find((device) => device.endpoint === (replaces ?? target.endpoint));
@@ -94,9 +83,8 @@ export async function setPushOptions(options: { finished: boolean }): Promise<Pu
 	return pushView();
 }
 
-/** When an Anton window was last in front of you; pages say so while they are visible and focused. */
 let presentAt = 0;
-/** How long a page's word that it is in front of you holds; pages repeat it well within this. */
+/** Pages repeat their presence well within this. */
 export const PRESENCE_MS = 75_000;
 
 export function notePresence(present: boolean, now = Date.now()): void {
@@ -105,7 +93,6 @@ export function notePresence(present: boolean, now = Date.now()): void {
 
 export const someoneLooking = (now = Date.now()) => now - presentAt < PRESENCE_MS;
 
-/** Sends a notice to every device (or one); forgets devices whose subscription is gone. Returns how many took it. */
 export async function notifyDevices(notice: Notice, only?: string): Promise<number> {
 	const sender = getProviders().push;
 	const auth = await keys();
@@ -155,10 +142,8 @@ export async function sendTest(id?: string): Promise<{ sent: number }> {
 	return { sent };
 }
 
-/** Where tapping a task's notification goes: a project's thread opens inside its project. */
 export const taskUrl = (session: Pick<Session, 'id' | 'spaceId'>) => (session.spaceId ? `/projects/${session.spaceId}/threads/${session.id}` : `/agents/${session.id}`);
 
-/** What a task's notice says at the end of a reply, or null when there is nothing to tell. */
 export function noticeFor(session: Session, reply: string | null, finished: boolean): Notice | null {
 	const base = { title: clip(session.title, 80), url: taskUrl(session), tag: `anton-${session.id}` };
 	if (session.status === 'error') return { ...base, kind: 'failed', body: clip(`Failed: ${session.errorMessage ?? 'the task stopped with an error.'}`) };
@@ -177,7 +162,6 @@ async function sendFor(id: string, make: (session: Session, finished: boolean) =
 	if (notice) await notifyDevices(notice);
 }
 
-/** At the end of a task's reply: tells your devices when it waits on you, failed, or finished. Never throws. */
 export async function replyNotice(id: string, reply: string | null): Promise<void> {
 	await sendFor(id, (session, finished) => noticeFor(session, reply, finished)).catch((error: unknown) => logProblem('warn', 'Could not send a notification', error, id));
 }
@@ -187,7 +171,6 @@ type SettledEvent = { type: string; instanceId?: string; agentName?: string; out
 const errorText = (error: unknown) =>
 	error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : typeof error === 'string' ? error : null;
 
-/** A coding agent's reply that failed, from the runtime's events: its devices hear of it. Runs in the event observer. */
 export function recordFailedReply(event: SettledEvent): void {
 	if (event.type !== 'submission_settled' || event.outcome !== 'failed' || !event.instanceId) return;
 	if (event.agentName && !/^coder$/i.test(event.agentName)) return;

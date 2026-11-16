@@ -27,27 +27,17 @@ import { secretsToHide } from '../secrets/secrets.ts';
 import { machineFor } from './workspace.ts';
 
 /*
- * What a repository task's read, grep and glob answer from. Until the task has
- * its workspace they read the snapshot of the repository at the commit it
- * started from, so a task that only reads never needs a machine; once it has one
- * (it had a machine in an earlier reply, or this reply ran a command or changed a
- * file) they read the machine, which holds its changes, even when it has stopped
- * and must start again. A path outside the repository (/tmp, ../outputs) is only
- * in the machine. `repo` names another GitHub repository, always read from its own
- * snapshot. The tools' schemas and output are the same whichever answers.
+ * A repository task's read, grep and glob read the snapshot at its base commit until it has a workspace, then the machine
+ * (even when stopped). A path outside the repository is only in the machine; `repo` always reads its own snapshot.
  */
 
 export type Deps = {
-	/** Whether the task's files are in its machine now. */
 	workspace: (id: string) => boolean;
-	/** The task's machine, started or waited for. */
 	machine: (id: string) => Promise<Machine>;
 	secrets: (id: string) => Promise<Record<string, string>>;
-	/** The repository folder in the task's machine, known before the machine starts. */
 	root: (id: string) => Promise<string>;
 };
 
-/** The repository folder a task's machine has or will have, `repoDir` of it, without starting it. */
 export async function taskRoot(id: string): Promise<string> {
 	const runner = await runnerOf(id);
 	if (!runner) throw new NotFoundError('Session not found');
@@ -62,7 +52,7 @@ const defaults: Deps = {
 	root: (id) => taskRoot(id),
 };
 
-/** The task's machine for work that may change its files: from now on its reads come from there. */
+/** From now on its reads come from the machine. */
 export async function workMachine(id: string, deps: Partial<Deps> = {}): Promise<Machine> {
 	const machine = await (deps.machine ?? defaults.machine)(id);
 	noteWorkspace(id);
@@ -71,7 +61,6 @@ export async function workMachine(id: string, deps: Partial<Deps> = {}): Promise
 
 type Place = { snapshot: string } | { machine: string };
 
-/** Where a path is read: the snapshot for a path in the repository while the task has no workspace, else the machine. */
 async function placeOf(id: string, file: string, d: Deps): Promise<Place> {
 	const root = await d.root(id);
 	const absolute = path.posix.resolve(root, file);
@@ -80,14 +69,12 @@ async function placeOf(id: string, file: string, d: Deps): Promise<Place> {
 	return { machine: absolute };
 }
 
-/** How a path in the machine shows in results: from the repository's root when it is in it. */
 function shown(root: string, absolute: string): string {
 	return absolute === root ? '.' : absolute.startsWith(`${root}/`) ? absolute.slice(root.length + 1) : absolute;
 }
 
 export type ReadInput = { path: string; offset?: number; limit?: number; repo?: string };
 
-/** A file's lines, numbered from `offset`, or why it cannot be read. */
 export async function readTaskFile(id: string, input: ReadInput, deps: Partial<Deps> = {}): Promise<string> {
 	const d = { ...defaults, ...deps };
 	const { offset = 1, limit = READ_LINES } = input;
@@ -108,7 +95,6 @@ export async function readTaskFile(id: string, input: ReadInput, deps: Partial<D
 	return content.includes('\0') ? `${where} is a binary file.` : numberedLines(content, offset, limit);
 }
 
-/** A file's bytes, for an image; throws with why it cannot be read. */
 export async function taskFileBytes(id: string, file: string, repo?: string, deps: Partial<Deps> = {}): Promise<Uint8Array> {
 	const d = { ...defaults, ...deps };
 	if (repo) return repoBytes(id, file, repo);
@@ -118,28 +104,16 @@ export async function taskFileBytes(id: string, file: string, repo?: string, dep
 
 export type GrepInput = SearchInput;
 
-/** Output a search may send back from the machine at most, in lines, so a pattern that matches everything stays small. */
 const MAX_OUTPUT_LINES = 5_000;
 const SEARCH_TIMEOUT_MS = 60_000;
 
-/**
- * A glob as an extended regular expression over paths, for `grep -E`: the snapshot's own glob, so both sides pick the
- * same files. rg's `-g` is not used: a glob that matches a folder's name (`*`, `src/**`) brings back what .gitignore
- * leaves out, node_modules and all.
- */
+/** The snapshot's own glob, so both sides pick the same files. rg's `-g` is not used: a glob matching a folder's name brings back what .gitignore leaves out. */
 export const globPattern = (glob: string) => globToRegExp(glob).source.replaceAll('(?:', '(');
 
-/** Runs `rg` when the machine has it, else `other`; the first line says which ran. */
 const either = (rg: string, other: string, name: string, tool: 'auto' | 'rg' | string) =>
 	tool === 'rg' ? `echo @rg; ${rg}` : tool === name ? `echo @${name}; ${other}` : `if command -v rg >/dev/null 2>&1; then echo @rg; ${rg}; else echo @${name}; ${other}; fi`;
 
-/**
- * The machine's search, as one command run from the repository's root on `target` (from that root, or absolute):
- * rg when the machine has it (it honours .gitignore, so node_modules and build output stay out, and reads dotfiles
- * but not .git), else grep. A folder is searched from inside it, so a glob is matched from there as the snapshot
- * matches it. The first lines say whether `target` was a folder (paths then start from it) and which tool ran.
- * Every rg names what it searches: given none, with no terminal, it reads its input instead.
- */
+/** A folder is searched from inside it, so a glob matches as on the snapshot. Every rg names what it searches: given none, with no terminal, it reads stdin. */
 export function searchCommand(input: GrepInput, target: string, tool: 'auto' | 'rg' | 'grep' = 'auto'): string {
 	const context = !input.filesOnly && input.context ? ` -C ${Math.max(0, Math.floor(input.context))}` : '';
 	const rgSearch = [
@@ -163,18 +137,13 @@ export function searchCommand(input: GrepInput, target: string, tool: 'auto' | '
 	return `if test -d ${quote(target)}; then cd -- ${quote(target)} && echo @dir && set --; else echo @file; set -- ${quote(target)}; fi; { ${either(rg, grep, 'grep', tool)}; } | head -n ${MAX_OUTPUT_LINES + 2}`;
 }
 
-/** A matched or context line as the snapshot shows it: indentation dropped unless there is context to line it up with, and cut. */
 const lineText = (line: string, context: boolean) => (context ? line.trimEnd() : line.trim()).slice(0, 300);
 
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 type Hit = { file: string; line: number; match: boolean; text: string };
 
-/**
- * The machine's search output in the snapshot's form and order: files by path, `path:line: text`, context as
- * `path-line- text`, `--` between groups, and past the cap how to narrow it. rg and grep each print files in the
- * order they find them.
- */
+/** rg and grep each print files in the order they find them, so they are sorted to the snapshot's order. */
 export function searchResult(output: string, input: GrepInput, prefix: string): string {
 	const [where = '', tool = '', ...rest] = output.split('\n');
 	const lines = rest.filter(Boolean);
@@ -225,7 +194,6 @@ export function searchResult(output: string, input: GrepInput, prefix: string): 
 	return more ? `${out.join('\n')}\n${NARROW_SEARCH}` : out.join('\n');
 }
 
-/** Lines matching a regular expression, with context around them, or the files that have one. */
 export async function grepTask(id: string, input: GrepInput, deps: Partial<Deps> = {}): Promise<string> {
 	const d = { ...defaults, ...deps };
 	if (input.repo) return searchRepo(id, input);
@@ -234,7 +202,6 @@ export async function grepTask(id: string, input: GrepInput, deps: Partial<Deps>
 	return searchMachine(await d.machine(id), await d.root(id), place.machine, input, await d.secrets(id));
 }
 
-/** A search in the machine, secrets hidden from what it prints. */
 export async function searchMachine(machine: Machine, root: string, target: string, input: GrepInput, secrets: Record<string, string> = {}, tool: 'auto' | 'rg' | 'grep' = 'auto'): Promise<string> {
 	const hide = redactor(secrets);
 	const where = shown(root, target);
@@ -248,11 +215,7 @@ export async function searchMachine(machine: Machine, root: string, target: stri
 
 export type GlobInput = { pattern: string; path?: string; repo?: string };
 
-/**
- * Files under `target` matching `pattern`: rg's list when the machine has it (it honours .gitignore and never walks
- * .git or node_modules), else git's own list of the files it tracks or would, else find's; picked by the glob as the
- * snapshot picks them, before the cap on what comes back. The first line says which listed them.
- */
+/** rg's list (honours .gitignore), else git's own list, else find's; picked by the glob as the snapshot picks them, before the cap. */
 export function globCommand(pattern: string, target: string, tool: 'auto' | 'rg' | 'list' = 'auto'): string {
 	const rg = "rg --files --hidden --sort path -g '!.git'";
 	const list = "{ git ls-files -co --exclude-standard 2>/dev/null || find . -type f -not -path '*/.git/*' -not -path '*/node_modules/*'; }";
@@ -261,7 +224,6 @@ export function globCommand(pattern: string, target: string, tool: 'auto' | 'rg'
 
 type Listing = { paths: string[]; cut: boolean } | { problem: string };
 
-/** The machine's listing as paths from the repository's root, sorted. */
 export function globPaths(output: string, pattern: string, prefix: string): { paths: string[]; cut: boolean } {
 	const [, ...rest] = output.split('\n');
 	const regex = globToRegExp(pattern);
@@ -281,7 +243,6 @@ async function machineGlob(machine: Machine, root: string, target: string, patte
 	return globPaths(text(result.stdout), pattern, where === '.' ? '' : where);
 }
 
-/** A listing as the snapshot's: past the cap, how many more and how to narrow it. */
 function listingText(listing: Listing): string {
 	if ('problem' in listing) return listing.problem;
 	const { paths, cut } = listing;
@@ -290,12 +251,10 @@ function listingText(listing: Listing): string {
 	return more > 0 ? `${paths.slice(0, MAX_LISTED).join('\n')}\n(${more}${cut ? '+' : ''} more; narrow it with path or pattern)` : paths.join('\n');
 }
 
-/** Files under `target` in the machine matching a glob, as the glob tool shows them. */
 export async function globMachine(machine: Machine, root: string, target: string, pattern: string, tool: 'auto' | 'rg' | 'list' = 'auto'): Promise<string> {
 	return listingText(await machineGlob(machine, root, target, pattern, tool));
 }
 
-/** Files matching a glob, as paths from the repository's root. */
 export async function globTask(id: string, input: GlobInput, deps: Partial<Deps> = {}): Promise<string> {
 	const d = { ...defaults, ...deps };
 	if (input.repo) return listRepoFiles(id, { glob: input.pattern, path: input.path, repo: input.repo });
@@ -304,7 +263,6 @@ export async function globTask(id: string, input: GlobInput, deps: Partial<Deps>
 	return globMachine(await d.machine(id), await d.root(id), place.machine, input.pattern);
 }
 
-/** For run_script programs: every path matching a glob, as a list, from wherever the task's reads come from. */
 export async function taskPaths(id: string, input: GlobInput, deps: Partial<Deps> = {}): Promise<string[]> {
 	const d = { ...defaults, ...deps };
 	if (input.repo) return repoPaths(id, { glob: input.pattern, path: input.path, repo: input.repo });
@@ -315,7 +273,6 @@ export async function taskPaths(id: string, input: GlobInput, deps: Partial<Deps
 	return listing.paths;
 }
 
-/** For run_script programs: a file's whole text; throws when it cannot be read. */
 export async function taskText(id: string, file: string, repo?: string, deps: Partial<Deps> = {}): Promise<string> {
 	const d = { ...defaults, ...deps };
 	if (repo) return repoText(id, file, repo);

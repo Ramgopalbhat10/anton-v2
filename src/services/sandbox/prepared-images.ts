@@ -8,34 +8,21 @@ import { machineRequest, previewEnv, setUpMachine } from './machine-setup.ts';
 import { type SandboxSettings, sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from '../secrets/secrets.ts';
 
-/*
- * A repo's prepared image: its sandbox's filesystem with the repo cloned, its packages installed and its setup script
- * run, at the base branch's head. Tasks start from it rather than cloning. It is built in a sandbox of its own that
- * no agent or terminal ever has, so nothing a task does reaches an image, and no task waits while one is saved.
- */
+// A prepared image is built in a sandbox no agent or terminal ever has, so nothing a task does reaches an image.
 
-/** The repo's prepared image while it is younger than `share` of its days, else null. */
 export function preparedImageFor(project: Project, settings: SandboxSettings, share = 1): string | null {
 	const fresh = project.warmedAt && Date.now() - Date.parse(project.warmedAt) < share * settings.warmImageDays * 86_400_000;
 	return fresh ? project.warmImage : null;
 }
 
-/**
- * An image past this share of its days is built again while tasks still use it, so no task meets an expired one and
- * waits on clone and install.
- */
+/** Rebuilt past this share of its days while tasks still use it, so no task meets an expired one. */
 export const RENEW_SHARE = 0.75;
 
-/** Marks the machine an image is built in, so no task takes it for its own. */
 const IMAGE_MARKER = 'prepared-image';
 
 const building = new Map<string, Promise<string | null>>();
 
-/**
- * Builds the repo's prepared image unless a fresh one exists (`force` builds it anyway, as a changed lockfile asks),
- * and returns it. One build per repo at a time; a second ask waits for the first. A rebuild starts from the image it
- * replaces, so it only fetches, checks out and installs what changed.
- */
+/** One build per repo at a time. A rebuild starts from the image it replaces, so it only fetches and installs what changed. */
 export function buildPreparedImage(projectId: string, force = false): Promise<string | null> {
 	const pending = building.get(projectId);
 	if (pending) return pending;
@@ -67,7 +54,6 @@ export function buildPreparedImage(projectId: string, force = false): Promise<st
 	return build;
 }
 
-/** Starts a build in the background when the repo needs one; a failure is logged, and the next ask tries again. */
 export function renewPreparedImage(projectId: string, force = false): void {
 	if (!config.prepareImages) return;
 	void buildPreparedImage(projectId, force).catch((error: unknown) => logProblem('warn', 'Building the prepared image failed', error));

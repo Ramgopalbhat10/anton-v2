@@ -6,7 +6,6 @@ import { getProviders } from '../../providers/index.ts';
 import { type Checkpoint, whileNoCheckpointIsWritten } from '../git/checkpoints.ts';
 import { logProblem } from '../../core/log.ts';
 
-/** The timeline shows this many entries, so older ones only take space. */
 const KEEP_CHECKPOINTS = 50;
 /** A blob this new may belong to a checkpoint still being written. */
 const BLOB_GRACE_MS = 60 * 60_000;
@@ -15,18 +14,16 @@ const DAY_MS = 24 * 60 * 60_000;
 export type CleanupResult = { at: string; removed: number; freedBytes: number };
 export type StorageView = { objects: number; bytes: number; lastCleanup: CleanupResult | null };
 
-/** The task id in a key under `sessions/`. */
 function sessionOf(key: string): string {
 	return key.split('/')[1] ?? '';
 }
 
-/** Only checkpoint manifests list blobs; a task's outputs may be JSON files too. */
+/** A task's outputs may be JSON files too. */
 function isManifest(key: string): boolean {
 	const [, , name, entry] = key.split('/');
 	return (name === 'checkpoint.json' && entry === undefined) || (name === 'checkpoints' && entry?.endsWith('.json') === true);
 }
 
-/** History entries beyond the newest ones kept: each manifest and its diff. */
 function surplusHistory(objects: StoredObject[]): StoredObject[] {
 	const entries = objects.filter((object) => object.key.split('/')[2] === 'checkpoints');
 	const times = [...new Set(entries.map((object) => object.key.replace(/\.(json|patch)$/, '')))].sort().reverse();
@@ -34,7 +31,7 @@ function surplusHistory(objects: StoredObject[]): StoredObject[] {
 	return entries.filter((object) => dropped.has(object.key.replace(/\.(json|patch)$/, '')));
 }
 
-/** Blobs the kept manifests point at. A manifest that cannot be read keeps everything, as nothing is known to be unused. */
+/** A manifest that cannot be read keeps everything, as nothing is known to be unused. */
 async function referencedBlobs(store: ObjectStore, manifests: StoredObject[]): Promise<Set<string> | null> {
 	const used = new Set<string>();
 	for (const manifest of manifests) {
@@ -51,7 +48,7 @@ async function referencedBlobs(store: ObjectStore, manifests: StoredObject[]): P
 	return used;
 }
 
-/** Blobs no kept checkpoint uses, read while no checkpoint is being written so none is in use unseen. */
+/** Read while no checkpoint is being written, so none is in use unseen. */
 async function unusedBlobs(store: ObjectStore, dropped: Set<string>, now: number): Promise<StoredObject[]> {
 	const manifests = (await store.list('sessions/')).filter((object) => isManifest(object.key) && !dropped.has(object.key));
 	const used = await referencedBlobs(store, manifests);
@@ -59,14 +56,7 @@ async function unusedBlobs(store: ObjectStore, dropped: Set<string>, now: number
 	return (await store.list('blobs/')).filter((blob) => !used.has(blob.key) && now - blob.modifiedAt > BLOB_GRACE_MS);
 }
 
-/**
- * Removes what nothing can show any more: what is left of tasks this database
- * deleted, history beyond the newest entries, and file contents no checkpoint
- * uses. A task this database does not know is never removed: the storage may
- * be shared with another database (a second server, a development copy
- * pointed at the same bucket, one not restored yet), and its tasks are not
- * this one's to judge.
- */
+/** A task this database does not know is never removed: the storage may be shared with another database. */
 export async function cleanUpStorage(now = Date.now()): Promise<CleanupResult> {
 	const { store } = getProviders();
 	const [records, deleted] = await Promise.all([listSessionRecords(), deletedSessionIds()]);
@@ -98,7 +88,6 @@ export async function storageView(): Promise<StorageView> {
 	return { objects: all.length, bytes: all.reduce((sum, object) => sum + object.size, 0), lastCleanup };
 }
 
-/** Runs the cleanup once a day, starting a minute after boot. */
 export function scheduleCleanup(): void {
 	const run = async () => {
 		const last = await getSetting<CleanupResult | null>('lastCleanup', null);

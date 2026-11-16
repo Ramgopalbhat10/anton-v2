@@ -3,12 +3,11 @@ import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { listArtifacts } from './artifacts.ts';
 import { readOutputFile } from './files.ts';
 
-/** Bound transient memory on both server and browser; the gallery never fetches these bytes. */
 export const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 const keyOf = (item: { sessionId: string; path: string }) => JSON.stringify([item.sessionId, item.path]);
 const safePart = (part: string) => part.replace(/[\\:\x00-\x1f<>"|?*]/g, '-').replace(/[. ]+$/, '') || 'file';
 
-/** All or nothing: report missing files before returning a download, never silently omit them. */
+/** All or nothing: missing files are reported, never silently left out. */
 export async function artifactArchive(items: { sessionId: string; path: string }[]): Promise<Uint8Array> {
 	if (!items.length || items.length > 500) throw new InvalidInputError('Select between 1 and 500 artifacts per ZIP.');
 	const listed = new Map((await listArtifacts()).map((item) => [keyOf(item), item]));

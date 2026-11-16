@@ -8,18 +8,8 @@ import { getSetting, setSetting } from '../../db/settings.ts';
 import { proxyLabel, proxyParts } from './egress.ts';
 
 /*
- * Sealed secrets: values the agent can use but never read. Unlike Settings ›
- * Secrets' variables, none of them reaches a sandbox, a shell or the model.
- * The agent names one in a request (`{{secret:NAME}}`, or `{{totp:NAME}}` for
- * the current code of a TOTP secret) and Anton fills it in on this server as
- * it sends the request (`http-request.ts`), only to the hosts the secret
- * allows, through the proxy it names, with its value hidden in the answer.
- * A token an API answers with can be kept the same way, so the agent never
- * holds that either.
- *
- * Values are stored encrypted (AES-256-GCM) with ANTON_SECRETS_KEY, or a key
- * Anton makes once in its data folder, so a copy of the database alone does
- * not give them away.
+ * Values the agent can use but never read: none reaches a sandbox, a shell or the model; `http-request.ts` fills them in.
+ * Stored AES-256-GCM encrypted with ANTON_SECRETS_KEY or a key made once in the data folder, so the database alone gives none away.
  */
 
 const KEY = 'sealed-secrets';
@@ -28,19 +18,16 @@ const HOST = /^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*$/;
 const MAX_SECRETS = 100;
 const MAX_VALUE = 16_384;
 
-/** Who set it: you in Settings, or a task that saved it from an answer. */
 export type SealedSource = { by: 'you' } | { by: 'task'; taskId: string };
 
-/** `readsDirect`: a GET or HEAD with this secret goes straight out, and only what changes something takes the proxy. */
+/** `readsDirect`: a GET or HEAD with this secret goes straight out; only what changes something takes the proxy. */
 type Stored = { value: string; hosts: string[]; proxy: string | null; readsDirect?: boolean; source: SealedSource; updatedAt: string };
 
-/** A sealed secret as the page sees it: never its value or the proxy's password. */
+/** Never its value or the proxy's password. */
 export type SealedSecretView = { name: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: SealedSource; updatedAt: string };
 
-/** What the agent is told of one: its name and where it may go. */
 export type SealedSecretBrief = { name: string; hosts: string[]; proxied: boolean; byYou: boolean };
 
-/** A secret as a request uses it, decrypted. */
 export type OpenSecret = { name: string; value: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: SealedSource };
 
 let cachedKey: Buffer | undefined;
@@ -98,7 +85,6 @@ export async function sealedSecretBriefs(): Promise<SealedSecretBrief[]> {
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The secrets a request names, decrypted; a name that is not set is left out. */
 export async function openSecrets(names: string[]): Promise<Map<string, OpenSecret>> {
 	const all = await stored();
 	const open = new Map<string, OpenSecret>();
@@ -109,13 +95,13 @@ export async function openSecrets(names: string[]): Promise<Map<string, OpenSecr
 	return open;
 }
 
-/** Every value, decrypted, to hide wherever an agent's output is read back. */
+/** To hide wherever an agent's output is read back. */
 export async function sealedValues(): Promise<Record<string, string>> {
 	const all = await stored();
 	return Object.fromEntries(Object.entries(all).map(([name, entry]) => [name, unseal(entry.value)]));
 }
 
-/** Whether `host` is one of `hosts`; `*.example.com` takes its subdomains, not example.com itself. */
+/** `*.example.com` takes its subdomains, not example.com itself. */
 export function hostAllowed(host: string, hosts: string[]): boolean {
 	const name = host.toLowerCase();
 	return hosts.some((allowed) => (allowed.startsWith('*.') ? name.endsWith(allowed.slice(1)) && name.length > allowed.length - 1 : name === allowed));
@@ -129,10 +115,7 @@ function cleanHosts(hosts: string[]): string[] {
 	return clean;
 }
 
-/**
- * What the page sends. `value`, `proxy` and `readsDirect` left out (or null) keep what is stored; an
- * empty `proxy` removes it. A new secret needs a value.
- */
+/** Fields left out (or null) keep what is stored; an empty `proxy` removes it. A new secret needs a value. */
 export type SealedSecretInput = { name: string; value?: string | null; hosts: string[]; proxy?: string | null; readsDirect?: boolean | null };
 
 export async function saveSealedSecret(input: SealedSecretInput): Promise<SealedSecretView[]> {
@@ -173,17 +156,13 @@ export async function deleteSealedSecret(name: string): Promise<SealedSecretView
 	return sealedSecretsView();
 }
 
-/** Checked before a request is sent, so one whose answer could not be kept is not sent at all. */
+/** So a request whose answer could not be kept is not sent at all. */
 export async function assertKeepable(name: string): Promise<void> {
 	if (!NAME.test(name)) throw new InvalidInputError(`${name} is not a secret name: capital letters, digits and _, starting with a letter`);
 	if ((await stored())[name]?.source.by === 'you') throw new ConflictError(`${name} was set in Settings, so a task cannot replace it; save under another name`);
 }
 
-/**
- * Keeps a value a task's request was answered with (a sign-in's token) as a sealed secret, sent only
- * where that request went and through the same proxy, with the same rule for reads. A task may
- * replace what a task saved, never one you set.
- */
+/** Sent only where that request went, through the same proxy. A task may replace what a task saved, never one you set. */
 export async function keepFromAnswer(taskId: string, name: string, value: string, host: string, proxy: string | null, readsDirect = false): Promise<void> {
 	await assertKeepable(name);
 	const all = await stored();

@@ -1,18 +1,13 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type { McpServer } from '../../core/types.ts';
 
-/**
- * Connections to remote MCP servers for code mode's programs, kept between
- * programs so a script that calls a server does not first pay for a new
- * connection, and each server's tool list, kept so run_script can describe
- * its tools when the agent renders (which is synchronous). Shared by every
- * task that uses the same server with the same token; a connection nobody
- * used for a few minutes is closed.
+/*
+ * Connections to MCP servers kept between programs, and tool lists kept so run_script can be described while the agent
+ * renders (synchronously). Shared by tasks using the same server and token; idle connections close after a few minutes.
  */
 
 const CONNECT_MS = 15_000;
 const IDLE_MS = 5 * 60_000;
-/** How long a tool list is trusted before it is read again; a server that could not be reached is tried again sooner. */
 const LIST_MS = 10 * 60_000;
 const FAILED_MS = 60_000;
 
@@ -31,9 +26,9 @@ type Connection = { client: Promise<Client>; idle: ReturnType<typeof setTimeout>
 const connections = new Map<string, Connection>();
 const listings = new Map<string, Listing>();
 
-/** One connection per address and token; the token never leaves this module's memory. */
+/** The token never leaves this module's memory. */
 const connectionKey = (server: McpServer) => `${server.url}\n${server.auth ?? ''}`;
-/** A listing also depends on the tools the repo allows, and is named by the server's name in the repo. */
+/** A listing also depends on the tools the repo allows. */
 const listingKey = (server: McpServer) => `${connectionKey(server)}\n${server.tools.join(',')}`;
 
 function release(key: string, entry: Connection) {
@@ -80,7 +75,6 @@ async function withClient<T>(server: McpServer, use: (client: Client) => Promise
 	}
 }
 
-/** The server's tools that the repo allows, read once and kept for a while. */
 export function serverTools(server: McpServer): Promise<McpTool[]> {
 	const key = listingKey(server);
 	const known = listings.get(key);
@@ -104,15 +98,11 @@ export function serverTools(server: McpServer): Promise<McpTool[]> {
 	return listing.tools;
 }
 
-/** The tools last read from the server: null when it has not been read yet, empty when it could not be reached. */
 export function knownServerTools(server: McpServer): McpTool[] | null {
 	return listings.get(listingKey(server))?.settled ?? null;
 }
 
-/**
- * Reads the servers' tool lists ahead of the agent rendering, waiting at most `waitMs` for slow ones. Only a server
- * never read is waited for: one read before keeps its list for this message while it is read again behind it.
- */
+/** Only a server never read is waited for: one read before keeps its list for this message. */
 export async function warmServerTools(servers: McpServer[], waitMs: number): Promise<void> {
 	const unread = servers.flatMap((server) => {
 		const tools = serverTools(server).catch(() => []);
@@ -129,7 +119,6 @@ export function callServerTool(server: McpServer, name: string, args: Record<str
 	return withClient(server, async (client) => (await client.callTool({ name, arguments: args }, { signal })) as McpCallResult);
 }
 
-/** For tests: close every connection and forget every listing. */
 export async function resetMcpToolsForTests(): Promise<void> {
 	const open = [...connections.values()];
 	connections.clear();

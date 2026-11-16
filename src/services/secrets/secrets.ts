@@ -7,10 +7,7 @@ import { sealedValues } from './sealed-secrets.ts';
 const SHARED = 'shared-env';
 const GUARDRAILS = 'guardrails';
 
-/**
- * Applies a change from the browser to stored variables: one set to null
- * keeps its stored value, one left out is removed.
- */
+/** One set to null keeps its stored value, one left out is removed. */
 export function mergeEnv(stored: Record<string, string>, change: Record<string, string | null>): Record<string, string> {
 	return Object.fromEntries(
 		Object.entries(change)
@@ -19,12 +16,11 @@ export function mergeEnv(stored: Record<string, string>, change: Record<string, 
 	);
 }
 
-/** Variables every repository's sandboxes get. */
 export function sharedEnv(): Promise<Record<string, string>> {
 	return getSetting<Record<string, string>>(SHARED, {});
 }
 
-/** What a repo's sandboxes get: the shared variables, with the repo's own over them; a chat's get the shared ones. */
+/** The repo's own over the shared ones; a chat's get the shared ones. */
 export async function envFor(project: Project | null): Promise<Record<string, string>> {
 	return { ...(await sharedEnv()), ...project?.env };
 }
@@ -40,7 +36,6 @@ export async function setGuardrails(next: Guardrails): Promise<Guardrails> {
 	return next;
 }
 
-/** The values to keep out of what a task's agent reads back, by name; none while the guardrail is off. */
 export async function secretsToHide(sessionId: string): Promise<Record<string, string>> {
 	const session = await getSessionRecord(sessionId);
 	const project = session && (await getProject(session.projectId));
@@ -49,7 +44,7 @@ export async function secretsToHide(sessionId: string): Promise<Record<string, s
 	return { ...(session && (await guardrails()).hideSecrets ? await envFor(project) : {}), ...sealed };
 }
 
-/** Names only, never values: the shared variables and each repository's own. */
+/** Names only, never values. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
 
 export async function secretsView(): Promise<SecretsView> {

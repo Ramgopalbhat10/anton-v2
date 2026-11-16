@@ -2,7 +2,6 @@ import type { PullRequestActivity } from '../../core/ports.ts';
 import { listSessionRecords } from '../../db/sessions.ts';
 import { getProviders } from '../../providers/index.ts';
 
-/** Where a pull request stands for its reviewer: you, its checks, or done. */
 export type ReviewGroup = 'failing' | 'checking' | 'ready' | 'merged' | 'closed' | 'unknown';
 
 export type ReviewItem = {
@@ -12,7 +11,6 @@ export type ReviewItem = {
 	url: string;
 	group: ReviewGroup;
 	draft: boolean;
-	/** Someone else's pull request, which the task reviews; its author's login. */
 	reviewing: string | null;
 	conflicts: boolean;
 	checks: { passed: number; failed: number; pending: number };
@@ -31,11 +29,7 @@ function groupOf(activity: PullRequestActivity | null): ReviewGroup {
 
 const count = (activity: PullRequestActivity | null, status: string) => activity?.checks.filter((check) => check.status === status).length ?? 0;
 
-/**
- * Pull request state lives on the host, which announces nothing to Anton, so
- * the queue asks it and keeps answers briefly; a merged or closed one never
- * changes again and is kept for good.
- */
+/** The host announces nothing, so answers are kept briefly; a merged or closed one is kept for good. */
 const cache = new Map<string, { at: number; activity: PullRequestActivity }>();
 const FRESH_MS = 60_000;
 
@@ -52,7 +46,6 @@ async function activityOf(url: string): Promise<PullRequestActivity | null> {
 	}
 }
 
-/** Every pull request the agent opened or reviews, the ones waiting on you first. */
 export async function reviewQueue(): Promise<ReviewItem[]> {
 	const sessions = (await listSessionRecords()).filter((session) => session.prUrl);
 	const items = await Promise.all(

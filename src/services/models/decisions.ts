@@ -3,10 +3,9 @@ import { getProviders } from '../../providers/index.ts';
 import { logProblem } from '../../core/log.ts';
 import { recordUsage } from './usage.ts';
 
-/** Whether a decision model is set up; without one, every decision falls back to what Anton did before. */
+/** Without one, every decision falls back to what Anton did before. */
 export const hasDecisionModel = () => Boolean(getProviders().decisions);
 
-/** `ask`, with what the answers cost. */
 export async function consult(id: string, state: Record<string, unknown>, questions: Record<string, Question>, signal?: AbortSignal): Promise<Decision> {
 	const model = getProviders().decisions;
 	if (!model) throw new Error('No decision model is set up. It needs an OpenRouter key.');
@@ -15,20 +14,16 @@ export async function consult(id: string, state: Record<string, unknown>, questi
 	return decision;
 }
 
-/** Asks the decision model about one task, counting its cost on that task like any model call. Throws when it cannot answer. */
+/** Counts its cost on the task like any model call. Throws when it cannot answer. */
 export async function ask(id: string, state: Record<string, unknown>, questions: Record<string, Question>, signal?: AbortSignal): Promise<Record<string, Answer>> {
 	return (await consult(id, state, questions, signal)).answers;
 }
 
-/**
- * The decision model's calls inside one step, and what each judged, so the
- * step can show them (the Agents panel lists them under the step).
- */
 export type Tally = { decisions: number; cost: number; actions: Array<{ what: string; p: number | null; failed?: boolean }> };
 
 export const newTally = (): Tally => ({ decisions: 0, cost: 0, actions: [] });
 
-/** `ask`, or null when there is no decision model or it fails, so the caller does what it did without one. A `tally` counts the call. */
+/** Null when there is no decision model or it fails, so the caller does what it did without one. */
 export async function decide(id: string, state: Record<string, unknown>, questions: Record<string, Question>, tally?: Tally): Promise<Record<string, Answer> | null> {
 	if (!hasDecisionModel()) return null;
 	try {
@@ -44,9 +39,7 @@ export async function decide(id: string, state: Record<string, unknown>, questio
 	}
 }
 
-/** The probability of yes, or null for no answer. */
 export const yesOf = (answer: Answer | undefined): number | null => (answer && 'yes' in answer ? answer.yes : null);
 
-/** The option picked and its probability, or null for no answer. */
 export const choiceOf = (answer: Answer | undefined): { choice: string; p: number } | null =>
 	answer && 'choice' in answer ? { choice: answer.choice, p: answer.probabilities[answer.choice] ?? 0 } : null;

@@ -6,18 +6,14 @@ import { logProblem } from '../../core/log.ts';
 import { accessToken, agentRuntimes, loadGatewayKey, subscriptionProviders, subscriptionView } from '../models/subscriptions.ts';
 import { whyNoAnswer } from './why-no-answer.ts';
 
-/** `set` when it is set up but not checked from here; `off` when it is not set up; `failing` when the check did not pass. */
+/** `set`: set up but not checked from here. */
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
 
 export const CHECK_MS = 10_000;
 
-/** A check that ran out of time, told apart from one that was answered with an error. */
 class NoAnswer extends Error {}
 
-/**
- * Runs a check for at most CHECK_MS. Out of time with the service's `url`, it says which step was slow (the
- * address lookup, the connection, or the service), since one stall on this server fails every check at once.
- */
+/** Out of time with `url`, it says which step was slow, since one stall on this server fails every check at once. */
 export async function withTimeout<T>(work: Promise<T>, url?: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<never>((_, reject) => {
@@ -33,10 +29,8 @@ export async function withTimeout<T>(work: Promise<T>, url?: string): Promise<T>
 	}
 }
 
-/** `url` is the service's address, for saying why it did not answer in time. */
 type Check = { id: string; name: string; provider: string; off?: string; unchecked?: boolean; url?: string; run: () => Promise<string> };
 
-/** Each plan you can sign in to: off until you do, then checked by renewing its token if it needs it. */
 async function subscriptionChecks(): Promise<Check[]> {
 	const runtimes = await Promise.all(
 		agentRuntimes().map(async (runtime): Promise<Check> => {
@@ -168,7 +162,6 @@ async function probe({ id, name, provider, off, unchecked, url, run }: Check): P
 	}
 }
 
-/** Every service Anton depends on, each checked live. */
 export async function connections(): Promise<Connection[]> {
 	return Promise.all((await checks()).map(probe));
 }

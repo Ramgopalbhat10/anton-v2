@@ -6,28 +6,20 @@ import { getSetting, setSetting } from '../../db/settings.ts';
 import { getProviders } from '../../providers/index.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * Accounts the agent's tools reach (Google) and the services on them (Gmail),
- * connected once in Settings › Connectors for every task. The sign-in is kept
- * here, on Anton's server, and renewed here: its tokens never reach a
- * sandbox, a view or the model. Google signs in on your own OAuth client
- * (pasted in Settings, else GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET), since
- * a self-hosted Anton is no verified app of Google's.
- */
+// Sign-ins are kept and renewed on Anton's server; tokens never reach a sandbox, a view or the model. Google signs in on
+// your own OAuth client, since a self-hosted Anton is no verified app of Google's.
 
-/** What Anton keeps of an account. `client` is the one pasted in Settings; null falls back to the environment. */
+/** `client` null falls back to the environment. */
 type StoredAccount = { client: OAuthClient | null; credential: SubscriptionCredential | null; connectedAt: string | null; problem: string | null };
-/** What a mailbox may do for the agent. Drafts and sending also need the sign-in to have allowed them. */
+/** Drafts and sending also need the sign-in to have allowed them. */
 export type MailboxOptions = { enabled: boolean; draft: boolean; send: boolean };
-/** How much a connect asks Google for. */
 export type MailAccess = 'read' | 'draft';
 
 const ACCOUNT_DEFAULTS: StoredAccount = { client: null, credential: null, connectedAt: null, problem: null };
 const MAILBOX_DEFAULTS: MailboxOptions = { enabled: true, draft: true, send: true };
-/** A token this close to expiring is renewed first, so a call the agent makes with it does not fail halfway. */
+/** So a call the agent makes with it does not fail halfway. */
 const RENEW_EARLY_MS = 2 * 60_000;
 const LOGIN_TTL_MS = 10 * 60_000;
-/** Where Google sends the browser back, on Anton's own address. */
 export const CALLBACK_PATH = (account: string) => `/api/connectors/${account}/callback`;
 
 const accountKey = (id: string) => `account.${id}`;
@@ -48,7 +40,6 @@ export function mailboxById(id: string): Mailbox {
 	return found;
 }
 
-/** Each account's stored state, read once and written through, so the agent's lookups stay cheap. */
 const accounts = new Map<string, StoredAccount>();
 
 async function storedAccount(id: string): Promise<StoredAccount> {
@@ -71,7 +62,6 @@ async function mailboxOptions(id: string): Promise<MailboxOptions> {
 	return { ...MAILBOX_DEFAULTS, ...(await getSetting<Partial<MailboxOptions>>(mailboxKey(id), {})) };
 }
 
-/** The OAuth client to sign in with: the one pasted in Settings, else the environment's; null when neither is set. */
 async function clientFor(id: string): Promise<OAuthClient | null> {
 	const { client } = await storedAccount(id);
 	if (client) return client;
@@ -79,7 +69,7 @@ async function clientFor(id: string): Promise<OAuthClient | null> {
 	return null;
 }
 
-/** Saves the OAuth client pasted in Settings. A secret left out keeps the stored one; an empty client id removes the client. */
+/** A secret left out keeps the stored one; an empty client id removes the client. */
 export async function setAccountClient(id: string, input: { clientId: string; clientSecret?: string | null }): Promise<ConnectorsView> {
 	signInById(id);
 	const clientId = input.clientId.trim();
@@ -97,7 +87,6 @@ export async function setAccountClient(id: string, input: { clientId: string; cl
 }
 
 type Attempt = { login: SubscriptionLogin; mailbox: string; timer: ReturnType<typeof setTimeout>; finishing?: Promise<void> };
-/** One sign-in at a time per account, held only in memory: a restart means connecting again. */
 const attempts = new Map<string, Attempt>();
 
 function endAttempt(id: string) {
@@ -106,7 +95,7 @@ function endAttempt(id: string) {
 	attempts.delete(id);
 }
 
-/** Anton's address as the browser reaches it, which is where Google must send it back; only its origin is kept. */
+/** Where Google must send the browser back; only its origin is kept. */
 export function appOrigin(origin: string): string {
 	if (!URL.canParse(origin)) throw new InvalidInputError('Send the page’s origin, such as https://anton.example.com');
 	const url = new URL(origin);
@@ -114,10 +103,8 @@ export function appOrigin(origin: string): string {
 	return url.origin;
 }
 
-/** The address to add to the OAuth client in Google Cloud, for Anton at `origin`. */
 export const redirectUriFor = (account: string, origin: string) => `${appOrigin(origin)}${CALLBACK_PATH(account)}`;
 
-/** Starts connecting a mailbox: the address of the vendor's consent page, which comes back to Anton's callback. */
 export async function beginConnect(mailboxId: string, origin: string, access: MailAccess): Promise<{ url: string }> {
 	const mailbox = mailboxById(mailboxId);
 	const signIn = signInById(mailbox.account);
@@ -133,7 +120,6 @@ export async function beginConnect(mailboxId: string, origin: string, access: Ma
 	return { url: login.url };
 }
 
-/** Finishes a sign-in with the query Google sent the browser back with; the mailbox it was for is turned on. */
 export async function finishConnect(accountId: string, query: string): Promise<{ mailbox: string; email: string | null }> {
 	const signIn = signInById(accountId);
 	const attempt = attempts.get(accountId);
@@ -153,7 +139,7 @@ export async function finishConnect(accountId: string, query: string): Promise<{
 	return { mailbox: attempt.mailbox, email: (await storedAccount(accountId)).credential?.email ?? null };
 }
 
-/** Forgets the sign-in, telling the vendor first so Anton leaves the account's connected apps. */
+/** Tells the vendor first, so Anton leaves the account's connected apps. */
 export async function disconnectAccount(id: string): Promise<ConnectorsView> {
 	const signIn = signInById(id);
 	const { credential } = await storedAccount(id);
@@ -170,13 +156,11 @@ export async function setMailboxOptions(id: string, options: MailboxOptions): Pr
 	return connectorsView();
 }
 
-/** The account's sign-in no longer works: what the agent and Settings say about it. */
 export class SignInNeeded extends Error {}
 
 const renewing = new Map<string, Promise<string>>();
 const isRejected = (message: string) => /\((400|401)\)|invalid_grant/.test(message);
 
-/** A working access token for the account, renewed when it is about to expire; concurrent calls share one renewal. */
 export async function accountToken(id: string): Promise<string> {
 	const signIn = signInById(id);
 	const { credential, problem } = await storedAccount(id);
@@ -205,7 +189,6 @@ export async function accountToken(id: string): Promise<string> {
 	return pending;
 }
 
-/** What the agent may do in a mailbox now: null when it is off or its account is not connected. */
 export type MailboxAccess = { read: true; draft: boolean; send: boolean };
 
 export async function mailboxAccess(id: string): Promise<MailboxAccess | null> {
@@ -221,7 +204,7 @@ export async function mailboxAccess(id: string): Promise<MailboxAccess | null> {
 export type AccountView = {
 	id: string;
 	name: string;
-	/** The OAuth client's id, never its secret; `fromEnv` when it comes from the environment. */
+	/** Never its secret. */
 	client: { clientId: string; fromEnv: boolean } | null;
 	email: string | null;
 	connectedAt: string | null;
@@ -235,7 +218,6 @@ export type MailboxView = {
 	name: string;
 	account: string;
 	options: MailboxOptions;
-	/** Whether the sign-in allowed drafts and sending. */
 	canDraft: boolean;
 	access: MailboxAccess | null;
 };
@@ -275,7 +257,6 @@ export async function connectorsView(): Promise<ConnectorsView> {
 	return { accounts: accountViews, mailboxes: mailboxViews };
 }
 
-/** For tests: forget what is cached in memory. */
 export function resetConnectorsForTests(): void {
 	accounts.clear();
 	renewing.clear();

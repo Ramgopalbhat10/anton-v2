@@ -7,32 +7,21 @@ import { getProviders } from '../../providers/index.ts';
 import { composioKeySlot } from '../../providers/composio/key.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * Apps connected through an apps platform (Composio, behind the AppsConnector
- * port): one row per toolkit, its sign-in a hosted connect link the user
- * approves on the provider's own page. The platform holds the tokens and runs
- * the tools; Anton keeps only the connected account's id and status, so they
- * never reach a sandbox, a view or the model. The project API key comes from
- * Settings or COMPOSIO_API_KEY.
- */
+// The apps platform holds the tokens and runs the tools; Anton keeps only the connected account's id and status, so they never reach a sandbox, a view or the model.
 
-/** Whose connections these are inside the platform's project: one per Anton install. */
+/** One per Anton install inside the platform's project. */
 const USER_ID = 'anton';
-/** A pending sign-in's status is read from the platform at most this often. */
 const REFRESH_MS = 15_000;
 const refreshedAt = new Map<string, number>();
 
 const KEY_SETTING = 'composio.key';
 
-/** The apps platform port, when this install has one (tests may not). */
 const apps = (): AppsConnector | null => getProviders().apps ?? null;
 
-/** Whether a project key is about to be used, and from where — what Settings › Connectors shows. */
 export function composioKeySource(): 'settings' | 'environment' | null {
 	return apps() ? composioKeySlot.source() : null;
 }
 
-/** Reads the key pasted in Settings into the slot at startup, so calls have it before any page asks. */
 export async function loadComposioKey(): Promise<void> {
 	composioKeySlot.set(await getSetting<string | null>(KEY_SETTING, null));
 }
@@ -43,7 +32,7 @@ async function needApps(): Promise<AppsConnector> {
 	return platform;
 }
 
-/** Saves the project key pasted in Settings; an empty one removes it. It is checked with the platform before it is kept. */
+/** Checked with the platform before it is kept; an empty one removes it. */
 export async function setComposioKey(key: string | null): Promise<ComposioView> {
 	const platform = apps();
 	const trimmed = key?.trim() ?? '';
@@ -71,7 +60,6 @@ function accountState(status: string): ComposioAccountRow['status'] {
 	return status ? 'pending' : 'none';
 }
 
-/** Reads the connected account's live status into the row, at most once per REFRESH_MS per toolkit. */
 async function refreshRow(row: ComposioAccountRow, platform: AppsConnector, force = false): Promise<ComposioAccountRow> {
 	if (!row.accountId || row.status === 'none') return row;
 	const last = refreshedAt.get(row.toolkit) ?? 0;
@@ -101,7 +89,6 @@ const present = (row: ComposioAccountRow): ComposioAccountView => {
 	return { ...rest, account: row.status === 'active' ? (_id ?? null) : null };
 };
 
-/** What Settings › Connectors shows: whether a key is set, and each added app with its live status. */
 export async function composioView(): Promise<ComposioView> {
 	const platform = apps();
 	const source = composioKeySource();
@@ -111,14 +98,12 @@ export async function composioView(): Promise<ComposioView> {
 	return { configured: true, keyFromEnv: source === 'environment', accounts: live.map(present) };
 }
 
-/** Forgets cached state (tests). */
 export function resetComposioForTests(): void {
 	composioKeySlot.set(null);
 	refreshedAt.clear();
 	toolLists.clear();
 }
 
-/** Adds an app from the catalog; its details are read from the platform so the row always matches the toolkit. */
 export async function addComposioToolkit(toolkit: string): Promise<ComposioView> {
 	const platform = await needApps();
 	const slug = toolkit.trim().toLowerCase();
@@ -146,11 +131,6 @@ export async function setComposioAccountEnabled(toolkit: string, enabled: boolea
 	return composioView();
 }
 
-/**
- * Starts a sign-in: the Composio-managed auth config for the toolkit (made on
- * first use), stale unfinished accounts cleared, and a Connect Link whose
- * page the user approves on the provider's own site.
- */
 export async function beginComposioConnect(toolkit: string, callbackUrl?: string): Promise<{ url: string }> {
 	const platform = await needApps();
 	const row = await getComposioAccount(toolkit);
@@ -170,7 +150,6 @@ export async function beginComposioConnect(toolkit: string, callbackUrl?: string
 	return { url: link.redirectUrl };
 }
 
-/** Reads the account's status now, for the page that is waiting on the sign-in. */
 export async function refreshComposioAccount(toolkit: string): Promise<ComposioView> {
 	const platform = apps();
 	const row = await getComposioAccount(toolkit);
@@ -179,7 +158,6 @@ export async function refreshComposioAccount(toolkit: string): Promise<ComposioV
 	return composioView();
 }
 
-/** Forgets the connection at the platform and here; the app stays added, ready to connect again. */
 export async function disconnectComposioAccount(toolkit: string): Promise<ComposioView> {
 	const platform = await needApps();
 	const row = await getComposioAccount(toolkit);
@@ -190,7 +168,6 @@ export async function disconnectComposioAccount(toolkit: string): Promise<Compos
 	return composioView();
 }
 
-/** Removes the app altogether: its connection first, then its row. */
 export async function removeComposioAccount(toolkit: string): Promise<ComposioView> {
 	const row = await getComposioAccount(toolkit);
 	if (!row) throw new NotFoundError(`No app is named ${toolkit}`);
@@ -201,7 +178,6 @@ export async function removeComposioAccount(toolkit: string): Promise<ComposioVi
 	return composioView();
 }
 
-/** Apps in Composio's catalog matching a search, for the Connectors page's search box; fewer than two letters finds nothing. */
 export async function searchComposioToolkits(search: string, limit = 20): Promise<AppsToolkit[]> {
 	const platform = await needApps();
 	const query = search.trim();
@@ -209,20 +185,16 @@ export async function searchComposioToolkits(search: string, limit = 20): Promis
 	return platform.toolkits({ search: query, limit });
 }
 
-/** One catalog app by its toolkit slug, for the page that adds it; null when Composio has none by that name. */
 export async function composioToolkit(toolkit: string): Promise<AppsToolkit | null> {
 	const platform = await needApps();
 	return (await platform.toolkits({ slug: toolkit }))[0] ?? null;
 }
-
-/* ---- what the agent reaches ---- */
 
 export type ComposioConnectorTool = AppsTool & { toolkit: string };
 
 const TOOL_LIST_MS = 10 * 60_000;
 const toolLists = new Map<string, { at: number; tools: Promise<ComposioConnectorTool[]> }>();
 
-/** A toolkit's tools as the agent may call them, cached for a while; empty when the app is not connected. */
 export async function composioTools(toolkit: string): Promise<ComposioConnectorTool[]> {
 	const platform = apps();
 	const row = await getComposioAccount(toolkit);
@@ -235,20 +207,13 @@ export async function composioTools(toolkit: string): Promise<ComposioConnectorT
 	return listing.tools;
 }
 
-/** `composio__<toolkit>__<action>`: the name connector_tools gives and connector_call takes. */
 export function composioToolName(toolkit: string, slug: string): string {
 	const prefix = `${toolkit.toUpperCase()}_`;
 	const action = slug.toUpperCase().startsWith(prefix) ? slug.slice(prefix.length) : slug;
 	return `composio__${toolkit}__${action.toLowerCase()}`;
 }
 
-/**
- * Whether a tool call waits on the user's Run before it goes. Composio's
- * catalog does not mark read and write apart, so the action's name does:
- * a write-looking word anywhere asks first; otherwise the action is a read
- * when it starts or ends with a read verb (`FETCH_…`, `…_LIST`), and anything
- * unrecognized asks too.
- */
+/** Composio does not mark read and write apart, so the action's name does: a write-looking word or an unrecognized verb waits on the user's Run. */
 const WRITES = /(^|_)(SEND|POST|CREATE|UPDATE|DELETE|REMOVE|ADD|PUBLISH|WRITE|PATCH|PUT|MERGE|APPROVE|REJECT|CLOSE|ARCHIVE|UNARCHIVE|MOVE|ASSIGN|UNASSIGN|INVITE|SHARE|UNSHARE|UPLOAD|EXECUTE|RUN|TRIGGER|SUBMIT|CANCEL|REVOKE|GRANT|TRANSFER|PAY|CHARGE|REFUND|DEPLOY|RESTART|REBOOT|STOP|START|ENABLE|DISABLE|CONNECT|DISCONNECT|FOLLOW|UNFOLLOW|LIKE|UNLIKE|COMMENT|REACT|NOTIFY|ALERT|BOOK|SCHEDULE|RESERVE|ORDER|PURCHASE|BUY|SUBSCRIBE|UNSUBSCRIBE|MODIFY|EDIT|RENAME|COPY|DUPLICATE|IMPORT|EXPORT|SYNC|GENERATE|COMPOSE|REPLY|FORWARD|DRAFT|ATTACH|DETACH|LINK|UNLINK|MARK|FLAG|PIN|UNPIN|MUTE|UNMUTE|BLOCK|UNBLOCK|VERIFY|CONFIRM|COMPLETE|RESOLVE|REOPEN|ESCALATE|SPLIT|CLONE|FORK|COMMIT|PUSH|TAG|RELEASE|ROLLBACK|MIGRATE|SEED|PURGE|WIPE|TRUNCATE|INSERT|UPSERT|REPLACE|SWAP|ROTATE|REGENERATE|ACTIVATE|DEACTIVATE|REGISTER|DEREGISTER|ENROLL|UNENROLL|AUTHORIZE|DEAUTHORIZE|AUTHENTICATE)(_|$)/;
 const READS = new Set(['GET', 'LIST', 'SEARCH', 'FETCH', 'READ', 'FIND', 'RETRIEVE', 'COUNT', 'CHECK', 'LOOKUP', 'QUERY', 'VIEW', 'PREVIEW', 'DESCRIBE', 'SHOW', 'DOWNLOAD', 'HEAD', 'INSPECT']);
 
@@ -260,7 +225,6 @@ export function composioToolNeedsApproval(toolkit: string, slug: string): boolea
 	return !READS.has(words[0]) && !READS.has(words[words.length - 1]);
 }
 
-/** Runs a toolkit's tool on the user's connected account; the result's data as JSON text. */
 export async function executeComposioTool(toolkit: string, slug: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
 	const platform = await needApps();
 	const row = await getComposioAccount(toolkit);

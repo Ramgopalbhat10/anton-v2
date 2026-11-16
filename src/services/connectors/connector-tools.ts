@@ -13,21 +13,14 @@ import { logProblem } from '../../core/log.ts';
 import { secretsToHide } from '../secrets/secrets.ts';
 import { requestToolApproval } from './tool-approvals.ts';
 
-/**
- * Connectors' tools for the agent, loaded on demand. The agent always has the
- * same two tools, `connector_tools` (what the connectors that are on offer,
- * with each tool's arguments) and `connector_call` (call one), whatever is on,
- * so turning a connector on or off in the composer changes neither the tool
- * list nor the instructions, and the provider's prompt cache holds. A
- * connector costs the conversation context only once the agent looks it up.
- * Both read the connectors' state as they run: one turned on mid-task is
- * there from the agent's next call, one turned off refuses.
+/*
+ * The agent always has the same two tools, `connector_tools` and `connector_call`, whatever is on, so turning a connector on
+ * or off never changes the tool list or instructions and the prompt cache holds. Both read the connectors' state as they run.
  */
 
-/** A connector set up in Settings › Connectors: a connected mailbox, an added MCP server, or an app connected through Composio. */
 export type SetUpConnector = { id: string; name: string; kind: 'mailbox' | 'mcp' | 'composio'; codeMode: boolean };
 
-/** The connectors set up now, on or off; what the agent's instructions name, so they change only when one is added or removed. */
+/** On or off: what the agent's instructions name, so they change only when one is added or removed. */
 export async function setUpConnectors(): Promise<SetUpConnector[]> {
 	const [view, servers, composio] = await Promise.all([connectorsView(), listMcpServers(), listComposioAccounts()]);
 	const connected = new Set(view.accounts.filter((account) => account.connectedAt).map((account) => account.id));
@@ -38,7 +31,6 @@ export async function setUpConnectors(): Promise<SetUpConnector[]> {
 	];
 }
 
-/** A tool as the agent calls it through connector_call: its arguments as a JSON schema, and what running it does. */
 type ConnectorTool = {
 	name: string;
 	description: string;
@@ -57,7 +49,6 @@ function checked<T extends v.GenericSchema>(schema: T, args: unknown): v.InferOu
 	return result.output;
 }
 
-/** A mailbox's tools (Gmail): search and read, write drafts, and ask to send one, as its sign-in and switches allow. */
 function mailboxTools(id: string, name: string, access: { draft: boolean; send: boolean }): ConnectorTool[] {
 	const search = v.object({ query: v.pipe(v.string(), v.maxLength(500)), max: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_SEARCH))) });
 	const read = v.object({ thread_id: v.pipe(v.string(), v.minLength(1), v.maxLength(100)) });
@@ -139,10 +130,8 @@ function mailboxTools(id: string, name: string, access: { draft: boolean; send: 
 	];
 }
 
-/** `mcp__<server>__<tool>`, the name a program calls the tool by too, so both read the same in the thread. */
 export const mcpToolName = (server: string, tool: string) => `mcp__${server}__${tool}`.replace(/[^\w]/g, '_');
 
-/** What the agent reads back from an MCP call: its text, else its structured result, with images and files named rather than dropped. */
 function mcpText(result: McpCallResult, tool: string): string {
 	const text = (result.content ?? [])
 		.map((part) => {
@@ -169,11 +158,7 @@ function serverToolsFor(server: McpServer, tools: McpTool[]): ConnectorTool[] {
 	}));
 }
 
-/**
- * An app connected through Composio, as connector tools: Composio runs the
- * tool on the user's account. A call that would change something first asks
- * the user to Run it, as a Gmail send does; reads go straight through.
- */
+/** A call that would change something first asks the user to Run it, as a Gmail send does; reads go straight through. */
 function composioToolsFor(toolkit: string, name: string, tools: Awaited<ReturnType<typeof composioTools>>): ConnectorTool[] {
 	return tools.map((tool) => {
 		const toolName = composioToolName(toolkit, tool.slug);
@@ -199,7 +184,6 @@ function composioToolsFor(toolkit: string, name: string, tools: Awaited<ReturnTy
 	});
 }
 
-/** Every connector set up, as it stands this moment, with its tools read only when asked for. */
 async function connectorsNow(): Promise<Connector[]> {
 	const [view, servers, composioRows] = await Promise.all([connectorsView(), mcpServerStates(), listComposioAccounts()]);
 	const composioKeySet = composioKeySource() !== null;
@@ -239,22 +223,16 @@ async function connectorsNow(): Promise<Connector[]> {
 }
 
 const OFF = "it is off. If the work needs it, ask the user to turn it on from the composer's + menu, under Connectors; it works from your next call after that.";
-/** At most this many tools are listed at once; a query narrows a longer list. */
 const MAX_LISTED = 30;
-/**
- * Tools listed with their arguments in full, the best matches first; the rest get a line each. A big
- * server's whole schema (GitHub's is over 40KB) would otherwise sit in every later call of the conversation.
- */
+/** A big server's whole schema (GitHub's is over 40KB) would otherwise sit in every later call. */
 const MAX_DETAILED = 8;
 
-/** A tool's description to its first sentence or line, for a listing that gives it a line. */
 function firstLine(description: string): string {
 	const line = description.trim().split('\n')[0] ?? '';
 	const sentence = /^.*?[.!?](?=\s|$)/.exec(line)?.[0] ?? line;
 	return sentence.length > 160 ? `${sentence.slice(0, 159)}…` : sentence;
 }
 
-/** What connector_tools answers: each connector's state, and the matching tools of those that are on, the best matches with their arguments in full. */
 export async function connectorToolsText(query: string, signal?: AbortSignal): Promise<string> {
 	const connectors = await connectorsNow();
 	if (!connectors.length) return 'No connectors are set up. The user adds them in Settings › Connectors.';
@@ -310,10 +288,9 @@ export async function connectorToolsText(query: string, signal?: AbortSignal): P
 	return `Call a tool with connector_call, giving its name and arguments.\n\n${sections.join('\n\n')}${more}`;
 }
 
-/** How long a call may take when the runtime gives no signal of its own. */
 const CALL_MS = 5 * 60_000;
 
-/** Runs one connector tool for a task, if its connector is on now. A mailbox's send only asks: the answer carries the approval the thread shows. */
+/** A mailbox's send only asks: the answer carries the approval the thread shows. */
 export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<{ output: string; approval?: MailApprovalView; ask?: string }> {
 	for (const connector of await connectorsNow()) {
 		const prefix = connector.kind === 'mcp' ? mcpToolName(connector.id, '') : connector.kind === 'composio' ? `composio__${connector.id}__` : `${connector.id}_`;

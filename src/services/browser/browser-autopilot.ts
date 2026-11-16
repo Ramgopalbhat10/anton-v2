@@ -4,90 +4,61 @@ import { RISKY_WORDS } from './browser-step.ts';
 import { choiceOf, consult, yesOf } from '../models/decisions.ts';
 
 /*
- * Browsing on autopilot: the agent names an outcome ("open the closed pull
- * requests", "fill the form with these values") and the decision model
- * drives the page to it, a step at a time. Each round is one call that reads
- * the page and answers typed questions: is the goal reached, is it out of
- * reach, which kind of action comes next, which element to click, and which
- * field each given value goes in. Code acts on the answers through the same
- * browser step the agent uses, so it works in the Browser panel and in the
- * sandbox alike. A round costs a fraction of a cent and a few hundred
- * milliseconds, where a model step costs cents and seconds.
- *
- * The decision model only ever picks from what is on the page and from the
- * values the agent gave it; nothing it says becomes a selector or text. Before
- * a click that could buy, send, post or delete something, a second question
- * asks whether it would, and if so the round stops: only the agent, on its
- * brief's say-so, confirms such a click by name.
+ * Autopilot: the decision model drives the page toward the agent's goal, one cheap call a round, through the same browser step
+ * the agent uses. It only ever picks from what is on the page and the values the agent gave; nothing it says becomes a
+ * selector or text. A click that could buy, send, post or delete stops the run unless the agent confirms it by name.
  */
 
 export type AutopilotInput = {
 	goal: string;
-	/** Text the agent wants typed, by what it is ("email": "ada@example.com"); the model picks the field for each. */
+	/** By what it is ("email": "ada@example.com"); the model picks the field for each. */
 	values?: Record<string, string>;
-	/** The name of an element the agent confirms clicking although it may buy, send, post or delete something. */
 	confirm?: string;
 	maxActions?: number;
 };
 
 export type AutopilotOutcome = 'done' | 'stuck' | 'unsure' | 'needs_confirmation' | 'max_actions' | 'stopped';
 
-/** One thing the autopilot did, and how sure the decision model was of it. */
 export type AutopilotAction = { what: string; p: number | null; failed?: boolean };
 
 export type AutopilotResult = {
 	outcome: AutopilotOutcome;
 	actions: AutopilotAction[];
-	/** For needs_confirmation, the element it stopped before; for unsure, the choices it weighed. */
 	about: string | null;
 	decisions: number;
 	cost: number;
 	state: BrowserState;
 };
 
-/** An element on the page the autopilot can use, with the selector the browser step takes. */
 export type Candidate = { role: string; name: string; label: string; selector: string; kind: 'click' | 'field' };
 
 const CLICKABLE = new Set(['button', 'link', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'checkbox', 'radio', 'switch', 'option', 'treeitem']);
 const FIELDS = new Set(['textbox', 'searchbox', 'combobox', 'spinbutton']);
 
-/** Choices offered in one round: a page with more than this is cut, which the agent can still do by hand. */
+/** A page with more is cut; the agent can still do the rest by hand. */
 const MAX_CLICKS = 120;
 const MAX_FIELDS = 40;
-/** The page as the decision model reads it each round. */
 const PAGE_CHARS = 12_000;
 const DEFAULT_ACTIONS = 8;
 export const MAX_ACTIONS = 15;
 const DONE = 'Is the goal already reached? Say yes only if this page itself shows it (its address, title or content prove it), not because a link toward it is on the page.';
 
-/** A round ends the run as done or out of reach when the model is at least this sure. */
 const SURE = 0.8;
-/** Below this, the model's choice of action or element is too unsure to act on. */
 const UNSURE = 0.5;
-/** A value goes in a field only when the model is at least this sure it belongs there. */
 const FILL = 0.6;
-/** A click judged at least this likely to buy, send, post or delete stops for confirmation. */
 const RISKY = 0.5;
 
-/**
- * Controls that move around a page or choose among its parts, never commit anything: a click on one is asked
- * about only for risky words. Any other kind of control (a button, a menu item, a checkbox) is always asked about.
- */
+/** These only move around a page, so a click on one is asked about only for risky words; any other control always is. */
 const NAVIGATES = new Set(['link', 'tab', 'treeitem']);
 
-/** Whether a click on this, named by its label or selector, could be one to confirm first. */
 export const mayBeIrreversible = (text: string) => RISKY_WORDS.test(text);
 
-/** One line of the accessibility tree: `- role "name" [state]: value`, maybe quoted whole as YAML does for some names. */
+/** `- role "name" [state]: value`, maybe quoted whole as YAML does for some names. */
 const LINE = /^\s*- '?([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?:\s*\[[^\]]*\])*)'?(?::\s*(.*))?$/;
 
-/** An iframe's tree, as the browser step adds it after the page's: `- iframe [frame=N]:`. */
 const FRAME = /^(\s*)- iframe \[frame=(\d+)\]:$/;
 
-/**
- * The controls in a page's accessibility tree, in page order, each with a selector that finds exactly it;
- * one in an iframe's tree with `frame=N >> ` before it, counted within its frame.
- */
+/** One in an iframe's tree has `frame=N >> ` before its selector, counted within its frame. */
 export function candidatesOf(snapshot: string): Candidate[] {
 	const out: Candidate[] = [];
 	const seen = new Map<string, number>();
@@ -124,29 +95,19 @@ export function candidatesOf(snapshot: string): Candidate[] {
 	return out;
 }
 
-/**
- * Each task's elements judged safe to click, by page and label, so clicking one again ("Add one", twice, or
- * across the do calls of one test) asks nothing. A page is its address without the part after #; the same
- * label elsewhere is asked about again, as a "Continue" on another page may be the one that pays.
- */
+/** By page (address without #) and label, so a repeated click asks nothing; the same label on another page is asked about again. */
 const judgedSafe = new Map<string, Set<string>>();
 const MAX_SAFE = 500;
 const MAX_TASKS = 200;
 const safeKey = (url: string, label: string) => `${url.split('#')[0]}\n${label}`;
 function remember(safe: Set<string>, key: string) {
 	safe.add(key);
-	// The oldest go first, so a long task's set stays small.
 	if (safe.size > MAX_SAFE) safe.delete(safe.values().next().value!);
 }
 
 const pct = (p: number | null) => (p === null ? '' : ` (${p.toFixed(2)})`);
 
-/**
- * Drives the page toward `goal` through `step`, one decision-model round per
- * action, and says how it ended. Stops when the goal is reached or out of
- * reach, when the model is unsure, before a click to confirm, or after
- * `maxActions`. `onAction` hears each action as it is taken.
- */
+/** Stops when the goal is reached or out of reach, when the model is unsure, before a click to confirm, or after `maxActions`. */
 export async function autopilot(
 	id: string,
 	step: (command: BrowserInput) => Promise<BrowserState>,
@@ -154,7 +115,6 @@ export async function autopilot(
 	options: {
 		signal?: AbortSignal;
 		onAction?: (actions: AutopilotAction[], decisions: number, cost: number) => void;
-		/** The page as the step just before left it (an open), so the run need not look at it again first. */
 		start?: BrowserState;
 	} = {},
 ): Promise<AutopilotResult> {
@@ -184,10 +144,7 @@ export async function autopilot(
 	};
 	const end = (outcome: AutopilotOutcome, about: string | null = null): AutopilotResult => ({ outcome, actions, about, decisions, cost, state });
 
-	/**
-	 * Acts, then waits for the page to show it: some sites change the page without loading a new one. Says
-	 * whether the page changed, only scrolled (a "go to" link or a table of contents), or did neither.
-	 */
+	/** Some sites change the page without loading a new one; says whether it changed, only scrolled, or neither. */
 	const act = async (command: BrowserInput): Promise<'changed' | 'scrolled' | null> => {
 		const before = state.snapshot;
 		const view = state.view;
@@ -201,8 +158,7 @@ export async function autopilot(
 
 	for (let round = 0; ; round++) {
 		if (options.signal?.aborted) return end('stopped');
-		// At the limit, one last look says whether the actions taken reached the goal: a run held to one or two actions
-		// that did what was asked ends as done, not as a limit the agent reads as a failure and checks again.
+		// At the limit, one last look says whether the goal was reached, so a short run that did what was asked ends as done.
 		if (actions.length >= limit) {
 			const last = await ask(
 				{ goal: input.goal.slice(0, 2000), url: state.url, title: state.title, actions_taken: actions.map((action) => action.what).join('\n'), page: state.snapshot.slice(0, PAGE_CHARS) },
@@ -257,7 +213,6 @@ export async function autopilot(
 				const pick = choiceOf(answers[`value${index}`]);
 				const field = pick && pick.choice !== 'none' && pick.p >= FILL ? fields[Number(pick.choice.slice(1))] : undefined;
 				if (!field) continue;
-				// A select is chosen from; any other field is typed into.
 				if (field.role === 'combobox') await act({ action: 'select', target: field.selector, text: value });
 				if (field.role !== 'combobox' || state.problem) await act({ action: 'type', target: field.selector, text: value });
 				const failed = Boolean(state.problem);
@@ -310,10 +265,8 @@ export async function autopilot(
 	}
 }
 
-/** The question asked before a click that could matter. */
 export const IRREVERSIBLE = 'Would clicking this element buy or pay for something, send or post a message, publish, delete, or otherwise make a change that cannot be undone?';
 
-/** The top choices a model weighed, for an agent taking over from an unsure round. */
 function weighed(answer: Answer | undefined, labels: Record<string, string>): string | null {
 	if (!answer || !('probabilities' in answer)) return null;
 	const top = Object.entries(answer.probabilities)
@@ -323,7 +276,6 @@ function weighed(answer: Answer | undefined, labels: Record<string, string>): st
 	return `it weighed: ${top.join('; ')}`;
 }
 
-/** What the agent should make of how a run ended. */
 export function outcomeNote(result: AutopilotResult): string {
 	switch (result.outcome) {
 		case 'done':

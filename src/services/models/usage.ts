@@ -5,19 +5,17 @@ import { startOfToday } from './budget.ts';
 import { logProblem } from '../../core/log.ts';
 import { type PlanUsage, planUsage } from './subscriptions.ts';
 
-/** What the runtime reports for one response; cached prompt tokens are still prompt tokens. */
+/** Cached prompt tokens are still prompt tokens. */
 type ResponseUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } };
 
 export function toUsage(usage: ResponseUsage): Usage {
 	return { inputTokens: usage.input + usage.cacheRead + usage.cacheWrite, outputTokens: usage.output, cost: usage.cost.total, cachedTokens: usage.cacheRead };
 }
 
-/** Two usages together. */
 export function addUsage(a: Usage, b: Usage): Usage {
 	return { inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, cost: a.cost + b.cost, cachedTokens: (a.cachedTokens ?? 0) + (b.cachedTokens ?? 0) };
 }
 
-/** Adds usage to the task's totals, under the model that did the work; a failed write only loses the count. */
 export async function recordUsage(id: string, usage: Usage, model: string | null = null, turnId: string | null = null): Promise<boolean> {
 	return addSessionUsage(id, usage, new Date(), model ? unrouted(model) : null, turnId).catch((error: unknown) => {
 		logProblem('warn', 'Usage not recorded', error, id);
@@ -33,15 +31,10 @@ type TurnEvent = {
 	response?: { usage?: ResponseUsage };
 };
 
-/** `openrouter/<id>`, the way tasks name their model, so a subagent on another model is counted under it. */
 /** A task's route is no model of its own: its calls count under the model. */
 const modelOf = (request: TurnEvent['request']) => (request ? unrouted(`${request.providerId}/${request.requestedModel}`) : null);
 
-/**
- * Counts every model call as it ends: the agent's, its subagents' and
- * compaction's, including calls in a response that is later stopped or fails.
- * Returns the task it counted against, if any.
- */
+/** Includes calls in a response that is later stopped or fails. Returns the task it counted against, if any. */
 export async function recordTurnUsage(event: TurnEvent): Promise<string | null> {
 	if (event.type !== 'turn' || !event.instanceId || !event.response?.usage) return null;
 	const recorded = await recordUsage(event.instanceId, toUsage(event.response.usage), modelOf(event.request), event.turnId ?? null);
@@ -54,19 +47,16 @@ function startOfMonth(now: Date): Date {
 	return day;
 }
 
-/** Days the daily chart covers, today included. */
 export const DAILY_DAYS = 30;
 
-/** One model's spend on one local day (`YYYY-MM-DD`); `model` is null when it was not recorded. */
 export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
 
-/** A local date as `YYYY-MM-DD`, the way the daily cap counts days. */
+/** The way the daily cap counts days. */
 export function dayKey(date: Date): string {
 	const pad = (value: number) => String(value).padStart(2, '0');
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-/** Spend per local day and model over the last `DAILY_DAYS` days, oldest first. Days with nothing spent are left out. */
 async function dailySpend(now: Date): Promise<DailySpend[]> {
 	const since = startOfToday(now);
 	since.setDate(since.getDate() - (DAILY_DAYS - 1));
@@ -82,7 +72,6 @@ async function dailySpend(now: Date): Promise<DailySpend[]> {
 	return [...rows.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
-/** What has been spent this month, in total and by repository and model, from the server's local midnight on the 1st, and each of the last 30 days. */
 export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans: PlanUsage[] };
 
 export async function usageView(now = new Date()): Promise<UsageView> {

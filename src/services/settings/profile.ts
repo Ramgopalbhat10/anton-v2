@@ -3,7 +3,6 @@ import { logProblem } from '../../core/log.ts';
 
 let cached: Promise<string | null> | undefined;
 
-/** Who Anton acts as on the git host, asked once; a failed ask is tried again next time. */
 export function profileName(): Promise<string | null> {
 	cached ??= getProviders()
 		.git.accountName()

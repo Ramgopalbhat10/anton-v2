@@ -19,21 +19,13 @@ import { runnerFor, runnerOf } from '../tasks/runners.ts';
 
 export { previewHosts, previewPortsFor } from './machine-setup.ts';
 
-/** A chat's project is null: it has no repository, so its sandbox starts from an empty scratch folder. */
 type Context = { machine: Machine; session: SessionRecord; project: Project | null };
 
-/**
- * Machines of tasks created before the ready marker existed: their own machine,
- * once it has saved a checkpoint. Newer tasks always get the marker, so a
- * checkpoint saved after a failed or stopped setup never counts as ready.
- */
+/** Tasks from before the ready marker. Newer tasks always get it, so a checkpoint saved after a failed setup never counts as ready. */
 const setUpBeforeMarker = (session: SessionRecord, origin: MachineOrigin) =>
 	session.legacySetup && (origin === 'live' || origin === 'resumed') && session.checkpointAt !== null;
 
-/**
- * Whether the machine is the task's own and set up (its marker holds the task id), a spare set up for it while it
- * was typed, or neither. Images carry the marker of the machine they were made in, so they never count.
- */
+/** Images carry the marker of the machine they were made in, so they never count. */
 type Readiness = { state: 'ready' } | { state: 'spare'; marker: string } | { state: 'unready' };
 
 async function readinessOf(machine: Machine, session: SessionRecord, origin: MachineOrigin): Promise<Readiness> {
@@ -43,23 +35,16 @@ async function readinessOf(machine: Machine, session: SessionRecord, origin: Mac
 	return parseSpareMarker(marker)?.taskId === session.id ? { state: 'spare', marker } : { state: 'unready' };
 }
 
-/** Sets up a machine that is not ready yet: one fresh from an image or the toolchain. */
 async function prepare(context: Context, origin: MachineOrigin): Promise<void> {
 	const { machine, session, project } = context;
 	const from = !project ? 'scratch' : origin === 'image' ? 'image' : 'clone';
 	const installed = await setUpMachine(machine, project, { marker: session.id, branch: session.branch, sha: session.baseSha }, from);
-	// The repo's image is built in a sandbox of its own, in the background, so no task waits on a snapshot: when it is
-	// missing or old, or when this task found the lockfile changed and had to install. A task on this server makes
-	// none, as images belong to the sandbox, where the next task on the repo starts.
+	// Built in its own sandbox in the background, so no task waits on a snapshot. Not for a task on this server: images belong to the sandbox.
 	if (project && session.runOn !== 'host') renewPreparedImage(project.id, from === 'image' && installed);
 	await putBackSavedFiles(machine, session.id);
 }
 
-/**
- * A fresh machine for a task that has saved files (a fork, or a task whose
- * sandbox is gone) starts from them. After the image, so no image holds a
- * task's files; a file that cannot be put back is logged, not fatal.
- */
+/** After the image, so no image holds a task's files; a file that cannot be put back is logged, not fatal. */
 async function putBackSavedFiles(machine: Machine, id: string): Promise<void> {
 	const checkpoint = await readCheckpoint(id);
 	if (!checkpoint) return;
@@ -79,11 +64,7 @@ async function load(id: string): Promise<{ session: SessionRecord; project: Proj
 
 const isUsed = (origin: MachineOrigin) => origin === 'live' || origin === 'resumed';
 
-/**
- * The task's machine, set up or ready to be. A machine of its own that lacks
- * the marker may have been used by the agent or the terminal since, and
- * setup runs with Anton's credentials, so it is set aside for a fresh one.
- */
+/** Setup runs with Anton's credentials, so a machine of its own without the marker (maybe used since) is set aside for a fresh one. */
 async function acquireReady(session: SessionRecord, project: Project | null): Promise<{ acquired: Acquired; readiness: Readiness }> {
 	const sandbox = runnerFor(session.runOn);
 	const settings = await sandboxSettings();
@@ -98,25 +79,23 @@ async function acquireReady(session: SessionRecord, project: Project | null): Pr
 async function provision(id: string): Promise<Machine> {
 	const startedAt = Date.now();
 	const { session, project } = await load(id);
-	// A sandbox woken while the task was typed is set up, or nearly: wait for it rather than start a second one, and
-	// keep its open connection rather than look it up again.
+	// Wait for a spare woken while the task was typed rather than start a second one.
 	const spare = await claimSpare(session).catch((error: unknown) => {
 		logProblem('warn', 'The sandbox woken for this task could not be used', error, id);
 		return null;
 	});
 	const { acquired, readiness } = spare ? { acquired: spare.acquired, readiness: { state: 'spare', marker: spare.marker } as const } : await acquireReady(session, project);
 	const ports = await previewEnv(acquired.machine, project);
-	// A review task may be on a repo added only by pasting a link, whose own install scripts are its owner's code:
-	// it gets the repo's own variables (none unless you set some), never the shared ones, and the code of a
-	// pull request whose author cannot push to the repo gets none at all.
+	// A review task's repo may be added only by pasting a link and its install scripts are its owner's code: it gets the repo's
+	// own variables only, never the shared ones, and a pull request whose author cannot push to the repo gets none.
 	const variables = session.review ? (project?.env ?? {}) : await envFor(project);
 	const setupMachine = withEnv(acquired.machine, { ...ports, ...variables });
 	const machine = session.review && !session.review.trusted ? withEnv(acquired.machine, ports) : setupMachine;
 	await updateSession(id, { machineState: acquired.state, failed: false, errorMessage: null });
 	const acquiredAt = Date.now();
-	// They sit beside the repo, not in it, so they are copied while it is set up rather than after.
+	// Beside the repo, so copied while it is set up.
 	const files = Promise.all([
-		// A project's thread gets the project's files beside its repo, each start, since files can be added at any time.
+		// Each start, since project files can be added at any time.
 		session.spaceId ? copySpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not copy the project files', error, id)) : null,
 		// So do the files attached to its messages before it had a sandbox, and, in a fresh machine, what it saved before.
 		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
@@ -143,13 +122,9 @@ async function provision(id: string): Promise<Machine> {
 
 const machines = new Map<string, Promise<Machine>>();
 const starting = new Set<string>();
-/**
- * Machines stay cached briefly so a burst of UI requests resolves one sandbox, and for as long as the task's
- * agent works and the machine runs, since each of its computer steps and messages asks for it again.
- */
+/** Cached so a burst of UI requests resolves one sandbox, and for as long as the agent works and the machine runs. */
 const CACHE_MS = 20_000;
 
-/** The task's machine, started or resumed if it is not running. */
 export function machineFor(id: string): Promise<Machine> {
 	const cached = machines.get(id);
 	if (cached) return cached;
@@ -175,13 +150,7 @@ export function machineFor(id: string): Promise<Machine> {
 	return pending;
 }
 
-/**
- * Starts a repository task's machine as its agent starts a reply, so its first command or edit (or a routine chat's
- * `start_workspace`) finds it started or starting; its reads need none.
- * Not for a chat (most never need one) unless a routine started it (routine runs mostly run a skill's scripts, and
- * nobody is waiting to see whether they will), a task planning or reviewing (they read first), one that runs on this
- * server, or one that already has a machine. Nothing waits for it, and a start that fails is tried again when the agent asks.
- */
+/** Not for a chat unless a routine started it, a plan or review (they read first), a task on this server, or one that already has a machine. */
 export async function prewarmMachine(id: string): Promise<void> {
 	if (!config.prewarmSandbox || machines.has(id)) return;
 	const session = await getSessionRecord(id);
@@ -189,12 +158,7 @@ export async function prewarmMachine(id: string): Promise<void> {
 	await machineFor(id).catch((error: unknown) => logProblem('warn', 'The sandbox did not start ahead of the agent', error, id));
 }
 
-/**
- * Starts a task's machine while a message to it is being typed, so it is up, or nearly, when the message is sent.
- * For a task that has had a machine (it is likely to need it again, and comes back from its saved state), or one
- * `prewarmMachine` would start as the agent replies. Never for a review or a task on this server. One that stays
- * unused stops after its idle minutes. Returns whether a start is under way.
- */
+/** For a task that has had a machine or one `prewarmMachine` would start. Never for a review or a task on this server. */
 export async function wakeMachine(id: string): Promise<{ waking: boolean }> {
 	if (!config.wakeSandbox) return { waking: false };
 	if (machines.has(id)) return { waking: true };
@@ -205,14 +169,12 @@ export async function wakeMachine(id: string): Promise<{ waking: boolean }> {
 	return { waking: true };
 }
 
-/** The task's machine only if it is already running. */
 export async function liveMachine(id: string): Promise<Machine | null> {
 	const cached = machines.get(id);
 	if (cached && !starting.has(id)) return cached;
 	return findMachine(id);
 }
 
-/** The task's running machine, asked of the runner its task names; none for an id that is no task. */
 async function findMachine(id: string): Promise<Machine | null> {
 	const runner = await runnerOf(id);
 	return runner ? runner.find(id) : null;

@@ -46,17 +46,13 @@ export type AutomationInput = {
 	model?: string | null;
 	reasoning?: Reasoning | null;
 	planFirst?: boolean;
-	/** A project to start its tasks in, as threads; the repository must be one of the project's. */
+	/** Starts its tasks as threads; the repository must be one of the project's. */
 	spaceId?: string | null;
-	/** A project's schedule only: an installed skill's script, `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
+	/** Project schedules only: an installed skill's script, `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
 	gate?: string | null;
 };
 
-/**
- * An automation's settings once checked: on a repository, or with `projectId` null a project's routine whose
- * threads start as chats. Those need the project, and can only run on a schedule, since labeled issues belong
- * to a repository.
- */
+/** With `projectId` null, a project's routine whose threads start as chats; it can only run on a schedule. */
 async function checked(projectId: string | null, input: AutomationInput): Promise<NewAutomation> {
 	if (projectId && !(await getProject(projectId))) throw new NotFoundError('Project not found');
 	if (!projectId && !input.spaceId) throw new InvalidInputError('Pick a repository');
@@ -98,16 +94,11 @@ async function checked(projectId: string | null, input: AutomationInput): Promis
 	};
 }
 
-/** Adds an automation on a repository, or with `projectId` null a project's routine whose threads start as chats. */
 export async function addAutomation(projectId: string | null, input: AutomationInput): Promise<Automation> {
 	return insertAutomation(await checked(projectId, input));
 }
 
-/**
- * Changes what an automation does, checked as when it was added. It stays where it is: a repository's on that
- * repository, a project's routine in its project, where `projectId` picks its repository (null for chats) and
- * leaving it out keeps the one it has. Its runs, and the issues it picked up, are kept.
- */
+/** It stays where it is; `projectId` picks a project routine's repository (null for chats) and leaving it out keeps the one it has. */
 export async function editAutomation(id: string, input: Omit<AutomationInput, 'spaceId'> & { projectId?: string | null }): Promise<Automation> {
 	const automation = await existing(id);
 	const projectId = automation.spaceId && input.projectId !== undefined ? input.projectId || null : automation.projectId || null;
@@ -161,10 +152,6 @@ function issuePrompt(issue: Issue, extra: string): string {
 	].join('\n');
 }
 
-/**
- * Creates a task and gives its agent the instructions, the same as typing them on the launcher. A project's
- * routine starts it as one of the project's threads instead, which waits its turn when the project is busy.
- */
 async function startTask(automation: Automation, title: string, prompt: string, id?: string): Promise<string> {
 	if (automation.spaceId) {
 		const thread = await startThread(automation.spaceId, {
@@ -177,7 +164,6 @@ async function startTask(automation: Automation, title: string, prompt: string, 
 			reasoning: automation.reasoning ?? undefined,
 			planMode: automation.planFirst,
 		});
-		// The coordinator did not start it, so it hears of it, and its feed shows it as it starts.
 		await threadStarted(thread.id, { by: 'routine', routine: automation.schedule ? describeSchedule(automation.schedule) : `on issues labeled “${automation.label}”` });
 		return thread.id;
 	}
@@ -199,26 +185,17 @@ async function startTask(automation: Automation, title: string, prompt: string, 
 	return session.id;
 }
 
-/** The day a run started on its schedule's clock, as its thread's title ends: runs of one routine read apart in lists and in the project's Library. */
 const runDay = (now: number, timeZone?: string) => new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone });
 
-/** A schedule's next run after `now`, as kept on the automation. */
 const upcoming = (schedule: Schedule, now: number) => nextRun(schedule, new Date(now))?.toISOString() ?? null;
 
-/**
- * When a schedule is due: its next run as kept, or for one kept before next runs were (an "every N hours"
- * routine moved to a schedule), the first after its last run, else after it was added.
- */
+/** Its kept next run or, for one kept before next runs were, the first after its last run, else after it was added. */
 function dueAt(automation: Automation & { schedule: Schedule }): number {
 	if (automation.nextRunAt) return Date.parse(automation.nextRunAt);
 	const next = nextRun(automation.schedule, new Date(automation.lastRunAt ?? automation.createdAt));
 	return next ? next.getTime() : Number.POSITIVE_INFINITY;
 }
 
-/**
- * A routine's short name, its runs' title: written once from its instructions by the title model and kept on it
- * (until they change), or the start of them without one. `spent` is the model's call, counted on the run it names.
- */
 async function routineName(automation: Automation): Promise<{ name: string; spent: ShortTitle | null }> {
 	if (automation.title) return { name: automation.title, spent: null };
 	const named = await shortTitle(automation.prompt).catch((error: unknown) => {
@@ -230,7 +207,6 @@ async function routineName(automation: Automation): Promise<{ name: string; spen
 	return { name: named.title, spent: named };
 }
 
-/** The gate's answer; when it cannot run, the run starts, and the answer says why. */
 async function gated(automation: Automation & { gate: string }, now: number): Promise<GateAnswer> {
 	try {
 		return await runGate(automation, now);
@@ -243,12 +219,10 @@ async function gated(automation: Automation & { gate: string }, now: number): Pr
 type Run = { now: number; force: boolean };
 
 /**
- * A routine's sandbox starts this long before its run, under the id its task will have (`spares.ts`), so the run
- * starts on a set-up machine. Schedules are looked at each minute, so it is woken one or two looks ahead. Not for a
- * routine with a gate (most of its runs may be skipped), one that plans first (it reads first), or one without a repo.
+ * The sandbox wakes this long ahead under its task's future id (`spares.ts`); schedules are looked at each minute.
+ * Not for a gated routine (most runs may be skipped), one that plans first, or one without a repo.
  */
 const WAKE_AHEAD_MS = 90_000;
-/** The task id each routine's coming run was woken under. */
 const wokenRuns = new Map<string, string>();
 
 function wakeAhead(automation: Automation, due: number, now: number): void {
@@ -261,7 +235,6 @@ function wakeAhead(automation: Automation, due: number, now: number): void {
 
 const running = new Set<string>();
 
-/** Each kind starts what is due and returns what to remember about this run. */
 const runners: Record<Automation['kind'], (automation: Automation, project: Project | null, run: Run) => Promise<Partial<Automation>>> = {
 	async issues(automation, project, { now }) {
 		if (!project) throw new InvalidInputError('Labeled issues need a repository');
@@ -307,17 +280,12 @@ const runners: Record<Automation['kind'], (automation: Automation, project: Proj
 	},
 };
 
-/**
- * Starts the tasks an automation is due to start; `force` runs a schedule
- * early. Errors are kept on the automation for the settings page.
- */
 export async function runAutomation(id: string, { now = Date.now(), force = false } = {}): Promise<Automation> {
 	// Run now and the timer can meet; one run at a time, reading the automation only once it holds the turn.
 	if (running.has(id)) return existing(id);
 	running.add(id);
 	try {
 		const automation = await existing(id);
-		// A project's routine without a repository starts its threads as chats.
 		const project = automation.projectId ? await getProject(automation.projectId) : null;
 		if (automation.projectId && !project) throw new NotFoundError('Project not found');
 		const update = await runners[automation.kind](automation, project, { now, force });
@@ -330,7 +298,6 @@ export async function runAutomation(id: string, { now = Date.now(), force = fals
 	return existing(id);
 }
 
-/** Runs every enabled automation (of `kind`, if given) that is due; nothing starts while today's spending cap is reached. */
 export async function runDueAutomations(now = Date.now(), kind?: Automation['kind']): Promise<void> {
 	if ((await budget()).blocked) return;
 	for (const automation of await listAutomations()) {

@@ -4,19 +4,9 @@ import { unrouted } from '../../core/model-route.ts';
 import type { AgentSpan, CompactionSpan, ModelSpan, ToolSpan, Trace, TraceMessage, TracePart, TraceSpan } from '../../core/trace.ts';
 import { measureRequest, scaleParts } from './context-usage.ts';
 
-/**
- * Each reply's trace, for the trace modal in the thread: every model call and
- * tool call the reply made, its subagents' too, on one clock. The runtime
- * tells Anton the request of each call (system prompt, tools, messages) and
- * what the provider counted, cache reads and writes apart, so a call's trace
- * says what went into its context, what it added since the call before, and
- * whether the cache held. Kept per reply, cut to sizes that stay readable,
- * and saved when the reply finishes (`src/db/traces.ts`).
- */
+/** Kept per reply, cut to sizes that stay readable, and saved when the reply finishes (`src/db/traces.ts`). */
 
-/** Spans one trace keeps; the rest are counted as dropped. */
 const MAX_SPANS = 600;
-/** Messages kept of what a call added, the latest; and characters kept of each. */
 const MAX_ADDED = 8;
 const MESSAGE_CHARS = 2500;
 const INPUT_CHARS = 4000;
@@ -61,15 +51,14 @@ type Open = {
 	tools: Map<string, ToolSpan>;
 	agents: Map<string, AgentSpan>;
 	compactions: Map<string, CompactionSpan>;
-	/** How many messages each conversation's latest call sent, to tell what the next one added. */
 	sent: Map<string, number>;
-	/** `task` calls about to start a subagent, by brief: the runtime's start event names neither the call nor its lane. */
+	/** The runtime's start event names neither the call nor its lane, so they are matched by brief. */
 	delegating: Map<string, { call: string; lane: string; description: string | null }>;
 };
 
 const open = new Map<string, Open>();
 
-/** A reply starts: trace it from now. `resumed` marks one begun mid-reply, after a restart. */
+/** `resumed` marks one begun mid-reply, after a restart. */
 export function startTrace(id: string, resumed = false): void {
 	open.set(id, {
 		trace: { id: randomUUID(), sessionId: id, startedAt: new Date().toISOString(), durationMs: 0, model: null, spans: [], prompts: {}, toolsets: {}, dropped: 0, ...(resumed ? { resumed } : {}) },
@@ -96,7 +85,6 @@ const json = (value: unknown) => {
 	}
 };
 
-/** A message's content as text: images named, tool calls as their name and arguments. */
 function contentText(content: LlmMessage['content']): string {
 	if (typeof content === 'string') return content;
 	if (!Array.isArray(content)) return '';
@@ -118,16 +106,12 @@ function messageOf(message: LlmMessage): TraceMessage {
 	return { role, text: cut(text, MESSAGE_CHARS), chars: text.length, ...(message.toolName ? { tool: message.toolName } : {}) };
 }
 
-/** A tool's result as text: the runtime's `{ content }`, else the value as JSON. */
 function resultText(result: unknown): string {
 	if (result && typeof result === 'object' && Array.isArray((result as { content?: unknown }).content)) return contentText((result as LlmMessage).content);
 	return json(result);
 }
 
-/**
- * The messages a call added to its conversation: those past what the previous call sent, or, for a
- * conversation's first call in the reply (or one after a compaction shrank it), those after the model's last word.
- */
+/** For a conversation's first call in the reply, or one after a compaction shrank it, those after the model's last word. */
 function addedMessages(messages: LlmMessage[], before: number | undefined): LlmMessage[] {
 	if (before !== undefined && before <= messages.length) return messages.slice(before);
 	let last = messages.length - 1;
@@ -147,11 +131,7 @@ function push(state: Open, span: TraceSpan): boolean {
 	return true;
 }
 
-/**
- * Records one runtime event into its task's open trace. The reviewer, working
- * under a task's id, has replies of its own and is left out. Runs in the event
- * observer, synchronously, so a reply's last call is in its trace by the time it finishes.
- */
+/** The reviewer has replies of its own and is left out. Synchronous, so a reply's last call is in its trace by the time it finishes. */
 export function recordTraceEvent(event: TraceEvent): void {
 	if (!event.instanceId) return;
 	if (event.agentName && /^reviewer$/i.test(event.agentName)) return;
@@ -305,7 +285,7 @@ export function recordTraceEvent(event: TraceEvent): void {
 	}
 }
 
-/** The reply's trace, ending it; null when its start was not seen (a reply resumed after a restart) or it did nothing. */
+/** Null when its start was not seen (a reply resumed after a restart) or it did nothing. */
 export function finishTrace(id: string): Trace | null {
 	const state = open.get(id);
 	open.delete(id);

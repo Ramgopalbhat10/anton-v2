@@ -9,17 +9,9 @@ import { backgroundModel, backgroundReasoning, textEffort } from './general.ts';
 import { modelFor } from '../tasks/sessions.ts';
 import { recordUsage } from './usage.ts';
 
-/*
- * The computer tool's eyes: a vision model through the VisionModel port,
- * asked about one screenshot at a time with no tools, so it can only answer.
- * Each look is counted on the task like any model call.
- */
+// Asked about one screenshot at a time with no tools, so it can only answer.
 
-/**
- * The model that looks at the screen: the computer subagent's own model from
- * Settings when the vision port runs it and it reads images, else the task's,
- * else the vision model from Settings › General's background models, else ANTON_VISION_MODEL.
- */
+/** The computer subagent's own model when the vision port runs it and it reads images, else the task's, else the background vision model, else ANTON_VISION_MODEL. */
 export function visionModelFor(id: string): string {
 	const vision = getProviders().vision;
 	const models = loadedModels();
@@ -45,7 +37,6 @@ async function look(id: string, prompt: string, png: Uint8Array, signal?: AbortS
 
 const Located = v.object({ found: v.boolean(), x: v.optional(v.nullable(v.number())), y: v.optional(v.nullable(v.number())), note: v.optional(v.string(), '') });
 
-/** The first JSON object in a model's answer, which may come wrapped in a code fence or a sentence. */
 export function jsonIn(text: string): unknown {
 	const start = text.indexOf('{');
 	const end = text.lastIndexOf('}');
@@ -57,7 +48,6 @@ export function jsonIn(text: string): unknown {
 	}
 }
 
-/** Where `what` is on the screen, in pixels, or why it is not there. */
 export async function locate(id: string, what: string, png: Uint8Array, signal?: AbortSignal): Promise<{ at: { x: number; y: number } | null; note: string; cost: number }> {
 	const { text, cost } = await look(
 		id,
@@ -73,7 +63,6 @@ export async function locate(id: string, what: string, png: Uint8Array, signal?:
 	return { at: inside ? { x, y } : null, note, cost };
 }
 
-/** What the screen shows, in a few sentences, with the positions of what matters for `focus`. */
 export async function describe(id: string, png: Uint8Array, focus: string | null, signal?: AbortSignal): Promise<{ screen: string; cost: number }> {
 	const { text, cost } = await look(
 		id,
@@ -85,10 +74,7 @@ export async function describe(id: string, png: Uint8Array, focus: string | null
 	return { screen: text, cost };
 }
 
-/**
- * An image put into words, for a task whose own model cannot see: a picture
- * attached to a project thread's brief reaches it as this description.
- */
+/** For a task whose own model cannot see: a picture attached to a project thread's brief reaches it as this. */
 export async function describeImage(id: string, image: Uint8Array, mimeType: string, signal?: AbortSignal): Promise<string> {
 	const { text } = await look(
 		id,

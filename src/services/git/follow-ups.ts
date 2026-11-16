@@ -10,41 +10,26 @@ import { decide, yesOf } from '../models/decisions.ts';
 import { logProblem } from '../../core/log.ts';
 import { readPullRequest } from './pr-status.ts';
 
-/** After this many automatic messages a task waits for a person, so a fix that keeps failing cannot loop. */
+/** So a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
 
-/**
- * What has been handled on one pull request: the last head commit whose
- * failures were sent, the head and base its conflicts were last sent for,
- * the comments sent, how many messages since a person last wrote, and
- * whether it is merged or closed.
- */
 type FollowState = { url?: string; sha: string | null; conflict?: string | null; seen: string[]; sent: number; done?: boolean };
 
 const initial: FollowState = { sha: null, seen: [], sent: 0 };
 
-/** The state for the task's current pull request; a new pull request starts afresh. */
 function stateFor(session: SessionRecord): FollowState {
 	const state = session.followState ? (JSON.parse(session.followState) as FollowState) : initial;
 	return state.url === undefined || state.url === session.prUrl ? state : initial;
 }
 
-/**
- * Deploy and status bots comment on every push; review bots leave reviews and
- * line comments, which are kept. Anton's own review that found nothing asks nothing.
- */
+/** Deploy and status bots comment on every push; review bots' reviews and line comments are kept. */
 const isNoise = (comment: PullRequestComment) => (comment.author.endsWith('[bot]') && comment.id.startsWith('comment-')) || comment.body.includes(CLEAN_MARK);
 
-/** Comments not yet handled that might ask the agent for something. */
 export const unseenComments = (activity: PullRequestActivity, state: FollowState) => activity.comments.filter((comment) => !state.seen.includes(comment.id) && !isNoise(comment));
 
-/** At or below this chance that a comment asks for anything, it is taken as thanks or approval and never wakes the agent. */
+/** At or below this chance a comment is taken as thanks or approval and never wakes the agent. */
 const ASKS_NOTHING = 0.1;
 
-/**
- * Comments the decision model is sure ask nothing ("LGTM", "Thanks!"), so a
- * full agent turn is not spent on them. Without a decision model, none.
- */
 async function askingNothing(id: string, comments: PullRequestComment[]): Promise<string[]> {
 	const asks = { type: 'yes-no', instructions: 'Does this pull request comment ask the author to change something, answer a question, or do anything else?' } as const;
 	const answers = await Promise.all(comments.map((comment) => decide(id, { comment: comment.body.slice(0, 20_000) }, { asks })));
@@ -77,11 +62,7 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	].join('\n');
 }
 
-/**
- * What to tell the agent about the pull request now, and the state that
- * records it as handled. `quiet` comments ask nothing; they are marked seen
- * without a message. Conflicts are sent once for each head and base.
- */
+/** `quiet` comments are marked seen without a message. Conflicts are sent once for each head and base. */
 export function nextFollowUp(
 	url: string,
 	activity: PullRequestActivity,
@@ -113,10 +94,6 @@ export function nextFollowUp(
 	};
 }
 
-/**
- * Sends the agent anything new on its pull request: merge conflicts, failed checks on the latest commit, and new comments.
- * `read` is the pull request as just read from the host, when the caller has it; otherwise it is read here.
- */
 export async function followUp(session: SessionRecord, read?: PullRequestActivity): Promise<boolean> {
 	// A task reviewing someone else's pull request has nothing to fix there; its reviews follow pushes instead.
 	if (!session.prUrl || session.review || isWorking(session.id)) return false;
@@ -136,7 +113,6 @@ export async function followUp(session: SessionRecord, read?: PullRequestActivit
 	return next.message !== null;
 }
 
-/** A person wrote to the task, so its agent may again follow up on its own up to the limit. */
 export async function resetFollowUps(id: string): Promise<void> {
 	const session = await getSessionRecord(id);
 	if (!session?.followState) return;
@@ -144,7 +120,6 @@ export async function resetFollowUps(id: string): Promise<void> {
 	if (state.sent > 0) await updateSession(id, { followState: JSON.stringify({ ...state, sent: 0 }) });
 }
 
-/** Checks every task with a pull request; one failing never stops the rest. */
 export async function runFollowUps(): Promise<void> {
 	if ((await budget()).blocked) return;
 	for (const session of (await listSessionRecords()).filter((record) => record.prUrl)) {

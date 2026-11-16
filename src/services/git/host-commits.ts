@@ -3,23 +3,17 @@ import { quote, run } from '../../core/shell.ts';
 import { getProviders } from '../../providers/index.ts';
 import { repoDir } from './git.ts';
 
-/**
- * A machine the agent has used never gets git credentials, and its clone
- * fetches missing files lazily from the host, which then fails: these keep
- * git from trying, so a missing object is an error at once rather than a
- * stalled or failed network call.
- */
+/** A machine the agent used has no git credentials, so a lazy fetch would fail; these make a missing object an error at once. */
 export const OFFLINE_GIT = { GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: 'none', GIT_TERMINAL_PROMPT: '0' };
 
-/** More files than this changed since the machine's commits means a fresh task is the better way in. */
+/** Past this a fresh task is the better way in. */
 const MAX_BLOBS = 2000;
-/** Base64 sent to the machine per command, so a large change never travels as one request. */
 const BATCH_BYTES = 8 * 1024 * 1024;
 const FETCHES_AT_ONCE = 8;
 
 const SHA = /^[0-9a-f]{40}$/;
 
-/** Blob hashes in the trees of `refs` the machine has, read without fetching anything. */
+/** Read without fetching anything. */
 async function blobsIn(machine: Machine, refs: string[]): Promise<Set<string>> {
 	const known = new Set<string>();
 	for (const ref of refs) {
@@ -47,7 +41,6 @@ async function fetchBlobs(repo: string, shas: string[]): Promise<Map<string, Uin
 	return blobs;
 }
 
-/** Writes files into the machine's object store, a line of base64 each, checking each comes out with its hash. */
 async function writeBlobs(machine: Machine, blobs: Map<string, Uint8Array>): Promise<void> {
 	const entries = [...blobs];
 	for (let start = 0; start < entries.length; ) {
@@ -73,7 +66,6 @@ async function writeBlobs(machine: Machine, blobs: Map<string, Uint8Array>): Pro
 const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
 const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
-/** Rebuilds every tree of a listing, deepest first, and checks each against the host's hash. */
 async function writeTrees(machine: Machine, root: string, entries: TreeEntry[]): Promise<void> {
 	const children = new Map<string, TreeEntry[]>([['', []]]);
 	for (const entry of entries) {
@@ -97,22 +89,14 @@ async function writeTrees(machine: Machine, root: string, entries: TreeEntry[]):
 	});
 }
 
-/** Whether git in the machine can read `sha` as a commit, its own or a stand-in. */
 export async function hasCommit(machine: Machine, sha: string): Promise<boolean> {
 	if (!SHA.test(sha)) return false;
 	return (await machine.exec(`git rev-parse -q --verify ${sha}^{commit}`, { cwd: repoDir(machine), env: OFFLINE_GIT })).exitCode === 0;
 }
 
 /**
- * Puts a commit from the host into a machine that holds no credentials.
- * Its files and folders are rebuilt from the host's API with their exact
- * hashes; a commit the machine lacks gets a stand-in git reads in its place
- * (a replace ref), so merges, diffs and new commits that name it use its
- * real hash, and a push finds the host already has it. Its history is not
- * brought: the stand-in's parent is `parent`, which the machine must have
- * checked out at some point (its files count as there), and `note` is its
- * message. A commit the machine knows, but whose files its partial clone
- * never fetched, gets just the files.
+ * Rebuilds the commit's files from the host's API with exact hashes; a commit the machine lacks gets a stand-in (a replace
+ * ref), so merges, diffs and pushes use its real hash. Its history is not brought: the stand-in's parent is `parent`.
  */
 export async function bringCommit(machine: Machine, repo: string, sha: string, parent: string, note: string): Promise<void> {
 	const known = await hasCommit(machine, sha);

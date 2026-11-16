@@ -11,12 +11,7 @@ import { agentNow } from '../tasks/agent-now.ts';
 import { deletedThreads } from './deleted-threads.ts';
 import { minutes, runReport, subagentRuns } from '../tasks/subagent-runs.ts';
 
-/**
- * What a project's coordinator knows each turn. It never reads a thread's
- * transcript: before every message it gets a fresh state block (the goal,
- * instructions, memory, repositories and a line per thread), so its own
- * conversation can be compacted freely and its context stays small.
- */
+/** The coordinator never reads a thread's transcript: a fresh state block each message lets its own conversation compact freely. */
 export type CoordinatorBrief = ModelChoice & { name: string; state: string; propose: boolean };
 
 const briefs = new Map<string, CoordinatorBrief>();
@@ -33,7 +28,6 @@ const clip = (text: string, length: number) => {
 
 const prNumber = (url: string) => /\/pull\/(\d+)/.exec(url)?.[1];
 
-/** One line per thread: what it is, where it stands, and what it last said or asks. */
 export function threadLine(thread: Session): string {
 	const parts = [`[${thread.id.slice(0, 8)}] "${thread.title}"`, thread.repo || 'no repository', THREAD_STATE_LABELS[thread.threadState ?? 'idle']];
 	if (thread.prUrl) {
@@ -47,10 +41,7 @@ export function threadLine(thread: Session): string {
 	return `- ${parts.join(' · ')}`;
 }
 
-/**
- * What a working thread is doing this moment and for how long, and its running subagents' latest steps:
- * enough for the coordinator to say where a quiet thread is, or that it is stuck on one step.
- */
+/** Enough for the coordinator to say where a quiet thread is, or that it is stuck on one step. */
 export async function threadActivity(threadId: string, now = Date.now()): Promise<string> {
 	const lines: string[] = [];
 	const live = agentNow(threadId);
@@ -66,7 +57,6 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 	return lines.join('\n');
 }
 
-/** Open threads all, and the latest few resolved, so a long-lived project's block stays short. */
 const RESOLVED_SHOWN = 5;
 
 export async function stateBlock(spaceId: string): Promise<string> {
@@ -97,7 +87,6 @@ export async function stateBlock(spaceId: string): Promise<string> {
 	return lines.filter(Boolean).join('\n');
 }
 
-/** Loads the coordinator's model and its project's state block, before each message it is given. */
 export async function primeCoordinator(spaceId: string): Promise<void> {
 	const space = await getSpace(spaceId);
 	if (!space) return;
@@ -110,7 +99,6 @@ export async function primeCoordinator(spaceId: string): Promise<void> {
 	briefs.set(spaceId, { model, reasoning, name: space.name, state: await stateBlock(spaceId), propose: space.autonomy === 'propose' });
 }
 
-/** Every project's coordinator, for replies the runtime resumes at startup. */
 export async function primeAllCoordinators(): Promise<void> {
 	for (const space of await listSpaces()) await primeCoordinator(space.id).catch(() => undefined);
 }

@@ -5,13 +5,7 @@ import { decide, hasDecisionModel, yesOf } from '../models/decisions.ts';
 import { changeGate, gate, loadGate, type Said } from './gate-state.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * Whether the coding agent's reply waits on the user: a question to answer, a
- * choice to make, something to provide. A task that does shows as needing
- * you, with the question, until your next message; one that is simply done
- * shows as done. The decision model judges the reply's end; without one, a
- * reply ending in a question does.
- */
+/** A reply that waits on you shows the task as needing you until your next message. The decision model judges; without one, a reply ending in a question does. */
 
 type MessageEvent = {
 	type: string;
@@ -22,18 +16,10 @@ type MessageEvent = {
 	message?: { role?: string; content?: unknown };
 };
 
-/** The question shown with the task is kept short. */
 const MAX_QUESTION = 240;
-/** How sure the decision model must be that the reply waits on the user. */
 const WAITS = 0.6;
 
-/**
- * What the agent said in its current reply, as a reply can say its findings and then a closing line, and whether its
- * latest message had no words, so a reply's end is read from its last message alone. Only the messages from the last
- * of substance on are kept (`closingOf` reads no further back), with the count of those before, and they are kept
- * with the task's checks (`gate-state.ts`): a reply resumed after a restart, or whose end is checked again after one,
- * reads the same end. A long run of short messages keeps its latest `KEEP_SAID`.
- */
+/** Only the messages from the last of substance on are kept, with the task's checks, so a reply resumed after a restart reads the same end. */
 const KEEP_SAID = 100;
 
 const lastWordsOf = (said: Said): string => (said.silent ? '' : (said.texts[said.texts.length - 1] ?? ''));
@@ -44,7 +30,6 @@ function textOf(content: unknown): string {
 	return content.map((block) => (block && typeof block === 'object' && 'text' in block && typeof block.text === 'string' ? block.text : '')).join('');
 }
 
-/** Keeps the agent's latest words in its main conversation, from the runtime's events. Runs in the event observer. */
 export function recordReplyText(event: MessageEvent): void {
 	if (event.type !== 'message_end' || event.message?.role !== 'assistant' || !event.instanceId || event.taskId) return;
 	if (event.session !== undefined && event.session !== 'default') return;
@@ -65,7 +50,6 @@ export function recordReplyText(event: MessageEvent): void {
 	});
 }
 
-/** The last thing the reply asks: its last sentence ending in a question mark, else its last line. */
 export function questionOf(reply: string): string {
 	const lines = reply
 		.split('\n')
@@ -78,7 +62,6 @@ export function questionOf(reply: string): string {
 	return line.length > MAX_QUESTION ? `${line.slice(0, MAX_QUESTION - 1)}…` : line;
 }
 
-/** Whether the reply waits on the user, by the decision model, or by whether it ends in a question. */
 async function waitsOnUser(id: string, reply: string): Promise<boolean> {
 	if (!hasDecisionModel()) return /\?\s*$/.test(questionOf(reply));
 	const answers = await decide(id, { reply: reply.slice(-3000) }, {
@@ -91,17 +74,9 @@ async function waitsOnUser(id: string, reply: string): Promise<boolean> {
 	return yes === null ? /\?\s*$/.test(questionOf(reply)) : yes >= WAITS;
 }
 
-/** How sure the decision model must be that a thread's reply finished its work before the thread is marked done. */
 const FINISHED = 0.7;
 
-/**
- * Whether a reply delivered what was asked, with nothing left for anyone to
- * do: the file is made, the change is in, the document is written. A thread
- * whose reply does is done, as Claude closes a thread once its result is
- * delivered; an answer to a question, a report of progress or a reply that
- * offers a next step leaves it open. Only the decision model judges this, so
- * without one a thread stays open until you mark it done.
- */
+/** Only the decision model judges this, so without one a thread stays open until you mark it done. */
 export async function finishesWork(id: string, asked: string | null, reply: string): Promise<boolean> {
 	const answers = await decide(id, { asked: asked?.slice(-1500) ?? '', reply: reply.slice(-3000) }, {
 		finished: {
@@ -113,15 +88,9 @@ export async function finishesWork(id: string, asked: string | null, reply: stri
 	return (yesOf(answers?.finished) ?? 0) >= FINISHED;
 }
 
-/** How long a message must be to say something of substance, rather than narrate a step ("Let me read the entry point."). */
 const SUBSTANCE = 280;
 
-/**
- * What a reply in several messages comes to: its last message, with those
- * before it back to the last one of substance, since a reply often reports
- * and then closes with a line. Narration from earlier steps is left out, so
- * the thread's card and the coordinator read the outcome, not the opening.
- */
+/** Its last message, back to the last one of substance, since a reply often reports and then closes with a line. */
 export function closingOf(texts: string[]): string | null {
 	const kept: string[] = [];
 	for (const text of [...texts].reverse()) {
@@ -131,27 +100,18 @@ export function closingOf(texts: string[]): string | null {
 	return kept.length ? kept.join('\n\n') : null;
 }
 
-/**
- * What the reply in hand ends on so far (`closingOf` its messages), read without clearing it, for the checks made
- * before a reply ends; empty when its last message had no words, so an earlier message is not read as its end.
- * Given `from`, only its messages from that one on: what it said since a check sent it back.
- */
+/** Read without clearing it; empty when its last message had no words, so an earlier message is not read as its end. */
 export function replyEnding(id: string, from = 0): string {
 	const { said } = gate(id);
 	if (!lastWordsOf(said)) return '';
 	return closingOf(said.texts.slice(Math.max(0, from - said.start))) ?? '';
 }
 
-/** How many messages with words the reply in hand has said so far. */
 export function replyMessages(id: string): number {
 	const { said } = gate(id);
 	return said.start + said.texts.length;
 }
 
-/**
- * At the end of a reply: notes what it asks the user, or that it asks nothing, and the plan it proposed for
- * approval, or that none waits. Returns what the reply comes to (`closingOf`), when it had any text.
- */
 export async function checkReply(id: string): Promise<string | null> {
 	await loadGate(id);
 	const { said } = gate(id);
@@ -174,21 +134,15 @@ export async function checkReply(id: string): Promise<string | null> {
 	return [whole ?? reply, ask, plan ? `Plan waiting for approval:\n${plan}` : null].filter(Boolean).join('\n\n') || null;
 }
 
-/** A new reply may be sent back again. A reply is sent back once; that it was is kept with the task's checks. */
 export function startStallCheck(id: string): void {
 	changeGate(id, (state) => {
 		state.nudged = false;
 	});
 }
 
-/** A message that only says what the agent will do next ("I'll start by exploring the repository."). */
 const ANNOUNCES = /^(?:(?:ok(?:ay)?|alright|sure|great)[,.!]?\s+)?(?:i['’]ll|i will|i['’]m going to|let me(?! know)|let['’]s|now,? i['’]ll|next,? i['’]ll|first,? i['’]ll)\b/i;
 
-/**
- * When a reply is about to end on a message that only announces its next step, as some models do, so the
- * work it promised never runs and the task ends with nothing done: what to tell the agent so it carries on;
- * null otherwise. Once a reply, and never when the reply ends asking the user or proposing a plan.
- */
+/** Some models end on a message that only announces the next step, so the work never runs. Once a reply; never on `ask` or a plan. */
 export function stallReminder(id: string, calls: readonly { tool: string }[]): string | null {
 	const { said, nudged } = gate(id);
 	const text = lastWordsOf(said);

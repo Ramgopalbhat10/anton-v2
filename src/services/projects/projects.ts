@@ -11,10 +11,7 @@ import { deleteSession } from '../tasks/sessions.ts';
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 
-/**
- * What the browser sees of a repo: variable names, never their values; when
- * its prepared image was built, not the image.
- */
+/** Variable names, never their values. */
 export type ProjectView = Omit<Project, 'env' | 'warmImage'> & { envKeys: string[] };
 
 function present({ env, warmImage, warmedAt, ...project }: Project): ProjectView {
@@ -25,7 +22,6 @@ function present({ env, warmImage, warmedAt, ...project }: Project): ProjectView
 	};
 }
 
-/** Adds a repository by `owner/name`, checking it exists on the git host. */
 export async function addProject(fullName: string): Promise<ProjectView> {
 	if (!REPO_NAME.test(fullName)) throw new InvalidInputError('Use the form owner/name');
 	const repo = await getProviders().git.getRepo(fullName);
@@ -35,14 +31,13 @@ export async function addProject(fullName: string): Promise<ProjectView> {
 	return present(project);
 }
 
-/** Repos Anton's account can reach that are not added yet, most recently pushed first. */
 export async function addableRepos(): Promise<string[]> {
 	const [reachable, known] = await Promise.all([getProviders().git.listRepos(), listProjects()]);
 	const added = new Set(known.map((project) => project.repoFullName.toLowerCase()));
 	return reachable.filter((name) => !added.has(name.toLowerCase()));
 }
 
-/** Known repositories; seeds ANTON_DEFAULT_REPO the first time, so removing it later keeps it removed. */
+/** Seeds ANTON_DEFAULT_REPO the first time, so removing it later keeps it removed. */
 export async function projects(): Promise<ProjectView[]> {
 	const known = await listProjects();
 	if (known.length > 0 || !config.defaultRepo || (await getSetting('seededDefaultRepo', false))) return known.map(present);
@@ -51,7 +46,6 @@ export async function projects(): Promise<ProjectView[]> {
 	return [seeded];
 }
 
-/** Removes a repository and everything Anton keeps for it: its tasks (machines and history too) and its automations. */
 export async function removeProject(id: string): Promise<void> {
 	await existing(id);
 	for (const sessionId of await projectSessionIds(id)) await deleteSession(sessionId);
@@ -69,13 +63,9 @@ export async function branches(projectId: string): Promise<string[]> {
 	return getProviders().git.listBranches((await existing(projectId)).repoFullName);
 }
 
-/** The longest check command: one line of a command, or a short script, never a file's worth. */
 export const MAX_CHECK_COMMAND = 2_000;
 
-/**
- * A settings change from the browser. A variable set to null keeps its stored
- * value and one left out is removed. Leaving out `checkCommand`, `followUps`, `reviewOthers` or `fullVm` keeps them as they are.
- */
+/** A variable set to null keeps its stored value and one left out is removed. Other fields left out keep what they are. */
 export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'reviewOthers' | 'fullVm' | 'checkCommand'> & {
 	env: Record<string, string | null>;
 	checkCommand?: string;
@@ -84,11 +74,7 @@ export type SettingsChange = Omit<ProjectSettings, 'env' | 'followUps' | 'review
 	fullVm?: boolean;
 };
 
-/**
- * Saves the repo's settings. New tasks use them. Running tasks get variable
- * changes from their next command batch and the check command from their next
- * change; preview ports, the base image and the full VM apply once their sandbox restarts.
- */
+/** Running tasks get variables from their next command and the check command from their next change; ports, base image and full VM once the sandbox restarts. */
 export async function updateSettings(id: string, change: SettingsChange): Promise<ProjectView> {
 	const project = await existing(id);
 	const checkCommand = change.checkCommand?.trim() ?? project.checkCommand;
@@ -106,7 +92,6 @@ export async function updateSettings(id: string, change: SettingsChange): Promis
 	return present(await existing(id));
 }
 
-/** Drops the repo's prepared image and builds a new one from scratch in the background; tasks until then clone. */
 export async function rebuildPreparedImage(id: string): Promise<ProjectView> {
 	await existing(id);
 	await clearWarmImage(id);

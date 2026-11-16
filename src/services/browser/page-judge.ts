@@ -1,33 +1,17 @@
 import type { Question } from '../../core/ports.ts';
 import { decide, type Tally, yesOf } from '../models/decisions.ts';
 
-/**
- * The decision model's judgements about a page the browser subagent reads:
- * which parts of a long page matter for its job, and whether the page needs
- * the user (a sign-in or a human check) before anything else can happen.
- * Each is one call of a fraction of a cent; without a decision model, or when
- * it cannot answer, the page is left as it was. A `tally` notes each call and
- * what it judged, for the step to show.
- */
+// Without a decision model, or when it cannot answer, the page is left as it was.
 
-/** Pages shorter than this are given whole; trimming them saves too little. */
 const MIN_TRIM = 4000;
-/**
- * A part judged less likely than this to matter is left out. Parts the job
- * might need come in around one half; the agent sees what was left out and
- * can look again for the whole page, so a firm line costs little.
- */
+/** Parts the job might need come in around one half; the agent sees what was left out and can ask for it, so a firm line costs little. */
 const RELEVANT = 0.55;
 const MAX_PARTS = 24;
 const EXCERPT = 600;
 
 type Part = { lines: string[] };
 
-/**
- * The page's parts: its top-level blocks, with any block that is most of the
- * page opened into its children, as far down as it takes (pages built of
- * nested tables or wrappers have one block holding everything).
- */
+/** A block that is most of the page is opened into its children (pages of nested tables or wrappers). */
 export function partsOf(snapshot: string): Part[] {
 	const split = (lines: string[], indent: string): Part[] => {
 		const parts: Part[] = [];
@@ -51,10 +35,6 @@ export function partsOf(snapshot: string): Part[] {
 	return parts;
 }
 
-/**
- * A long page cut to the parts that matter for `job`: the others become one
- * line each saying how much was left out, so the agent can ask for them.
- */
 export async function trimToJob(id: string, job: string | null, url: string, snapshot: string, tally?: Tally): Promise<string> {
 	if (!job || snapshot.length < MIN_TRIM) return snapshot;
 	const parts = partsOf(snapshot);
@@ -80,14 +60,9 @@ export async function trimToJob(id: string, job: string | null, url: string, sna
 	return `(Parts of this page that do not bear on your job are left out; use look to see them.)\n${kept.join('\n')}`;
 }
 
-/**
- * What a sign-in wall or a human check shows: a password field, or a CAPTCHA
- * or "are you human" check. A page that only links to a sign-in (most sites
- * do) is not put to the decision model.
- */
+/** A page that only links to a sign-in (most sites do) is not put to the decision model. */
 const LOOKS_GATED = /textbox "[^"]*password|password:|captcha|verify (?:you are|that you are) (?:a )?human|are you a robot|security check|just a moment/i;
 
-/** Whether the page needs the user to sign in or prove they are human before it shows what it is for. */
 export async function needsTheUser(id: string, url: string, title: string, snapshot: string, tally?: Tally): Promise<boolean> {
 	if (!LOOKS_GATED.test(`${title}\n${snapshot}`)) return false;
 	const answers = await decide(

@@ -26,16 +26,13 @@ import { readOutput } from '../git/checkpoints.ts';
 import { logProblem } from '../../core/log.ts';
 import { snapshotFiles } from '../sandbox/repo-snapshot.ts';
 
-/** Marketplaces offered until the user picks their own: Anthropic's skills, and Devin's catalog of plugins from many vendors. */
 const DEFAULT_MARKETPLACES = ['anthropics/skills', 'CognitionAI/devin-marketplace'];
-/** A catalog is read again after this long, so new plugins show up. */
 const CATALOG_TTL_MS = 10 * 60_000;
-/** The repo's own instructions shown to a read-only task; a sandbox's agent reads them from its files. */
+/** For a read-only task; a sandbox's agent reads them from its files. */
 const MAX_INSTRUCTIONS = 20_000;
 
 export const marketplaces = () => getSetting<string[]>('marketplaces', DEFAULT_MARKETPLACES);
 
-/** Saves the marketplaces as `owner/repo` or `owner/repo/folder`. */
 export async function setMarketplaces(list: string[]): Promise<string[]> {
 	const saved: string[] = [];
 	for (const item of list) {
@@ -48,7 +45,6 @@ export async function setMarketplaces(list: string[]): Promise<string[]> {
 	return saved;
 }
 
-/** A repo's files at a branch or commit, and the commit. */
 async function filesAt(repo: string, ref: string | null): Promise<{ files: RepoFiles; sha: string }> {
 	const git = getProviders().git;
 	const sha = await git.resolveRef(repo, ref ?? (await git.getRepo(repo)).defaultBranch);
@@ -65,7 +61,6 @@ const idFor = (source: PluginSource, skills: string[] | null) =>
 export type CatalogItem = CatalogEntry & { id: string; installed: boolean };
 const catalogs = new Map<string, { at: number; entries: CatalogEntry[]; expanded: Set<string> }>();
 
-/** What one marketplace offers, and which of it is installed. */
 export async function catalog(marketplace: string, bundle?: string): Promise<CatalogItem[]> {
 	const found = parseGitHub(marketplace);
 	if (!found) throw new InvalidInputError(`"${marketplace}" is not a GitHub repository`);
@@ -98,7 +93,6 @@ export async function catalog(marketplace: string, bundle?: string): Promise<Cat
 
 type Resolved = { source: PluginSource; named: string[] | null; fallback: string; marketplace: string | null };
 
-/** Where a pick lives, and which of its skills a marketplace names. */
 async function resolve(pick: PluginPick): Promise<Resolved> {
 	if ('address' in pick) {
 		const found = parseGitHub(pick.address);
@@ -119,19 +113,13 @@ async function resolve(pick: PluginPick): Promise<Resolved> {
 /** A plugin installed before its pick was kept came from its address. */
 const pickOf = (plugin: InstalledPlugin): PluginPick => plugin.pick ?? { address: [plugin.source.repo, plugin.source.path].filter(Boolean).join('/') };
 
-/** An installed plugin, or not found. */
 async function installed(id: string): Promise<InstalledPlugin> {
 	const plugin = await getPlugin(id);
 	if (!plugin) throw new NotFoundError('Plugin not found');
 	return plugin;
 }
 
-/**
- * Installs a plugin from a marketplace by name, or from a GitHub address: a
- * repository, a folder of skills, or one skill. Its skills are saved whole.
- * An installed plugin given by its id is installed again from where it came,
- * which updates it.
- */
+/** An installed plugin given by its id is installed again from where it came, which updates it. */
 export async function installPlugin(input: PluginPick | { plugin: string }): Promise<InstalledPlugin> {
 	if ('plugin' in input) {
 		const saved = await installed(input.plugin);
@@ -148,17 +136,13 @@ export async function installPlugin(input: PluginPick | { plugin: string }): Pro
 	return savePlugin({ id: idFor({ ...source, ref: null }, named), ...plugin, source, sha, marketplace, pick });
 }
 
-/** The source of a skill installed from a file on the Artifacts page: no repository, the file's path in the Library. */
 const ADDED_SOURCE = ADDED_FILES;
 
 export const isAdded = (source: PluginSource) => source.repo === ADDED_SOURCE;
 
 const isZip = (path: string) => /\.zip$/i.test(path);
 
-/**
- * A skill folder zipped whole, so its scripts and references come with its SKILL.md: the SKILL.md nearest the
- * top is the skill, whether the zip holds the folder's files or the folder itself.
- */
+/** The SKILL.md nearest the top is the skill, whether the zip holds the folder's files or the folder itself. */
 function zippedSkill(path: string, bytes: Uint8Array): { files: RepoFiles; dir: string } {
 	let entries: Record<string, Uint8Array>;
 	try {
@@ -172,12 +156,7 @@ function zippedSkill(path: string, bytes: Uint8Array): { files: RepoFiles; dir: 
 	return { files: { paths, read: async (at) => entries[at] ?? null }, dir: skillFile.slice(0, -'SKILL.md'.length).replace(/\/$/, '') };
 }
 
-/**
- * Installs a file you added on the Artifacts page as a skill: a SKILL.md, or a skill's folder zipped with its
- * scripts. A SKILL.md is one by content, not by name: its front matter names the skill and says when to use
- * it, so a file called IndMoney-API.md installs as the skill its `name:` gives. Installing the same file again
- * updates it.
- */
+/** A SKILL.md is one by its front matter, not its file name. Installing the same file again updates it. */
 export async function installAddedSkill(path: string): Promise<InstalledPlugin> {
 	const bytes = await readOutput(ADDED_FILES, path);
 	if (!bytes) throw new NotFoundError(`${path} is not among the files you added`);
@@ -204,15 +183,12 @@ export async function installAddedSkill(path: string): Promise<InstalledPlugin> 
 	});
 }
 
-/** Files listed for a plugin; a whole large repository is cut short. */
 const MAX_LISTED_FILES = 2000;
 
 export type PluginPreview = {
-	/** The id it installs as. */
 	id: string;
 	name: string;
 	description: string;
-	/** The repository and folder, at the commit read. */
 	source: PluginSource;
 	sha: string;
 	marketplace: string | null;
@@ -220,24 +196,15 @@ export type PluginPreview = {
 	skills: Array<{ name: string; description: string; folder: string; license: string | null }>;
 	mcpServers: string[];
 	skipped: string[];
-	/** Paths in the repository under the plugin's folder. */
 	files: string[];
 	truncated: boolean;
-	/** The plugin's README, when it has one. */
 	readme: string | null;
-	/** How it is installed, when it is. */
 	installed: { sha: string; enabled: boolean } | null;
-	/** A newer commit of an installed plugin, when there is one. */
 	update: string | null;
-	/** For a skill installed from a file on the Artifacts page, that file's path there; its files are read with `pluginFile` under `ADDED_FILES`. */
 	added?: string;
 };
 
-/**
- * A plugin as installing it would save it, without saving anything: its
- * skills, MCP servers, what would be left out and every file in its folder.
- * An installed plugin shows as it was installed, with any newer commit.
- */
+/** Saves nothing. An installed plugin shows as it was installed, with any newer commit. */
 export async function previewPlugin(input: PluginPick | { plugin: string }): Promise<PluginPreview> {
 	const saved = 'plugin' in input ? await installed(input.plugin) : null;
 	if (saved && isAdded(saved.source)) return addedPreview(saved);
@@ -271,17 +238,12 @@ export async function previewPlugin(input: PluginPick | { plugin: string }): Pro
 	};
 }
 
-/** The newest commit of a plugin's branch; null for one pinned to a commit, which never moves. */
 async function newestCommit(source: PluginSource): Promise<string | null> {
 	if (/^[0-9a-f]{40}$/.test(source.ref ?? '')) return null;
 	const git = getProviders().git;
 	return git.resolveRef(source.repo, source.ref ?? (await git.getRepo(source.repo)).defaultBranch);
 }
 
-/**
- * A skill installed from a file on the Artifacts page, shown as it was installed: its SKILL.md and the files
- * that came with it from a zip. There is no repository behind it, so it has no newer commit to offer.
- */
 function addedPreview(saved: InstalledPlugin): PluginPreview {
 	const files = saved.skills.flatMap((skill) => ['SKILL.md', ...Object.keys(skill.files)]).sort((a, b) => (a === 'SKILL.md' ? -1 : b === 'SKILL.md' ? 1 : a.localeCompare(b)));
 	return {
@@ -304,7 +266,6 @@ function addedPreview(saved: InstalledPlugin): PluginPreview {
 	};
 }
 
-/** A file of a skill installed from the Artifacts page, as installed: its SKILL.md is written back from what was kept. */
 async function addedFile(sha: string, path: string): Promise<Uint8Array | null> {
 	const plugin = (await listPlugins()).find((item) => isAdded(item.source) && item.sha === sha);
 	const skill = plugin?.skills[0];
@@ -318,7 +279,6 @@ async function addedFile(sha: string, path: string): Promise<Uint8Array | null> 
 	return 'text' in file ? new TextEncoder().encode(file.text) : new Uint8Array(Buffer.from(file.base64, 'base64'));
 }
 
-/** One file of a repository at a commit, as a preview shows it; null when there is none or it is too large to keep. */
 export async function pluginFile(repo: string, sha: string, path: string): Promise<Uint8Array | null> {
 	if (repo === ADDED_SOURCE && /^[0-9a-f]{40}$/.test(sha)) return addedFile(sha, path);
 	if (!parseGitHub(repo) || !/^[0-9a-f]{40}$/.test(sha)) throw new InvalidInputError('Give a repository and a commit');
@@ -333,7 +293,6 @@ const searches = new Map<string, { at: number; result: Promise<GitHubSearch> }>(
 const SEARCH_TTL_MS = 10 * 60_000;
 const KEEP_SEARCHES = 100;
 
-/** A skill found by its SKILL.md, named and described by its front matter. */
 async function skillHit(hit: FileHit): Promise<GitHubSkill | null> {
 	const folder = hit.path.split('/').slice(0, -1).join('/');
 	const bytes = await getProviders().git.file(hit.repo, hit.ref, hit.path).catch(() => null);
@@ -363,11 +322,7 @@ async function runSearch(query: string): Promise<GitHubSearch> {
 	};
 }
 
-/**
- * Skills and repositories of skills on GitHub matching a search, live:
- * SKILL.md files whose contents match, and repositories that mention skills.
- * Each search is kept a while, as GitHub allows only a few a minute.
- */
+/** Each search is kept a while, as GitHub allows only a few a minute. */
 export async function searchGitHub(raw: string): Promise<GitHubSearch> {
 	const query = raw.trim().replace(/\s+/g, ' ').slice(0, 100);
 	if (query.length < 2) return { skills: [], repos: [], problems: [] };
@@ -384,7 +339,7 @@ export async function searchGitHub(raw: string): Promise<GitHubSearch> {
 
 export type PluginView = Omit<InstalledPlugin, 'skills'> & { skills: Array<{ name: string; description: string; active: boolean }> };
 
-/** Whether each skill of each plugin is used: the plugin is on, and no earlier plugin has a skill by that name. */
+/** Used when the plugin is on and no earlier plugin has a skill by that name. */
 function marked(plugins: InstalledPlugin[]): Array<{ plugin: InstalledPlugin; skill: ParsedSkill; active: boolean }> {
 	const taken = new Set<string>();
 	return plugins.flatMap((plugin) =>
@@ -396,14 +351,12 @@ function marked(plugins: InstalledPlugin[]): Array<{ plugin: InstalledPlugin; sk
 	);
 }
 
-/** A text file of an installed skill that is on, as a sandbox has it at `../skills/<skill>/<path>`; null when there is none. */
 export async function installedSkillFile(skill: string, path: string): Promise<string | null> {
 	const found = marked(await listPlugins()).find((item) => item.active && item.skill.name === skill);
 	const file = found?.skill.files[path];
 	return file && 'text' in file ? file.text : null;
 }
 
-/** Installed plugins, each skill marked inactive when its plugin is off or an earlier plugin has its name. */
 export async function pluginsView(): Promise<PluginView[]> {
 	const plugins = await listPlugins();
 	const all = marked(plugins);
@@ -422,7 +375,6 @@ export async function removePlugin(id: string): Promise<void> {
 	await deletePlugin(id);
 }
 
-/** A skill as Flue mounts it (its `SkillDefinition`), with binary files as bytes. */
 export type MountedSkill = {
 	name: string;
 	description: string;
@@ -431,7 +383,6 @@ export type MountedSkill = {
 	files: Record<string, string | Uint8Array>;
 };
 
-/** Left-out files a skill's instructions list by name; the rest are counted. */
 const LISTED_OMISSIONS = 20;
 
 function toMounted(skill: ParsedSkill): MountedSkill {
@@ -441,7 +392,6 @@ function toMounted(skill: ParsedSkill): MountedSkill {
 	return { name: skill.name, description: skill.description, instructions: skill.instructions + omissionNote(skill.omitted ?? []), ...(skill.license ? { license: skill.license } : {}), files };
 }
 
-/** Says which files were left out, so the agent does not go looking for them. */
 function omissionNote(omitted: string[]): string {
 	if (omitted.length === 0) return '';
 	const listed = omitted.slice(0, LISTED_OMISSIONS).join(', ');
@@ -451,13 +401,7 @@ function omissionNote(omitted: string[]): string {
 
 const repacking = new Map<string, Promise<InstalledPlugin>>();
 
-/**
- * Packs a plugin's skills again from the commit it was installed at, once per
- * server (a failure is not retried until a restart). Skills packed before files were picked by importance could have
- * lost the references their instructions name to examples and repository
- * files that came first by path. Skills from before their folder was kept
- * stay as they are.
- */
+/** Once per server (a failure waits for a restart): skills packed before files were picked by importance could have lost the references their instructions name. */
 function repacked(plugin: InstalledPlugin): Promise<InstalledPlugin> {
 	if (plugin.skills.every((skill) => skill.omitted || skill.folder === undefined)) return Promise.resolve(plugin);
 	let pending = repacking.get(plugin.id);
@@ -479,7 +423,6 @@ function repacked(plugin: InstalledPlugin): Promise<InstalledPlugin> {
 	return pending;
 }
 
-/** A repo's skills and instructions at one commit, read from GitHub once. */
 type RepoContext = { agents: MountedSkill[]; claude: MountedSkill[]; instructions: string };
 const NO_CONTEXT: RepoContext = { agents: [], claude: [], instructions: '' };
 const repoContexts = new Map<string, Promise<RepoContext>>();
@@ -512,7 +455,7 @@ function repoContext(repo: string, sha: string): Promise<RepoContext> {
 	return pending;
 }
 
-/** What each task's agent mounts while it renders, which is synchronous; filled before every message. */
+/** The agent renders synchronously; filled before every message. */
 const primed = new Map<string, { repo: RepoContext; plugins: MountedSkill[] }>();
 
 export async function primeSkills(id: string): Promise<void> {
@@ -533,11 +476,7 @@ export async function primeSkills(id: string): Promise<void> {
 	primed.set(id, { repo, plugins: installed });
 }
 
-/**
- * The skills a task's agent mounts. The repo's own come first and win a
- * name: `.agents/skills` is read from the snapshot while read-only and by Flue
- * itself once there is a sandbox, so only `.claude/skills` is mounted then.
- */
+/** The repo's own come first and win a name. `.agents/skills` is read by Flue itself once there is a sandbox, so only `.claude/skills` is mounted then. */
 export function skillsFor(id: string, workspace: boolean): MountedSkill[] {
 	const { repo, plugins } = primed.get(id) ?? { repo: NO_CONTEXT, plugins: [] };
 	const own = [...repo.agents, ...repo.claude];
@@ -545,19 +484,17 @@ export function skillsFor(id: string, workspace: boolean): MountedSkill[] {
 	return [...(workspace ? repo.claude : own), ...plugins.filter((skill) => !taken.has(skill.name))];
 }
 
-/** The installed plugins' skills a task mounts, whose files its sandbox gets a copy of; the repo's own are in its clone. */
 export function pluginSkillsFor(id: string): MountedSkill[] {
 	const { repo, plugins } = primed.get(id) ?? { repo: NO_CONTEXT, plugins: [] };
 	const taken = new Set([...repo.agents, ...repo.claude].map((skill) => skill.name));
 	return plugins.filter((skill) => !taken.has(skill.name));
 }
 
-/** The repo's AGENTS.md and CLAUDE.md, for a task without a sandbox; one with a sandbox reads them from its files. */
+/** For a task without a sandbox; one with a sandbox reads them from its files. */
 export function repoInstructionsFor(id: string): string {
 	return primed.get(id)?.repo.instructions ?? '';
 }
 
-/** The skills a task can be asked to use by name, as `/name` in the composer. */
 export async function sessionSkills(id: string): Promise<Array<{ name: string; description: string }>> {
 	if (!primed.has(id)) await primeSkills(id);
 	return skillsFor(id, false).map(({ name, description }) => ({ name, description }));

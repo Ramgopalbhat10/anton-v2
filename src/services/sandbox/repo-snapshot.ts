@@ -10,18 +10,13 @@ import { getProject } from '../../db/projects.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { getProviders } from '../../providers/index.ts';
 
-/**
- * A read-only copy of a repo at one commit, on Anton's own disk. It lets the
- * agent answer questions about the code without a sandbox, a clone or a
- * branch; one download serves every task on that commit.
- */
+/** A read-only copy of a repo at one commit on Anton's own disk, so questions about the code need no sandbox; shared by every task on that commit. */
 type Entry = { path: string; size: number; kind: 'file' | 'symlink'; stored: boolean; target?: string };
 type Snapshot = { dir: string; entries: Entry[] };
 
 /** Larger files are listed but not kept: questions rarely need them, and a workspace can read them. */
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
-/** Snapshots kept on disk, most recently used first. */
 const KEEP = 10;
 const SEARCH_TIMEOUT_MS = 20_000;
 export const MAX_LISTED = 500;
@@ -30,7 +25,7 @@ const root = () => path.join(config.dataDir, 'snapshots');
 const INDEX = 'index.json';
 const loaded = new Map<string, Promise<Snapshot>>();
 
-/** Unpacks the archive into `dir`, keeping only regular files under the size limit and never following a link. */
+/** Keeps only regular files under the size limit and never follows a link. */
 async function unpack(repo: string, sha: string, dir: string): Promise<Entry[]> {
 	const archive = await getProviders().git.archive(repo, sha);
 	const entries: Entry[] = [];
@@ -62,7 +57,6 @@ async function unpack(repo: string, sha: string, dir: string): Promise<Entry[]> 
 	return entries.sort((a, b) => (a.path < b.path ? -1 : 1));
 }
 
-/** Removes all but the most recently used snapshots. */
 async function evict(): Promise<void> {
 	const names = await readdir(root()).catch(() => [] as string[]);
 	const used = await Promise.all(
@@ -97,7 +91,6 @@ async function build(repo: string, sha: string, key: string): Promise<Snapshot> 
 	}
 }
 
-/** The snapshot of `repo` at `sha`, downloaded on first use. */
 export function snapshot(repo: string, sha: string): Promise<Snapshot> {
 	const key = `${repo.replace('/', '__')}@${sha}`;
 	let pending = loaded.get(key);
@@ -109,7 +102,7 @@ export function snapshot(repo: string, sha: string): Promise<Snapshot> {
 	return pending;
 }
 
-/** A repo's files at `sha` for reading skills and plugins; files too large to keep read as missing. */
+/** Files too large to keep read as missing. */
 export async function snapshotFiles(repo: string, sha: string): Promise<RepoFiles> {
 	const { dir, entries } = await snapshot(repo, sha);
 	const stored = new Set(entries.filter((entry) => entry.stored).map((entry) => entry.path));
@@ -119,11 +112,10 @@ export async function snapshotFiles(repo: string, sha: string): Promise<RepoFile
 	};
 }
 
-/** How long a branch or tag of another repository stays resolved to one commit, so follow-ups read the same files without asking GitHub again. */
+/** So follow-ups read the same files without asking GitHub again. */
 const REF_MS = 10 * 60_000;
 const refs = new Map<string, { sha: string; at: number }>();
 
-/** `owner/name`, optionally `@` a branch, tag or commit; the default branch when none is given. */
 export function parseRepo(text: string): { fullName: string; ref: string | null } {
 	const match = /^(?:https?:\/\/github\.com\/)?([\w.-]+\/[\w.-]+?)(?:\.git)?(?:@(.+))?\/?$/.exec(text.trim());
 	if (!match) throw new InvalidInputError(`"${text}" is not a repository: give it as owner/name, optionally @branch, tag or commit.`);
@@ -146,10 +138,6 @@ async function commitOf(fullName: string, ref: string | null): Promise<string> {
 	return sha;
 }
 
-/**
- * The snapshot the repo tools read: the task's repository at its base commit, or, given `repo`, any GitHub
- * repository the token can read, so studying another codebase is one download and then local reads.
- */
 async function snapshotFor(id: string, repo?: string): Promise<Snapshot> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -164,7 +152,7 @@ async function snapshotFor(id: string, repo?: string): Promise<Snapshot> {
 	return snapshot(project.repoFullName, session.baseSha);
 }
 
-/** A glob as a regular expression: `**` crosses folders, `*` and `?` do not, `{a,b}` picks one. */
+/** `**` crosses folders, `*` and `?` do not, `{a,b}` picks one. */
 export function globToRegExp(glob: string): RegExp {
 	let out = '';
 	for (let index = 0; index < glob.length; index += 1) {
@@ -185,7 +173,6 @@ export function globToRegExp(glob: string): RegExp {
 
 type Filter = { path?: string; glob?: string; repo?: string };
 
-/** Entries under `folder` (or that file), matching `glob` from that folder down, as a search run in that folder matches it. */
 function select(entries: Entry[], { path: folder, glob }: Filter): Entry[] {
 	const relative = folder ? safeRelativePath(folder) : '';
 	const prefix = relative && relative !== '.' ? `${relative}/` : '';
@@ -195,7 +182,6 @@ function select(entries: Entry[], { path: folder, glob }: Filter): Entry[] {
 	);
 }
 
-/** Paths in the repo at the task's base commit, optionally under a folder or matching a glob. */
 export async function listRepoFiles(id: string, filter: Filter): Promise<string> {
 	const picked = select((await snapshotFor(id, filter.repo)).entries, filter);
 	if (picked.length === 0) return 'No files match.';
@@ -204,7 +190,6 @@ export async function listRepoFiles(id: string, filter: Filter): Promise<string>
 	return more > 0 ? `${lines.join('\n')}\n(${more} more; narrow it with path or glob)` : lines.join('\n');
 }
 
-/** A file's bytes, or why it cannot be read. */
 async function fileBytes(id: string, file: string, repo?: string): Promise<{ bytes: Uint8Array } | { problem: string }> {
 	const { dir, entries } = await snapshotFor(id, repo);
 	const wanted = safeRelativePath(file);
@@ -218,7 +203,6 @@ async function fileBytes(id: string, file: string, repo?: string): Promise<{ byt
 	return { bytes: new Uint8Array(await readFile(path.join(dir, 'files', wanted))) };
 }
 
-/** A file's whole text, or why it cannot be read. */
 async function fileText(id: string, file: string, repo?: string): Promise<{ text: string } | { problem: string }> {
 	const read = await fileBytes(id, file, repo);
 	if ('problem' in read) return read;
@@ -226,32 +210,27 @@ async function fileText(id: string, file: string, repo?: string): Promise<{ text
 	return text.includes('\0') ? { problem: `${safeRelativePath(file)} is a binary file.` } : { text };
 }
 
-/** A file of the snapshot as bytes, for an image; throws with why it cannot be read. */
 export async function repoBytes(id: string, file: string, repo?: string): Promise<Uint8Array> {
 	const read = await fileBytes(id, file, repo);
 	if ('problem' in read) throw new Error(read.problem);
 	return read.bytes;
 }
 
-/** For run_script programs: every matching path, as a list. */
 export async function repoPaths(id: string, filter: Filter): Promise<string[]> {
 	return select((await snapshotFor(id, filter.repo)).entries, filter).map((entry) => entry.path);
 }
 
-/** For run_script programs: a file's whole text; throws when it cannot be read. */
 export async function repoText(id: string, file: string, repo?: string): Promise<string> {
 	const read = await fileText(id, file, repo);
 	if ('problem' in read) throw new Error(read.problem);
 	return read.text;
 }
 
-/** Lines a read shows when it names no limit, and at most. */
 export const READ_LINES = 400;
 export const MAX_READ_LINES = 2000;
-/** A longer line (minified code, a data blob) is cut, so one line cannot fill the context. */
+/** So one line (minified code, a data blob) cannot fill the context. */
 const MAX_LINE_CHARS = 2000;
 
-/** A text's lines numbered from `offset`, number and tab first, saying how to read on when more follow: the same for the snapshot and the sandbox. */
 export function numberedLines(text: string, offset = 1, limit = READ_LINES): string {
 	const lines = text.split('\n');
 	const start = Math.max(1, offset);
@@ -263,19 +242,13 @@ export function numberedLines(text: string, offset = 1, limit = READ_LINES): str
 	return end < lines.length ? `${numbered}\n(lines ${start}-${end} of ${lines.length}; read on with offset ${end + 1})` : numbered;
 }
 
-/** A file's lines, numbered from `offset`. */
 export async function readRepoFile(id: string, file: string, offset = 1, limit = READ_LINES, repo?: string): Promise<string> {
 	const read = await fileText(id, file, repo);
 	if ('problem' in read) return read.problem;
 	return numberedLines(read.text, offset, limit);
 }
 
-/**
- * Runs in a worker thread, so a pattern that backtracks without end can be
- * stopped without stalling Anton. Matches come as `path:line: text`; with
- * context, the lines around them as `path-line- text` and `--` between groups,
- * as rg and grep print them.
- */
+/** Runs in a worker thread, so a pattern that backtracks without end can be stopped without stalling Anton. Output as rg and grep print it. */
 const SEARCH_WORKER = `
 const { parentPort, workerData } = require('node:worker_threads');
 const { readFileSync } = require('node:fs');
@@ -318,7 +291,6 @@ for (const file of files) {
 parentPort.postMessage({ lines: out, more });
 `;
 
-/** Matches a search shows at most, or files with filesOnly; past them it says how to narrow it. */
 export const MAX_MATCHES = 200;
 export const MAX_FILES = 500;
 export const NARROW_SEARCH = '(more matches; narrow the search with path or glob)';
@@ -326,7 +298,6 @@ export const NARROW_FILES = '(more files match; narrow the search with path or g
 
 export type SearchInput = Filter & { pattern: string; ignoreCase?: boolean; context?: number; filesOnly?: boolean };
 
-/** Lines matching a regular expression, as `path:line: text`, with `context` lines around each; or, with `filesOnly`, the files that have one. */
 export async function searchRepo(id: string, input: SearchInput): Promise<string> {
 	const { dir, entries } = await snapshotFor(id, input.repo);
 	const flags = input.ignoreCase ? 'i' : '';

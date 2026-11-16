@@ -13,23 +13,16 @@ import { createSession, getSession } from '../tasks/sessions.ts';
 
 const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/;
 
-/** At most this many new reviews start in one repo each round, so turning reviews on for a busy repo eases in. */
+/** So turning reviews on for a busy repo eases in. */
 const NEW_AT_ONCE = 2;
 
-/** A pull request link as GitHub writes it, without a tab (`/files`), query or anchor. */
 export function pullRequestUrl(input: string): string {
 	const match = PULL_URL.exec(input.trim());
 	if (!match) throw new InvalidInputError('Paste a GitHub pull request link, such as https://github.com/owner/repo/pull/12');
 	return `https://github.com/${match[1]}/pull/${match[2]}`;
 }
 
-/**
- * Reviews any pull request, by its link: Anton's own from the task that
- * opened it, anyone else's in a task of its own, created the first time
- * (adding the repository if it is new) on the merge base, which the
- * pull request's head is then put on top of. The review runs in the task's
- * sandbox and is posted on GitHub, and the task stays open to ask about it.
- */
+/** Anton's own from the task that opened it; anyone else's in a task of its own, created on the merge base with the head put on top. */
 export async function reviewPullRequest(link: string, { automatic = false }: { automatic?: boolean } = {}): Promise<Session> {
 	const url = pullRequestUrl(link);
 	const existing = (await listSessionRecords()).find((session) => session.prUrl === url);
@@ -57,12 +50,7 @@ export async function reviewPullRequest(link: string, { automatic = false }: { a
 	return getSession(session.id);
 }
 
-/**
- * For each repo with Review every pull request on: a review of each open
- * pull request updated since it was turned on, and again when its author
- * pushes. Drafts, Anton's own pull requests (its Reviewer reads those) and
- * pull requests from people who cannot push to the repo are left alone.
- */
+/** Drafts, Anton's own pull requests (its Reviewer reads those) and authors who cannot push to the repo are left alone. */
 export async function runAutomaticReviews(): Promise<void> {
 	if ((await budget()).blocked) return;
 	const tasks = new Map((await listSessionRecords()).flatMap((session) => (session.prUrl ? [[session.prUrl, session] as const] : [])));

@@ -12,7 +12,7 @@ import { logProblem } from '../../core/log.ts';
 
 const PATH = /^\/vm\/([\w-]+)\/pty$/;
 
-/** Only pages served from this host may open a shell (blocks cross-site WebSocket hijacking). */
+/** Blocks cross-site WebSocket hijacking. */
 export function isSameOrigin(request: IncomingMessage): boolean {
 	const origin = request.headers.origin;
 	if (!origin || !request.headers.host) return false;
@@ -22,7 +22,6 @@ export function isSameOrigin(request: IncomingMessage): boolean {
 type Size = { cols: number; rows: number };
 type Control = Size & { type: 'resize' };
 
-/** A resize with sane bounds, or null for anything else. */
 function parseControl(raw: string): Control | null {
 	try {
 		const control = JSON.parse(raw) as Partial<Control>;
@@ -33,10 +32,7 @@ function parseControl(raw: string): Control | null {
 	}
 }
 
-/**
- * What the browser sent before the shell existed. Starting a machine can take
- * minutes, and keystrokes or resizes sent meanwhile must not be dropped.
- */
+/** Starting a machine can take minutes; keystrokes and resizes sent meanwhile must not be dropped. */
 function earlyFrames(socket: WebSocket, size: Size) {
 	const state = { size, input: [] as Uint8Array[], closed: false };
 	const onMessage = (data: RawData, isBinary: boolean) => {
@@ -83,11 +79,7 @@ async function bridge(socket: WebSocket, id: string, size: Size): Promise<void> 
 
 const wss = new WebSocketServer({ noServer: true });
 
-/**
- * Handles an upgrade to `/vm/:id/pty`: binary frames carry keystrokes and
- * output, text frames carry `{ type: 'resize' }`. Opening a terminal is an
- * explicit request for a machine, so it starts one when needed.
- */
+/** Binary frames carry keystrokes and output, text frames carry `{ type: 'resize' }`. Starts a machine when needed. */
 export function handleTerminalUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
 	const url = new URL(request.url ?? '/', 'http://localhost');
 	const match = PATH.exec(url.pathname);

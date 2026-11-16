@@ -4,28 +4,21 @@ import { httpRequest } from '../secrets/http-request.ts';
 import { installedSkillFile } from '../settings/plugins.ts';
 import { readSpaceFile } from '../projects/space-files.ts';
 
-/**
- * A routine's gate: a script from an installed skill that runs on Anton's side when a scheduled run is due, before
- * any thread starts, and answers whether this run is worth one. A trading check-in every 15 minutes mostly finds
- * nothing new; its gate reads the project's records and a few quotes and skips the run, so a quiet check-in costs no
- * model call and no sandbox. The script is the skill's own (`skill-name/scripts/gate.js`), so it updates with the skill.
- *
- * It runs like a run_script program, in a fresh QuickJS VM that reaches only what is handed to it: http_request (with
- * the sealed secrets filled in on Anton's side, as for the agent, and the answer not cut at the agent's 100k characters)
- * and read_project_file (the project's Library). It
- * gets `args` ({ now, lastRunAt, lastGate }) and returns `{ run, reason }`. A gate that fails lets the run start.
+/*
+ * A routine's gate: an installed skill's script (`skill-name/scripts/gate.js`) run on Anton's side when a scheduled run
+ * is due, before any thread starts, so a quiet run costs no model call and no sandbox. It runs in a fresh QuickJS VM with
+ * only http_request (sealed secrets filled in, answer not cut at the agent's 100k) and read_project_file; it gets `args`
+ * ({ now, lastRunAt, lastGate }) and returns `{ run, reason }`. A gate that fails lets the run start.
  */
 
 const TIMEOUT_MS = 30_000;
 const MEMORY_BYTES = 64 * 1024 * 1024;
-/** A Library file a gate reads; its records are small. */
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_REASON = 300;
-/** Characters of an answer a gate is given: a script, not the model, reads it, so a whole market's quotes fit (about 400 KB per 500 stocks). */
+/** Characters of an answer: a script, not the model, reads it, so a whole market's quotes fit (about 400 KB per 500 stocks). */
 const MAX_ANSWER = 4 * 1024 * 1024;
 const GATE = /^([a-z0-9]+(?:-[a-z0-9]+)*)\/((?:[\w.-]+\/)*[\w.-]+\.js)$/;
 
-/** Why `gate` cannot name a skill's script, or null. */
 export function gateProblem(gate: string): string | null {
 	if (!GATE.test(gate) || gate.split('/').some((part) => part === '..' || part === '.')) return 'Name the gate as skill-name/scripts/file.js, a script of an installed skill';
 	return null;
@@ -69,7 +62,6 @@ function gateTools(automation: Automation): CodemodeTool[] {
 	];
 }
 
-/** Runs the routine's gate and returns its answer; throws when the gate cannot run or fails. */
 export async function runGate(automation: Automation & { gate: string }, now: number): Promise<GateAnswer> {
 	const [skill, ...rest] = automation.gate.split('/');
 	const text = await installedSkillFile(skill, rest.join('/'));

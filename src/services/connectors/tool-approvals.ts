@@ -5,13 +5,7 @@ import { getToolApproval, insertToolApproval, listToolApprovals, moveToolApprova
 import { executeComposioTool } from './composio.ts';
 import { logProblem } from '../../core/log.ts';
 
-/**
- * Connector tool calls that wait on the user's Run, as mail_approvals do for
- * Gmail's send: the agent asks, the thread shows the call with Run and Don't
- * run, and only a press here runs it — from Anton's server, never the agent.
- * What is kept is the call, not its credentials: the toolkit and tool's slug
- * are run again on approval.
- */
+/** Only the user's Run runs the call, from Anton's server; the call is kept, not its credentials. */
 
 export type ToolApprovalView = {
 	id: string;
@@ -39,7 +33,6 @@ const present = (approval: ToolApproval): ToolApprovalView => ({
 	decidedAt: approval.decidedAt,
 });
 
-/** The call waits on the user; the agent is told to stop, as a send does. */
 export async function requestToolApproval(
 	sessionId: string,
 	call: { connector: string; tool: string; args: Record<string, unknown>; payload: { toolkit: string; slug: string; args: Record<string, unknown> } },
@@ -61,7 +54,6 @@ export async function toolApprovals(sessionId: string): Promise<ToolApprovalView
 	return (await listToolApprovals(sessionId)).map((approval) => present(approval));
 }
 
-/** The user's Run or Don't run. Run goes through the same path a direct call would. */
 export async function decideToolApproval(sessionId: string, approvalId: string, run: boolean): Promise<ToolApprovalView> {
 	const approval = await getToolApproval(approvalId);
 	if (!approval || approval.sessionId !== sessionId) throw new NotFoundError('No tool call waits for your answer here');

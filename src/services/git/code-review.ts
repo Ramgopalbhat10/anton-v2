@@ -14,11 +14,6 @@ import { bringCommit, OFFLINE_GIT } from './host-commits.ts';
 import { logProblem } from '../../core/log.ts';
 import { machineFor } from '../sandbox/workspace.ts';
 
-/**
- * How Anton reviews a change, for its Reviewer agent on its own pull requests
- * and for the Coder in a task reviewing someone else's: a correctness pass,
- * then a security pass that names each issue's severity and exploit path.
- */
 export const REVIEW_GUIDE = [
 	'Review the change, not the whole repository: read the diff, then read the surrounding code, callers and tests you need to judge it.',
 	'If the repository has a REVIEW.md, follow it; its AGENTS.md and CLAUDE.md rules apply too.',
@@ -30,16 +25,16 @@ export const REVIEW_GUIDE = [
 	'When this conversation has earlier reviews, report a problem again only if it is still there.',
 ].join(' ');
 
-/** Ends every review Anton posts, so it can count its own reviews on a pull request. */
+/** Lets Anton count its own reviews on a pull request. */
 export const REVIEW_MARK = '<!-- anton-review -->';
-/** Ends a review that found nothing, which follow-ups never send to the agent. */
+/** Follow-ups never send a clean review to the agent. */
 export const CLEAN_MARK = '<!-- anton-review:clean -->';
-/** Automatic reviews of one pull request; a fix that keeps drawing findings then waits for a person. */
+/** A fix that keeps drawing findings then waits for a person. */
 export const MAX_REVIEWS = 3;
 
 const isAntonReview = (comment: PullRequestComment) => comment.id.startsWith('review-') && (comment.body.includes(REVIEW_MARK) || comment.body.includes(CLEAN_MARK));
 
-/** The head each task's reviewer is reading, so its line comments land on the lines it read. */
+/** So its line comments land on the lines it read. */
 const reviewing = new Map<string, string>();
 
 function reviewMessage(url: string, baseSha: string, head: string): string {
@@ -50,16 +45,10 @@ function reviewMessage(url: string, baseSha: string, head: string): string {
 	].join('\n');
 }
 
-/** At or below this chance that the change touches code, it is taken as documentation only. */
 const CODE_CHANGE = 0.1;
-/** Enough of the diff to judge it, well inside the decision model's 32k-token window. */
+/** Well inside the decision model's 32k-token window. */
 const MAX_DIFF_CHARS = 60_000;
 
-/**
- * Whether the decision model is sure the pull request changes only
- * documentation, which an automatic review would find nothing to fix in.
- * Without a decision model, never.
- */
 async function documentationOnly(id: string, url: string): Promise<boolean> {
 	if (!hasDecisionModel()) return false;
 	let budget = MAX_DIFF_CHARS;
@@ -73,22 +62,12 @@ async function documentationOnly(id: string, url: string): Promise<boolean> {
 	return (yesOf(answers?.code) ?? 1) <= CODE_CHANGE;
 }
 
-/** Whether automatic reviews are on for the task: General's setting for Anton's own pull requests, the repo's for others'. */
 async function reviewsOn(session: SessionRecord): Promise<boolean> {
 	if (!session.review) return (await generalSettings()).reviewPullRequests;
 	return (await getProject(session.projectId))?.reviewOthers ?? false;
 }
 
-/**
- * Asks for a review of the task's pull request at the head on the host:
- * Anton's own by the task's reviewer agent, someone else's by the task's
- * own agent, which the user can then ask about it. Automatic requests, made
- * each time the agent opens or updates a pull request (or, for a reviewing
- * task, when the author pushes), follow the setting, skip a change that is
- * only documentation and stop after MAX_REVIEWS; asking by hand always
- * reviews. Someone else's pull request is put in the sandbox first, which may
- * take a while, so that review starts in the background.
- */
+/** Automatic requests follow the setting, skip documentation-only changes and stop after MAX_REVIEWS; asking by hand always reviews. */
 export async function requestReview(id: string, { automatic }: { automatic: boolean }): Promise<boolean> {
 	const session = await getSessionRecord(id);
 	if (!session) throw new NotFoundError('Session not found');
@@ -121,10 +100,9 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	return true;
 }
 
-/** Tasks whose review of someone else's pull request is being set up, so a second request never races it in the machine. */
+/** So a second request never races it in the machine. */
 const preparing = new Set<string>();
 
-/** Someone else's pull request at its head, in the task's sandbox, then the review asked of the task's agent. */
 async function reviewTheirs(id: string, url: string): Promise<void> {
 	const info = await getProviders().git.pullRequest(url);
 	const machine = await machineFor(id);
@@ -137,14 +115,7 @@ async function reviewTheirs(id: string, url: string): Promise<void> {
 	await sendToAgent(id, theirReviewMessage(info, base));
 }
 
-/**
- * Puts the pull request's head on the task branch in a machine that holds no
- * credentials: its files come through the host's API, under one commit
- * standing in for its own, on top of its merge base. Files changed in the
- * sandbox are dropped when the pull request has moved, since the review
- * follows the author's branch. Returns the merge base, which the task's
- * changes are measured from.
- */
+/** The machine holds no credentials, so its files come through the host's API under a stand-in commit on its merge base. Returns the merge base. */
 async function checkOutPullRequest(session: SessionRecord, info: PullRequestInfo, machine: Machine): Promise<string> {
 	const cwd = repoDir(machine);
 	const current = (await run(machine, 'git rev-parse HEAD', { cwd, env: OFFLINE_GIT })).trim();
@@ -161,7 +132,6 @@ async function checkOutPullRequest(session: SessionRecord, info: PullRequestInfo
 	return base;
 }
 
-/** At most this much of the author's description goes into the request. */
 const MAX_DESCRIPTION = 4000;
 
 function theirReviewMessage(info: PullRequestInfo, base: string): string {
@@ -180,7 +150,6 @@ function theirReviewMessage(info: PullRequestInfo, base: string): string {
 	].join('\n');
 }
 
-/** Reviews the pull request the agent just opened or updated, if reviews are on; never fails the push. */
 export function reviewAfterPush(id: string): void {
 	requestReview(id, { automatic: true }).catch((error: unknown) => logProblem('warn', 'Could not start the pull request review', error, id));
 }
@@ -188,10 +157,8 @@ export function reviewAfterPush(id: string): void {
 export const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 export type Severity = (typeof SEVERITIES)[number];
 
-/** A problem on one line; a security one also says how it is exploited. Kind and severity are missing from older callers. */
 export type Finding = { path: string; line: number; body: string; kind?: 'bug' | 'security'; severity?: Severity; exploit?: string };
 
-/** A finding as its line comment reads on the host: what kind and how bad, the problem and fix, and the exploit path. */
 function commentBody({ kind, severity, body, exploit }: Finding): string {
 	const label = [kind === 'security' ? 'Security' : kind === 'bug' ? 'Bug' : null, severity].filter(Boolean).join(' · ');
 	return [label ? `**${label}**` : null, body.trim(), kind === 'security' && exploit?.trim() ? `**Exploit path:** ${exploit.trim()}` : null].filter(Boolean).join('\n\n');
@@ -204,10 +171,6 @@ function headingOf(findings: Finding[]): string {
 	return `**Anton review:** ${count} to fix${security ? `, ${security === findings.length ? (security === 1 ? 'a security one' : 'all security') : `${security} of them security`}` : ''}.`;
 }
 
-/**
- * Posts the review's findings on the task's pull request, most severe first. On Anton's own pull
- * requests follow-ups then send them to the agent to fix; on someone else's they are for its author.
- */
 export async function postReview(id: string, { summary, findings }: { summary: string; findings: Finding[] }): Promise<string> {
 	const session = await getSessionRecord(id);
 	if (!session?.prUrl) throw new NotFoundError('This task has no pull request');

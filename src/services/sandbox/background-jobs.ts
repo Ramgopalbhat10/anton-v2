@@ -8,42 +8,23 @@ import { secretsToHide } from '../secrets/secrets.ts';
 import { liveMachine, machineFor } from './workspace.ts';
 
 /*
- * Commands the agent runs in the background in its sandbox: a test suite, a
- * build, a type check. A benchmark run spent a third of its time with the
- * agent blocked on its tests (4,127 s in the tester subagent over 13,646 s);
- * told to run suites in the background, the agent had only `nohup … &` in
- * bash, and then polled the log with `sleep 30; tail`, a model call a poll,
- * with no exit code and nothing to say the suite had ended.
- *
- * A job runs detached in the machine (its own session, so neither the exec
- * that started it nor a stopped command takes it down), its output in one log
- * under /tmp/anton-jobs and its exit code in a file beside it once it ends, so
- * the result is there to read after this server restarts. The machine's own
- * `timeout` stops it at its time limit. The server learns that it ended
- * through one exec per job held open until the exit file appears (or its time
- * is up): no model call, and on Modal an exec in flight is what keeps a
- * sandbox from its idle timeout while a job outlives the reply.
+ * Background jobs (a suite, a build) run detached in the machine, in a session of their own, their log and exit code under
+ * /tmp/anton-jobs so a restart can read them; the machine's `timeout` enforces the limit. One exec per job is held open
+ * until its exit file appears: no model call, and on Modal an exec in flight keeps a sandbox from its idle timeout.
+ * In a benchmark the agent spent a third of its time blocked on tests (4,127 s of 13,646 s) before this existed.
  */
 
-/** A job's time limit when the agent names none. */
 export const DEFAULT_TIMEOUT_MS = 30 * 60_000;
-/** The longest one `check_job` waits. The agent asks for the wait, as it names a command's timeout, so it may pass the 3 minutes a command gets without one (`COMMAND_TIMEOUT_MS`). */
+/** The agent names the wait, as it names a command's timeout, so it may pass the 3 minutes a command gets without one. */
 export const MAX_WAIT_S = 300;
-/** Where the logs and exit codes are, in the machine. */
 export const JOBS_DIR = '/tmp/anton-jobs';
-/** How long `timeout` gives a job to end after its TERM before it is killed. */
 const KILL_GRACE_S = 10;
-/** Lines of the log's end in a digest: test runners print their summary last. */
+/** Test runners print their summary last. */
 const TAIL_LINES = 30;
-/** Lines that look like failures, from before the end, at most. */
 const FAILURE_LINES = 40;
-/** Each part of a digest, at most, so the whole is a few KB. */
 const PART_CHARS = 2_000;
-/** Each line of a digest, at most. */
 const LINE_CHARS = 300;
-/** A command as a notice names it. */
 const COMMAND_CHARS = 60;
-/** Tasks whose jobs are kept, and jobs a task keeps; the oldest go first. */
 const KEEP_TASKS = 200;
 const KEEP_JOBS = 20;
 
@@ -65,26 +46,21 @@ type Job = {
 	status: JobStatus;
 	exitCode: number | null;
 	endedAt: number | null;
-	/** Why its state is unknown, when it is. */
 	lost: string | null;
-	/** The agent was told it ended, by a notice or a result. */
 	told: boolean;
-	/** The agent got its result after it ended: from `check_job`, or inline when the reply was sent back. */
 	read: boolean;
 	/** The reply was sent back once for it while it ran, and once with its unread result. */
 	sentRunning: boolean;
 	sentUnread: boolean;
 	hide: (text: string) => string;
-	/** The held exec that learns it ended; settles once it has. */
 	watched: Promise<void>;
 };
 
 type TaskJobs = { jobs: Map<number, Job>; reply: Set<number> };
 
 export type Deps = {
-	/** The task's machine for a new job; started if it is not running, as the agent's own commands do. */
 	machine: (id: string) => Promise<Machine>;
-	/** The task's machine only if it is running, for reading a job: viewing never starts a sandbox. */
+	/** Viewing never starts a sandbox. */
 	live: (id: string) => Promise<Machine | null>;
 	secrets: (id: string) => Promise<Record<string, string>>;
 	cwd: (machine: Machine) => string;
@@ -115,7 +91,6 @@ function jobsOf(id: string): TaskJobs {
 	return found;
 }
 
-/** `12s`, `3m 12s` or `1h 5m`. */
 export function durationText(ms: number): string {
 	const seconds = Math.max(0, Math.round(ms / 1000));
 	if (seconds < 60) return `${seconds}s`;
@@ -131,11 +106,7 @@ const shortCommand = (job: Job) => {
 
 const paths = (dir: string, number: number) => ({ log: `${dir}/${number}.log`, base: `${dir}/${number}` });
 
-/**
- * What runs the job, detached: the command under `timeout` in a session of its own (so stopping it reaches every
- * process it started), its output appended to the log, then its exit code written beside it, whole or not at all.
- * A job that hit its limit is marked so, as `timeout` exits 124 (137 once it had to kill).
- */
+/** A session of its own, so stopping it reaches every process it started; the exit code is written whole or not at all. `timeout` exits 124 (137 once it had to kill). */
 const RUNNER = [
 	'b=$1; s=$2',
 	't=; command -v timeout >/dev/null && t="timeout -k ' + KILL_GRACE_S + ' $s"',
@@ -148,7 +119,7 @@ const RUNNER = [
 	'echo "$code" > "$b.exit.part" && mv "$b.exit.part" "$b.exit"',
 ].join('\n');
 
-/** Picks the next free number (the log is made only if it is not there, so two jobs started at once never share one), and starts the runner. */
+/** The log is made only if it is not there, so two jobs started at once never share a number. */
 function startScript(dir: string, first: number, id: string, cwd: string, command: string, seconds: number): string {
 	return [
 		`d=${quote(dir)}; mkdir -p "$d" || exit 1`,
@@ -166,7 +137,6 @@ function startScript(dir: string, first: number, id: string, cwd: string, comman
 	].join('\n');
 }
 
-/** What is known of a job in the machine, after waiting up to `wait` seconds for it to end; with `digest`, its log's digest too. */
 function inspectScript(dir: string, number: number, wait: number, digest: boolean): string {
 	const lines = [
 		`b=${quote(paths(dir, number).base)}`,
@@ -189,11 +159,7 @@ function inspectScript(dir: string, number: number, wait: number, digest: boolea
 	return lines.join('\n');
 }
 
-/**
- * The lines of a script that print what `digestOf` is made from, for the log at `log` (a shell word): its line count,
- * then its lines that look like failures before its end, then its end. Last in a script, as `parseInspect` reads
- * everything after them as the log's. The repository's check (`repo-check.ts`) digests its log the same way.
- */
+/** Last in a script, as `parseInspect` reads everything after them as the log's. `repo-check.ts` digests its log the same way. */
 export function digestScript(log: string): string[] {
 	return [
 		`total=$(wc -l < ${log})`,
@@ -247,7 +213,6 @@ export function parseInspect(output: string): Seen {
 	};
 }
 
-/** The first lines that fit in `chars`, or the last ones with `fromEnd`. */
 function within(textIn: string, chars: number, fromEnd = false): string {
 	if (textIn.length <= chars) return textIn;
 	const lines = textIn.split('\n');
@@ -261,10 +226,7 @@ function within(textIn: string, chars: number, fromEnd = false): string {
 	return (fromEnd ? kept.reverse() : kept).join('\n');
 }
 
-/**
- * A log as the agent reads it without any model: its failure-looking lines, then its end, a few KB at most, secrets
- * hidden. `partChars` bounds each of the two parts, for a shorter digest.
- */
+/** Its failure-looking lines, then its end, a few KB at most, secrets hidden; no model reads it first. */
 export function digestOf(seen: Pick<Seen, 'failures' | 'tail' | 'lines'>, log: string, hide: (text: string) => string, partChars = PART_CHARS): string {
 	const failures = within(hide(seen.failures), partChars);
 	const tail = within(hide(seen.tail), partChars, true);
@@ -277,7 +239,6 @@ export function digestOf(seen: Pick<Seen, 'failures' | 'tail' | 'lines'>, log: s
 		.join('\n');
 }
 
-/** The job's state from what the machine shows, for a job this server watches. */
 function settle(job: Job, seen: Seen, now: number): void {
 	if (job.status !== 'running') return;
 	if (seen.exitCode !== null) {
@@ -291,7 +252,6 @@ function settle(job: Job, seen: Seen, now: number): void {
 	}
 }
 
-/** Its state in a few words: `exited with code 1 after 3m 12s`. */
 function stateText(job: Job, now: number): string {
 	const ran = durationText((job.endedAt ?? now) - job.startedAt);
 	switch (job.status) {
@@ -308,11 +268,7 @@ function stateText(job: Job, now: number): string {
 	}
 }
 
-/**
- * Holds one exec open until the job's exit file appears or its time is up, then notes how it ended. Past its time
- * with no exit code (a machine without `timeout`), it is stopped here. A machine that stopped leaves it unknown;
- * an exec cut short on a machine still running is held again.
- */
+/** Past its time with no exit code (a machine without `timeout`), it is stopped here. An exec cut short on a machine still running is held again. */
 async function watch(id: string, job: Job, machine: Machine, d: Deps): Promise<void> {
 	for (let failures = 0; job.status === 'running'; ) {
 		const left = Math.max(1, Math.ceil((job.startedAt + job.timeoutMs - d.now()) / 1000) + KILL_GRACE_S + 5);
@@ -343,7 +299,7 @@ async function watch(id: string, job: Job, machine: Machine, d: Deps): Promise<v
 	}
 }
 
-/** Stops the job's whole process group, marked first so a reading after a restart says why it ended. */
+/** Marked first, so a reading after a restart says why it ended. */
 async function kill(machine: Machine, dir: string, number: number, why: 'stopped' | 'timeout'): Promise<void> {
 	const b = quote(paths(dir, number).base);
 	await machine.exec(
@@ -362,10 +318,7 @@ async function kill(machine: Machine, dir: string, number: number, why: 'stopped
 
 export type Started = { job: number; log: string; output: string };
 
-/**
- * Starts `command` detached in the task's working folder, with the environment its shell has, and returns at once
- * with its number and log. `timeoutS` sets its limit (30 minutes by default, never past a reply's).
- */
+/** Returns at once. The limit is 30 minutes by default, never past a reply's. */
 export async function startJob(id: string, command: string, timeoutS: number | undefined, deps: Partial<Deps> = {}): Promise<Started> {
 	const d = { ...defaults, ...deps };
 	const timeoutMs = Math.min(Math.max(1_000, timeoutS ? timeoutS * 1000 : DEFAULT_TIMEOUT_MS), d.limitMs);
@@ -406,7 +359,6 @@ export async function startJob(id: string, command: string, timeoutS: number | u
 	};
 }
 
-/** A job of an earlier run of this server, read back from its files, for `check_job` on a number it does not know. */
 function recovered(number: number, seen: Seen, dir: string): Job {
 	const startedAt = seen.info!.started;
 	const now = seen.now ?? startedAt;
@@ -432,11 +384,7 @@ function recovered(number: number, seen: Seen, dir: string): Job {
 
 export type CheckOptions = { wait?: number; stop?: boolean; signal?: AbortSignal };
 
-/**
- * A job's status, exit code, time and log digest, after waiting up to `wait` seconds (at most `MAX_WAIT_S`) for it
- * to end, in one exec; with `stop`, after stopping it. Reads only a running machine. A number this server does not
- * know (it restarted) is read back from the job's files, when they are this task's.
- */
+/** In one exec. Reads only a running machine; a number from before a restart is read back from the job's files, when they are this task's. */
 export async function checkJob(id: string, number: number, options: CheckOptions = {}, deps: Partial<Deps> = {}): Promise<string> {
 	const d = { ...defaults, ...deps };
 	const known = tasks.get(id)?.jobs.get(number);
@@ -474,10 +422,6 @@ export async function checkJob(id: string, number: number, options: CheckOptions
 	return `Job ${number}${name} is ${stateText(job, now)}.\n${digestOf(seen, job.log, hide)}`;
 }
 
-/**
- * The line a `bash` result ends with for each job of the task that ended since the agent last heard of it, once
- * a job; empty when none did. The same kind of line as the reply clock's (`reply-clock.ts`).
- */
 export function jobNotice(id: string, now = Date.now()): string {
 	const own = tasks.get(id);
 	if (!own) return '';
@@ -500,12 +444,11 @@ export function jobNotice(id: string, now = Date.now()): string {
 	return lines.join('');
 }
 
-/** A new reply: the jobs it starts are the ones its end is checked for. */
 export function startJobsGate(id: string): void {
 	tasks.get(id)?.reply.clear();
 }
 
-/** Whether a job of the task is running and within its time, so the idle stop leaves its sandbox up until it ends. */
+/** So the idle stop leaves its sandbox up until it ends. */
 export function hasRunningJob(id: string, now = Date.now()): boolean {
 	for (const job of tasks.get(id)?.jobs.values() ?? []) {
 		if (job.status === 'running' && now < job.startedAt + job.timeoutMs + KILL_GRACE_S * 1000 + 60_000) return true;
@@ -513,7 +456,7 @@ export function hasRunningJob(id: string, now = Date.now()): boolean {
 	return false;
 }
 
-/** Stops the jobs the reply in hand started that still run: a reply stopped by the user leaves nothing running. */
+/** A reply stopped by the user leaves nothing running. */
 export async function stopReplyJobs(id: string, deps: Partial<Deps> = {}): Promise<void> {
 	const d = { ...defaults, ...deps };
 	const own = tasks.get(id);
@@ -533,9 +476,8 @@ export async function stopReplyJobs(id: string, deps: Partial<Deps> = {}): Promi
 type Call = { tool: string };
 
 /**
- * At the end of a reply: a job it started that still runs sends it back to wait for the job (or stop it), and a job
- * that ended with its result never read sends it back with that result inline. Each job is the cause of at most one
- * send-back each way, so this never loops. Never on an aborted reply or one that ends on `ask` or `propose_plan`.
+ * A job still running sends the reply back to wait for it (or stop it); one that ended unread sends it back with its result.
+ * Each job causes at most one send-back each way, so this never loops. Never on an aborted reply or one ending on `ask` or `propose_plan`.
  */
 export async function jobsGate(id: string, calls: readonly Call[], context: { signal?: AbortSignal } = {}, deps: Partial<Deps> = {}): Promise<string | null> {
 	const d = { ...defaults, ...deps };
@@ -577,7 +519,6 @@ async function readDigest(id: string, job: Job, d: Deps): Promise<string> {
 	}
 }
 
-/** Settles once every watch of the task's jobs has: for tests. */
 export async function settledJobs(id: string): Promise<void> {
 	await Promise.all([...(tasks.get(id)?.jobs.values() ?? [])].map((job) => job.watched));
 }
