@@ -788,6 +788,15 @@ async function gatewayStored(gateway: Gateway): Promise<Stored> {
 	return current;
 }
 
+/** The plans signed in to, by name, from what is stored here and the runtime's own sign-in, with no call to a vendor. */
+export async function plansSignedIn(): Promise<string[]> {
+	const names: string[] = [];
+	for (const provider of subscriptionProviders()) if ((await stored(provider.id)).credential) names.push(provider.name);
+	for (const plan of keyPlans()) if ((await stored(plan.id)).key) names.push(plan.name);
+	for (const runtime of agentRuntimes()) if ((await runtime.status().catch(() => null))?.signedIn) names.push(runtime.name);
+	return names;
+}
+
 /**
  * Whether a gateway's models are offered (OpenRouter's by default): it has a key and is switched on.
  * Without OpenRouter's port its catalog is offered as it is.

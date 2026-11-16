@@ -1,7 +1,11 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { ChevronRight, List, type IconComponent, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Count } from '@/components/instrument';
 import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/signal';
+import { api } from '@/lib/api';
+import { setupLeft } from '@/components/setup-card';
 import { closeSettings } from '@/lib/settings-modal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
@@ -62,6 +66,7 @@ function Nav() {
 							<Link key={section.id} to="/settings/$section" params={{ section: section.id }} className={NAV_ITEM}>
 								<NavIcon icon={section.icon} />
 								<span className="min-w-0 flex-1 truncate">{section.label}</span>
+								{section.id === 'connections' ? <SetupLeft /> : null}
 							</Link>
 						))}
 					</Fragment>
@@ -69,6 +74,13 @@ function Nav() {
 			)}
 		</nav>
 	);
+}
+
+/** How many needed connections are not set up yet, by Connections in the nav; nothing once all are. */
+function SetupLeft() {
+	const setup = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 60_000 });
+	const left = setup.data ? setupLeft(setup.data) : 0;
+	return left ? <Count>{left}</Count> : null;
 }
 
 const usePath = () => useRouterState({ select: (state) => state.location.pathname });

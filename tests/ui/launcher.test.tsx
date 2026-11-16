@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
 	projects: vi.fn(),
 	sessions: vi.fn(),
 	profile: vi.fn(async () => ({ name: 'Ada Lovelace' })),
+	// A server that can run tasks: Home shows the composer, and the Settings nav no count by Connections.
+	setup: vi.fn(async () => ({ slots: [], plans: ['ChatGPT plan'], canRunTasks: true })),
 	models: vi.fn(),
 	generalSettings: vi.fn(),
 	branches: vi.fn(),

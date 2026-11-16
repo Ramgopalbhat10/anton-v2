@@ -11,6 +11,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
+import { mockSetup } from './mock-setup.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
 
@@ -246,6 +247,10 @@ export function mockApi(): Plugin {
 	const handle = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
 		const url = new URL(req.url ?? '/', 'http://local');
 		let path = url.pathname;
+		if (path.startsWith('/__setup/') || path === '/api/connections' || path.startsWith('/api/setup')) {
+			void mockSetup(req, res, path, json).then((handled) => (handled ? undefined : next()));
+			return;
+		}
 		if (path === '/__perf/start') {
 			startedAt = Date.now();
 			return json(res, { ok: true });

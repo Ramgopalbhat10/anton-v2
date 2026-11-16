@@ -1,9 +1,12 @@
 import path from 'node:path';
 import { asToolProfileSetting } from './core/tool-profile.ts';
+import { loadSavedEnv } from './saved-env.ts';
 
 const read = (name: string, fallback = ''): string => process.env[name]?.trim() || fallback;
 /** Anton's own files: both databases, local machines and disk storage. */
 const dataDir = path.resolve(read('ANTON_DATA_DIR', 'data'));
+// Values saved in Settings › Connections (data/anton.env) go over the environment before any setting is read.
+loadSavedEnv(dataDir);
 
 /** Every setting Anton reads from the environment, in one place. */
 export const config = {
@@ -39,9 +42,14 @@ export const config = {
 		secretAccessKey: read('TIGRIS_SECRET_ACCESS_KEY'),
 		region: read('TIGRIS_REGION', 'auto'),
 	},
+	/** Read as it is used, so a token saved in Settings › Connections applies without a restart. */
 	github: {
-		token: read('ANTON_GITHUB_TOKEN'),
-		apiUrl: read('ANTON_GITHUB_API_URL', 'https://api.github.com'),
+		get token() {
+			return read('ANTON_GITHUB_TOKEN');
+		},
+		get apiUrl() {
+			return read('ANTON_GITHUB_API_URL', 'https://api.github.com');
+		},
 		/** The secret of a GitHub webhook pointed at `/api/github/webhook`; without it the route is off and Anton polls. */
 		webhookSecret: read('ANTON_GITHUB_WEBHOOK_SECRET'),
 	},
@@ -62,12 +70,18 @@ export const config = {
 	 * The System One decision model (TypeSafe's Jev) that decides which pull request
 	 * comments and pushes need an agent, and that run_script programs can ask. `off` turns it off.
 	 */
-	decisionModel: read('ANTON_DECISION_MODEL', '~typesafe/jev-latest'),
+	get decisionModel() {
+		return read('ANTON_DECISION_MODEL', '~typesafe/jev-latest');
+	},
 	/** Parallel's search MCP server gives every task web_search and web_fetch; free without a key. `off` turns it off. */
 	web: {
-		mcpUrl: read('ANTON_WEB_MCP_URL', 'https://search.parallel.ai/mcp'),
+		get mcpUrl() {
+			return read('ANTON_WEB_MCP_URL', 'https://search.parallel.ai/mcp');
+		},
 		/** Optional, for higher rate limits. */
-		apiKey: read('PARALLEL_API_KEY'),
+		get apiKey() {
+			return read('PARALLEL_API_KEY');
+		},
 	},
 	/** Your own Google OAuth client, for Gmail in Settings › Connectors; the client pasted there is used instead when there is one. */
 	google: {

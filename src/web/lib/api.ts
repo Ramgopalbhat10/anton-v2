@@ -511,6 +511,13 @@ export type ContextView = {
 };
 export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans?: PlanUsage[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
+/** One value a connection needs (src/services/setup.ts): where it comes from now, and the value itself unless it is a secret, whose last four characters stand in. */
+export type SetupField = { env: string; label: string; secret: boolean; optional: boolean; fallback: string | null; source: 'saved' | 'environment' | null; value: string | null; hint: string | null };
+export type SetupOption = { id: string; label: string; fields: SetupField[] };
+/** A slot of Settings › Connections: `provider` is the one the next start uses; `restart` says it differs from what runs now. */
+export type SetupSlot = { id: string; name: string; required: boolean; live: boolean; provider: string | null; restart: boolean; saved: boolean; options: SetupOption[] };
+export type SetupView = { slots: SetupSlot[]; plans: string[]; canRunTasks: boolean };
+export type SetupInput = { provider: string; values: Record<string, string> };
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the caps at API prices. */
 export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean };
 /** A plan you can sign in to; the sign-in itself never leaves the server. */
@@ -800,6 +807,10 @@ export const api = {
 	budget: (sessionId?: string) => json<Budget>(`/api/budget${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
 	usage: () => json<UsageView>('/api/usage'),
 	connections: () => json<{ connections: Connection[] }>('/api/connections'),
+	setup: () => json<SetupView>('/api/setup'),
+	testSetup: (slot: string, input: SetupInput) => json<{ detail: string }>(`/api/setup/${slot}/test`, { method: 'POST', body: JSON.stringify(input) }),
+	saveSetup: (slot: string, input: SetupInput) => json<{ detail: string; restart: boolean }>(`/api/setup/${slot}`, { method: 'PUT', body: JSON.stringify(input) }),
+	clearSetup: (slot: string, provider: string) => json<{ ok: true }>(`/api/setup/${slot}?provider=${encodeURIComponent(provider)}`, { method: 'DELETE' }),
 	compute: () => json<ComputeView>('/api/compute'),
 	sandboxSettings: () => json<SandboxView>('/api/settings/sandbox'),
 	saveSandboxSettings: (settings: SandboxSettings) =>
