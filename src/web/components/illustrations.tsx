@@ -1,5 +1,5 @@
 import { Check, GitPullRequest, ListTodo, type IconComponent, Rows3 } from '@/lib/icons';
-import { type CSSProperties, createContext, type ReactNode, useContext, useId } from 'react';
+import { type CSSProperties, createContext, type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /*
@@ -41,6 +41,9 @@ function Art({ w, h, label, className, children }: { w: number; h: number; label
 					<stop offset="0" style={{ stopColor: 'var(--accent)', stopOpacity: 0.28 }} />
 					<stop offset="1" style={{ stopColor: 'var(--accent)', stopOpacity: 0 }} />
 				</radialGradient>
+				<filter id={`${id}-blur`} x="-100%" y="-100%" width="300%" height="300%">
+					<feGaussianBlur stdDeviation="3" />
+				</filter>
 				<linearGradient id={`${id}-screen`} x1="0" y1="0" x2="0" y2="1">
 					<stop offset="0" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.9 }} />
 					<stop offset="1" style={{ stopColor: 'var(--bg-app)', stopOpacity: 0.6 }} />
@@ -358,30 +361,62 @@ function MarkShapes() {
 	);
 }
 
+/** A small pool and a ring of the accent where the plug meets its socket, drawn only while it seats. */
+function Spark({ cx, cy }: { cx: number; cy: number }) {
+	const id = useContext(Ids);
+	return (
+		<g>
+			<circle className="fa-spark" cx={cx} cy={cy} r={10} fill={ACCENT} filter={`url(#${id}-blur)`} />
+			<circle className="fa-ring" cx={cx} cy={cy} r={7} stroke={ACCENT} strokeWidth={1.25} />
+		</g>
+	);
+}
+
 /**
  * Anton on the left, your plan on the right (its vendor's logo when there is
- * one), joined by a plug in the middle: pushed into its socket, the wires lit
- * and carrying a flow, when you are signed in; pulled out when you are not.
+ * one), joined by a plug and a socket: the plug pushed in and the wires lit,
+ * carrying a flow, when you are signed in; pulled out with a gap when you are
+ * not. When a plan connects while the drawing is on screen, the plug slides in
+ * with a small spark at the socket; a plan already connected never animates.
  */
 export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { className?: string; linked: boolean; plan: string; noun?: 'plan' | 'account'; logo?: string }) {
-	// Signed in, the plug moves right and the socket left until the prongs sit in it.
-	const plugX = linked ? 125.5 : 118.5;
-	const socketX = linked ? 141.5 : 148.5;
+	const was = useRef(linked);
+	const [seating, setSeating] = useState(false);
+	useEffect(() => {
+		// Only a change from not connected to connected, never the first render.
+		const flipped = linked && !was.current;
+		was.current = linked;
+		if (!flipped) return;
+		setSeating(true);
+		const timer = setTimeout(() => setSeating(false), 1000);
+		return () => clearTimeout(timer);
+	}, [linked]);
+	// The plug body's left edge; its prongs reach 25 past it, into the socket at 150 when linked.
+	const plugX = linked ? 128 : 112;
+	const edge = linked ? 'var(--accent-line)' : ink(22);
 	const prong = linked ? 'var(--accent-text)' : 'var(--text-4)';
+	const slot = linked ? 'var(--accent-text)' : ink(20);
 	return (
 		<Art w={280} h={112} label={linked ? `Anton linked to your ${plan} ${noun}` : `Anton, with your ${plan} ${noun} not connected yet`} className={className}>
-			<Wire d={`M86 46 H${plugX - 0.5}`} lit={linked} broken={!linked} />
-			<Wire d={`M${socketX + 13.5} 46 H194`} lit={linked} broken={!linked} />
-			<g>
-				<line x1={plugX + 12.5} x2={plugX + 16.5} y1={43.5} y2={43.5} stroke={prong} strokeLinecap="round" />
-				<line x1={plugX + 12.5} x2={plugX + 16.5} y1={48.5} y2={48.5} stroke={prong} strokeLinecap="round" />
-				<rect x={plugX} y={40.5} width={13} height={11} rx={2.5} fill={linked ? 'var(--accent-soft)' : 'var(--bg-active)'} stroke={linked ? 'var(--accent-line)' : EDGE} />
-				{linked ? (
-					<rect x={socketX} y={40.5} width={13} height={11} rx={2.5} fill="var(--accent-soft)" stroke="var(--accent-line)" />
-				) : (
-					<rect x={socketX} y={40.5} width={13} height={11} rx={2.5} fill="none" stroke={ink(14)} strokeDasharray="2 2" />
-				)}
+			{/* The cable from Anton to the plug, and the lead from the socket to the plan. */}
+			<g className={seating ? 'fa-arrive' : undefined}>
+				<Wire d={`M86 46 H${plugX - 3}`} lit={linked} />
+				<Wire d="M163 46 H194" lit={linked} />
 			</g>
+			{seating ? <Spark cx={150} cy={46} /> : null}
+			{/* The plug: a cable neck, a body and two prongs. The outer group places it; the inner one animates. */}
+			<g transform={`translate(${plugX} 0)`}>
+				<g className={seating ? 'fa-seat' : undefined}>
+					<line x1={18} x2={25} y1={42.5} y2={42.5} stroke={prong} strokeWidth={1.5} strokeLinecap="round" />
+					<line x1={18} x2={25} y1={49.5} y2={49.5} stroke={prong} strokeWidth={1.5} strokeLinecap="round" />
+					<rect x={0.5} y={39.5} width={18} height={13} rx={3} fill={linked ? 'var(--accent-soft)' : 'var(--bg-active)'} stroke={edge} />
+					<rect x={-4} y={43.5} width={5} height={5} rx={1.5} fill={linked ? 'var(--accent-line)' : ink(16)} />
+				</g>
+			</g>
+			{/* The socket: a taller housing on the plan's lead, its slots lit once the prongs are in. */}
+			<rect x={150.5} y={35.5} width={13} height={21} rx={3} fill="var(--bg-app)" stroke={edge} />
+			<line x1={150.5} x2={155} y1={42.5} y2={42.5} stroke={slot} strokeWidth={1.5} />
+			<line x1={150.5} x2={155} y1={49.5} y2={49.5} stroke={slot} strokeWidth={1.5} />
 			{/* Anton. */}
 			<Tile x={30} y={18} w={56} h={56} r={12} lit={linked} />
 			<g transform="translate(40 28) scale(2.15) translate(-3.5 -5.7)">
@@ -407,8 +442,8 @@ export function PlanLinkArt({ className, linked, plan, noun = 'plan', logo }: { 
 			<Caption x={58} y={92} anchor="middle">
 				Anton
 			</Caption>
-			<Caption x={140} y={76} anchor="middle" accent={linked}>
-				{linked ? 'signed in' : 'not connected'}
+			<Caption x={140} y={92} anchor="middle" accent={linked}>
+				{linked ? 'connected' : 'not connected'}
 			</Caption>
 			<Caption x={222} y={92} anchor="middle" accent={linked}>
 				{shortName(plan, 18)}

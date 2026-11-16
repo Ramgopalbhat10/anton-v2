@@ -661,3 +661,21 @@ describe('OpenRouter', () => {
 		expect(sourcesOf([model]).map((source) => [source.name, source.plan])).toEqual([['OpenRouter', false]]);
 	});
 });
+
+describe('Plan link drawing', () => {
+	it('seats the plug with a spark only when a plan connects on screen, not when it is already connected', async () => {
+		const { PlanLinkArt } = await import('@/components/illustrations');
+		const { render } = await import('@testing-library/react');
+		const already = render(<PlanLinkArt linked plan="Claude" />);
+		expect(already.container.querySelector('.fa-seat, .fa-spark')).toBeNull();
+		already.unmount();
+
+		const view = render(<PlanLinkArt linked={false} plan="Claude" />);
+		expect(view.container.querySelector('.fa-seat')).toBeNull();
+		view.rerender(<PlanLinkArt linked plan="Claude" />);
+		expect(view.container.querySelector('.fa-seat')).toBeTruthy();
+		expect(view.container.querySelector('.fa-spark')).toBeTruthy();
+		expect(screen.getByRole('img', { name: 'Anton linked to your Claude plan' })).toBeTruthy();
+		await waitFor(() => expect(view.container.querySelector('.fa-seat')).toBeNull(), { timeout: 2000 });
+	});
+});
