@@ -1,10 +1,6 @@
 import type { Session } from './types.ts';
 
-/**
- * Where a task stands, a project's thread or a task of its own, in the order a project shows them:
- * what needs you first, then what runs, waits for a slot, waits on review,
- * is about to land, sits idle, and what is done.
- */
+/** In the order a project shows them. */
 export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
 export type ThreadState = (typeof THREAD_STATES)[number];
 
@@ -20,14 +16,9 @@ export const THREAD_STATE_LABELS: Record<ThreadState, string> = {
 
 type Facts = Pick<Session, 'working' | 'status' | 'asking' | 'planMode' | 'plan' | 'pullRequest' | 'prUrl' | 'resolvedAt' | 'brief'>;
 
-/** The agent's last reply proposed a plan, and it changes nothing until the plan is approved. */
 const planReady = (thread: Facts) => thread.planMode && !thread.working && Boolean(thread.plan);
 
-/**
- * One task's state from its own fields; the first rule that holds wins. The
- * server reports and counts with it, and every page (the sidebar, a project,
- * its rack) shows it, so none of them disagree. Nothing here is stored.
- */
+/** The first rule that holds wins. The server and every page use it, so none disagree. */
 export function threadState(thread: Facts): ThreadState {
 	if (thread.resolvedAt) return 'resolved';
 	const pr = thread.prUrl ? thread.pullRequest : null;
@@ -38,8 +29,6 @@ export function threadState(thread: Facts): ThreadState {
 	return 'idle';
 }
 
-/** Whether the thread needs something from you: an answer, an approval, or a look at what failed. */
 export const needsYou = (state: ThreadState) => state === 'waiting';
 
-/** Threads that hold a slot of the project's parallel limit. */
 export const holdsSlot = (state: ThreadState) => state === 'working';

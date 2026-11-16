@@ -7,10 +7,8 @@ import { useRepoSnapshot } from './tools/snapshot.ts';
 import { useRunScript } from './tools/run-script.ts';
 
 /**
- * What every explorer is told, whichever files it reads. In prod (Nov 2026, 106 explorer runs) one took 7 steps and
- * 140k tokens at the median and 11 steps and 270k at the 90th percentile; the runs past that grew their context with
- * whole files (two explorers of one reply read 238KB and 219KB and spent 639k and 725k tokens), and a 2,400-token
- * final report took 30 s to write. Nothing told them when to stop or how long to answer.
+ * Prod, Nov 2026, 106 explorer runs: median 7 steps and 140k tokens, p90 11 steps and 270k; the runs past that read
+ * whole files (up to 238KB, 725k tokens), and a 2,400-token report took 30 s to write.
  */
 const EXPLORER_SCOPE =
 	'Answer the questions in your brief and nothing past them: once each is answered, or you see it cannot be answered from here, stop reading and report. ' +
@@ -25,7 +23,6 @@ const findingsReport = (canWrite: boolean) =>
 	'Report in about 500 words or fewer unless the brief asks for more: each finding with its files and lines and what they show, then what you could not settle.' +
 	(canWrite ? ` Write ${OUTPUTS}/explorer-report.md only when the brief asks for a report. Do not commit, push, or open a pull request.` : '');
 
-/** Says what the Coder gets from an explorer and what it costs, in every explorer's description. */
 const EXPLORER_USE =
 	'It starts without this conversation, cannot reach the web, and the caller waits for its report: use it for an investigation across many files you cannot name yet, not for a few files you can.';
 
@@ -63,11 +60,8 @@ export const tester = defineSubagent({
 });
 
 /**
- * A subagent's own model — its project's choice when the task is a thread, else Settings › General's —
- * often a cheaper one; without one it uses the task's, and its compaction. One on a
- * Claude Code model compacts where Settings › General says Claude Code compacts (scripts/patch-flue.ts
- * reads its `compaction`), not near the end of a 1M window; others keep the runtime's point for their model,
- * and their own model writes their summary at the effort the task's own model writes one.
+ * Without its own model a subagent uses the task's, and its compaction. One on a Claude Code model compacts where
+ * Settings › General says Claude Code compacts (scripts/patch-flue.ts reads `compaction`), not near the end of a 1M window.
  */
 export function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
 	const choice = helperModelFor(id, name);
@@ -89,12 +83,7 @@ function SnapshotExplorer(scripts: boolean, chat: boolean) {
 	].join(' ');
 }
 
-/**
- * Before a chat, plan or review has a sandbox, the explorer reads the same
- * snapshot the agent answers from, so reading many files stays out of the
- * agent's context without starting a machine. With a sandbox, `useWorkspace`
- * mounts the explorer that works there instead.
- */
+/** Before a chat, plan or review has a sandbox, its explorer reads the snapshot, so reading never starts a machine. */
 export function useSnapshotExplorer(id: string, chat: boolean) {
 	const subagent = defineSubagent({
 		name: 'explorer',
@@ -103,7 +92,6 @@ export function useSnapshotExplorer(id: string, chat: boolean) {
 			: `Read-only investigation of the repository as the task started, or of another GitHub repository the brief names as owner/name, reporting its findings with files and lines. ${EXPLORER_USE}`,
 		agent: () => {
 			useRepoSnapshot(id, chat);
-			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
 			const scripts = agentSettingsNow().codeMode;
 			if (scripts) useRunScript(id, { repo: true, mcp: false });
 			return SnapshotExplorer(scripts, chat);
@@ -112,11 +100,7 @@ export function useSnapshotExplorer(id: string, chat: boolean) {
 	useSubagent(withSettingsModel(id, subagent, 'explorer'));
 }
 
-/**
- * A repository task's explorer, one definition for the whole task: it reads with read, grep and glob, which answer
- * from the snapshot until the task has its workspace and from the sandbox after, so reading never starts a machine.
- * It shares the sandbox's tools as every subagent does, bash among them, for what reading cannot answer.
- */
+/** One explorer for the whole task: read, grep and glob answer from the snapshot until the workspace exists. */
 function TaskExplorer(id: string, scripts: boolean) {
 	return (
 		[
@@ -131,13 +115,12 @@ function TaskExplorer(id: string, scripts: boolean) {
 	);
 }
 
-/** A repository task's explorer and tester; the runtime gives them no repository instructions of its own here, so they get the task's. */
+/** The runtime gives these no repository instructions here, so they get the task's. */
 export function useTaskSubagents(id: string) {
 	const taskExplorer = defineSubagent({
 		name: 'explorer',
 		description: `Read-only investigation of the repository, or of another GitHub repository the brief names as owner/name, answering with its findings with files and lines. ${EXPLORER_USE}`,
 		agent: () => {
-			// Its job is many reads, which is what code mode is for; it has no MCP servers of its own.
 			const scripts = agentSettingsNow().codeMode;
 			if (scripts) useRunScript(id, { repo: 'task', mcp: false });
 			return TaskExplorer(id, scripts);

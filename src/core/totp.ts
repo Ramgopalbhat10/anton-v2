@@ -1,10 +1,6 @@
 import { createHmac } from 'node:crypto';
 
-/**
- * Time-based one-time passwords (RFC 6238), as an authenticator app shows them:
- * HMAC-SHA1 over 30-second steps, six digits. The secret is the base32 text the
- * app was set up with (spaces and case ignored).
- */
+// RFC 6238 as authenticator apps show it: HMAC-SHA1 over 30-second steps, six digits; a base32 secret, spaces and case ignored.
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -25,7 +21,6 @@ export function base32Bytes(text: string): Buffer {
 	return Buffer.from(out);
 }
 
-/** The code for `at` (milliseconds since the epoch). */
 export function totp(secret: string | Buffer, at = Date.now(), { digits = 6, stepSeconds = 30 } = {}): string {
 	const key = typeof secret === 'string' ? base32Bytes(secret) : secret;
 	const counter = Buffer.alloc(8);
@@ -36,5 +31,4 @@ export function totp(secret: string | Buffer, at = Date.now(), { digits = 6, ste
 	return String(code).padStart(digits, '0');
 }
 
-/** Milliseconds until the current code changes. */
 export const totpRemainingMs = (at = Date.now(), stepSeconds = 30) => stepSeconds * 1000 - (at % (stepSeconds * 1000));

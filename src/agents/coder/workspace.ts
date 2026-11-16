@@ -47,7 +47,6 @@ export function useStartWorkspace(id: string, chat: boolean, startWorkspace: () 
 	);
 }
 
-/** How the agent's model takes an image `read` shows: as a picture, or in the vision model's words. */
 function sightOf(id: string): ImageSight {
 	return {
 		sees: async () => (await findModel(modelFor(id).model).catch(() => undefined))?.vision === true,
@@ -55,22 +54,13 @@ function sightOf(id: string): ImageSight {
 	};
 }
 
-/** The task's machine as its agent's sandbox. */
 async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 	const secrets = await secretsToHide(id);
-	// A skill's scripts and kits run from a copy in the sandbox; without one it still reads them through read_skill_resource.
 	copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
-	// A command's result also says when a background job ended, once a job, and when the repository's check has news.
 	return machineSandbox(machine, repoDir(machine), () => !isPlanning(id), secrets, undefined, () => elapsedNote(id) + jobNotice(id) + checkNotice(id));
 }
 
-/**
- * A chat's or a plan's or review's sandbox, once it has one, and everything that needs it: shell and file tools,
- * subagents and a browser to use web apps in, the tools that change files being the model family's (`profile`).
- * In plan mode the file tools cannot write. A chat's sandbox is a
- * scratch folder: no repository to investigate or test. Someone else's pull request is reviewed, never pushed to.
- * A repository task outside plan mode and review has `useTaskWorkspace` instead, from its first model call.
- */
+/** A chat's, plan's or review's sandbox, once it has one. A repository task outside plan mode and review uses `useTaskWorkspace`. */
 export function useWorkspace(id: string, chat: boolean, review: ReviewTask | null, profile: ToolProfile) {
 	useSandbox({
 		createSandbox: async () => sandboxOf(id, await machineFor(id)),
@@ -85,12 +75,7 @@ export function useWorkspace(id: string, chat: boolean, review: ReviewTask | nul
 	useSandboxChecks(id);
 }
 
-/**
- * A repository task's sandbox and everything that needs it, from its first model call, so its tools and system
- * prompt never change: read, grep and glob answer from the snapshot until the task has its workspace, and the
- * first command, file change or job gets the machine (the one `prewarmMachine` started, or a new one) and gives it
- * its workspace, as `start_workspace` used to. Nothing here starts a machine before a tool needs one.
- */
+/** From the first model call, so tools and prompt never change; nothing here starts a machine before a tool needs one. */
 export function useTaskWorkspace(id: string, profile: ToolProfile) {
 	useSandbox({
 		async createSandbox() {
@@ -126,7 +111,6 @@ export function useTaskWorkspace(id: string, profile: ToolProfile) {
 	useSandboxChecks(id);
 }
 
-/** Checks of what runs in the sandbox: a Preview port, and a screenshot of a page. */
 function useSandboxChecks(id: string) {
 	useTool(
 		defineTool({
@@ -158,10 +142,6 @@ function useSandboxChecks(id: string) {
 	);
 }
 
-/**
- * Commands that end (test suites, builds) run without holding the reply: the agent goes on working, is told when
- * one ends with its next command's result, and reads its exit code and failures in one call (`background-jobs.ts`).
- */
 function useBackgroundJobs(id: string, machine?: (id: string) => Promise<Machine>) {
 	useTool(
 		defineTool({

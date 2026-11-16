@@ -61,7 +61,6 @@ observeRuntime((event) => {
 	noteTodoStep(event as Parameters<typeof noteTodoStep>[0]);
 	// A compaction of a task's conversation is noted before the end-of-reply hook that follows it, which pins the request and todo list.
 	noteCompaction(event as Parameters<typeof noteCompaction>[0]);
-	// A finished call that may have changed a task's files runs the repository's check after a quiet, in the background.
 	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
@@ -85,14 +84,12 @@ appDb()
 	.then(() => generalSettings())
 	.catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
-// A message with pictures (a thread's brief with images attached) goes as a user message carrying them.
 const delivered = (text: string, images?: DeliveredImage[]) => (images?.length ? { kind: 'user' as const, body: text, attachments: images } : text);
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coder, { id, message: delivered(text, images) })));
 setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id, message: delivered(text, images) })), 'reviewer');
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
-// The OpenRouter key pasted in Settings › Subscriptions, before anything calls OpenRouter.
+// Before anything calls OpenRouter.
 await loadGatewayKey().catch((error: unknown) => logProblem('warn', 'Could not load the OpenRouter key', error));
-// And the Composio key pasted in Settings › Connectors.
 await loadComposioKey().catch((error: unknown) => logProblem('warn', 'Could not load the Composio key', error));
 // Before the runtime resumes replies a restart cut off, so they run with their task's model and MCP servers.
 await primeAllAgents().catch((error: unknown) => logProblem('warn', 'Could not load task models', error));
@@ -105,9 +102,8 @@ app.onError((error, c) => {
 	return c.json({ error: error.message }, status as 400);
 });
 
-// Each module in src/routes keeps its routes' full paths. Hono copies a module's routes in when it
-// is mounted, so mounting order is registration order: a module's checks (the ones in front of the
-// agent routers, the incognito views on /api/sessions/*) stay in front of the routes they guard.
+// Hono copies a module's routes in when it is mounted, so mounting order is registration order:
+// a module's checks (in front of the agent routers, the incognito views) stay in front of the routes they guard.
 app.route('/', agentRoutes);
 app.route('/', miscRoutes);
 app.route('/', settingsRoutes);

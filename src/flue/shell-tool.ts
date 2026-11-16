@@ -4,27 +4,18 @@ import type { Sandbox } from '@flue/runtime';
 import { quote } from '../core/shell.ts';
 import type { Tool } from './sandbox-tools.ts';
 
-/**
- * How long the agent's command runs when it names no timeout of its own. In a 20-task benchmark run the 422
- * commands that named none took 18 s at most, and every command past a minute named its own (120 s to 30 min),
- * so three minutes cuts no honest command and stops a watch-mode runner or a prompt for input in good time.
- */
+/** In a 20-task benchmark the 422 commands that named no timeout took 18 s at most; every one past a minute named its own. */
 export const COMMAND_TIMEOUT_MS = 3 * 60_000;
 /** Where a command's whole output is kept in the machine, so the agent can read what its result leaves out. */
 export const OUTPUT_DIR = '/tmp/anton-out';
-/**
- * A result up to this comes back whole; a longer one as its start and end. In that run 38 of 901 results were
- * past 16KB (about 124K tokens beyond it, each sent again with every later step), and half of those were whole
- * source files or diffs printed with cat or git show, which `read` pages anyway.
- */
+/** A longer result comes back as its start and end. In that run 38 of 901 results were past 16KB, about 124K tokens resent with every later step. */
 export const INLINE_BYTES = 16 * 1024;
-/** Of a longer one, the start: a compiler's first error and the command's own first lines. */
+/** The start: a compiler's first error. */
 export const HEAD_BYTES = 6 * 1024;
-/** And the end, the larger part: test runners print their failures and summary last, and npm its error after them. */
+/** The end, the larger part: test runners print their failures and summary last, and npm its error after them. */
 export const TAIL_BYTES = INLINE_BYTES - HEAD_BYTES;
-/** Outputs each machine keeps, the oldest dropped first. Only those cut are kept at all. */
+/** The oldest dropped first. Only cut outputs are kept at all. */
 export const KEEP_OUTPUTS = 30;
-/** How long a stopped command's processes get to end after their TERM before they are killed. */
 const KILL_GRACE_S = 5;
 /** The machine's own limit, past the command's: the script still prints what the command wrote once it stops it. */
 const BACKSTOP_MS = 30_000;
@@ -42,12 +33,8 @@ const DESCRIPTION =
 type Run = { file: string; nonce: string };
 
 /**
- * The command as the machine runs it: in a subshell of the login shell, as before, with its output (stdout and
- * stderr, in the order written) going to a file, and stopped by the script itself at its time limit, so what it
- * wrote is still there to show. The subshell has a process group of its own (`set -m`; job control is off inside
- * it, so its pipelines and background jobs stay in that group), which the stop and a TERM to the script take
- * down whole. The script then prints the file whole up to the limit, else its start and end, and a last line with
- * the exit code, whether it was stopped, and the file's size and lines. Plain bash and coreutils.
+ * Output goes to a file and the script stops the command at its limit, so what it wrote is still there to show. The
+ * subshell has its own process group (`set -m`; job control is off inside it), which a stop takes down whole.
  */
 export function shellScript(command: string, seconds: number, run: Run, dir = OUTPUT_DIR): string {
 	const out = quote(run.file);
@@ -80,7 +67,6 @@ export function shellScript(command: string, seconds: number, run: Run, dir = OU
 
 type Ending = { code: number; stopped: boolean; bytes: number; lines: number };
 
-/** What the script printed: the output as it shows, and its last line, or null when the script never got to print one. */
 export function parseRun(stdout: string, nonce: string): { shown: string; ending: Ending | null } {
 	const at = stdout.lastIndexOf(`\n${nonce} `);
 	if (at < 0) return { shown: stdout, ending: null };
@@ -95,11 +81,7 @@ function size(bytes: number): string {
 	return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-/**
- * The start and end of a long output, cut at line ends, with a line between them saying how much is left out and
- * where the whole is. Each part comes a byte longer than it is shown, so a line that ends exactly at the cut is kept.
- * A part with no line end at all (one very long line) is cut where it is.
- */
+/** Each part comes a byte longer than it is shown, so a line that ends exactly at the cut is kept. */
 export function startAndEnd(head: string, tail: string, bytes: number, lines: number, file: string | null): string {
 	const end = head.lastIndexOf('\n');
 	const start = tail.indexOf('\n');
@@ -112,7 +94,6 @@ export function startAndEnd(head: string, tail: string, bytes: number, lines: nu
 	return `${shownHead}\n[${left.toLocaleString('en-US')} lines (${size(leftBytes)}) cut here.${where}]\n${shownTail}`;
 }
 
-/** Output that never reached the file (the script was stopped, or could not make it), cut the same way in memory. */
 export function cutInMemory(output: string): string {
 	const bytes = Buffer.from(output);
 	if (bytes.length <= INLINE_BYTES) return output;
@@ -121,7 +102,6 @@ export function cutInMemory(output: string): string {
 	return startAndEnd(head, tail, bytes.length, count(output, '\n'), null);
 }
 
-/** The line a stopped command's result ends with: what happened, and what to do about it. */
 export function stoppedNote(seconds: number, named: boolean): string {
 	if (named) return `[anton] Command timed out after ${seconds} seconds.`;
 	return (
@@ -132,7 +112,7 @@ export function stoppedNote(seconds: number, named: boolean): string {
 
 type ExecResult = Awaited<ReturnType<Sandbox['exec']>>;
 
-/** The tool's result from what the script printed, in the shape Flue's `bash` gave: the exit code on a line of its own unless 0. */
+/** In the shape Flue's `bash` gave: the exit code on a line of its own unless 0. */
 export function shellResult(command: string, result: ExecResult, run: Run, seconds: number, named: boolean) {
 	const { shown, ending } = parseRun(result.stdout, run.nonce);
 	const exitCode = ending?.code ?? result.exitCode;
@@ -155,21 +135,15 @@ export function shellResult(command: string, result: ExecResult, run: Run, secon
 }
 
 export type ShellToolOptions = {
-	/** Where outputs are kept in the machine (tests use a folder of their own). */
 	dir?: string;
-	/** A fresh name for each run. */
 	id?: () => string;
 };
 
 const freshId = () => randomBytes(6).toString('hex');
 
 /**
- * The agent's `bash`, with the name and parameters Flue's has and the models know. Flue's kept the last 2,000 lines
- * or 50KB of a command's output, which cut the first compiler error or failing test, and was up to 12,000 tokens
- * sent again with every later step; at its timeout it gave no output at all. This one keeps the start and the end
- * of a long output, with the whole in a file in the machine, in one round trip (`shellScript`). Only this tool's
- * commands are run so: every other `exec` of the sandbox and the machine is as it was. The sandbox hides secrets
- * in what comes back and adds the reply clock and job notices to it, as for every command.
+ * Flue's `bash` kept the last 2,000 lines or 50KB, which cut the first compiler error, and gave no output at its timeout.
+ * Only this tool's commands run through `shellScript`; every other `exec` is as it was.
  */
 export function createShellTool(sandbox: Sandbox, options: ShellToolOptions = {}): Tool {
 	const dir = options.dir ?? OUTPUT_DIR;

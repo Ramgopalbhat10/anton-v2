@@ -4,7 +4,6 @@ import { skillsFor } from '../../../services/settings/plugins.ts';
 import { readProjectFileForAgent } from '../../../services/projects/space-files.ts';
 import { readAttachment } from '../../../services/artifacts/attachments.ts';
 
-/** A thread reads the project's Library here, as text; with a sandbox the originals are in ../project-files too. */
 export function useProjectFiles(id: string) {
 	useTool(
 		defineTool({
@@ -19,7 +18,6 @@ export function useProjectFiles(id: string) {
 	);
 }
 
-/** Files the user attaches arrive as <attachment> blocks with their text, cut when long; this reads the rest, with or without a sandbox. */
 export function useReadAttachment(id: string) {
 	useTool(
 		defineTool({
@@ -36,7 +34,6 @@ export function useReadAttachment(id: string) {
 	);
 }
 
-/** The repo's own skills and the installed plugins' skills; the agent loads one when a task matches its description. */
 export function useSkills(id: string, workspace: boolean) {
 	for (const skill of skillsFor(id, workspace)) useSkill(skill);
 }

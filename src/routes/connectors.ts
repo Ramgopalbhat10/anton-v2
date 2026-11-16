@@ -9,10 +9,8 @@ import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from '../services
 import { gitHubDelivery, signedByGitHub } from '../services/git/pr-watch.ts';
 import { body } from './shared.ts';
 
-/** Connectors (accounts, mailboxes, MCP servers, Composio) and GitHub's webhook. */
 const app = new Hono();
 
-// GitHub's webhook, so a pull request's checks and comments reach its card and agent the moment they change.
 // Off without ANTON_GITHUB_WEBHOOK_SECRET; a delivery only says which pull requests to read again from GitHub.
 app.post('/api/github/webhook', async (c) => {
 	const secret = config.github.webhookSecret;
@@ -32,7 +30,6 @@ app.post('/api/github/webhook', async (c) => {
 	return c.json({ ok: true, tasks: await gitHubDelivery(event, (delivery ?? {}) as Parameters<typeof gitHubDelivery>[1]) });
 });
 
-// Connectors: MCP servers every task gets, accounts such as Gmail signed in to on your own OAuth client, and apps connected through Composio; see services/connectors/connectors.ts and services/connectors/composio.ts.
 app.get('/api/connectors', async (c) => c.json({ ...(await connectorsView()), mcpServers: await mcpServersView(), composio: await composioView() }));
 app.put('/api/connectors/accounts/:id/client', async (c) => {
 	const input = await body(
@@ -50,7 +47,6 @@ app.put('/api/connectors/mailboxes/:id', async (c) => {
 	const options = await body(c, v.object({ enabled: v.boolean(), draft: v.boolean(), send: v.boolean() }));
 	return c.json(await setMailboxOptions(c.req.param('id'), options));
 });
-// Google sends the browser back here; it goes on to Settings › Connectors, which says how it went.
 app.get('/api/connectors/:account/callback', async (c) => {
 	const query = new URL(c.req.url).search;
 	const back = new URLSearchParams();
@@ -62,7 +58,6 @@ app.get('/api/connectors/:account/callback', async (c) => {
 		back.set('add', 'gmail');
 		back.set('problem', error instanceof Error ? error.message : String(error));
 	}
-	// The connector's own page, which says how it went.
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
 const MCP_SERVER = v.object({
@@ -98,7 +93,6 @@ app.delete('/api/mcp-servers/:name/sign-in', async (c) => {
 	await signOutOfMcpServer(c.req.param('name'));
 	return c.json({ mcpServers: await mcpServersView() });
 });
-// A server's sign-in sends the browser back here; it goes on to Settings › Connectors, which says how it went.
 app.get('/api/mcp-servers/callback', async (c) => {
 	const back = new URLSearchParams();
 	try {
@@ -106,13 +100,12 @@ app.get('/api/mcp-servers/callback', async (c) => {
 		back.set('c', `mcp:${name}`);
 		back.set('connected', name);
 	} catch (error) {
-		// No server is known when the sign-in is not, so Connectors itself says what went wrong.
+		// No server is known when the sign-in failed, so Connectors itself shows the problem.
 		back.set('problem', error instanceof Error ? error.message : String(error));
 		return c.redirect(`/settings/connectors?${back}`);
 	}
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
-// Composio: the project key, apps added from its catalog, and each one's Composio-hosted sign-in; see services/connectors/composio.ts.
 const COMPOSIO_TOOLKIT = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,64}$/, 'Toolkit names use lowercase letters, digits, - and _'));
 app.put('/api/composio/key', async (c) => {
 	const { key } = await body(c, v.object({ key: v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300))) }));
@@ -123,7 +116,6 @@ app.post('/api/composio/accounts', async (c) => {
 	return c.json(await addComposioToolkit(toolkit));
 });
 app.get('/api/composio/accounts/:toolkit/tools', async (c) => c.json({ tools: await composioTools(c.req.param('toolkit')) }));
-// The whole Composio catalog, searched live, and one app by its slug for the add page.
 app.get('/api/composio/toolkits', async (c) => c.json({ toolkits: await searchComposioToolkits(c.req.query('search') ?? '') }));
 app.get('/api/composio/toolkits/:slug', async (c) => {
 	const slug = c.req.param('slug');

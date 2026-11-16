@@ -12,7 +12,6 @@ type WireResponse = {
 	usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
 };
 
-/** Any OpenRouter model, given one prompt and no tools, with the key Anton already has. */
 export function openRouterText({ apiUrl, apiKey }: TextOptions): TextModel {
 	return {
 		runs: (model) => model.startsWith('openrouter/'),

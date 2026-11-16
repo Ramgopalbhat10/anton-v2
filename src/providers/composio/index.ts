@@ -2,11 +2,6 @@ import type { AppsConnector } from '../../core/ports.ts';
 import type { KeySlot } from '../key-slot.ts';
 import * as api from './api.ts';
 
-/**
- * Composio as the apps platform behind the `AppsConnector` port: its REST API
- * called with the project key from `key` — the one pasted in Settings ›
- * Connectors, else COMPOSIO_API_KEY.
- */
 export function composioApps(options: { key: KeySlot }): AppsConnector {
 	const key = (): string => {
 		const found = options.key.get();

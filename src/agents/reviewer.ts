@@ -11,7 +11,7 @@ import { repoDir } from '../services/git/git.ts';
 import { secretsToHide } from '../services/secrets/secrets.ts';
 import { modelFor } from '../services/tasks/sessions.ts';
 import { machineFor } from '../services/sandbox/workspace.ts';
-// Registers the model providers (OpenRouter, Vercel, the plans) before this agent resolves a model.
+// Registers the model providers before this agent resolves a model.
 import './providers.ts';
 
 const PROMPT = [
@@ -20,13 +20,8 @@ const PROMPT = [
 	REVIEW_GUIDE,
 ].join(' ');
 
-/**
- * Reads a task's pull request in the task's own sandbox and posts what it
- * finds; it can look and run commands but not change files. It is its own
- * conversation, so the coder never sees how it reasoned, only its comments.
- */
+/** Its own conversation, so the coder never sees how it reasoned, only its comments. */
 export function Reviewer({ id }: AgentProps) {
-	// Its own model — the project's when the task is a thread, else Settings › General's — or the task's.
 	const { model, reasoning } = helperModelFor(id, 'reviewer') ?? modelFor(id);
 	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	useSandbox({

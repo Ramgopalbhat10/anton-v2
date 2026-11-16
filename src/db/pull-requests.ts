@@ -1,7 +1,7 @@
 import type { PullRequestState } from '../core/ports.ts';
 import { appDb } from './client.ts';
 
-/** A pull request a task opened (or reviews), kept after a newer one takes its place as the task's current one. */
+/** Kept after a newer one takes its place as the task's current one. */
 export type PullRequestRecord = {
 	url: string;
 	sessionId: string;
@@ -10,7 +10,6 @@ export type PullRequestRecord = {
 	title: string;
 	head: string;
 	base: string;
-	/** As last read from the host; null when it was never read. */
 	state: PullRequestState | null;
 	openedAt: string;
 	mergedAt: string | null;
@@ -33,7 +32,6 @@ function toRecord(row: Row): PullRequestRecord {
 	};
 }
 
-/** Keeps a pull request the first time it is opened; a later push to it keeps when it was opened and takes its new title. */
 export async function recordPullRequest(record: Omit<PullRequestRecord, 'mergedAt' | 'openedAt'> & { openedAt?: string }): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -43,13 +41,11 @@ export async function recordPullRequest(record: Omit<PullRequestRecord, 'mergedA
 	});
 }
 
-/** Saves a pull request's state as last read; `mergedAt` once it merged. */
 export async function setPullRequestState(url: string, state: PullRequestState, mergedAt: string | null = null): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE pull_requests SET state = ?, merged_at = COALESCE(?, merged_at) WHERE url = ?', args: [state, mergedAt, url] });
 }
 
-/** A task's pull requests, newest first. */
 export async function listPullRequestRecords(sessionId: string): Promise<PullRequestRecord[]> {
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT * FROM pull_requests WHERE session_id = ? ORDER BY opened_at DESC, number DESC', args: [sessionId] });

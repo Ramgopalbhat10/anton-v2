@@ -4,43 +4,31 @@ import { announce } from '../core/changes.ts';
 import type { Schedule } from '../core/schedule.ts';
 import { appDb } from './client.ts';
 
-/** A way tasks start without anyone typing: from labeled issues, or on a schedule. */
 export type Automation = {
 	id: string;
-	/** The repository its tasks work on; empty for a project's routine whose threads start as chats. */
+	/** Empty for a project's routine whose threads start as chats. */
 	projectId: string;
 	kind: 'issues' | 'schedule';
-	/** Issues with this label start tasks (kind `issues`). */
 	label: string | null;
-	/** When it runs (kind `schedule`), on its time zone's clock. */
 	schedule: Schedule | null;
-	/** When a schedule runs next; null until worked out, from its last run. */
 	nextRunAt: string | null;
-	/** The task's instructions; for issues, added after the issue itself. */
+	/** For issues, added after the issue itself. */
 	prompt: string;
-	/** Model for the tasks it starts; null uses the default. */
 	model: string | null;
-	/** Reasoning level for that model; null uses the model's default. */
 	reasoning: Reasoning | null;
-	/** Its tasks start in plan mode: they propose a plan and change nothing until it is approved. */
 	planFirst: boolean;
 	enabled: boolean;
 	lastRunAt: string | null;
 	lastError: string | null;
-	/** Issue numbers this automation started a task for. */
 	seen: number[];
-	/** The project its tasks start in, as threads; null for tasks of their own. */
 	spaceId: string | null;
-	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
 	title: string | null;
-	/** A schedule's gate: an installed skill's script, as `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
+	/** An installed skill's script, as `skill-name/scripts/file.js`, that says whether a due run starts a thread. */
 	gate: string | null;
-	/** What the gate last answered, and when. */
 	lastGate: GateAnswer | null;
 	createdAt: string;
 };
 
-/** A gate's answer: whether the run started a thread, and why. */
 export type GateAnswer = { at: string; run: boolean; reason: string };
 
 type Row = Record<string, unknown>;
@@ -99,7 +87,6 @@ export async function insertAutomation(input: NewAutomation): Promise<Automation
 	return (await getAutomation(id))!;
 }
 
-/** Each automation with the issues it started tasks for. */
 const SELECT = `SELECT automations.*, (SELECT json_group_array(issue_number) FROM (SELECT issue_number FROM issue_tasks WHERE automation_id = automations.id ORDER BY issue_number)) AS seen_json FROM automations`;
 
 export async function listAutomations(projectId?: string): Promise<Automation[]> {
@@ -110,7 +97,6 @@ export async function listAutomations(projectId?: string): Promise<Automation[]>
 	return result.rows.map((row) => toAutomation(row as Row));
 }
 
-/** A project's routines: automations whose tasks start as its threads. */
 export async function listSpaceAutomations(spaceId: string): Promise<Automation[]> {
 	const db = await appDb();
 	const result = await db.execute({ sql: `${SELECT} WHERE space_id = ? ORDER BY created_at`, args: [spaceId] });
@@ -161,7 +147,6 @@ export async function updateAutomation(id: string, update: AutomationUpdate): Pr
 		sql: `UPDATE automations SET ${entries.map((key) => `${columns[key]} = ?`).join(', ')} WHERE id = ?`,
 		args: [...entries.map((key) => stored(key, update[key])), id],
 	});
-	// A run moves its last-run time, and may have taken issues: the routine lists show it.
 	announce({ kind: 'automations' });
 }
 
@@ -171,7 +156,6 @@ export async function deleteAutomation(id: string): Promise<void> {
 	announce({ kind: 'automations' });
 }
 
-/** Takes an issue for one task; false when it already has one. */
 export async function claimIssue(projectId: string, issueNumber: number, automationId: string): Promise<boolean> {
 	const db = await appDb();
 	const result = await db.execute({
@@ -181,7 +165,6 @@ export async function claimIssue(projectId: string, issueNumber: number, automat
 	return result.rowsAffected === 1;
 }
 
-/** Gives a claimed issue back, when its task could not start, so a later run tries again. */
 export async function releaseIssue(projectId: string, issueNumber: number): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM issue_tasks WHERE project_id = ? AND issue_number = ?', args: [projectId, issueNumber] });
@@ -192,7 +175,6 @@ export async function setIssueTask(projectId: string, issueNumber: number, sessi
 	await db.execute({ sql: 'UPDATE issue_tasks SET session_id = ? WHERE project_id = ? AND issue_number = ?', args: [sessionId, projectId, issueNumber] });
 }
 
-/** Issues of the repo that already have a task, and the tasks they started. */
 export async function issueTasks(projectId: string): Promise<{ issues: Set<number>; sessions: string[] }> {
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT issue_number, session_id FROM issue_tasks WHERE project_id = ?', args: [projectId] });

@@ -1,20 +1,12 @@
 import { type FlueExecutionContext, type FlueExecutionOperation, instrument } from '@flue/runtime';
 import { endOverTime, onSubagentStop } from '../services/tasks/subagent-runs.ts';
 
-/**
- * The longest a subagent runs before its task call answers with what it had done, so one that is stuck
- * (a step that never returns, a loop) cannot hold the reply for good. ANTON_SUBAGENT_MINUTES changes it.
- */
+/** So a stuck subagent cannot hold the reply for good. ANTON_SUBAGENT_MINUTES changes it. */
 export const SUBAGENT_BUDGET_MS = (Number(process.env.ANTON_SUBAGENT_MINUTES) || 20) * 60_000;
 
 /**
- * Lets the user stop one subagent while the rest of the reply goes on. The
- * runtime runs each subagent inside the agent's `task` call and keeps no handle
- * to it outside, but it passes that run through its execution interceptors, so
- * this one races it against a stop. On a stop the call answers at once with
- * what the run had done; the runtime then closes the subagent (aborting its
- * model call and abandoning its tool) and the agent reads the answer at its
- * next step, along with any message that waited for it.
+ * The runtime keeps no handle to a subagent outside the agent's `task` call, but passes that run through its execution
+ * interceptors, so this races it against a stop. On a stop the call answers at once with what the run had done.
  */
 export function subagentStopInterceptor<T>(operation: FlueExecutionOperation, ctx: FlueExecutionContext, next: () => Promise<T>, budgetMs = SUBAGENT_BUDGET_MS): Promise<T> {
 	if (operation.type !== 'task') return next();

@@ -8,7 +8,6 @@ import { pageGuide, saveRender } from '../../../services/artifacts/renders.ts';
 import { generateImage, MAX_REFERENCES } from '../../../services/artifacts/images.ts';
 import { UI_LIMITS } from '../../../core/ui-spec.ts';
 
-/** A question with options to tap, for a decision only the user can make; the thread shows it as a card and marks the task waiting on you. */
 export function useAsk(id: string) {
 	useTool(
 		defineTool({
@@ -39,7 +38,6 @@ export function useAsk(id: string) {
 	);
 }
 
-/** The catalog, as the agent reads it; src/core/ui-spec.ts has the types. */
 const SHOW_DESCRIPTION = [
 	'Show the user components in your reply, drawn in the thread with Anton\'s own look: figures, tables, charts, timelines, and inputs they press.',
 	'children is a list of components; each is an object with a type and the fields below ("?" is optional). Containers hold children.',
@@ -68,7 +66,6 @@ export function useShow(id: string) {
 	);
 }
 
-/** An open-ended page, for what the catalog can't draw: shown in the thread, in a sandbox that reaches the web only through Anton, and kept in the Library. */
 export function useRenderHtml(id: string) {
 	useTool(
 		defineTool({
@@ -92,7 +89,6 @@ export function useRenderHtml(id: string) {
 
 const ASPECT_RATIOS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9'] as const;
 
-/** Images drawn by an image model through Anton, whatever model the task runs on: shown in the thread and kept in the Library. */
 export function useGenerateImage(id: string) {
 	useTool(
 		defineTool({

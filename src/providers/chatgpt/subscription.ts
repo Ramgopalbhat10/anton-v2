@@ -3,12 +3,7 @@ import { OPENAI_MODELS } from '@earendil-works/pi-ai/providers/openai.models';
 import { linkVariants, sizeTag, withVariants } from '../../core/model-variants.ts';
 import { REASONING_LEVELS, type Reasoning, type SubscriptionCredential, type SubscriptionModel, type SubscriptionProvider } from '../../core/ports.ts';
 
-/**
- * Sign in with ChatGPT's token sharing for open-source apps
- * (developers.openai.com/siwc/token-sharing-open-source): the user approves
- * Anton in ChatGPT, and the access token it gets calls the OpenAI Responses
- * API on their plan. Ported from pi-ai 1.x (MIT), which Flue does not ship yet.
- */
+/** Sign in with ChatGPT (developers.openai.com/siwc/token-sharing-open-source), ported from pi-ai 1.x (MIT), which Flue does not ship yet. */
 export type ChatGptOptions = { authUrl: string; apiUrl: string };
 
 export const CHATGPT_DEFAULTS: ChatGptOptions = { authUrl: 'https://auth.openai.com', apiUrl: 'https://api.openai.com/v1' };
@@ -64,7 +59,6 @@ const asLevel = (effort: unknown): Reasoning | undefined => {
 	return REASONING_LEVELS.find((level) => level === (name === 'none' ? 'off' : name));
 };
 
-/** The fields Anton reads from an entry of `GET /models` for a ChatGPT token. */
 type ListedModel = {
 	slug?: string;
 	id?: string;
@@ -86,7 +80,6 @@ type ListedModel = {
 
 const known = new Map<string, (typeof OPENAI_MODELS)[keyof typeof OPENAI_MODELS]>(Object.values(OPENAI_MODELS).map((model) => [model.id, model]));
 
-/** What pi knows of an OpenAI model fills in what the account's list leaves out. */
 export function toSubscriptionModel(listed: ListedModel, gateway: string): SubscriptionModel | null {
 	const slug = listed.slug ?? listed.id;
 	if (!slug || (listed.visibility && listed.visibility !== 'list')) return null;
@@ -116,11 +109,6 @@ const offersFast = (listed: ListedModel) =>
 	(listed.service_tiers ?? []).some((tier) => /^(priority|fast)$/i.test(String(tier.id)) || /^fast$/i.test(String(tier.name))) ||
 	(listed.additional_speed_tiers ?? []).some((tier) => tier === 'fast');
 
-/**
- * The model and the variants the account's list offers beside it: its largest
- * context (`[1m]`), when that is more than its standard one, fast mode
- * (`[fast]`, Codex's priority tier), and both.
- */
 export function toSubscriptionModels(listed: ListedModel, gateway: string): SubscriptionModel[] {
 	const model = toSubscriptionModel(listed, gateway);
 	if (!model) return [];

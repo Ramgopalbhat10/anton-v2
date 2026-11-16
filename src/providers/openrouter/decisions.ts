@@ -21,7 +21,6 @@ function answerOf(id: string, question: Question, answer: WireAnswer | undefined
 	throw new Error(`The decision model gave no answer for ${id}`);
 }
 
-/** A System One decision model (TypeSafe's Jev by default) through OpenRouter, with the key Anton already has. */
 export function openRouterDecisions({ apiUrl, apiKey, model }: DecisionOptions): DecisionModel {
 	return {
 		name: `openrouter/${model}`,

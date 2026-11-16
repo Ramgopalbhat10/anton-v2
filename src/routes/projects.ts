@@ -6,10 +6,8 @@ import { releaseSpare, wakeSpare } from '../services/sandbox/spares.ts';
 import { MAX_MEMORY, saveMemory } from '../services/projects/memory.ts';
 import { ENV, body } from './shared.ts';
 
-/** Repositories (`/api/projects`): adding and removing them, their settings and memory, branches and files, and the sandbox a new task's composer wakes. */
 const app = new Hono();
 
-// A new task's composer wakes a sandbox for it while you type (`spares.ts`), asks again while the draft stays, and lets it go when cleared.
 app.post('/api/projects/:id/wake', async (c) => {
 	const input = await body(c, v.object({ taskId: v.pipe(v.string(), v.uuid()), branch: v.optional(v.pipe(v.string(), v.maxLength(255))) }));
 	return c.json(await wakeSpare({ projectId: c.req.param('id'), ...input }));

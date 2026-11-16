@@ -17,50 +17,31 @@ import {
 import { type AgentRuntime, type ModelInfo, REASONING_LEVELS, type RuntimeContent, type RuntimeConversation, type RuntimeEvent, type RuntimeToolOutput } from '../core/ports.ts';
 
 /**
- * Models on a plan that only runs inside the vendor's own agent: Claude Code for
- * a Claude plan (docs/claude-code-subscription.md), and Cursor's SDK for a Cursor
- * plan. Flue calls the model once per step and runs the tools itself; the
- * vendor's agent runs a whole loop and calls tools as it goes. The bridge meets
- * them at tool calls: a step ends when the model asks for tools, the agent waits
- * on Anton's tools meanwhile, and the next step hands it Flue's results and
- * streams on.
- *
- * Each Flue conversation keeps one of the agent's conversations open while the
- * context Flue sends only grows. When it does not (compaction, an edit, a new
- * system prompt or tool list, a restart), the bridge starts a new one and
- * replays the conversation so far as text.
+ * Flue calls the model once per step and runs the tools itself; the vendor's agent runs a whole loop. The bridge meets
+ * them at tool calls: a step ends when the model asks for tools, and the next step hands the agent Flue's results.
+ * A conversation stays open while the context Flue sends only grows; otherwise a new one replays it as text.
  */
 export type ClaudeCodeHooks = {
-	/** The plan's usage limit stopped a call. */
 	onLimit?(): void;
-	/** The plan's limit ran out and the account now pays for extra usage. */
 	onExtraUsage?(): void;
-	/** At most this many Claude Code conversations stay open; the longest idle closes first. */
 	maxOpen?: number;
 };
 
-/** Which plan and agent a bridge serves, for its model ids and what it says when something goes wrong. */
 export type RuntimePlan = {
 	/** The `<gateway>` its models are named under, and pi's provider and API id. */
 	gateway: string;
-	/** The provider as pi lists it: "Claude (Claude Code)". */
 	name: string;
-	/** The agent, as errors name it: "Claude Code". */
 	program: string;
-	/** The plan, as errors name it: "Claude". */
 	plan: string;
-	/** Anton's reasoning levels as the agent's own; a level left out is passed as it is. */
+	/** A level left out is passed as it is. */
 	efforts?: Record<string, string>;
 };
 
-/** The part of an agent the bridge uses: opening conversations. */
 export type RuntimeOpener = Pick<AgentRuntime, 'open'>;
 
 /**
- * How long a conversation with nothing to do stays open. Once one closes, the next step replays the
- * conversation as text, which nothing cached matches. Claude Code caches a plan's conversation for an
- * hour, so one that sits idle under that is read again from the cache; a long thread that closed after
- * ten idle minutes sent its whole context again uncached.
+ * Claude Code caches a plan's conversation for an hour, and a closed one is replayed as text that nothing cached
+ * matches: a long thread that closed after ten idle minutes sent its whole context again uncached.
  */
 export const IDLE_MS = 55 * 60_000;
 const MAX_OPEN = 3;
@@ -76,7 +57,7 @@ const CLAUDE_CODE: RuntimePlan = {
 	efforts: { minimal: 'low' },
 };
 
-/** Cursor takes Anton's levels as they are and maps them to each model's own values (`src/providers/cursor/plan.ts`). */
+/** Cursor maps Anton's levels to each model's own values (`src/providers/cursor/plan.ts`). */
 const CURSOR: RuntimePlan = { gateway: 'cursor', name: 'Cursor (Cursor SDK)', program: 'Cursor', plan: 'Cursor' };
 
 function toPiModel(info: ModelInfo, plan: RuntimePlan): RuntimeModel {
@@ -98,10 +79,7 @@ function toPiModel(info: ModelInfo, plan: RuntimePlan): RuntimeModel {
 	};
 }
 
-/**
- * A message as the bridge recognises it again on the next step: Flue stores and
- * rebuilds messages, so this leaves out what it may not keep (such as response ids).
- */
+/** Flue stores and rebuilds messages, so this leaves out what it may not keep (such as response ids). */
 export function fingerprint(message: Message): string {
 	const hash = (value: unknown) => createHash('sha1').update(JSON.stringify(value)).digest('base64url');
 	if (message.role === 'toolResult') return `r:${message.toolCallId}`;
@@ -122,10 +100,6 @@ const plainText = (content: Message['content']): string =>
 		? content
 		: content.map((part) => (part.type === 'text' ? part.text : part.type === 'image' ? '[image]' : part.type === 'thinking' ? '' : '')).join('\n');
 
-/**
- * The conversation so far, for a new Claude Code conversation that did not see
- * it: earlier turns as text, then the latest user message as it was sent.
- */
 export function transcript(messages: Message[]): RuntimeContent[] {
 	const lastUser = messages.findLastIndex((message) => message.role === 'user');
 	const last = messages[lastUser];
@@ -152,7 +126,7 @@ export function transcript(messages: Message[]): RuntimeContent[] {
 
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 
-/** An image, in characters, as the runtime counts one when it estimates. */
+/** As the runtime counts an image when it estimates. */
 const IMAGE_CHARS = 4800;
 
 function charsOf(content: Message['content']): number {
@@ -168,12 +142,8 @@ function charsOf(content: Message['content']): number {
 }
 
 /**
- * The tokens of a model call the agent did not count, by the runtime's rule of
- * thumb (four characters a token): the context it was sent, and what it wrote.
- * Cursor counts a whole run at its end, every call in it together, so its sum
- * would read as a context far past the window: the runtime would compact (or
- * find nothing to cut) after every long reply, and the context meter would
- * show the run's total.
+ * By the runtime's rule of thumb (four characters a token). Cursor counts a whole run at its end, so its sum would read
+ * as a context far past the window and the runtime would compact after every long reply.
  */
 export function estimatedUsage(context: Context, written: AssistantMessage['content']): { input: number; output: number } {
 	const sent = (context.systemPrompt ?? '').length + JSON.stringify(context.tools ?? []).length + context.messages.reduce((sum, message) => sum + charsOf(message.content), 0);
@@ -182,13 +152,10 @@ export function estimatedUsage(context: Context, written: AssistantMessage['cont
 
 type Settings = { model: string; instructions: string; tools: string; effort: string };
 
-/** One of the agent's conversations behind one Flue conversation. */
 class Bridged {
 	readonly conversation: RuntimeConversation;
 	readonly events: AsyncIterator<RuntimeEvent>;
-	/** Fingerprints of the Flue messages this conversation has seen, in order. */
 	seen: string[] = [];
-	/** Tool calls the last step asked for, whose results Claude Code is waiting on. */
 	awaiting = new Set<string>();
 	/** Turns that ended for Flue whose `turn_end` is still to come. */
 	turnsToDrain = 0;
@@ -219,7 +186,6 @@ class Bridged {
 		this.events = this.conversation.events[Symbol.asyncIterator]();
 	}
 
-	/** Hands the agent a tool's result, now if it is waiting for it, or when it asks. */
 	deliver(toolCallId: string, output: RuntimeToolOutput): void {
 		this.awaiting.delete(toolCallId);
 		const waiting = this.parked.get(toolCallId);
@@ -240,11 +206,7 @@ class Bridged {
 
 const sameSettings = (a: Settings, b: Settings) => a.model === b.model && a.instructions === b.instructions && a.tools === b.tools && a.effort === b.effort;
 
-/**
- * What the new messages ask of a conversation that has seen the rest: results
- * for the tools it waits on, then any messages the user sent meanwhile; or the
- * user's next message. Null when they do not fit, and a new conversation is needed.
- */
+/** Null when they do not fit, and a new conversation is needed. */
 export function continuation(
 	added: Message[],
 	awaiting: ReadonlySet<string>,
@@ -258,7 +220,7 @@ export function continuation(
 	return { results, user: users.flatMap((message) => asContent(message.content)) };
 }
 
-/** Every open conversation in this process, by gateway and then Flue session, shared by all agents so each plan's cap counts them all. */
+/** Shared by all agents, so each plan's cap counts them all. */
 const conversations = new Map<string, Map<string, Bridged>>();
 let sweeping: ReturnType<typeof setInterval> | undefined;
 
@@ -268,13 +230,9 @@ const openFor = (gateway: string): Map<string, Bridged> => {
 	return open;
 };
 
-/**
- * Whether a conversation is doing something: streaming, or waiting on the results of tools Anton is
- * running for it, such as a subagent that works for longer than any idle limit.
- */
+/** Waiting on tools counts, such as a subagent that works for longer than any idle limit. */
 const working = (bridged: Bridged) => bridged.busy || bridged.awaiting.size > 0;
 
-/** Closes the conversations idle past `IDLE_MS`; a later step starts a new one with the conversation so far. */
 export function sweepIdle(now = Date.now()): void {
 	for (const open of conversations.values()) {
 		for (const [key, bridged] of open) {
@@ -286,7 +244,7 @@ export function sweepIdle(now = Date.now()): void {
 	}
 }
 
-/** Makes room for one more conversation by closing the longest idle ones; busy ones, and ones waiting on tools, are never closed. */
+/** Busy ones, and ones waiting on tools, are never closed. */
 function makeRoom(open: Map<string, Bridged>, maxOpen: number): void {
 	const idle = [...open].filter(([, bridged]) => !working(bridged)).sort(([, a], [, b]) => a.usedAt - b.usedAt);
 	while (open.size >= maxOpen && idle.length) {
@@ -296,7 +254,6 @@ function makeRoom(open: Map<string, Bridged>, maxOpen: number): void {
 	}
 }
 
-/** Closes every conversation; for tests and shutdown. */
 export function closeClaudeCodeConversations(): void {
 	for (const open of conversations.values()) {
 		for (const bridged of open.values()) bridged.close();
@@ -308,15 +265,10 @@ export function claudeCodeProvider(live: () => readonly ModelInfo[], runtime: ()
 	return runtimeProvider(CLAUDE_CODE, live, runtime, hooks);
 }
 
-/** Models on a Cursor plan, run by Cursor's SDK with the plan's key. */
 export function cursorProvider(live: () => readonly ModelInfo[], runtime: () => Promise<RuntimeOpener | undefined>, hooks: ClaudeCodeHooks = {}): Provider {
 	return runtimeProvider(CURSOR, live, runtime, hooks);
 }
 
-/**
- * The bridge for any agent behind the `AgentRuntime` conversation shape.
- * `runtime` may look the agent up as it is needed, such as with a key from Settings.
- */
 export function runtimeProvider(
 	plan: RuntimePlan,
 	live: () => readonly ModelInfo[],
@@ -396,7 +348,6 @@ export function runtimeProvider(
 		const onAbort = () => abandon();
 		options?.signal?.addEventListener('abort', onAbort, { once: true });
 
-		/** Content blocks of the current model call by Claude's block index, with their place in `output`. */
 		const blocks = new Map<number, { at: number; json: string }>();
 		let started = false;
 		try {

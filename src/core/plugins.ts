@@ -1,33 +1,21 @@
 /**
- * Agent Skills, plugins and marketplaces, read from a repository's files.
- *
- * A skill is a folder with a SKILL.md (https://agentskills.io/specification).
- * A plugin bundles skills; its manifest is `.devin-plugin/plugin.json`,
- * `.claude-plugin/plugin.json` or an Agent Plugins `plugin.json`, found in that
- * order as Devin does, and a folder of skills with no manifest is a plugin too.
- * A marketplace lists plugins, here or in other repositories: Claude Code's
- * `marketplace.json` (also used by Codex and Cursor) or a Devin manifest's
- * `optionalPlugins`. Only GitHub sources are read.
+ * A plugin's manifest is `.devin-plugin/plugin.json`, `.claude-plugin/plugin.json` or `plugin.json`, found in that order
+ * as Devin does; a folder of skills with no manifest is a plugin too. Only GitHub sources are read.
  */
 
-/** A repository at one commit: its file paths, and their contents on request. */
 export type RepoFiles = { paths: string[]; read(path: string): Promise<Uint8Array | null> };
 
-/** How the user picks a plugin: an entry of a marketplace, or a GitHub address of a repository, folder or skill. */
 export type PluginPick = { marketplace: string; name: string } | { address: string };
 
-/** Where a plugin lives: a folder of a GitHub repository at a commit or branch (null for its default branch). */
+/** `ref` null is the default branch. */
 export type PluginSource = { repo: string; path: string; ref: string | null };
 
 export type CatalogEntry = {
 	name: string;
 	description: string;
 	source: PluginSource;
-	/** Skill folders the marketplace names for this plugin, when it names them. */
 	skills: string[] | null;
-	/** The bundle this individually installable skill belongs to. */
 	bundle?: string;
-	/** Skills in a separate repository can be fetched on demand. */
 	browseable?: boolean;
 };
 
@@ -39,9 +27,9 @@ export type ParsedSkill = {
 	instructions: string;
 	license?: string;
 	files: Record<string, SkillFile>;
-	/** Its folder in the repository; absent on skills installed before it was kept. */
+	/** Absent on skills installed before it was kept. */
 	folder?: string;
-	/** Files of its folder left out to keep it small; absent on skills packed before files were picked by importance. */
+	/** Absent on skills packed before files were picked by importance. */
 	omitted?: string[];
 };
 
@@ -49,19 +37,17 @@ export type ParsedPlugin = {
 	name: string;
 	description: string;
 	skills: ParsedSkill[];
-	/** MCP servers the plugin declares. Anton does not run them; a repository's MCP settings can add them. */
+	/** Anton does not run them. */
 	mcpServers: string[];
-	/** What was left out, and why. */
 	skipped: string[];
 };
 
 const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_DESCRIPTION = 1024;
-/** Supporting files beyond these are left out, the least needed first (see `importance`). */
+/** Supporting files beyond these are left out, the least needed first. */
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILES = 250;
-/** A repository's own housekeeping, which a skill never reads: dot files, changelogs and the like, its tests and evals. */
 const HOUSEKEEPING = /(^|\/)\.|^(changelog|contributing|code_of_conduct|security|license)(\.[a-z]+)?$|^(tests?|evals?)\//i;
 const MANIFESTS = ['.devin-plugin/plugin.json', '.claude-plugin/plugin.json', 'plugin.json'];
 const MARKETPLACES = ['.claude-plugin/marketplace.json', '.agents/plugins/marketplace.json', '.cursor-plugin/marketplace.json'];
@@ -86,11 +72,7 @@ const unquote = (value: string) => {
 	return trimmed;
 };
 
-/**
- * The YAML front matter of a SKILL.md and the body after it. Enough YAML for
- * what skills use: plain, quoted and folded (`>`, `|`) values, and one level of
- * nesting for `metadata`.
- */
+/** Enough YAML for what skills use: plain, quoted and folded values, and one level of nesting for `metadata`. */
 export function parseFrontMatter(source: string): { data: Record<string, string | Record<string, string>>; body: string } {
 	const match = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
 	if (!match) return { data: {}, body: source };
@@ -120,7 +102,6 @@ export function parseFrontMatter(source: string): { data: Record<string, string 
 	return { data, body: source.slice(match[0].length) };
 }
 
-/** A skill folder as Flue mounts it, or why it cannot be. */
 export async function readSkill(files: RepoFiles, dir: string): Promise<ParsedSkill | string> {
 	const folder = join(dir);
 	const bytes = await files.read(join(folder, 'SKILL.md'));
@@ -157,12 +138,6 @@ export async function readSkill(files: RepoFiles, dir: string): Promise<ParsedSk
 	return { name, description, instructions: body.trim(), ...(license ? { license } : {}), files: out, folder, omitted: omitted.sort() };
 }
 
-/**
- * How much a skill needs one of its files, lowest first: a file its
- * instructions name, then its references, then its scripts and assets and
- * anything in a folder the instructions name, then the rest, and last the
- * repository's own housekeeping.
- */
 function importance(relative: string, instructions: string): number {
 	if (HOUSEKEEPING.test(relative)) return 4;
 	if (instructions.includes(relative)) return 0;
@@ -173,7 +148,6 @@ function importance(relative: string, instructions: string): number {
 	return 3;
 }
 
-/** Folders holding a SKILL.md: `dir` itself, or its direct children. */
 function skillFolders(paths: Set<string>, dir: string): string[] {
 	const folder = join(dir);
 	if (paths.has(join(folder, 'SKILL.md'))) return [folder];
@@ -198,7 +172,6 @@ async function readJson(files: RepoFiles, path: string): Promise<Record<string, 
 const asList = (value: unknown): string[] =>
 	typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
 
-/** The manifest at a plugin's folder, first found in Devin's order. */
 async function manifestAt(files: RepoFiles, dir: string): Promise<Record<string, unknown> | null> {
 	const paths = new Set(files.paths);
 	for (const name of MANIFESTS) {
@@ -219,10 +192,6 @@ async function mcpServerNames(files: RepoFiles, dir: string, manifest: Record<st
 	return [...names];
 }
 
-/**
- * The plugin in `dir`: its manifest's skills, the folders a marketplace named,
- * its `skills/` folder, or the folder itself when it is one skill.
- */
 export async function readPlugin(files: RepoFiles, dir: string, named: string[] | null = null, fallbackName = ''): Promise<ParsedPlugin> {
 	const paths = new Set(files.paths);
 	const manifest = await manifestAt(files, dir);
@@ -242,7 +211,6 @@ export async function readPlugin(files: RepoFiles, dir: string, named: string[] 
 	return { name, description, skills, mcpServers: await mcpServerNames(files, dir, manifest), skipped };
 }
 
-/** Enumerates a local bundle without fetching its supporting files. */
 async function withIndividualSkills(files: RepoFiles, marketplace: PluginSource, entries: CatalogEntry[]): Promise<CatalogEntry[]> {
 	const result: CatalogEntry[] = [];
 	const paths = new Set(files.paths);
@@ -259,7 +227,6 @@ async function withIndividualSkills(files: RepoFiles, marketplace: PluginSource,
 		const taken = new Set<string>();
 		const children: CatalogEntry[] = [];
 		for (const folder of folders) {
-			// A standalone skill already has its own install action.
 			if (folder === join(entry.source.path)) continue;
 			const bytes = await files.read(join(folder, 'SKILL.md'));
 			if (!bytes) continue;
@@ -276,12 +243,10 @@ async function withIndividualSkills(files: RepoFiles, marketplace: PluginSource,
 	return result;
 }
 
-/** Individual skills of a bundle, with the source's own files already fetched. */
 export async function readCatalogBundle(files: RepoFiles, entry: CatalogEntry): Promise<CatalogEntry[]> {
 	return (await withIndividualSkills(files, entry.source, [entry])).slice(1);
 }
 
-/** A GitHub repository and folder from a URL or `owner/repo[/path]`, or null for anything else. */
 export function parseGitHub(input: string): { repo: string; path: string; ref: string | null } | null {
 	const value = input.trim().replace(/\.git$/, '');
 	const url =
@@ -293,7 +258,6 @@ export function parseGitHub(input: string): { repo: string; path: string; ref: s
 	return null;
 }
 
-/** A marketplace entry's source, relative paths resolved against the marketplace itself; null when it is not on GitHub. */
 export function resolveSource(raw: unknown, marketplace: PluginSource, root = ''): PluginSource | null {
 	if (typeof raw === 'string') {
 		const value = raw.trim();
@@ -316,14 +280,9 @@ export function resolveSource(raw: unknown, marketplace: PluginSource, root = ''
 	return null;
 }
 
-/** A name for a plugin known only by where it lives. */
 const sourceName = (source: PluginSource) => [source.repo, source.path].filter(Boolean).join('/');
 
-/**
- * What a marketplace repository offers. Claude Code's format lists plugins
- * with names; Devin's lists folders and repositories, so local ones are named
- * from their own manifests. A repository with neither is one plugin.
- */
+/** Claude Code's format lists plugins with names; Devin's lists folders and repositories, so local ones are named from their own manifests. */
 export async function readCatalog(files: RepoFiles, marketplace: PluginSource): Promise<CatalogEntry[]> {
 	const paths = new Set(files.paths);
 	for (const name of MARKETPLACES) {
@@ -368,7 +327,7 @@ export async function readCatalog(files: RepoFiles, marketplace: PluginSource): 
 		: [];
 }
 
-/** A repository's own skills: `.agents/skills`, which every agent reads, then `.claude/skills` for names not taken. */
+/** `.agents/skills`, then `.claude/skills` for names not taken. */
 export async function readRepoSkills(files: RepoFiles): Promise<{ agents: ParsedSkill[]; claude: ParsedSkill[] }> {
 	const paths = new Set(files.paths);
 	const read = async (dir: string) => {

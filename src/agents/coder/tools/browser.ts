@@ -18,7 +18,6 @@ import { withSettingsModel } from '../subagents.ts';
 const BROWSER_ACTIONS = ['open', 'click', 'type', 'select', 'press', 'hover', 'scroll', 'back', 'wait', 'look', 'run'] as const;
 const AUTOPILOT_ACTIONS = [...BROWSER_ACTIONS, 'do'] as const;
 
-/** Where a browser step runs: the user's Browser panel (a real browser they watch), or a headless browser in the sandbox. */
 export type BrowserPlace = 'panel' | 'sandbox';
 
 const PLACES: Record<BrowserPlace, string> = {
@@ -26,15 +25,8 @@ const PLACES: Record<BrowserPlace, string> = {
 	sandbox: "a browser inside the sandbox, which the user can watch and take over in the Computer panel; the only one that reaches the app's dev server on localhost",
 };
 
-/** The browser each task's steps went to last, so a step that names no page stays on the page it is on. */
 const lastPlace = new Map<string, BrowserPlace>();
 
-/**
- * One step in a browser tab that stays open between steps, for using web pages
- * the way a person would, in the first of `places` unless the step says or the
- * page is the sandbox's own. With a decision model there is also `do`: the
- * agent names an outcome and the decision model drives the page to it.
- */
 function browserTool(id: string, places: BrowserPlace[]) {
 	const autopiloted = hasDecisionModel();
 	return defineTool({
@@ -43,7 +35,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			`${browserToolDescription(autopiloted)} ` +
 			places.map((place, index) => `"in": "${place}" is ${PLACES[place]}${index === 0 ? ' (the default)' : ''}.`).join(' '),
 		input: v.object({
-			// Do is on offer only with a decision model to drive it.
 			action: v.picklist((autopiloted ? AUTOPILOT_ACTIONS : BROWSER_ACTIONS) as typeof AUTOPILOT_ACTIONS),
 			in: v.optional(v.pipe(v.picklist(places), v.description('Which browser; steps after an open stay in the browser it used'))),
 			url: v.optional(v.pipe(v.string(), v.description('For open: a site, or the dev server in the sandbox such as http://localhost:3000. For do: a page to open first'))),
@@ -67,9 +58,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 		}),
 		async run({ data, toolCallId, signal }) {
 			const { in: chosen, goal, values, maxActions, confirm, ...rest } = data;
-			// Look is how the agent asks for the page again in full; every other step answers with what is new to it.
 			const full = rest.action === 'look';
-			// Opening the sandbox's own address goes to the sandbox; other steps stay where the last one was.
 			const opens = rest.action === 'open' || (rest.action === 'do' && Boolean(rest.url));
 			const local = opens && isLocalAddress(rest.url);
 			const place: BrowserPlace = chosen ?? (local && places.includes('sandbox') ? 'sandbox' : opens ? places[0] : (lastPlace.get(id) ?? places[0]));
@@ -80,7 +69,7 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				return { output: { problem: `Not opened: ${rest.url} is a plain file with nothing to act on. Read it with web_fetch, or report back that it should be read that way.` } };
 			}
 			lastPlace.set(id, place);
-			// Each action has a deadline and ends with the reply; a connection that hung is let go, so the next step connects again.
+			// A connection that hung is let go, so the next step connects again.
 			const go = async (command: BrowserInput): Promise<BrowserState> => {
 				let givenUp = false;
 				const controller = new AbortController();
@@ -97,7 +86,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			};
 			let state: BrowserState;
 			let report: Record<string, unknown> = {};
-			// What do drove, then every other call the decision model made in this step, for the Agents panel to show under it.
 			let driven: StepDetail | null = null;
 			const tally = newTally();
 			if (rest.action === 'do') {
@@ -113,7 +101,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 					id,
 					go,
 					{ goal, values, confirm, maxActions },
-					// The page it opened is where the run starts, without a look at it again.
 					{ signal, start: opened, onAction: (actions, decisions, cost) => void noteStep(id, toolCallId, { outcome: null, actions, decisions, cost }) },
 				);
 				driven = { outcome: result.outcome, actions: result.actions, decisions: result.decisions, cost: result.cost };
@@ -127,7 +114,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 			} else if (rest.action === 'run') {
 				if (!rest.code?.trim()) return { output: { problem: 'run needs code: the body of an async function given page.' } };
 				const brief = await currentBrief(id, 'browser');
-				// Before a click (or Enter) on something named with a risky word: allowed when the agent confirms it by name, else put to the decision model.
 				const ask = async (name: string): Promise<boolean> => {
 					if (confirm?.trim() && name.toLowerCase().includes(confirm.trim().toLowerCase())) return true;
 					return !(await mayNotUndo(id, name, brief, tally));
@@ -136,7 +122,6 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				report = codeReport(state.result, state.logs);
 			} else {
 				const step = rest as BrowserInput;
-				// A click or Enter that reads like buying, sending or deleting is put to the decision model first, unless the agent confirms it.
 				const pressing = step.action === 'click' || (step.action === 'press' && (step.key ?? 'Enter') === 'Enter');
 				if (pressing && step.target && !confirm && mayBeIrreversible(step.target) && (await mayNotUndo(id, step.target, await currentBrief(id, 'browser'), tally))) {
 					await noteJudgements(id, toolCallId, null, tally);
@@ -148,18 +133,15 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				}
 				state = await go(step);
 			}
-			// A sign-in wall or human check in the user's browser is theirs to pass: the panel asks them, and the subagent stops.
 			if (place === 'panel' && (await needsTheUser(id, state.url, state.title, state.snapshot, tally))) {
 				askTheUser(id, 'Sign in or pass the check here, then ask the agent to carry on.', state.url);
 				state = { ...state, problem: 'This page needs the user to sign in or pass a human check. Stop and report that they can do it in the Browser panel; do not try to get past it.' };
 			}
-			// A run answers with what its code returned, not the page: the agent looks when it needs to.
 			if (rest.action === 'run') {
 				await noteJudgements(id, toolCallId, null, tally);
 				const { snapshot: _page, result: _result, logs: _logs, ...ran } = forAgent(state);
 				return { output: { ...ran, ...report, note: 'Use look to see the page.' } };
 			}
-			// A page seen before comes back as what changed; one seen whole comes back with only the parts the job needs.
 			const seen = pageForAgent(`${id}:${place}`, state.url, state.snapshot, full);
 			const snapshot = seen === state.snapshot && !full ? await trimToJob(id, goal ?? (await currentBrief(id, 'browser')), state.url, seen, tally) : seen;
 			await noteJudgements(id, toolCallId, driven, tally);
@@ -168,12 +150,11 @@ function browserTool(id: string, places: BrowserPlace[]) {
 	});
 }
 
-/** A step's state as the agent reads it: where the page is scrolled to is only for telling whether a step did anything. */
+/** Where the page is scrolled to is only for telling whether a step did anything. */
 function forAgent({ view: _view, ...state }: BrowserState): Omit<BrowserState, 'view'> {
 	return state;
 }
 
-/** Whether the decision model judges a click on `target` to be one that cannot be undone; without one, a click is let through as before. */
 export async function mayNotUndo(id: string, target: string, brief: string | null, tally: Tally): Promise<boolean> {
 	const answers = await decide(id, { element: target, ...(brief ? { job: brief.slice(0, 2000) } : {}) }, { risky: { type: 'yes-no', instructions: IRREVERSIBLE } }, tally);
 	const risky = yesOf(answers?.risky);
@@ -181,11 +162,6 @@ export async function mayNotUndo(id: string, target: string, brief: string | nul
 	return (risky ?? 0) >= 0.5;
 }
 
-/**
- * Puts what the decision model did in one browser step on the step: what do
- * drove, then the checks around it (a risky click, a sign-in wall, a long page
- * trimmed), so every call it made shows in the Agents panel, not only in cost.
- */
 async function noteJudgements(id: string, toolCallId: string, driven: StepDetail | null, tally: Tally): Promise<void> {
 	if (!driven && !tally.decisions) return;
 	await noteStep(id, toolCallId, {
@@ -200,7 +176,6 @@ function Browser() {
 	return browserPrompt(hasDecisionModel());
 }
 
-/** A subagent for work on web pages, so the pages it reads stay out of the coding agent's own context. */
 export function useBrowserSubagent(id: string, places: BrowserPlace[]) {
 	const subagent = defineSubagent({
 		name: 'browser',

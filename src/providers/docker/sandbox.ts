@@ -19,13 +19,7 @@ const UNSIGNED = { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'commit.gpgsign', GI
 /** What a fresh machine gets on top of its image: nothing is installed, so a task runs on the image as it is (search falls back to grep without ripgrep). */
 const TOOLCHAIN = `mkdir -p ${ROOT}/outputs`;
 
-/**
- * One Docker container per task on this computer, from the task's base image
- * (Settings › Sandboxes, or the project's own), so a task runs in the image
- * a repository needs, isolated from this computer's files. A stopped task's
- * container is kept and started again; a snapshot is a committed image.
- * Previews are published on this computer's own address.
- */
+/** A stopped task's container is kept and started again; a snapshot is a committed image. */
 export function dockerSandboxProvider(options: DockerOptions): SandboxProvider {
 	const bin = options.docker ?? 'docker';
 	const docker = (args: string[], stdin?: Uint8Array) => runProcess(bin, args, { env: process.env as Record<string, string>, stdin });
@@ -38,7 +32,6 @@ export function dockerSandboxProvider(options: DockerOptions): SandboxProvider {
 		return text(result);
 	}
 
-	/** Whether the task's container is running, stopped, or not there. */
 	async function status(key: string): Promise<'running' | 'stopped' | null> {
 		const result = await docker(['inspect', '-f', '{{.State.Running}}', nameFor(key)]);
 		if (result.exitCode !== 0) return null;

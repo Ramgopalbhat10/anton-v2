@@ -4,7 +4,6 @@ import { cachedEndpoints, cachedList } from '../cached-list.ts';
 /** `apiKey` is read on each listing; with one, the list is the models the key may use. */
 export type OpenRouterOptions = { apiUrl: string; ttlMs: number; apiKey?: () => string | null };
 
-/** The fields Anton reads from OpenRouter's `GET /models`. */
 export type OpenRouterModel = {
 	id: string;
 	name: string;
@@ -37,7 +36,6 @@ function defaultLevel(model: OpenRouterModel, levels: Reasoning[]): Reasoning {
 	return levels.find((level) => level !== 'off') ?? 'off';
 }
 
-/** "DeepSeek: DeepSeek Flash Latest" → vendor "DeepSeek", name "DeepSeek Flash Latest". */
 function splitName(model: OpenRouterModel): { vendor: string; name: string } {
 	const [vendor, ...rest] = model.name.split(': ');
 	return rest.length ? { vendor, name: rest.join(': ') } : { vendor: model.id.replace(/^~/, '').split('/')[0], name: model.name };
@@ -59,11 +57,7 @@ function prices(pricing: NonNullable<OpenRouterModel['pricing']>): ModelInfo['pr
 	};
 }
 
-/**
- * A router such as Jev Router lists its price as -1, meaning it depends on the
- * model it picks. Anton prices every call from the list, so it could not count
- * such a model's spend against the caps.
- */
+/** A router such as Jev Router lists its price as -1; Anton prices every call from the list, so it could not cap its spend. */
 const unpriced = (model: OpenRouterModel) => [model.pricing?.prompt, model.pricing?.completion].some((price) => Number(price ?? 0) < 0);
 
 /** Agent work needs live tool calls, text out and a known price; batch-only variants and other models are left out. */
@@ -88,7 +82,6 @@ export function toModelInfo(model: OpenRouterModel): ModelInfo {
 	};
 }
 
-/** The fields Anton reads from OpenRouter's `GET /models/{id}/endpoints`. */
 type OpenRouterEndpoint = {
 	provider_name?: string;
 	tag?: string;
@@ -124,12 +117,7 @@ export function toEndpoints(body: unknown): ModelEndpoint[] {
 	});
 }
 
-/**
- * OpenRouter's model list, cached for `ttlMs` (`cachedList`). With a key it is
- * the models the key's account may use (`/models/user`, after its provider
- * preferences and guardrails), else the public list, which also stands in when
- * that call fails.
- */
+/** With a key, the models its account may use (`/models/user`), else the public list, which also stands in when that call fails. */
 export function openRouterCatalog({ apiUrl, ttlMs, apiKey = () => null }: OpenRouterOptions): ModelCatalog {
 	async function fetchList(path: string, key: string | null): Promise<OpenRouterModel[]> {
 		// Bounded, as a task's first list waits for it.

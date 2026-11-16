@@ -1,10 +1,6 @@
 import type { Machine } from './ports.ts';
 
-/**
- * The same machine, with `env` under every command and shell it runs. A
- * command's own variables win, so Anton's git credentials are never
- * overridden by a repo setting of the same name.
- */
+/** A command's own variables win, so a repo setting of the same name never overrides Anton's git credentials. */
 export function withEnv(machine: Machine, env: Record<string, string>): Machine {
 	return {
 		id: machine.id,

@@ -6,13 +6,8 @@ import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.l
 import { OPENCODE_GO_MODELS } from '@earendil-works/pi-ai/providers/opencode-go.models';
 import type { ModelInfo } from '../core/ports.ts';
 
-/**
- * Models on an OpenCode Go plan (opencode.ai/docs/go), each call with the key
- * from Settings › Subscriptions. pi's own `opencode-go` provider at 0.83 sends
- * neither a session id, which OpenCode now refuses requests without, nor a
- * name of its own; this one sends both, and serves the plan's live model list
- * rather than pi's, which falls behind the plan.
- */
+// pi's `opencode-go` provider (0.83) sends neither a session id, which OpenCode now requires, nor a client name of its own,
+// and its model list falls behind the plan's.
 type GoApi = 'anthropic-messages' | 'openai-completions' | 'openai-responses';
 type GoModel = Model<GoApi>;
 
@@ -25,7 +20,6 @@ export const SESSION_HEADER = 'x-opencode-session';
 
 const known = Object.values(OPENCODE_GO_MODELS) as GoModel[];
 
-/** The API a model is served over: pi's entry, else its family's, from the endpoints OpenCode lists for Go. */
 export function apiFor(id: string): GoApi {
 	const pi = known.find((model) => model.id === id);
 	if (pi) return pi.api;
@@ -58,7 +52,7 @@ function toPiModel(info: ModelInfo): GoModel {
 	} as GoModel;
 }
 
-/** Adds the conversation's session id to every request; a call outside a conversation gets one of its own. */
+/** A call outside a conversation gets a session id of its own. */
 export function withSession(streams: ProviderStreams): ProviderStreams {
 	const session = <T extends StreamOptions>(options: T | undefined): T =>
 		({ ...options, headers: { ...options?.headers, [SESSION_HEADER]: options?.sessionId ?? `anton-${randomUUID()}` } }) as unknown as T;
@@ -68,7 +62,6 @@ export function withSession(streams: ProviderStreams): ProviderStreams {
 	};
 }
 
-/** `live` is read on every lookup, so a key saved in Settings needs no restart. */
 export function openCodeGoProvider(live: () => readonly ModelInfo[], key: () => Promise<string>): Provider {
 	const base = createProvider<GoApi>({
 		id: GATEWAY,

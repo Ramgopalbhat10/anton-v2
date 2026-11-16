@@ -2,10 +2,6 @@ import { defineTool, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { notePlan } from '../../../services/replies/asks.ts';
 
-/**
- * Plan mode's way out: the plan is shown with an Approve button, and the task waits on your approval
- * (`checkReply` keeps the plan with it). Approving turns plan mode off and tells the agent to build it.
- */
 export function useProposePlan(id: string) {
 	useTool(
 		defineTool({

@@ -22,13 +22,9 @@ import { incognitoAttachment } from '../services/artifacts/attachments.ts';
 import { assertWithinBudget } from '../services/models/budget.ts';
 import { REASONING, ROUTE, body } from './shared.ts';
 
-/** The agents' HTTP surface: Flue's routers for the Coder and each project's coordinator, with the checks that run before a message reaches them, incognito chats, and the Android app's read API. */
 const app = new Hono();
 
-// A prompt needs a task, waits while its files are being restored, and is checked against
-// the spending caps; then the agent loads the task's model and MCP servers before it renders.
-// A person writing also lets the agent follow up on its pull request again. The task counts as
-// working from the moment the message arrives, so the task list moves it to Running at once.
+// The task counts as working from the moment the message arrives; a refused message undoes that.
 app.post('/api/agents/coder/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSessionRecord(id))) throw new NotFoundError('Session not found');
@@ -52,8 +48,7 @@ app.post('/api/agents/coder/:id/abort', async (c, next) => {
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
-// An incognito chat: a throwaway conversation the runtime keeps in memory only — no session record,
-// no files, nothing on disk. Its model choice lives in memory too, set by the page before it writes.
+// Incognito chats live in memory only: no session record, no files, nothing on disk.
 app.post('/api/incognito/attach', async (c) => {
 	const name = (c.req.query('name') ?? 'file').slice(0, 300);
 	const bytes = new Uint8Array(await c.req.arrayBuffer());
@@ -71,8 +66,7 @@ app.post('/api/incognito/:id', async (c) => {
 app.delete('/api/incognito/:id', (c) => {
 	const id = c.req.param('id');
 	if (isIncognitoId(id)) {
-		// Answer at once; aborting the reply, releasing its state and purging its rows run behind
-		// the response, so closing a chat never waits on any of it.
+		// Answer at once; aborting the reply and purging its state run behind the response.
 		void (async () => {
 			try {
 				await agents.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' });
@@ -81,16 +75,13 @@ app.delete('/api/incognito/:id', (c) => {
 			}
 			releaseIncognito(id);
 			forgetModelChoice(id);
-			// Everything the chat wrote lives in the in-memory store; delete it now, and once more
-			// after the abort's settlement lands so its last writes go too.
+			// Purged now, and again after the abort settles so its last writes go too.
 			purgeIncognito(id);
 			setTimeout(() => purgeIncognito(id), 2_000).unref();
 		})().catch(() => undefined);
 	}
 	return c.json({ ok: true });
 });
-// Its messages ride the same agent router as tasks, under their own path: the check is the incognito
-// prefix rather than a session record, since there is none.
 app.post('/api/agents/incognito/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!isIncognitoId(id)) throw new NotFoundError('Session not found');
@@ -103,12 +94,8 @@ app.post('/api/agents/incognito/:id/abort', async (c, next) => {
 	await next();
 });
 app.route('/api/agents/incognito', agents as never);
-// The Android app's read surface: stable DTOs over the internal shapes, and a transcript
-// normalized from the agent router instead of flue's wire protocol.
 const coordinators = createAgentRouter(Coordinator);
 app.route('/api/mobile', mobileApi(agents as never, coordinators as never));
-// A project's coordinator, one conversation per project; like a prompt to a task, a message is checked
-// against the daily cap, and the coordinator loads a fresh picture of its project before it renders.
 app.post('/api/agents/coordinator/:id', async (c, next) => {
 	const id = c.req.param('id');
 	if (!(await getSpace(id))) throw new NotFoundError('Project not found');

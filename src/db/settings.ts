@@ -1,6 +1,5 @@
 import { appDb } from './client.ts';
 
-/** An app-wide setting stored as JSON; `fallback` when it was never saved. */
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 	const db = await appDb();
 	const result = await db.execute({ sql: 'SELECT value FROM settings WHERE key = ?', args: [key] });

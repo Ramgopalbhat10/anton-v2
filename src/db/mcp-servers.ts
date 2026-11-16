@@ -26,7 +26,6 @@ export async function getMcpServer(name: string): Promise<InstalledMcpServer | n
 	return row ? toServer(row) : null;
 }
 
-/** Adds a server, or replaces the one of that name, keeping whether it is on and when it was added. */
 export async function saveMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>): Promise<void> {
 	const db = await appDb();
 	await db.execute({
@@ -46,7 +45,7 @@ export async function deleteMcpServer(name: string): Promise<void> {
 	await db.execute({ sql: 'DELETE FROM mcp_servers WHERE name = ?', args: [name] });
 }
 
-/** A server's sign-in, as `mcp-sign-in.ts` keeps it; never part of the server's view. */
+/** Never part of the server's view. */
 export async function getMcpSignIn(name: string): Promise<unknown> {
 	const db = await appDb();
 	const row = (await db.execute({ sql: 'SELECT oauth_json FROM mcp_servers WHERE name = ?', args: [name] })).rows[0];

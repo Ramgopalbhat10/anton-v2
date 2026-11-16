@@ -34,10 +34,7 @@ const UNSUPPORTED = [
 	'user',
 ];
 
-/**
- * Makes a Responses request one a ChatGPT plan token may send: streamed, unstored, and with no system-role items.
- * A variant's request names the model itself: a larger context needs nothing more, and fast mode is the priority tier.
- */
+/** A variant's request names the model itself: a larger context needs nothing more, and fast mode is the priority tier. */
 export function forChatGptPlan(payload: unknown): unknown {
 	if (!payload || typeof payload !== 'object') return payload;
 	const request = { ...(payload as Record<string, unknown>) };
@@ -57,7 +54,6 @@ export function forChatGptPlan(payload: unknown): unknown {
 	return request;
 }
 
-/** pi's Responses API, with every request passed through `forChatGptPlan` after any hook the caller set. */
 function planStreams(api: ProviderStreams): ProviderStreams {
 	const withPlanPayload = <T extends { onPayload?: (payload: unknown, model: Model<never>) => unknown }>(options: T | undefined): T =>
 		({
@@ -93,11 +89,6 @@ function toPiModel(info: ModelInfo): ResponsesModel {
 	};
 }
 
-/**
- * The OpenAI provider for models on a ChatGPT plan: the plan's models from
- * Anton's live list, each call authorized with a fresh token from the
- * sign-in. `live` is read on every lookup, so a sign-in needs no restart.
- */
 export function chatGptPlanProvider(live: () => readonly ModelInfo[], token: () => Promise<string>): Provider {
 	const base = createProvider<'openai-responses'>({
 		id: GATEWAY,

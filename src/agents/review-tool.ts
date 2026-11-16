@@ -2,7 +2,6 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { postReview, SEVERITIES } from '../services/git/code-review.ts';
 
-/** Posts a review on the task's pull request; the reviewer's on Anton's own, the coder's in a task reviewing someone else's. */
 export const postReviewTool = (id: string) =>
 	defineTool({
 		name: 'post_review',

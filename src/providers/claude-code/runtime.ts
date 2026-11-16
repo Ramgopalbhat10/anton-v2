@@ -23,17 +23,12 @@ import {
 } from '../../core/ports.ts';
 
 /**
- * Claude Code, run through the Claude Agent SDK, as a model for Anton's own
- * agents (docs/claude-code-subscription.md). The program runs unmodified on
- * Anton's server with its built-in tools off: it can only call Anton's tools,
- * over an in-process MCP server, and Anton runs each call. It signs in through
- * its own flow (`claude auth login`) into its own config directory, and Anton
- * never reads its token. This is the only file that imports the SDK.
+ * Claude Code runs with its built-in tools off: it can only call Anton's tools, over an in-process MCP server. It signs
+ * in through its own flow into its own config directory, and Anton never reads its token. The only file that imports the SDK.
  */
 export type ClaudeCodeOptions = {
-	/** Claude Code's own config directory (`CLAUDE_CONFIG_DIR`), where its sign-in lives. */
+	/** `CLAUDE_CONFIG_DIR`, where its sign-in lives. */
 	configDir: string;
-	/** A `claude` executable to run instead of the one the SDK bundles. */
 	executable?: string;
 };
 
@@ -57,9 +52,8 @@ const EXTRA_USAGE_PREFIXES = ["You're now using extra usage", 'Now using extra u
 const PASSED_ENV = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR'];
 
 /**
- * The child's environment. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and
- * `CLAUDE_CODE_OAUTH_TOKEN` are never passed, so calls bill the plan Claude Code signed in to and
- * nothing else; auto-compaction is off because Flue compacts the conversation itself.
+ * The API-key and token variables are never passed, so calls bill only the plan Claude Code signed in to; auto-compaction
+ * is off because Flue compacts the conversation itself.
  */
 export function childEnv(configDir: string, from: NodeJS.ProcessEnv = process.env): Record<string, string> {
 	const env: Record<string, string> = {};
@@ -77,7 +71,6 @@ export function childEnv(configDir: string, from: NodeJS.ProcessEnv = process.en
 	};
 }
 
-/** The `claude` the SDK bundles for this platform, for the sign-in command. */
 function bundledExecutable(): string | null {
 	const require = createRequire(import.meta.url);
 	const arch = `${process.platform}-${process.arch}`;
@@ -99,7 +92,6 @@ const SIGN_IN_FINISH_MS = 60_000;
 
 const plainText = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 
-/** Claude Code's last words, such as "Login failed: Request failed with status code 400". */
 function lastLine(output: string): string {
 	const lines = plainText(output)
 		.split(/[\r\n]+/)
@@ -108,12 +100,7 @@ function lastLine(output: string): string {
 	return lines.at(-1) ?? 'Claude Code stopped without saying why.';
 }
 
-/**
- * Runs `claude auth login` with no terminal. It prints the address to approve
- * at (the one for a machine with no browser, whose page shows a code), then
- * reads that code from stdin, trades it for its token and keeps the token in
- * its own config directory. `BROWSER` is a no-op, so nothing opens on the server.
- */
+/** With no terminal: it prints the address for a machine with no browser, then reads the code from stdin. `BROWSER` is a no-op, so nothing opens on the server. */
 export function startSignIn(
 	executable: string,
 	configDir: string,
@@ -172,7 +159,6 @@ export function startSignIn(
 	});
 }
 
-/** A single-reader queue: what the SDK reads Anton's messages from, and what Anton reads its events from. */
 function channel<T>() {
 	const items: T[] = [];
 	let waiting: ((result: IteratorResult<T>) => void) | null = null;
@@ -222,7 +208,7 @@ const textOf = (content: unknown): string =>
 
 const isLimit = (text: string) => LIMIT_PREFIXES.some((prefix) => text.includes(prefix));
 
-/** Turns one SDK message into Anton's runtime events. Subagent messages never occur: Claude Code has no Task tool here. */
+/** Subagent messages never occur: Claude Code has no Task tool here. */
 export function toRuntimeEvents(message: SDKMessage, state: { limited: boolean; failed: boolean }): RuntimeEvent[] {
 	if ('parent_tool_use_id' in message && message.parent_tool_use_id) return [];
 	switch (message.type) {
@@ -301,7 +287,6 @@ export function toRuntimeEvents(message: SDKMessage, state: { limited: boolean; 
 	}
 }
 
-/** Whether a notice from Claude Code says the plan's limit ran out and calls now bill paid extra usage. */
 export function isExtraUsageNotice(message: SDKMessage): boolean {
 	if (message.type === 'rate_limit_event') return Boolean(message.rate_limit_info.isUsingOverage || message.rate_limit_info.overageInUse);
 	if (message.type === 'system' && message.subtype === 'informational') return EXTRA_USAGE_PREFIXES.some((prefix) => message.content.startsWith(prefix));
@@ -312,7 +297,7 @@ export function isExtraUsageNotice(message: SDKMessage): boolean {
 type PiAnthropic = (typeof ANTHROPIC_MODELS)[keyof typeof ANTHROPIC_MODELS];
 const piModels = Object.values(ANTHROPIC_MODELS) as PiAnthropic[];
 
-/** pi's entry for the model, else the newest entry of its family (`claude-opus-…`) for a model pi does not know yet. */
+/** Else the newest entry of its family, for a model pi does not know yet. */
 function piEntry(id: string): PiAnthropic | undefined {
 	const exact = piModels.find((model) => model.id === id);
 	if (exact) return exact;
@@ -320,25 +305,17 @@ function piEntry(id: string): PiAnthropic | undefined {
 	return family ? piModels.filter((model) => model.id.startsWith(family) && !/\d{8}$/.test(model.id)).at(-1) : undefined;
 }
 
-/**
- * A plan model's context when Claude Code does not say: 200K. Claude Code serves 1M only on some plans,
- * and a conversation that outgrows what the plan serves fails. Claude Code says what it serves for each
- * model the account has (`contextsOf`): Opus 5.5 gets 1M under its plain name, with no `[1m]` name listed.
- */
+/** Claude Code serves 1M only on some plans, and a conversation that outgrows what the plan serves fails. */
 const PLAN_CONTEXT = 200_000;
 /** How long the status probe waits for the models' contexts before listing them without. */
 const CONTEXTS_TIMEOUT_MS = 10_000;
 
-/** `claude-opus-4-7` as "Claude Opus 4.7"; a dated snapshot drops its date. */
 export function nameOf(id: string): string {
 	const [, family = '', ...version] = id.replace(/-\d{8}$/, '').split('-');
 	return `Claude ${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`.trim();
 }
 
-/**
- * One of the models Claude Code offers the account, as Anton lists it, and its fast mode when Claude Code
- * offers one for it (`[fast]`, which bills paid extra usage rather than the plan). Aliases such as `default` are left out.
- */
+/** `[fast]` bills paid extra usage rather than the plan. Aliases such as `default` are left out. */
 export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY, window?: number): SubscriptionModel[] {
 	const resolved = parseVariant(listed.resolvedModel ?? listed.value);
 	// The wire id an alias resolves to can drop the 1M its name asks for (`sonnet[1m]` → `claude-sonnet-5`).
@@ -377,7 +354,6 @@ export function toSubscriptionModels(listed: ClaudeModel, gateway = GATEWAY, win
 	return withVariants(model, { fast: { description: 'Fast mode answers sooner, billed as paid extra usage rather than your plan’s limits.', change: { listPrice } } });
 }
 
-/** `contexts`: the context Claude Code serves for each listed model, by the name it lists it under (`value`). */
 export function toModels(listed: ClaudeModel[], gateway = GATEWAY, contexts: ReadonlyMap<string, number> = new Map()): SubscriptionModel[] {
 	const models = new Map<string, SubscriptionModel>();
 	for (const entry of listed) {
@@ -396,10 +372,8 @@ export function windowOf(usage: unknown): number | undefined {
 }
 
 /**
- * The context Claude Code itself gives each listed model on this account, as `/context` measures it: the
- * session is switched to each in turn, which makes no model call. Auto-compaction is off in the child
- * (`childEnv`), so this is the model's whole window rather than a compaction point. A model it will not
- * say for is left out, and keeps the 200K default.
+ * As `/context` measures it: the session is switched to each model in turn, which makes no model call. Auto-compaction is
+ * off in the child, so this is the whole window. A model it will not say for keeps the 200K default.
  */
 async function contextsOf(session: Query, listed: ClaudeModel[]): Promise<Map<string, number>> {
 	const windows = new Map<string, number>();
@@ -433,7 +407,6 @@ const WINDOWS: Array<[keyof NonNullable<Usage['rate_limits']>, string]> = [
 	['seven_day_oauth_apps', 'Week · apps'],
 ];
 
-/** The plan's limits from Claude Code's `/usage` answer, in the order its usage page shows them; null when the plan has none. */
 export function toWindows(usage: Pick<Usage, 'rate_limits_available' | 'rate_limits'>): PlanWindow[] | null {
 	const limits = usage.rate_limits;
 	if (!usage.rate_limits_available || !limits) return null;
@@ -450,7 +423,7 @@ export function toWindows(usage: Pick<Usage, 'rate_limits_available' | 'rate_lim
 
 type Account = { email?: string; subscriptionType?: string; tokenSource?: string; apiKeySource?: string; apiProvider?: string };
 
-/** What the account says about the sign-in. An API key or a cloud provider would bill something other than the plan. */
+/** An API key or a cloud provider would bill something other than the plan. */
 export function statusFrom(account: Account, version: string | null): AgentRuntimeStatus {
 	const plan = account.subscriptionType && account.subscriptionType !== 'Claude API' ? account.subscriptionType : null;
 	const base = { email: account.email ?? null, plan, version };
@@ -464,7 +437,6 @@ export function statusFrom(account: Account, version: string | null): AgentRunti
 	return { ...base, signedIn, problem: null };
 }
 
-/** The in-process MCP server that offers Anton's tools, served with their JSON Schemas as they are. */
 function toolServer(options: RuntimeConversationOptions) {
 	const server = new McpServer({ name: SERVER, version: '1.0.0' }, { capabilities: { tools: {} } });
 	const names = new Set(options.tools.map((tool) => tool.name));
@@ -524,7 +496,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 	type Probe = { status: AgentRuntimeStatus; models: SubscriptionModel[]; windows: Promise<PlanWindow[] | null> };
 	let probed: { at: number; result: Promise<Probe>; settled: boolean } | null = null;
 
-	/** The plan's limits as `/usage` shows them, through a call the SDK marks experimental; null when it will not say. */
+	/** Through a call the SDK marks experimental; null when it will not say. */
 	async function usageOf(session: Query): Promise<PlanWindow[] | null> {
 		const read = session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.bind(session);
 		if (!read) return null;
@@ -532,10 +504,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		return Promise.race([read({ skipBehaviors: true }).then(toWindows, () => null), late]);
 	}
 
-	/**
-	 * Starts Claude Code without sending anything, to read its sign-in, models and limits; no model call is made.
-	 * It closes once the limits are read, which the sign-in and models do not wait for.
-	 */
+	/** No model call is made. It closes once the limits are read, which the sign-in and models do not wait for. */
 	async function probe(): Promise<Probe> {
 		const idle = channel<SDKUserMessage>();
 		const session = query({ prompt: idle, options: baseOptions() });
@@ -562,10 +531,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 		}
 	}
 
-	/**
-	 * The last probe, read again once it is a few minutes old. A stale one that answered is still served at once
-	 * while the next runs behind it, so a task's first message never waits for Claude Code to start; `fresh` waits.
-	 */
+	/** A stale probe is still served at once while the next runs behind it, so a task's first message never waits for Claude Code to start; `fresh` waits. */
 	function probeCached(fresh = false): Promise<Probe> {
 		const current = probed;
 		if (!fresh && current && Date.now() - current.at <= STATUS_TTL_MS) return current.result;

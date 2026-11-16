@@ -2,13 +2,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { OPENCODE_GO_MODELS } from '@earendil-works/pi-ai/providers/opencode-go.models';
 import { type KeyPlan, type PlanWindow, REASONING_LEVELS, type SubscriptionModel } from '../../core/ports.ts';
 
-/**
- * OpenCode Go (opencode.ai/docs/go): a monthly plan of open coding models,
- * used with an API key from the OpenCode Console. OpenCode documents it for
- * "OpenCode and other coding agents", asking each client to name itself and
- * send a session id per conversation; the agents' calls go through pi's
- * OpenAI and Anthropic APIs (`src/flue/opencode-go-models.ts`).
- */
+/** OpenCode Go (opencode.ai/docs/go) asks each client to name itself and send a session id per conversation. */
 export type OpenCodeGoOptions = { apiUrl: string };
 
 export const OPENCODE_GO_DEFAULTS: OpenCodeGoOptions = { apiUrl: 'https://opencode.ai/inference/go/v1' };
@@ -24,7 +18,6 @@ const UNROUTED = /^gemini-/;
 
 const WINDOWS: Record<string, string> = { rolling: '5 hours', weekly: 'Week', monthly: 'Month' };
 
-/** "glm-5.3-flash" as "GLM 5.3 Flash", for a model pi does not know yet. */
 export function nameOf(id: string): string {
 	const upper = new Set(['glm', 'gpt', 'hy']);
 	return id
@@ -51,7 +44,6 @@ const vendorOf = (id: string): string =>
 		['step', 'StepFun'],
 	].find(([prefix]) => id.startsWith(prefix))?.[1] ?? 'OpenCode';
 
-/** One of the plan's models, filled in from pi's catalog where pi knows it. */
 export function toSubscriptionModel(id: string): SubscriptionModel {
 	const pi = catalog.find((model) => model.id === id);
 	// A model pi does not know yet gets no effort levels, so no reasoning field is sent that it might refuse.
@@ -72,7 +64,6 @@ export function toSubscriptionModel(id: string): SubscriptionModel {
 	};
 }
 
-/** The usage answer's windows, in the order the plan's limits run: five hours, week, month. */
 export function toWindows(body: unknown): PlanWindow[] {
 	const usage = (body as { usage?: Record<string, { status?: unknown; percent?: unknown; resetsAt?: unknown }> } | null)?.usage ?? {};
 	return Object.entries(WINDOWS).flatMap(([key, label]) => {
