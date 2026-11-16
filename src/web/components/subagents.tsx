@@ -12,12 +12,6 @@ import { cn } from '@/lib/utils';
 import { focusRun, ShowPanel } from '@/lib/workspace';
 import { taskQueries } from '@/lib/task-queries';
 
-/*
- * Subagents as the user sees them: who each one is (an icon and a colour per
- * kind), how far along it is, and what it is doing now. Shared by the card in
- * the thread and the Agents panel.
- */
-
 type Look = { icon: IconComponent; tone: string; label: string };
 
 const LOOKS: Record<string, Look> = {
@@ -37,7 +31,6 @@ export function titleOf(prompt: string, description?: string): string {
 	return (description?.trim() || prompt.trim().split('\n')[0] || 'Working').replace(/^#+\s*/, '');
 }
 
-/** A line of Markdown as plain words, for a one-line preview: no list marks, emphasis or links. */
 export function plainLine(text: string | null | undefined): string {
 	const line = (text ?? '').split('\n').find((entry) => entry.trim()) ?? '';
 	return line
@@ -48,7 +41,6 @@ export function plainLine(text: string | null | undefined): string {
 		.trim();
 }
 
-/** The subagent's kind as a small tile in its colour; it breathes while the subagent works. */
 export function AgentTile({ agent, running, size = 22 }: { agent: string; running?: boolean; size?: number }) {
 	const look = lookOf(agent);
 	// Just the role's glyph in the role's colour, no tile behind it: the colour is what tells roles apart.
@@ -59,12 +51,10 @@ export function AgentTile({ agent, running, size = 22 }: { agent: string; runnin
 	);
 }
 
-/** The task's subagent runs, kept current from the server's announcements. */
 export function useSubagentRuns(sessionId: string) {
 	return useQuery(taskQueries.subagents(sessionId));
 }
 
-/** The time now, ticking each second while `on`, so a running subagent's elapsed time moves. */
 export function useNow(on: boolean): number {
 	const [now, setNow] = useState(() => Date.now());
 	useEffect(() => {
@@ -79,14 +69,12 @@ export function runElapsed(run: SubagentRun, now: number): number {
 	return run.durationMs ?? Math.max(0, now - Date.parse(run.startedAt));
 }
 
-/** A step as the thread would describe it. */
 export function stepBody(step: SubagentStep) {
 	return describeTool({ toolName: step.tool, input: step.input, state: step.state === 'failed' ? 'output-error' : step.state === 'done' ? 'output-available' : 'input-available' });
 }
 
 export type WorkKind = 'read' | 'search' | 'run' | 'edit' | 'browse' | 'other';
 
-/** The kinds of work a subagent's steps add up to: reading and searching quiet greys, doing things lit in colour. */
 export const WORK: Record<WorkKind, { label: string; doing: string; tone: string }> = {
 	read: { label: 'Read', doing: 'reading', tone: 'var(--text-2)' },
 	search: { label: 'Searched', doing: 'searching', tone: 'var(--text-4)' },
@@ -105,10 +93,8 @@ export function workKind(tool: string): WorkKind {
 	return 'other';
 }
 
-/** A step's colour: its kind of work, or red when it failed. */
 export const stepTone = (step: SubagentStep) => (step.state === 'failed' ? toolTone(step.tool, true) : WORK[workKind(step.tool)].tone);
 
-/** Running, finished, stopped or failed, as a small glyph. */
 export function StatusGlyph({ status }: { status: SubagentRun['status'] | 'starting' }) {
 	if (status === 'running' || status === 'starting') return <Spinner size={11} />;
 	if (status === 'failed') return <Icon icon={CircleAlert} size={12} className="text-(--bad)" />;
@@ -116,10 +102,7 @@ export function StatusGlyph({ status }: { status: SubagentRun['status'] | 'start
 	return <Icon icon={Check} size={12} className="text-(--ok)" />;
 }
 
-/**
- * Stops one subagent and lets the rest of the reply go on: the agent is told
- * what it had done and carries on, reading any message that waited for it.
- */
+/** The agent is told what it had done and carries on, reading any message that waited for it. */
 export function useStopRun(sessionId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -128,7 +111,6 @@ export function useStopRun(sessionId: string) {
 	});
 }
 
-/** A small Stop for one running subagent. */
 export function StopRunButton({ sessionId, run, className }: { sessionId: string; run: SubagentRun; className?: string }) {
 	const stop = useStopRun(sessionId);
 	const label = `Stop the ${lookOf(run.agent).label.toLowerCase()} agent`;
@@ -147,7 +129,6 @@ export function StopRunButton({ sessionId, run, className }: { sessionId: string
 	);
 }
 
-/** A thread `task` call: what the agent asked, and the run it started, once the server has it. */
 export type Delegation = { toolCallId: string; agent: string; prompt: string; description: string; running: boolean; failed: boolean; output: string };
 
 /** The run a task call started: by its call id when the runtime gave one, else by who was asked what. */
@@ -155,7 +136,6 @@ export function runFor(runs: SubagentRun[], call: Delegation): SubagentRun | und
 	return runs.find((run) => run.toolCallId === call.toolCallId) ?? runs.find((run) => run.agent === call.agent && run.prompt === call.prompt);
 }
 
-/** What a finished task call answered, as text. */
 function outputOf(part: { output?: unknown; errorText?: string }): string {
 	if (part.errorText) return part.errorText;
 	if (typeof part.output === 'string') return part.output;
@@ -175,17 +155,14 @@ export function delegationOf(part: { toolCallId: string; input: unknown; state: 
 	};
 }
 
-/** When a run ended, or now while it works. */
 export function runEnd(run: SubagentRun, now: number): number {
 	return Date.parse(run.startedAt) + runElapsed(run, now);
 }
 
-/** What the decision model did across a run's steps: how many questions it answered and what they cost. */
 export function decisionsOf(run: SubagentRun): { decisions: number; cost: number } {
 	return run.steps.reduce((sum, step) => ({ decisions: sum.decisions + (step.detail?.decisions ?? 0), cost: sum.cost + (step.detail?.cost ?? 0) }), { decisions: 0, cost: 0 });
 }
 
-/** The time window a set of runs spans, for lanes that share one axis. */
 export function spanOf(runs: SubagentRun[], now: number): { from: number; to: number } {
 	if (!runs.length) return { from: now, to: now };
 	const from = Math.min(...runs.map((run) => Date.parse(run.startedAt)));
@@ -193,7 +170,6 @@ export function spanOf(runs: SubagentRun[], now: number): { from: number; to: nu
 	return { from, to: Math.max(to, from + 1000) };
 }
 
-/** What a run is doing now, or came back with, in one plain line. */
 export function runLine(run: SubagentRun | undefined, call?: Delegation): ReactNode {
 	const status = run?.status ?? (call?.running ? 'running' : call?.failed ? 'failed' : 'done');
 	if (status === 'running') {
@@ -205,7 +181,6 @@ export function runLine(run: SubagentRun | undefined, call?: Delegation): ReactN
 	return plainLine(run?.result ?? call?.output) || (status === 'failed' ? 'Failed' : null);
 }
 
-/** What a run came back with, as plain words for a few lines of a peek. */
 function answerText(text: string): string {
 	return text
 		.split('\n')
@@ -216,11 +191,7 @@ function answerText(text: string): string {
 
 const STATUS_WORD: Record<SubagentRun['status'] | 'starting', string> = { running: 'Working', starting: 'Starting', done: 'Finished', failed: 'Failed', stopped: 'Stopped' };
 
-/**
- * A subagent on hover: what kind it is and how it stands, what it is doing
- * now or what it answered, and its numbers. The brief and every step stay
- * in the Agents panel, one click away.
- */
+/** The brief and every step stay in the Agents panel, one click away. */
 function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number; onOpen: () => void }) {
 	const status = run?.status ?? (call.running ? 'starting' : call.failed ? 'failed' : 'done');
 	const live = status === 'running' || status === 'starting';
@@ -263,12 +234,6 @@ function RunPeek({ sessionId, call, run, now, onOpen }: { sessionId: string; cal
 	);
 }
 
-/**
- * One subagent in the thread, on one line: how it stands, what it was asked
- * to do, its kind, and its steps and time as chips; while it works a second
- * line says what it is doing. Resting on it shows the rest; clicking opens
- * it in the Agents panel.
- */
 function AgentRow({ sessionId, call, run, now }: { sessionId: string; call: Delegation; run: SubagentRun | undefined; now: number }) {
 	const showPanel = useContext(ShowPanel);
 	// Without a run (one from before Anton kept them, or a call that never reached a subagent) the call's own state and answer tell it.
@@ -319,11 +284,6 @@ function AgentRow({ sessionId, call, run, now }: { sessionId: string; call: Dele
 	);
 }
 
-/**
- * The subagents a turn handed work to, in place of plain "Delegated to"
- * steps: one card, a line each. How they ran together, their lanes and
- * every step live in the Agents panel; this says only who did what.
- */
 export function AgentsCard({ sessionId, calls }: { sessionId: string; calls: Delegation[] }) {
 	const runs = useSubagentRuns(sessionId).data?.runs ?? [];
 	const matched = calls.map((call) => ({ call, run: runFor(runs, call) }));

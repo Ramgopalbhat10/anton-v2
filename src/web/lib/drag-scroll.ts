@@ -1,15 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type { MouseEvent, PointerEvent } from 'react';
 
-/**
- * Scroll affordances for a row that scrolls sideways: a mouse or pen drag
- * moves it, a vertical wheel turns into horizontal scroll until the row hits
- * its end and the page takes over again, touch keeps its own scroll, and a
- * drag does not leave a click behind on whatever was under the pointer.
- * Spread the result on the scrolling element. The drag is tracked on the
- * window, not by pointer capture, so a plain click still lands on the chip or
- * tab it started on.
- */
+/** Drag and vertical-wheel scrolling for a sideways row, with no click left behind after a drag. Tracked on the window, not by pointer capture, so a plain click still lands where it started. */
 export function useDragScroll() {
 	const moved = useRef(false);
 	const drag = useRef(0);

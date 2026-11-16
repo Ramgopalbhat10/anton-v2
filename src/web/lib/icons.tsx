@@ -229,13 +229,7 @@ import {
 import { forwardRef, type ForwardRefExoticComponent, type RefAttributes, type SVGProps } from 'react';
 import { cn } from '@/lib/utils';
 
-/*
- * Anton's icons: Hugeicons' free stroke-rounded set (MIT), drawn on its own
- * 24-unit grid at a 1.5 stroke. Each is exported under the name the app used
- * with Lucide, so a component imports `Check` or `GitBranch` from here and
- * never names a Hugeicons glyph itself; swapping a drawing is a one-line change
- * below. Every icon carries `icon icon-<name>` for tests and styles.
- */
+/* Hugeicons' free stroke-rounded set (MIT), exported under the names the app used with Lucide. Every icon carries `icon icon-<name>` for tests and styles. */
 
 export type IconProps = Omit<SVGProps<SVGSVGElement>, 'ref'> & { size?: number | string; strokeWidth?: number; absoluteStrokeWidth?: boolean };
 export type IconComponent = ForwardRefExoticComponent<IconProps & RefAttributes<SVGSVGElement>>;

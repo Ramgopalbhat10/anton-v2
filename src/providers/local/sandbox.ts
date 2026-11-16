@@ -9,11 +9,7 @@ import { runProcess } from '../shell-process.ts';
 
 const RUNNING_MARKER = '.anton-running';
 
-/**
- * Commits are pushed by recreating them through the git host's API, which
- * cannot carry a signature, so a signing setup in this computer's git config
- * stays off for tasks.
- */
+/** Commits are pushed by recreating them through the git host's API, which cannot carry a signature. */
 const UNSIGNED = { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'tag.gpgsign', GIT_CONFIG_VALUE_1: 'false' };
 
 /**
@@ -25,11 +21,7 @@ function shellEnv(extra: Record<string, string> = {}): Record<string, string> {
 	return { ...pick('PATH'), ...pick('HOME'), ...pick('LANG'), TERM: 'xterm-256color', ANTON_SCREEN_BIND: '127.0.0.1', ...UNSIGNED, ...extra };
 }
 
-/**
- * Runs each task in its own folder on this computer. No isolation: it is
- * for development and tests, where Modal is not wanted, and for a task whose
- * composer says This server (`src/services/runners.ts`).
- */
+/** No isolation: for development and tests, and for a task whose composer says This server. */
 export function localSandboxProvider(dataDir: string): SandboxProvider {
 	const machinesDir = path.join(dataDir, 'machines');
 	const imagesDir = path.join(dataDir, 'images');
@@ -97,7 +89,6 @@ function localMachine(root: string): Machine {
 			await writeFile(path.resolve(root, file), content).catch((error: unknown) => Promise.reject(fileError('write', file, reasonOf(error))));
 			return true;
 		},
-		/** Dev servers in a local task listen on this computer. */
 		previewUrl: async (port) => `http://localhost:${port}`,
 		// Only the browser on this computer reaches it: the desktop listens on this computer's own address (ANTON_SCREEN_BIND).
 		socketUrl: async (port) => `ws://localhost:${port}`,

@@ -23,7 +23,6 @@ export function usePlugins() {
 	return useQuery({ queryKey: ['plugins'], queryFn: api.plugins });
 }
 
-/** Mutations answer with the new plugin list, which goes straight into the cache. */
 export function usePluginMutation<T>(run: (input: T) => Promise<{ plugins: Plugin[] }>) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -36,7 +35,6 @@ export function usePluginMutation<T>(run: (input: T) => Promise<{ plugins: Plugi
 	});
 }
 
-/** The detail page's search params for a pick. */
 export const viewSearch = (pick: PluginPick): ViewSearch => ({ ...pick });
 
 /** `owner/repo`, a deeper path or a GitHub URL, which can be opened as it is. */
@@ -44,7 +42,6 @@ export const looksLikeAddress = (text: string) => /^(https?:\/\/(www\.)?github\.
 
 export const owner = (repo: string) => repo.split('/')[0] ?? repo;
 
-/** A plugin's or a skill's bare glyph, in a square footprint. */
 export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 'lg' }) {
 	return (
 		<span
@@ -59,7 +56,6 @@ export function Glyph({ bundle, size = 'md' }: { bundle: boolean; size?: 'md' | 
 	);
 }
 
-/** One plugin or skill as a card; the whole card opens it, and `action` sits above that. */
 function Card({
 	open,
 	bundle,
@@ -245,7 +241,6 @@ function CatalogCard({ item, marketplace }: { item: CatalogItem; marketplace: st
 	);
 }
 
-/** Marketplace repositories to add or remove. */
 function ManageMarketplaces({ saved }: { saved: string[] }) {
 	const queryClient = useQueryClient();
 	const [adding, setAdding] = useState('');
@@ -303,7 +298,6 @@ function ManageMarketplaces({ saved }: { saved: string[] }) {
 
 const SKELETONS = Array.from({ length: 6 }, (_, index) => index);
 
-/** Every marketplace's catalog, read in parallel; one that fails says so on its own. */
 function useCatalogs(marketplaces: string[]) {
 	return useQueries({
 		queries: marketplaces.map((marketplace) => ({

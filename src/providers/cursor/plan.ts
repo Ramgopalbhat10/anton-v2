@@ -29,19 +29,12 @@ import {
 } from '../../core/ports.ts';
 
 /**
- * A Cursor plan, through Cursor's own TypeScript SDK (cursor.com/docs/api/sdk/typescript):
- * a user API key "bills to that user's plan", and the SDK is Cursor's supported
- * way to use it outside its editor. Cursor has no plain model endpoint, so each
- * conversation is a local Cursor agent on Anton's server with its built-in tools
- * off (`tools: ['mcp']`): Anton's tools are its only ones, offered as SDK custom
- * tools, and each call waits until Flue has run the tool in the sandbox, the
- * way the Claude Code bridge works (`src/flue/claude-code-models.ts`). This is
- * the only file that imports the SDK.
+ * Cursor has no plain model endpoint, so each conversation is a local Cursor agent with its built-in tools off
+ * (`tools: ['mcp']`); each of Anton's tool calls waits until Flue has run it, as the Claude Code bridge does.
+ * The only file that imports the SDK.
  */
 export type CursorOptions = {
-	/** Where the agents' working folder lives. */
 	dir: string;
-	/** The SDK, swapped for a fake in tests. */
 	sdk?: () => Promise<CursorSdk>;
 };
 
@@ -67,7 +60,7 @@ const VENDORS: Array<[RegExp, string]> = [
 	[/^muse-/, 'Meta'],
 ];
 
-/** The model's context sizes, smallest first: any larger than the first bills as Max Mode. */
+/** Smallest first: any larger than the first bills as Max Mode. */
 function contextSizes(item: ModelListItem): Array<{ value: string; size: number }> {
 	return (item.parameters?.find((param) => param.id === 'context')?.values ?? [])
 		.map((option) => ({ value: option.value, size: sizeOf(option.value) }))
@@ -75,7 +68,6 @@ function contextSizes(item: ModelListItem): Array<{ value: string; size: number 
 		.sort((a, b) => a.size - b.size);
 }
 
-/** The smallest context a model offers: larger ones bill as Max Mode. */
 function contextParam(item: ModelListItem): { value: string; size: number } | null {
 	return contextSizes(item)[0] ?? null;
 }
@@ -83,7 +75,6 @@ function contextParam(item: ModelListItem): { value: string; size: number } | nu
 const offersFast = (item: ModelListItem | undefined) =>
 	Boolean(item?.parameters?.find((param) => param.id === 'fast')?.values.some((option) => option.value === 'true'));
 
-/** The levels a model takes, from its effort parameter and its thinking switch. */
 export function levelsOf(item: ModelListItem): Reasoning[] {
 	const params = item.parameters ?? [];
 	const effort = params.find((param) => EFFORT_PARAMS.includes(param.id));
@@ -99,7 +90,7 @@ export function levelsOf(item: ModelListItem): Reasoning[] {
 	return REASONING_LEVELS.filter((level) => levels.has(level));
 }
 
-/** One of the models Cursor offers the account, as Anton lists it. `default` is an alias and is left out. */
+/** `default` is an alias and is left out. */
 export function toSubscriptionModel(item: ModelListItem): SubscriptionModel | null {
 	if (item.id === 'default') return null;
 	const reasoning = levelsOf(item);
@@ -118,11 +109,7 @@ export function toSubscriptionModel(item: ModelListItem): SubscriptionModel | nu
 	};
 }
 
-/**
- * The model and the variants Cursor offers beside it: its largest context
- * (`[1m]`, Max Mode, billed by the token from the plan's usage), fast mode
- * (`[fast]`), and both.
- */
+/** `[1m]` is Max Mode, billed by the token from the plan's usage. */
 export function toSubscriptionModels(item: ModelListItem): SubscriptionModel[] {
 	const model = toSubscriptionModel(item);
 	if (!model) return [];
@@ -135,18 +122,12 @@ export function toSubscriptionModels(item: ModelListItem): SubscriptionModel[] {
 	});
 }
 
-/** The context of the variant Cursor runs when none is named. */
 const defaultContext = (item: ModelListItem | undefined) =>
 	(item?.variants?.find((variant) => variant.isDefault) ?? item?.variants?.[0])?.params.find((param) => param.id === 'context')?.value;
 
 /**
- * The model and its parameters for a conversation at `effort`: the effort value
- * that names it, thinking on unless it is `off`, the variant's context or else
- * the smallest, and fast mode for a `[fast]` variant. If the catalog only offers
- * fast=false, send it explicitly: Cursor Plus rejects requests that omit it.
- * Other parameters left out take the model's default variant's value. The context that variant has is left
- * out too: Grok 4.7 refuses it named ("Invalid parameters for registry model")
- * and runs it when it is not.
+ * Cursor Plus rejects requests that omit `fast=false` when that is all the catalog offers. The default variant's context
+ * is left out: Grok 4.7 refuses it named ("Invalid parameters for registry model") and runs it when it is not.
  */
 export function selectionFor(model: string, item: ModelListItem | undefined, effort: string | null): ModelSelection {
 	const { base: id, context, fast } = parseVariant(model);
@@ -170,7 +151,6 @@ export function selectionFor(model: string, item: ModelListItem | undefined, eff
 	return params.length ? { id, params } : { id };
 }
 
-/** A single-reader queue of the conversation's events. */
 function channel<T>() {
 	const items: T[] = [];
 	let waiting: ((result: IteratorResult<T>) => void) | null = null;
@@ -232,10 +212,8 @@ const toolResult = (output: { content: RuntimeContent[]; isError: boolean }): SD
  */
 const PART_BYTES = 32_000;
 const MORE_TOOL = 'read_tool_output';
-/** The long results a conversation keeps for `read_tool_output`, the oldest dropped first. */
 const KEEP_LONG = 20;
 
-/** The text from `offset` that fits in a part, cut on a character. */
 export function partAt(text: string, offset: number): string {
 	let part = text.slice(offset, offset + PART_BYTES);
 	for (let excess = Buffer.byteLength(part) - PART_BYTES; excess > 0; excess = Buffer.byteLength(part) - PART_BYTES) part = part.slice(0, part.length - excess);
@@ -250,14 +228,8 @@ const partNote = (id: string, total: number, end: number) =>
 		: '';
 
 /**
- * Where a Cursor agent keeps its conversation state and run log, in memory for
- * as long as Anton's conversation with it lasts. The SDK records every streamed
- * update before it takes the next, and its JSONL store reads its whole file to
- * add one line: a file shared by every run Anton ever made, so the more Cursor
- * had been used, the longer each word of a reply waited (over a second at
- * 40 MB, which a few long replies reach). Anton never resumes
- * a Cursor agent (a new one is given the conversation so far), so nothing here
- * needs to outlive it.
+ * In memory for as long as Anton's conversation with the agent lasts: the SDK's JSONL store reads its whole file to add a
+ * line, which took over a second per streamed update at 40 MB. Anton never resumes a Cursor agent.
  */
 export function memoryStore(sdk: Pick<CursorSdk, 'paginateAgentDocuments' | 'paginateRunDocuments' | 'paginateCheckpointBlobIds'>): LocalAgentStore {
 	const agents = new Map<string, LocalAgentDocument>();
@@ -354,12 +326,7 @@ export function memoryStore(sdk: Pick<CursorSdk, 'paginateAgentDocuments' | 'pag
 
 type Start = { sdk: CursorSdk; key: string; workDir: string; model: (id: string) => Promise<ModelListItem | undefined> };
 
-/**
- * One Cursor agent behind one Flue conversation. Cursor streams text and
- * thinking and calls tools as it goes; this cuts its output into model calls
- * in the shape of Anthropic's Messages stream, as the bridge reads them: one
- * ends at each batch of tool calls, and the last when the run finishes.
- */
+/** Cuts Cursor's output into model calls in the shape of Anthropic's Messages stream: one ends at each batch of tool calls. */
 export function cursorConversation(start: Start, options: RuntimeConversationOptions): RuntimeConversation {
 	const events = channel<RuntimeEvent>();
 	const store = memoryStore(start.sdk);
@@ -372,7 +339,6 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 	const queued: SDKUserMessage[] = [];
 	const steering: Array<Promise<unknown>> = [];
 
-	// The model call being streamed out: whether one is open, and its blocks.
 	let open = false;
 	let nextIndex = 0;
 	let block: { index: number; kind: 'text' | 'thinking' } | null = null;
@@ -426,7 +392,6 @@ export function cursorConversation(start: Start, options: RuntimeConversationOpt
 	}
 
 	const long = new Map<string, string>();
-	/** The result as Cursor takes it whole: a text too long for that is kept, and its first part goes back. */
 	const fitted = (output: { content: RuntimeContent[]; isError: boolean }): SDKCustomToolResult => {
 		const text = output.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n\n');
 		if (Buffer.byteLength(text) <= PART_BYTES) return toolResult(output);
@@ -573,7 +538,6 @@ export function cursorPlan(options: CursorOptions): KeyPlan {
 	try {
 		rmSync(path.join(options.dir, 'agents'), { recursive: true, force: true });
 	} catch {}
-	/** The last listing per key, for each conversation's model parameters. */
 	let listed: { key: string; at: number; items: ModelListItem[] } | null = null;
 
 	async function list(key: string): Promise<ModelListItem[]> {

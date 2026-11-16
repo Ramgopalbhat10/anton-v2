@@ -8,7 +8,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-subagents-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { recordSubagentEvent, resetSubagentRunsForTests, subagentRuns } = await import('../src/services/subagent-runs.ts');
+const { recordSubagentEvent, resetSubagentRunsForTests, subagentRuns } = await import('../src/services/tasks/subagent-runs.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { getSetting } = await import('../src/db/settings.ts');
 
@@ -73,7 +73,7 @@ test('runs are listed newest first, and a failed run keeps why', async () => {
 
 test('what a tool did inside a step is kept on that step, even when it says so before the step is recorded', async () => {
 	resetSubagentRunsForTests();
-	const { noteStep } = await import('../src/services/subagent-runs.ts');
+	const { noteStep } = await import('../src/services/tasks/subagent-runs.ts');
 	const at = { instanceId: 'task-n', taskId: 'sub-n' };
 	recordSubagentEvent({ type: 'task_start', ...at, agent: 'browser', prompt: 'Fill the form' });
 	await settle();
@@ -92,7 +92,7 @@ test('what a tool did inside a step is kept on that step, even when it says so b
 
 test('one subagent is stopped on its own: its task call answers with what it had done, and the run ends stopped', async () => {
 	resetSubagentRunsForTests();
-	const { stopSubagent } = await import('../src/services/subagent-runs.ts');
+	const { stopSubagent } = await import('../src/services/tasks/subagent-runs.ts');
 	const { subagentStopInterceptor } = await import('../src/flue/subagent-stop.ts');
 	const at = { instanceId: 'task-s', taskId: 'sub-s' };
 	recordSubagentEvent({ type: 'task_start', ...at, agent: 'browser', prompt: 'Check the Library page\nin detail' });
@@ -125,7 +125,7 @@ test('one subagent is stopped on its own: its task call answers with what it had
 
 test('stopping the whole reply ends its running subagents as stopped, not failed', async () => {
 	resetSubagentRunsForTests();
-	const { noteRepliesStopping } = await import('../src/services/subagent-runs.ts');
+	const { noteRepliesStopping } = await import('../src/services/tasks/subagent-runs.ts');
 	const at = { instanceId: 'task-a', taskId: 'sub-a' };
 	recordSubagentEvent({ type: 'task_start', ...at, agent: 'tester', prompt: 'Run the tests' });
 	await settle();
@@ -137,7 +137,7 @@ test('stopping the whole reply ends its running subagents as stopped, not failed
 });
 
 test("the agent reads its subagents' runs as a short report", async () => {
-	const { runReport } = await import('../src/services/subagent-runs.ts');
+	const { runReport } = await import('../src/services/tasks/subagent-runs.ts');
 	const run = {
 		id: 'r',
 		agent: 'explorer',

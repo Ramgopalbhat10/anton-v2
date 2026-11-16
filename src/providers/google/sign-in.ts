@@ -2,7 +2,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { AccountSignIn, OAuthClient, SubscriptionCredential } from '../../core/ports.ts';
 
 const TIMEOUT_MS = 20_000;
-/** Who signed in, for the settings card: an email in the ID token. */
 const IDENTITY = ['openid', 'email'];
 
 type Options = { authUrl: string; tokenUrl: string; revokeUrl: string };
@@ -28,7 +27,6 @@ function emailOf(idToken: string | undefined): string | null {
 	}
 }
 
-/** Google's errors in words that say what to change. */
 function explain(status: number, body: TokenResponse | null, text: string): string {
 	const code = body?.error ?? '';
 	if (code === 'invalid_client') return 'Google does not know that client id and secret. Copy both again from the OAuth client in Google Cloud.';
@@ -37,7 +35,6 @@ function explain(status: number, body: TokenResponse | null, text: string): stri
 	return `Google sign-in failed (${status}): ${body?.error_description ?? (code || text.slice(0, 300))}`;
 }
 
-/** Signing in to a Google account for its APIs, with PKCE on the OAuth client you made in Google Cloud. */
 export function googleSignIn(overrides: Partial<Options> = {}): AccountSignIn {
 	const options = { ...DEFAULTS, ...overrides };
 

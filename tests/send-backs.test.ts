@@ -8,9 +8,9 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-send-backs-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { lastSendBack, noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } = await import('../src/services/send-backs.ts');
-const { recordReplyText } = await import('../src/services/reply-check.ts');
-const { loadGate, restartGates } = await import('../src/services/gate-state.ts');
+const { lastSendBack, noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } = await import('../src/services/replies/send-backs.ts');
+const { recordReplyText } = await import('../src/services/replies/reply-check.ts');
+const { loadGate, restartGates } = await import('../src/services/replies/gate-state.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 

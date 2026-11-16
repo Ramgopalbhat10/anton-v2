@@ -33,9 +33,9 @@ test('all agents register Devin once through the shared provider module', () => 
 	const providers = readFileSync(new URL('../src/agents/providers.ts', import.meta.url), 'utf8');
 	assert.match(providers, /import \{ devinProvider \} from '\.\.\/flue\/devin-models\.ts';/);
 	assert.equal((providers.match(/setProvider\(withPruning\(devinProvider\(loadedModels, \(\) => planKey\('devin'\)\)\)\);/g) ?? []).length, 1);
-	for (const agent of ['coder', 'coordinator', 'reviewer']) {
+	for (const [agent, providerImport] of [['coder/index', '../providers.ts'], ['coordinator', './providers.ts'], ['reviewer', './providers.ts']]) {
 		const source = readFileSync(new URL(`../src/agents/${agent}.ts`, import.meta.url), 'utf8');
-		assert.match(source, /import '\.\/providers\.ts';/);
+		assert.ok(source.includes(`import '${providerImport}';`), `${agent} must load the shared provider registry`);
 		assert.doesNotMatch(source, /devinProvider|setProvider\(/, `${agent} must not duplicate provider registration`);
 	}
 });

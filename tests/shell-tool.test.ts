@@ -185,7 +185,7 @@ test("the sandbox's other commands come back as they did: stdout and stderr apar
 });
 
 test("the prompts say a long result is cut, and no longer give a figure bash's results do not keep to", async () => {
-	const { workspacePrompts } = await import('../src/agents/coder.ts');
+	const { workspacePrompts } = await import('../src/agents/coder/prompts.ts');
 	for (const profile of ['edit', 'patch'] as const) {
 		const prompts = workspacePrompts(profile);
 		for (const name of ['task', 'workspace', 'chatWorkspace'] as const) {

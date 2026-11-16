@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path';
 import type { ObjectStore } from '../../core/ports.ts';
 
-/** Objects as files under a folder. For development and tests. */
+/** For development and tests. */
 export function diskStore(dir: string): ObjectStore {
 	const fileFor = (key: string) => path.join(dir, ...key.split('/'));
 

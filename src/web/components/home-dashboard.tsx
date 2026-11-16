@@ -12,15 +12,9 @@ import { activeAt, repoName } from '@/lib/task-view';
 import { stateOf, useSpaceName } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-/*
- * Home under the composer: only what wants you. The tasks that wait on you,
- * the ones running now, the latest few, and one quiet strip of figures.
- */
-
 const DAY = 86_400_000;
 /** Days the strip's bars cover; the newest seven are this week. */
 const DAYS = 14;
-/** Rows a section shows before it points at the full list. */
 const SHOWN = 5;
 
 function localDay(at: Date): number {
@@ -29,10 +23,8 @@ function localDay(at: Date): number {
 
 /** Whether a task waits on you: it asks something, has a plan to approve, or failed; the same state its mark shows, so a done thread never lands here. */
 export const needsYou = (session: Session) => stateOf(session) === 'waiting';
-/** Whether the agent is at work on a task right now, or its sandbox is starting for it. */
 export const isRunning = (session: Session) => session.working || session.status === 'starting';
 
-/** What to do about a task that waits on you, in a word or two. */
 function nextStep(session: Session): string {
 	if (session.status === 'error') return 'Open';
 	if (session.plan) return 'Review plan';
@@ -54,7 +46,6 @@ function TaskLink({ session, children, className }: { session: Session; children
 	);
 }
 
-/** A section's heading: its name, something beside it, and a link to the rest on the right. */
 function Heading({ title, aside, children }: { title: string; aside?: ReactNode; children?: ReactNode }) {
 	return (
 		<div className="mb-2 flex h-5 items-center gap-2">
@@ -68,7 +59,6 @@ function Heading({ title, aside, children }: { title: string; aside?: ReactNode;
 
 const MORE = 'inline-flex items-center gap-1 rounded-inner text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
-/** Where a task works: its project, its repository, or Chat; and its branch once it has one. */
 function Where({ session }: { session: Session }) {
 	const spaceName = useSpaceName(session.spaceId);
 	return (
@@ -84,7 +74,6 @@ function Where({ session }: { session: Session }) {
 	);
 }
 
-/** A task in a card: its state, its title over where it works or what it asks, its pull request, and what is on the right. */
 function CardRow({ session, note, children }: { session: Session; note?: string | null; children?: ReactNode }) {
 	return (
 		<TaskLink
@@ -104,7 +93,6 @@ function CardRow({ session, note, children }: { session: Session; note?: string 
 
 const AGE = 'in-num w-7 shrink-0 text-right text-small text-(--text-3)';
 
-/** Tasks that wait on you, each with the step that moves it on. */
 function NeedsYou({ sessions }: { sessions: Session[] }) {
 	const shown = sessions.slice(0, SHOWN);
 	return (
@@ -134,7 +122,6 @@ function NeedsYou({ sessions }: { sessions: Session[] }) {
 		);
 	}
 
-	/** Tasks the agent is working on now, with what each has spent. */
 function Running({ sessions }: { sessions: Session[] }) {
 	const shown = sessions.slice(0, SHOWN);
 	return (
@@ -160,7 +147,6 @@ function Running({ sessions }: { sessions: Session[] }) {
 	);
 }
 
-/** The latest tasks, a line each: state, title, where it works and how long ago. */
 function Recent({ sessions }: { sessions: Session[] }) {
 	return (
 		<section aria-label="Recent">
@@ -198,7 +184,6 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 	);
 }
 
-/** One quiet strip of figures: this week's tasks and merges, this month's spend, and a bar for each of the last 14 days. */
 function Strip({ sessions }: { sessions: Session[] }) {
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage, staleTime: 60_000 });
 	const { perDay, week, merged } = useMemo(() => {
@@ -243,7 +228,6 @@ function Strip({ sessions }: { sessions: Session[] }) {
 	);
 }
 
-/** Home's line under the greeting: how many tasks wait on you and how many run. */
 export function homeSummary(sessions: Session[]): string {
 	const waiting = sessions.filter(needsYou).length;
 	const running = sessions.filter(isRunning).length;

@@ -1,23 +1,13 @@
-/*
- * A reply's trace: every model call and tool call it made, its subagents'
- * too, on one clock. Recorded on the server from the runtime's events
- * (`src/services/response-trace.ts`) and drawn by the trace modal in the
- * thread (`src/web/components/trace-modal.tsx`), so both read these types.
- */
-
-/** The parts of a model call's request, as the context meter splits them. */
 export type TracePart = 'systemPrompt' | 'skills' | 'tools' | 'mcpTools' | 'messages';
 export const TRACE_PARTS: TracePart[] = ['systemPrompt', 'skills', 'tools', 'mcpTools', 'messages'];
 
-/** What a provider counted for one call: fresh input, input read from and written to its cache, output, and dollars. */
 export type TraceUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 
-/** One message of a request, as text: a user's, the model's own, or a tool's result. */
 export type TraceMessage = { role: 'user' | 'assistant' | 'toolResult' | 'system'; text: string; tool?: string; chars: number };
 
 type SpanBase = {
 	id: string;
-	/** Whose conversation: `main` for the agent, else the subagent run's id. */
+	/** `main` for the agent, else the subagent run's id. */
 	lane: string;
 	/** Milliseconds from the reply's start. */
 	start: number;
@@ -27,21 +17,17 @@ type SpanBase = {
 
 export type ModelSpan = SpanBase & {
 	kind: 'model';
-	/** `agent`, or one of compaction's summaries. */
 	purpose: string;
-	/** `<gateway>/<model>` as the task names it, and the model the provider says answered (an alias's model, a fallback's). */
 	model: string;
 	served: string | null;
 	usage: TraceUsage | null;
-	/** The request's parts in estimated tokens, scaled to what the provider counted. */
+	/** Estimated tokens, scaled to what the provider counted. */
 	parts: Record<TracePart, number>;
-	/** Messages the request carried. */
 	messages: number;
-	/** Messages new since this conversation's previous call: what this call added to the context. */
+	/** New since this conversation's previous call. */
 	added: TraceMessage[];
-	/** How many more were added than are kept in `added`. */
 	addedMore: number;
-	/** Keys into the trace's `prompts` and `toolsets`, so a changed prefix (the cache's undoing) can be seen. */
+	/** Keys into the trace's `prompts` and `toolsets`. */
 	prompt: string;
 	toolset: string;
 	output: { text: string; thinking: string; toolCalls: Array<{ id: string; name: string }> };
@@ -51,17 +37,15 @@ export type ModelSpan = SpanBase & {
 export type ToolSpan = SpanBase & {
 	kind: 'tool';
 	tool: string;
-	/** The call's arguments, as JSON. */
 	input: string;
 	output: string;
-	/** The output's whole length, before it was cut to keep. */
+	/** Before it was cut. */
 	outputChars: number;
 };
 
 export type AgentSpan = SpanBase & {
 	kind: 'agent';
 	agent: string;
-	/** The lane the agent was started from, and the `task` call that started it. */
 	parent: string;
 	call: string | null;
 	description: string | null;
@@ -84,19 +68,15 @@ export type Trace = {
 	sessionId: string;
 	startedAt: string;
 	durationMs: number;
-	/** The agent's own model. */
 	model: string | null;
 	spans: TraceSpan[];
-	/** System prompts by key, each as sent (cut past a size), and the tools each call offered. */
 	prompts: Record<string, string>;
 	toolsets: Record<string, Array<{ name: string; tokens: number }>>;
-	/** Spans left out once the trace held as many as it keeps. */
 	dropped: number;
-	/** Begun at its first model call after a restart, for a reply the runtime resumed: what came before is not in it. */
+	/** A reply the runtime resumed after a restart: what came before is not in it. */
 	resumed?: boolean;
 };
 
-/** What a call's input was, by where it came from: read from the cache, written to it, or sent fresh. */
 export function cacheShare(usage: TraceUsage): { total: number; read: number; write: number; fresh: number; hit: number } {
 	const total = usage.input + usage.cacheRead + usage.cacheWrite;
 	return { total, read: usage.cacheRead, write: usage.cacheWrite, fresh: usage.input, hit: total ? usage.cacheRead / total : 0 };
@@ -104,13 +84,7 @@ export function cacheShare(usage: TraceUsage): { total: number; read: number; wr
 
 export type CacheVerdict = { tone: 'success' | 'warning' | 'danger' | 'neutral'; label: string; why: string };
 
-/**
- * Why a call hit or missed the provider's cache, against the call before it in
- * the same conversation. A cache keys on the request's prefix (system prompt,
- * tools, then messages in order), so a changed prompt or tool list undoes it;
- * a prefix that held and still missed points at the cache expiring, or a
- * provider that caches nothing.
- */
+/** A cache keys on the request's prefix (system prompt, tools, then messages), so a changed prompt or tool list undoes it. */
 export function cacheVerdict(span: Pick<ModelSpan, 'usage' | 'prompt' | 'toolset'>, previous: Pick<ModelSpan, 'prompt' | 'toolset'> | null): CacheVerdict {
 	if (!span.usage) return { tone: 'neutral', label: 'No usage', why: 'The provider reported no tokens for this call.' };
 	const { hit, total, read, write } = cacheShare(span.usage);
@@ -140,7 +114,6 @@ export function cacheVerdict(span: Pick<ModelSpan, 'usage' | 'prompt' | 'toolset
 	};
 }
 
-/** Short, readable names for the request's parts. */
 export const PART_LABELS: Record<TracePart, string> = {
 	systemPrompt: 'System prompt',
 	skills: 'Skills',

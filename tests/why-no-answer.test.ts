@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import { test } from 'node:test';
-import { whyNoAnswer } from '../src/services/why-no-answer.ts';
+import { whyNoAnswer } from '../src/services/settings/why-no-answer.ts';
 
 test('a service that takes the connection and then says nothing is the slow one, not this server', async () => {
 	const server = createServer(() => {});

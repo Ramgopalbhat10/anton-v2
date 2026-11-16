@@ -2,14 +2,8 @@ import { queryOptions } from '@tanstack/react-query';
 import { api, refreshFor, type Source } from '@/lib/api';
 
 /**
- * A task's queries, made here rather than inline in the components that read them.
- *
- * The query cache keeps the options of the last component that read a query, its
- * `queryFn` among them, for `gcTime` after the page is gone. An arrow written
- * inside a component shares that component's closure scope, so a cached query
- * kept the whole scope alive: the conversation's rows, refs and, through them,
- * the page's detached DOM. A function made here closes over the task's id alone.
- * Spread one into `useQuery` to add options: `useQuery({ ...taskQueries.files(id), staleTime })`.
+ * Made here, not inline: the query cache keeps the last reader's `queryFn` for `gcTime`, and an inline arrow kept that
+ * component's whole closure (rows, refs, detached DOM) alive. These close over the task's id alone.
  */
 export const taskQueries = {
 	session: (id: string) => queryOptions({ queryKey: ['session', id], queryFn: () => api.session(id) }),
@@ -33,5 +27,5 @@ export const taskQueries = {
 	mail: (id: string) => queryOptions({ queryKey: ['mail', id], queryFn: () => api.mailApprovals(id) }),
 };
 
-/** How often a panel that shows a sandbox listing polls it: often while it reads the live sandbox, rarely from a snapshot. Made here for the same reason as `taskQueries`. */
+/** Polls often while the listing reads the live sandbox, rarely from a snapshot; made here for the same reason as `taskQueries`. */
 export const refreshBySource = (query: { state: { data?: { source?: Source } } }) => refreshFor(query.state.data?.source);

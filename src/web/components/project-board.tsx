@@ -6,10 +6,6 @@ import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/threa
 import { repoShort, type Session } from '@/lib/api';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
 
-/* A project's threads as a board by state: what needs you first, what is
-   done last. Each card shows only what decides the next move — its state,
-   where it works, its pull request, and the line it last said or asks. */
-
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
 	{ id: 'needs', label: 'Needs you', glyph: 'waiting', kinds: ['waiting', 'failed'] },
 	{ id: 'working', label: 'Working', glyph: 'working', kinds: ['working', 'queued'] },
@@ -20,13 +16,11 @@ const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: Glyph
 
 const KIND_ORDER = COLUMNS.flatMap((column) => column.kinds);
 
-/** A column's threads: by state first, then the most recently moved. */
 function columnThreads(threads: Session[], kinds: GlyphKind[]): Session[] {
 	const rank = (thread: Session) => KIND_ORDER.indexOf(glyphKind(thread));
 	return threads.filter((thread) => kinds.includes(glyphKind(thread))).sort((a, b) => rank(a) - rank(b) || threadActiveAt(b).localeCompare(threadActiveAt(a)));
 }
 
-/** One thread on the board: the whole card opens the thread. */
 function BoardCard({ thread }: { thread: Session }) {
 	const open = useOpenThread();
 	const kind = glyphKind(thread);
@@ -56,7 +50,6 @@ function BoardCard({ thread }: { thread: Session }) {
 	);
 }
 
-/** The project's threads by state, with a way to start another from any column. */
 export function ProjectBoard({ threads, onNewThread }: { threads: Session[]; onNewThread: () => void }) {
 	if (threads.length === 0) {
 		return (

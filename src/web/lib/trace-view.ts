@@ -1,11 +1,5 @@
 import type { AgentSpan, ModelSpan, ToolSpan, Trace, TraceSpan } from '../../core/trace';
 
-/*
- * A reply's trace laid out for the trace modal: a tree of the agent's calls,
- * each subagent's opening under the `task` call that started it, flattened
- * into rows as folds and the search allow; and the reply's totals.
- */
-
 /** Each conversation's hue: the agent's is Anton's blue, subagents take the next data hues in the order they started. */
 const LANE_HUES = ['var(--data-1)', 'var(--data-2)', 'var(--data-3)', 'var(--data-5)', 'var(--data-4)', 'var(--data-6)'];
 
@@ -24,7 +18,6 @@ export type TraceNode = {
 
 export type TraceRow = TraceNode & { depth: number; folded: boolean; match: boolean };
 
-/** A tool call's arguments, read back from the JSON they were kept as. */
 export function parsedInput(span: ToolSpan): unknown {
 	try {
 		return JSON.parse(span.input);
@@ -159,7 +152,6 @@ export function previousCall(trace: Trace, span: ModelSpan): ModelSpan | null {
 	return previous;
 }
 
-/** Each call's number within its conversation, from 1. */
 export function callNumber(trace: Trace, span: ModelSpan): number {
 	return trace.spans.filter((other) => other.kind === 'model' && other.lane === span.lane && other.start <= span.start).length;
 }
@@ -194,7 +186,6 @@ const GATEWAYS: Record<string, string> = {
 	cursor: 'Cursor plan',
 };
 
-/** A gateway's name as Settings names it. */
 export const gatewayName = (gateway: string) => GATEWAYS[gateway] ?? gateway;
 
 /** What a call ran on: the model asked for, and the one that answered when the provider names another (an alias resolved, a fallback). */
@@ -217,7 +208,6 @@ export function modelChanges(trace: Trace): ModelChange[] {
 
 export type ModelUse = { model: string; served: string[]; gateway: string; calls: number; tokens: number; cost: number; first: number };
 
-/** Every model the reply ran on, in the order it first did, with what each did. */
 export function modelsUsed(trace: Trace): ModelUse[] {
 	const uses = new Map<string, ModelUse>();
 	for (const span of trace.spans) {
@@ -232,10 +222,7 @@ export function modelsUsed(trace: Trace): ModelUse[] {
 	return [...uses.values()].sort((a, b) => a.first - b.first);
 }
 
-/**
- * How far to stretch the timeline past fitting its width so a typical model call reads: its median
- * call about 28px wide, never past where a second takes 400px, and not at all for a short reply.
- */
+/** How far to stretch the timeline so a median model call is about 28px wide, never past 400px a second, and not at all for a short reply. */
 export function autoZoom(trace: Trace, fit: number): { zoom: number; most: number } {
 	const total = Math.max(trace.durationMs, 1);
 	const most = Math.max(2, Math.min(80, (total / 1000) * (400 / Math.max(fit, 1))));

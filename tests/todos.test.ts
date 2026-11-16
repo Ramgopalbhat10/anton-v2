@@ -9,8 +9,8 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const v = await import('valibot');
-const { changeTodos, noteTodoStep, startTodoReply, TODOS_INPUT, todoReminded, todoReminder, todosFor, updateTodos, writeTodos } = await import('../src/services/todos.ts');
-const { completionGate, startCompletionGate } = await import('../src/services/completion-gate.ts');
+const { changeTodos, noteTodoStep, startTodoReply, TODOS_INPUT, todoReminded, todoReminder, todosFor, updateTodos, writeTodos } = await import('../src/services/replies/todos.ts');
+const { completionGate, startCompletionGate } = await import('../src/services/replies/completion-gate.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { upsertProject } = await import('../src/db/projects.ts');

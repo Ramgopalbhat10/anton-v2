@@ -6,15 +6,7 @@ import { addToComposer } from '@/lib/composer-inbox';
 import { onPageChange } from '@/lib/live-updates';
 import { theme, useTheme } from '@/lib/theme';
 
-/*
- * A page the agent wrote with render_html, in the thread. It loads inside
- * Anton's frame page (src/services/renders.ts), sandboxed, reaching the web
- * only through Anton (src/services/page-fetch.ts); the two speak the MCP Apps protocol over postMessage. The
- * frame takes the page's height as it reports it, opens links only after
- * asking, and puts text the page hands over into the composer, unsent. When
- * another copy of the page (a tab of its own, the Library, Artifacts) saves
- * its state, the frame page hears it from here and brings the page up to date.
- */
+/* A render_html page in a sandboxed frame (renders.ts), reaching the web only through Anton (page-fetch.ts); the two speak the MCP Apps protocol over postMessage. */
 
 const MIN_HEIGHT = 60;
 const MAX_HEIGHT = 1600;
@@ -56,11 +48,7 @@ export const frameUrl = (sessionId: string, path: string) => `/api/sessions/${en
 const chrome =
 	'inline-flex size-7 items-center justify-center rounded-card border border-(--line) bg-(--bg-overlay) text-(--text-2) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
-/**
- * The page, live. In the thread it is as tall as the page says and offers to
- * open it in Artifacts or a tab of its own; with `fill` it fills its box and
- * scrolls inside it, for the Library and Artifacts.
- */
+/** In the thread it is as tall as the page says; with `fill` it fills its box and scrolls inside it. */
 export const HtmlFrame = memo(function HtmlFrame({
 	sessionId,
 	path,
@@ -74,7 +62,6 @@ export const HtmlFrame = memo(function HtmlFrame({
 	title: string;
 	height?: number;
 	fill?: boolean;
-	/** Whether it offers to open the page in Artifacts or a tab of its own; off where the page around it does. */
 	actions?: boolean;
 }) {
 	const frame = useRef<HTMLIFrameElement>(null);
@@ -151,10 +138,7 @@ export const HtmlFrame = memo(function HtmlFrame({
 /** The width a thumbnail lays the page out at, about the thread's, before scaling it down to its card. */
 const THUMBNAIL_WIDTH = 520;
 
-/**
- * A page drawn small on a card: laid out at the thread's width and scaled to
- * fit, behind the card's own link, so it can be seen but not used.
- */
+/** Laid out at the thread's width and scaled to fit, behind the card's own link, so it can be seen but not used. */
 export function PageThumbnail({ sessionId, path }: { sessionId: string; path: string }) {
 	const box = useRef<HTMLDivElement>(null);
 	const current = useTheme();

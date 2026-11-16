@@ -1,9 +1,6 @@
 import type { Client } from '@libsql/client';
 
-/**
- * Append-only list of schema changes. Each runs once, in order, and is
- * recorded in `schema_migrations`. Never edit a shipped entry; add a new one.
- */
+/** Append-only: each runs once, in order, recorded in `schema_migrations`. Never edit a shipped entry; add a new one. */
 export const migrations: string[][] = [
 	// 1: the schema as it existed before versioning.
 	[
@@ -13,7 +10,6 @@ export const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, flue_conversation_id TEXT NOT NULL, sandbox_id TEXT, status TEXT NOT NULL, model TEXT NOT NULL, pr_url TEXT, error_message TEXT, title TEXT NOT NULL DEFAULT 'New chat', created_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, tigris_key TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL)`,
 	],
-	// 2: per-task branches and remote sandboxes; drop tables nothing uses.
 	[
 		`ALTER TABLE projects ADD COLUMN warmed_at TEXT`,
 		`ALTER TABLE sessions ADD COLUMN branch TEXT`,
@@ -25,30 +21,25 @@ export const migrations: string[][] = [
 		`DROP TABLE IF EXISTS oauth_tokens`,
 		`DROP TABLE IF EXISTS artifacts`,
 	],
-	// 3: per-task reasoning level; null means the model's default.
 	[`ALTER TABLE sessions ADD COLUMN reasoning TEXT`],
 	// 4: tasks that exist now were set up before the setup marker, so their machines carry none.
 	[`ALTER TABLE sessions ADD COLUMN legacy_setup INTEGER NOT NULL DEFAULT 0`, `UPDATE sessions SET legacy_setup = 1`],
-	// 5: per-repo environment, setup script, preview ports and base image.
 	[
 		`ALTER TABLE projects ADD COLUMN env_json TEXT`,
 		`ALTER TABLE projects ADD COLUMN setup_script TEXT`,
 		`ALTER TABLE projects ADD COLUMN preview_ports TEXT`,
 		`ALTER TABLE projects ADD COLUMN base_image TEXT`,
 	],
-	// 6: model tokens and cost per task.
 	[
 		`ALTER TABLE sessions ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sessions ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE sessions ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0`,
 	],
-	// 7: every response's cost, for daily spending caps; and app-wide settings.
 	[
 		`CREATE TABLE IF NOT EXISTS usage_log (session_id TEXT NOT NULL, at TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cost_usd REAL NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS usage_log_at ON usage_log (at)`,
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 	],
-	// 8: tasks that start themselves, follow-ups on the agent's pull requests, and MCP servers.
 	[
 		`ALTER TABLE projects ADD COLUMN follow_ups INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN mcp_json TEXT`,
@@ -57,17 +48,15 @@ export const migrations: string[][] = [
 		// One row per issue that has a task, so no issue starts two, whichever automation finds it.
 		`CREATE TABLE IF NOT EXISTS issue_tasks (project_id TEXT NOT NULL, issue_number INTEGER NOT NULL, automation_id TEXT NOT NULL, session_id TEXT, created_at TEXT NOT NULL, PRIMARY KEY (project_id, issue_number))`,
 	],
-	// 9: plan mode per task, and automations whose tasks plan first and wait for approval.
 	[`ALTER TABLE sessions ADD COLUMN plan_mode INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE automations ADD COLUMN plan_first INTEGER NOT NULL DEFAULT 0`],
-	// 10: notes about the repo that every task's agent reads, kept by the agent and the user.
 	[`ALTER TABLE projects ADD COLUMN memory TEXT NOT NULL DEFAULT ''`],
-	// 11: each response's repository and model, so spend can be broken down even after a task is deleted.
+	// 11: each response's repository and model, so spend can be broken down after a task is deleted.
 	[
 		`ALTER TABLE usage_log ADD COLUMN project_id TEXT`,
 		`ALTER TABLE usage_log ADD COLUMN model TEXT`,
 		`UPDATE usage_log SET project_id = (SELECT project_id FROM sessions WHERE sessions.id = usage_log.session_id), model = (SELECT model FROM sessions WHERE sessions.id = usage_log.session_id)`,
 	],
-	// 12: installed plugins, each a set of skills every task's agent can use; kept whole, so a task never waits on GitHub for them.
+	// 12: installed plugins, kept whole, so a task never waits on GitHub for them.
 	[
 		`CREATE TABLE IF NOT EXISTS plugins (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL, source_json TEXT NOT NULL, sha TEXT NOT NULL, marketplace TEXT, skills_json TEXT NOT NULL, mcp_json TEXT NOT NULL, skipped_json TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, installed_at TEXT NOT NULL)`,
 	],
@@ -76,56 +65,40 @@ export const migrations: string[][] = [
 		`ALTER TABLE usage_log ADD COLUMN turn_id TEXT`,
 		`CREATE UNIQUE INDEX usage_log_turn ON usage_log (session_id, turn_id) WHERE turn_id IS NOT NULL`,
 	],
-	// 14: tasks pinned to the top of the sidebar.
 	[`ALTER TABLE sessions ADD COLUMN pinned_at TEXT`],
-	// 15: what each plugin was installed from (a marketplace entry or an address), to show and update it from the same place.
 	[`ALTER TABLE plugins ADD COLUMN pick_json TEXT`],
-	// 16: the state and checks of each task's pull request, last read from the host, for the sidebar.
 	[`ALTER TABLE sessions ADD COLUMN pr_json TEXT`],
-	// 17: each task's latest input and when it came, for cards that show what the task was last asked.
 	[`ALTER TABLE sessions ADD COLUMN last_input TEXT`, `ALTER TABLE sessions ADD COLUMN last_input_at TEXT`],
-	// 18: input tokens the provider read from its cache, part of input_tokens and priced lower, per call and per task.
 	[`ALTER TABLE usage_log ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`, `ALTER TABLE sessions ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`],
-	// 19: what the agent's last reply asks the user, until they answer, so the task shows it waits on them.
 	[`ALTER TABLE sessions ADD COLUMN asking TEXT`],
-	// 20: projects (spaces in code, since `projects` means a repository): a coordinator conversation over parallel threads, each a task.
+	// 20: projects, called spaces in code since `projects` means a repository.
 	[
 		`CREATE TABLE IF NOT EXISTS spaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT, goal TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL DEFAULT '', memory TEXT NOT NULL DEFAULT '', coordinator_model TEXT, coordinator_reasoning TEXT, thread_model TEXT, thread_reasoning TEXT, max_parallel INTEGER NOT NULL DEFAULT 3, autonomy TEXT NOT NULL DEFAULT 'start', state TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS space_repos (space_id TEXT NOT NULL, project_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (space_id, project_id))`,
 		`ALTER TABLE sessions ADD COLUMN space_id TEXT`,
 		`ALTER TABLE sessions ADD COLUMN resolved_at TEXT`,
-		// The state the coordinator was last told about, so a thread reports each change once.
 		`ALTER TABLE sessions ADD COLUMN reported_state TEXT`,
-		// The coordinator's brief, held while the thread waits for a free slot.
 		`ALTER TABLE sessions ADD COLUMN brief TEXT`,
-		// The thread's latest reply, for the coordinator's reports and the thread's card.
 		`ALTER TABLE sessions ADD COLUMN last_reply TEXT`,
 		`CREATE INDEX IF NOT EXISTS sessions_space ON sessions (space_id)`,
 		// Coordinator turns have no task, so their spend is kept by project.
 		`ALTER TABLE usage_log ADD COLUMN space_id TEXT`,
-		// Routines scoped to a project start their tasks as its threads.
 		`ALTER TABLE automations ADD COLUMN space_id TEXT`,
 	],
-	// 21: the agent's latest todo list for the task, shown as the progress pill above the composer.
 	[`ALTER TABLE sessions ADD COLUMN todos_json TEXT`],
-	// 22: a repository's sandboxes can run as full VMs (Docker, FUSE) instead of containers.
 	[`ALTER TABLE projects ADD COLUMN full_vm INTEGER NOT NULL DEFAULT 0`],
 	// 23: code mode is on by default now; settings saved while it was off by default are turned on once.
 	[`UPDATE settings SET value = json_set(value, '$.codeMode', json('true')) WHERE key = 'general' AND json_valid(value)`],
-	// 24: the plan the latest reply proposed in plan mode, waiting for approval; null when none waits.
 	[`ALTER TABLE sessions ADD COLUMN plan TEXT`],
-	// 25: tasks that review someone else's pull request, and repos whose pull requests Anton reviews from when it was turned on.
 	[`ALTER TABLE sessions ADD COLUMN review_json TEXT`, `ALTER TABLE projects ADD COLUMN review_others_at TEXT`],
-	// 26: pages the agent drew (their titles, and the state every open copy of one shares), and each task's Library as listed last, for the Artifacts page.
 	[
 		`CREATE TABLE IF NOT EXISTS pages (session_id TEXT NOT NULL, path TEXT NOT NULL, title TEXT NOT NULL, state_json TEXT, version INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`,
 		`CREATE TABLE IF NOT EXISTS output_index (session_id TEXT PRIMARY KEY, outputs_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 	],
 	// 27: tasks this database deleted, the only ones whose stored files cleanup may remove: storage can be shared with another database.
 	[`CREATE TABLE IF NOT EXISTS deleted_sessions (session_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)`],
-	// 28: where in a reply the agent read each message sent while it worked, so the thread shows it there.
 	[`ALTER TABLE sessions ADD COLUMN joins_json TEXT`],
-	// 29: MCP servers are added once for every task, as skills are, rather than per repository; each repository's are moved over, the first of a name kept.
+	// 29: MCP servers are added once for every task; each repository's are moved over, the first of a name kept.
 	[
 		`CREATE TABLE IF NOT EXISTS mcp_servers (name TEXT PRIMARY KEY, url TEXT NOT NULL, auth TEXT, tools_json TEXT NOT NULL, code_mode INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 1, added_at TEXT NOT NULL)`,
 		`INSERT OR IGNORE INTO mcp_servers (name, url, auth, tools_json, code_mode, enabled, added_at)
@@ -136,15 +109,14 @@ export const migrations: string[][] = [
 			WHERE projects.mcp_json IS NOT NULL AND json_valid(projects.mcp_json) AND json_extract(server.value, '$.name') IS NOT NULL AND json_extract(server.value, '$.url') IS NOT NULL
 			ORDER BY projects.updated_at`,
 	],
-	// 30: emails the agent asked to send, each waiting for your Send in the thread; the draft's digest makes sure what you approved is what goes.
+	// 30: emails waiting for your Send; the draft's digest makes sure what you approved is what goes.
 	[
 		`CREATE TABLE IF NOT EXISTS mail_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, connector TEXT NOT NULL, draft_id TEXT NOT NULL, draft_json TEXT NOT NULL, digest TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT, sent_id TEXT)`,
 		`CREATE INDEX IF NOT EXISTS mail_approvals_session ON mail_approvals (session_id)`,
 	],
-	// 31: an MCP server's sign-in (OAuth): its registered client, where it signs in, and its tokens, kept apart from the server's view.
+	// 31: an MCP server's OAuth sign-in, kept apart from the server's view.
 	[`ALTER TABLE mcp_servers ADD COLUMN oauth_json TEXT`],
-	// 32: the routine that started a task, whose runs are done once they reply without asking you; and a routine's short name, its threads' title.
-	// A schedule's runs so far are found by the title they were given (the first line of its instructions, cut at 80), and those left idle are done.
+	// 32: a schedule's runs so far are found by their title (the first line of its instructions, cut at 80); those left idle are done.
 	[
 		`ALTER TABLE sessions ADD COLUMN automation_id TEXT`,
 		`ALTER TABLE automations ADD COLUMN title TEXT`,
@@ -157,12 +129,9 @@ export const migrations: string[][] = [
 		`UPDATE sessions SET resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE automation_id IS NOT NULL AND resolved_at IS NULL AND asking IS NULL AND plan IS NULL AND brief IS NULL AND pr_url IS NULL AND status != 'error' AND last_reply IS NOT NULL`,
 	],
-	// 33: files you deleted from a task's Library or from Artifacts, so a reply that showed one says it was deleted rather than drawing it broken.
 	[`CREATE TABLE IF NOT EXISTS deleted_outputs (session_id TEXT NOT NULL, path TEXT NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY (session_id, path))`],
-	// 34: a routine runs on a schedule kept on a time zone's clock (`src/core/schedule.ts`), and keeps when it runs next.
-	// Each "every N hours" routine moves to the nearest schedule on the UTC clock, at the time it last ran (else was added):
-	// hours dividing a day stay hourly (others round down to one that does), a day is daily, whole days are a cron
-	// expression, and a week or more is weekly on that weekday. Its next run is worked out from its last, as before.
+	// 34: each "every N hours" routine moves to the nearest schedule on the UTC clock, at the time it last ran (else was added):
+	// hours dividing a day stay hourly (others round down), a day is daily, whole days are cron, a week or more is weekly.
 	[
 		`ALTER TABLE automations ADD COLUMN schedule_json TEXT`,
 		`ALTER TABLE automations ADD COLUMN next_run_at TEXT`,
@@ -180,15 +149,12 @@ export const migrations: string[][] = [
 			FROM (SELECT MAX(1, COALESCE(automations.every_hours, 24)) AS hours, COALESCE(automations.last_run_at, automations.created_at) AS anchor))
 		WHERE kind = 'schedule'`,
 	],
-	// 35: where a gateway sends a task's model calls (`src/core/model-route.ts`): one provider first, or a sort; null leaves it to the gateway.
 	[`ALTER TABLE sessions ADD COLUMN route_json TEXT`],
-	// 36: each reply's trace (`src/services/response-trace.ts`): its model and tool calls on one clock, what went into each call's context, and the cache.
 	[
 		`CREATE TABLE IF NOT EXISTS response_traces (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at TEXT NOT NULL, trace_json TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS response_traces_session ON response_traces (session_id, created_at)`,
 	],
-	// 37: the commit Anton last pushed for a task, which Changes measures its unpushed work from; and every pull request a
-	// task opened, not only its latest, for the PR panel. Each task's current pull request starts the list, in its saved state.
+	// 37: each task's current pull request starts its list of pull requests, in its saved state.
 	[
 		`ALTER TABLE sessions ADD COLUMN pushed_sha TEXT`,
 		`CREATE TABLE IF NOT EXISTS pull_requests (url TEXT PRIMARY KEY, session_id TEXT NOT NULL, repo TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, head TEXT NOT NULL, base TEXT NOT NULL, state TEXT, opened_at TEXT NOT NULL, merged_at TEXT)`,
@@ -201,40 +167,27 @@ export const migrations: string[][] = [
 			FROM sessions s LEFT JOIN projects p ON p.id = s.project_id
 			WHERE s.pr_url IS NOT NULL AND instr(s.pr_url, '/pull/') > 0`,
 	],
-	// 38: where a task's commands run, chosen in the composer: its sandbox (NULL, as before) or 'host', this server.
+	// 38: NULL runs a task's commands in its sandbox, 'host' on this server.
 	[`ALTER TABLE sessions ADD COLUMN run_on TEXT`],
-	// 39: each helper agent's own model for the project's threads, as JSON of Settings › General's agentModels; NULL follows it.
 	[`ALTER TABLE spaces ADD COLUMN agent_models TEXT`],
-	// 40: a routine's gate, a skill's script that says whether a due run is worth a thread (`src/services/routine-gate.ts`),
-	// and what it last answered, as JSON.
 	[`ALTER TABLE automations ADD COLUMN gate TEXT`, `ALTER TABLE automations ADD COLUMN last_gate TEXT`],
-	// 41: apps connected through Composio (Settings › Connectors), one row per toolkit: its Composio connected
-	// account's id and status, never its tokens; and tool calls waiting on the user's Run, as mail_approvals are.
 	[
 		`CREATE TABLE IF NOT EXISTS composio_accounts (toolkit TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '', app_url TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 0, account_id TEXT, status TEXT NOT NULL DEFAULT 'none', status_reason TEXT, connected_at TEXT, added_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS tool_approvals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, connector TEXT NOT NULL, tool TEXT NOT NULL, args_json TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL, result TEXT, error TEXT, created_at TEXT NOT NULL, decided_at TEXT)`,
 		`CREATE INDEX IF NOT EXISTS tool_approvals_session ON tool_approvals (session_id)`,
 	],
-	// 42: the logo Composio hosts for each app, so a connector Composio knows but Anton's brand
-	// list does not still draws as the product it is.
 	[`ALTER TABLE composio_accounts ADD COLUMN logo TEXT NOT NULL DEFAULT ''`],
-	// 43: the Notifications dialog's list (`src/services/notifications.ts`): only the moments worth a look, each about one
-	// task. `key` names what a row stands for (a task's last reply, its sandbox, its pull request), so a newer one replaces it.
 	[
 		`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, key TEXT NOT NULL, kind TEXT NOT NULL, session_id TEXT, space_id TEXT, title TEXT NOT NULL, body TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT)`,
 		`CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created_at)`,
 		`CREATE INDEX IF NOT EXISTS notifications_key ON notifications (key)`,
 		`CREATE INDEX IF NOT EXISTS notifications_session ON notifications (session_id)`,
 	],
-	// 44: the state of a task's checks at the end of a reply (`src/services/gate-state.ts`): its request, what the finish
-	// review last read and how often it ran, the completion gate's rounds, the reply's clock and closing words, as JSON.
-	// A reply the runtime resumes after a restart ends with the same checks as it would have without one.
+	// 44: a reply the runtime resumes after a restart ends with the same checks as it would have without one.
 	[`CREATE TABLE IF NOT EXISTS task_gate_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`],
-	// 45: a repository's check command (`src/services/repo-check.ts`), run in a task's sandbox after the agent changes files; empty runs none.
 	[`ALTER TABLE projects ADD COLUMN check_command TEXT NOT NULL DEFAULT ''`],
 ];
 
-/** Brings the database up to the latest version, or to `upTo` (for tests of one migration). */
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {
 	await db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
 	const applied = await db.execute('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations');

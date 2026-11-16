@@ -12,7 +12,6 @@ const amount = (value: unknown): number | null => {
 	return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : null;
 };
 
-/** The team's credits from `GET /v1/credits`, as how much of all it bought is spent. */
 export function toCredits(body: unknown): PlanWindow | null {
 	const balance = amount((body as Credits | null)?.balance);
 	const used = amount((body as Credits | null)?.total_used);
@@ -20,10 +19,7 @@ export function toCredits(body: unknown): PlanWindow | null {
 	return { label: `Credits · $${balance.toFixed(2)} left`, usedPercent: Math.max(0, Math.min(100, (used / (balance + used)) * 100)), resetsAt: null, limited: balance <= 0 };
 }
 
-/**
- * The Vercel team a key belongs to (vercel.com/docs/ai-gateway/sdks-and-apis/rest-api):
- * `GET /v1/credits` checks the key and says what is left of the team's credits.
- */
+/** vercel.com/docs/ai-gateway/sdks-and-apis/rest-api: `GET /v1/credits` checks the key and says what is left of the team's credits. */
 export function vercelAccount({ apiUrl }: VercelAccountOptions): GatewayAccount {
 	async function credits(key: string): Promise<unknown> {
 		const response = await fetch(`${apiUrl}/v1/credits`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(TIMEOUT_MS) });

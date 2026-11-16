@@ -5,13 +5,6 @@ import { loudUnread, useNotifications } from '@/components/notifications';
 import { Icon } from '@/components/signal';
 import { cn } from '@/lib/utils';
 
-/*
- * On a phone the sidebar is a drawer, so the bar at the bottom holds the five
- * places you go most: home, tasks, a raised button that opens the palette to
- * start something, the inbox with its unread dot, and reviews. Everything else
- * stays a tap away inside those places and the drawer.
- */
-
 function Item({ to, label, icon, on, children }: { to: string; label: string; icon: typeof House; on: boolean; children?: ReactNode }) {
 	return (
 		<Link

@@ -10,7 +10,6 @@ export const glyphKind = (thread: Session): GlyphKind => {
 	return state === 'waiting' && failed(thread) ? 'failed' : state;
 };
 
-/** The colour each state draws with, in rings, bars and splits. */
 export const STATE_COLOR: Record<GlyphKind, string> = {
 	failed: 'var(--bad)',
 	waiting: 'var(--warn)',
@@ -38,14 +37,7 @@ export const KIND_LABEL: Record<GlyphKind, string> = {
 
 const CHECK = 'M5 8.2l2.1 2.1 3.9-4.2';
 
-/**
- * A state as a small drawn mark, so a list reads by shape as well as colour:
- * a dashed ring while queued, an accent ring with a turning wedge while it
- * works, an amber ring and dot while it waits on you, a violet ring three
- * quarters full in review, a green ring with a check once approved, a solid
- * green check when done, solid red with a bang when it failed, and a plain
- * grey ring when idle.
- */
+/** A state as a drawn mark, so a list reads by shape as well as colour. */
 export function Glyph({ kind, size = 14, className, title }: { kind: GlyphKind; size?: number; className?: string; title?: string }) {
 	const color = STATE_COLOR[kind];
 	return (

@@ -8,16 +8,16 @@ This file is an index. Read the doc for the area you change, not all of them.
 
 | Area | Code | Read |
 | --- | --- | --- |
-| Ports, providers (Modal, Docker, local, S3, GitHub, plans), Flue adapters, DB, routes | `src/core/ports.ts`, `src/providers/`, `src/flue/`, `src/db/`, `src/app.ts` | [server-and-providers](docs/architecture/server-and-providers.md) |
-| Plans, gateways, model variants, background and decision models | `src/services/subscriptions.ts`, `general.ts`, `decisions.ts` | [models-and-plans](docs/architecture/models-and-plans.md) |
-| Task lifecycle, sandboxes, chats, run on host, headless runs | `src/services/sessions.ts`, `workspace.ts`, `task-files.ts`, `agent-now.ts`, `scripts/anton-run.ts` | [tasks-and-sandboxes](docs/architecture/tasks-and-sandboxes.md) |
-| Context window, cuts, pruning, compaction, reply traces | `src/services/context-usage.ts`, `context-prune.ts`, `response-trace.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
-| Coder, subagents, finish review, background jobs, Reviewer, skills and plugins | `src/agents/`, `src/services/subagent-runs.ts`, `finish-review.ts`, `background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
-| Browser and Computer panels | `src/services/live-browser.ts`, `browser*.ts`, `computer.ts` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
+| Ports, providers (Modal, Docker, local, S3, GitHub, plans), Flue adapters, DB, routes | `src/core/ports.ts`, `src/providers/`, `src/flue/`, `src/db/`, `src/app.ts`, `src/routes/` | [server-and-providers](docs/architecture/server-and-providers.md) |
+| Plans, gateways, model variants, background and decision models | `src/services/models/subscriptions.ts`, `general.ts`, `decisions.ts` | [models-and-plans](docs/architecture/models-and-plans.md) |
+| Task lifecycle, sandboxes, chats, run on host, headless runs | `src/services/tasks/sessions.ts`, `agent-now.ts`, `src/services/sandbox/workspace.ts`, `task-files.ts`, `scripts/anton-run.ts` | [tasks-and-sandboxes](docs/architecture/tasks-and-sandboxes.md) |
+| Context window, cuts, pruning, compaction, reply traces | `src/services/context/context-usage.ts`, `context-prune.ts`, `response-trace.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
+| Coder, subagents, finish review, background jobs, Reviewer, skills and plugins | `src/agents/`, `src/services/tasks/subagent-runs.ts`, `src/services/replies/finish-review.ts`, `src/services/sandbox/background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
+| Browser and Computer panels | `src/services/browser/live-browser.ts`, `browser*.ts`, `computer.ts` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
 | What replies draw, Artifacts page, attachments | `src/web/components/thread.tsx`, `artifacts-page.tsx`, `attachments.tsx` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
-| Projects, coordinator, threads, project files | `src/services/spaces.ts`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |
-| Connectors | `src/services/connector-tools.ts`, `settings/connectors.tsx` | [connectors](docs/architecture/connectors.md) |
-| Web UI, panels, push notifications | `src/web/`, `src/services/push.ts` | [web-ui](docs/architecture/web-ui.md) |
+| Projects, coordinator, threads, project files | `src/services/projects/spaces.ts`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |
+| Connectors | `src/services/connectors/connector-tools.ts`, `settings/connectors.tsx` | [connectors](docs/architecture/connectors.md) |
+| Web UI, panels, push notifications | `src/web/`, `src/services/notify/push.ts` | [web-ui](docs/architecture/web-ui.md) |
 
 ## Rules
 

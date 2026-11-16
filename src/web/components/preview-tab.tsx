@@ -27,7 +27,6 @@ function NotRunning({ sessionId }: { sessionId: string }) {
 	);
 }
 
-/** The app the agent is running, through the sandbox's public URL for each preview port. */
 export function PreviewTab({ sessionId, onWatchTest }: { sessionId: string; onWatchTest?: () => void }) {
 	const [chosen, setChosen] = useState<number | null>(null);
 	const [reloads, setReloads] = useState(0);

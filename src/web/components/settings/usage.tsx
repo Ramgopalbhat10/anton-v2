@@ -87,7 +87,6 @@ function Caps({ limits }: { limits: Limits }) {
 	);
 }
 
-/** Today against the daily cap, warning from 80 percent: what is left, and how this month adds up. */
 function Allowance({ usage, budget }: { usage: UsageView; budget: Budget }) {
 	const cap = budget.limits.dailyUsd;
 	const used = cap ? usage.today / cap : 0;
@@ -155,7 +154,6 @@ function Allowance({ usage, budget }: { usage: UsageView; budget: Budget }) {
 
 type Metric = 'tokens' | 'spend';
 
-/** Rows for the daily chart: the biggest series by the metric, then everything else as one. */
 function stacked(entries: Array<{ day: string; name: string; value: number }>): { rows: StackRow[]; series: string[] } {
 	const totals = new Map<string, number>();
 	for (const entry of entries) totals.set(entry.name, (totals.get(entry.name) ?? 0) + entry.value);
@@ -177,7 +175,7 @@ function stacked(entries: Array<{ day: string; name: string; value: number }>): 
 	return { rows: [...merged.values()], series: named };
 }
 
-/** Tokens or spend per day for 30 days, stacked by model; spend against the daily cap. Plan models count in tokens, since they cost nothing per token. */
+/** Plan models count in tokens, since they cost nothing per token. */
 function Daily({ usage, cap, modelName }: { usage: UsageView; cap: number | null; modelName: (id: string | null) => string }) {
 	const [metric, setMetric] = useState<Metric>('tokens');
 	const days = useMemo(() => lastDays(30), []);
@@ -243,11 +241,7 @@ function Daily({ usage, cap, modelName }: { usage: UsageView; cap: number | null
 	);
 }
 
-/**
- * A plan you pay for: how much Anton used it, by day and model, and what the
- * same calls would have cost per token. The vendor does not share how much
- * of the plan is left, so the card links to where it does.
- */
+/** The vendor does not share how much of the plan is left, so the card links to where it does. */
 function Plan({ plan, modelName }: { plan: PlanUsage; modelName: (id: string | null) => string }) {
 	const days = useMemo(() => lastDays(30), []);
 	const { rows, series } = useMemo(() => stacked(plan.daily.map((row) => ({ day: row.day, name: modelName(row.model), value: row.tokens }))), [plan.daily, modelName]);
@@ -320,7 +314,6 @@ function Plan({ plan, modelName }: { plan: PlanUsage; modelName: (id: string | n
 
 const sum = (rows: StackRow[], day: string) => rows.filter((row) => row.day === day).reduce((total, row) => total + row.value, 0);
 
-/** Where this month's spend went: a split bar of the leaders, then every row ranked. */
 function Breakdown({
 	title,
 	sub,
@@ -410,7 +403,6 @@ function Breakdown({
 	);
 }
 
-/** What Anton has spent on models, where it went, and the caps that stop it. */
 export function UsagePage() {
 	const budget = useQuery({ queryKey: ['budget'], queryFn: () => api.budget() });
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage });

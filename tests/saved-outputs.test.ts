@@ -8,8 +8,8 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-saved-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { saveOutput, savedOutputs, readOutput } = await import('../src/services/checkpoints.ts');
-const { MAX_UPLOAD_BYTES, outputsView, readOutputFile, removeOutput, uploadOutput } = await import('../src/services/files.ts');
+const { saveOutput, savedOutputs, readOutput } = await import('../src/services/git/checkpoints.ts');
+const { MAX_UPLOAD_BYTES, outputsView, readOutputFile, removeOutput, uploadOutput } = await import('../src/services/artifacts/files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -59,8 +59,8 @@ test('a deleted file is listed as deleted, so replies can say so, until the agen
 });
 
 test('files you add on the Artifacts page are listed there, from no task, and read and deleted like any Library file', async () => {
-	const { ADDED_FILES, addFile } = await import('../src/services/added-files.ts');
-	const { listArtifacts } = await import('../src/services/artifacts.ts');
+	const { ADDED_FILES, addFile } = await import('../src/services/artifacts/added-files.ts');
+	const { listArtifacts } = await import('../src/services/artifacts/artifacts.ts');
 	const skill = new TextEncoder().encode('---\nname: broker\n---\n# Broker\n');
 	assert.equal(await addFile('SKILL.md', skill, 'text/markdown'), 'SKILL.md');
 	assert.equal(await addFile('SKILL.md', skill, 'text/markdown'), 'SKILL-2.md', 'a name already taken gets a number');
@@ -75,8 +75,8 @@ test('files you add on the Artifacts page are listed there, from no task, and re
 });
 
 test('a file you added installs as the skill its front matter names, whatever the file is called', async () => {
-	const { addFile } = await import('../src/services/added-files.ts');
-	const { installAddedSkill, installPlugin, pluginsView } = await import('../src/services/plugins.ts');
+	const { addFile } = await import('../src/services/artifacts/added-files.ts');
+	const { installAddedSkill, installPlugin, pluginsView } = await import('../src/services/settings/plugins.ts');
 	const first = new TextEncoder().encode('---\nname: indstocks\ndescription: Read an INDstocks account.\n---\n# INDstocks\nUse http_request.\n');
 	const path = await addFile('IndMoney-API.md', first, 'text/markdown');
 	const plugin = await installAddedSkill(path);
@@ -102,8 +102,8 @@ test('a file you added installs as the skill its front matter names, whatever th
 
 test('a skill folder added as a zip installs with its scripts beside its SKILL.md', async () => {
 	const { zipSync } = await import('fflate');
-	const { addFile } = await import('../src/services/added-files.ts');
-	const { installAddedSkill } = await import('../src/services/plugins.ts');
+	const { addFile } = await import('../src/services/artifacts/added-files.ts');
+	const { installAddedSkill } = await import('../src/services/settings/plugins.ts');
 	const enc = (value: string) => new TextEncoder().encode(value);
 	const zip = zipSync({
 		'day-trading/SKILL.md': enc('---\nname: day-trading\ndescription: Trade within the day on paper.\n---\nRun `scripts/kit.py levels`.\n'),
@@ -118,7 +118,7 @@ test('a skill folder added as a zip installs with its scripts beside its SKILL.m
 	assert.deepEqual(Object.keys(plugin.skills[0].files).sort(), ['scripts/kit.py', 'universe.json']);
 	assert.deepEqual(plugin.skills[0].files['scripts/kit.py'], { text: 'print("levels")\n' });
 	// Settings › Skills shows it as installed: its SKILL.md and scripts, read back without the zip.
-	const { previewPlugin, pluginFile } = await import('../src/services/plugins.ts');
+	const { previewPlugin, pluginFile } = await import('../src/services/settings/plugins.ts');
 	const preview = await previewPlugin({ plugin: plugin.id });
 	assert.equal(preview.added, 'day-trading.zip');
 	assert.deepEqual(preview.files, ['SKILL.md', 'scripts/kit.py', 'universe.json']);

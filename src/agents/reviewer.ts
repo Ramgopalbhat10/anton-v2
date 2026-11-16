@@ -2,16 +2,16 @@
 
 import { type AgentProps, useModel, useSandbox, useTool } from '@flue/runtime';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
-import { helperModelFor } from '../services/agent-runner.ts';
-import { REVIEW_GUIDE } from '../services/code-review.ts';
-import { compactionFor } from '../services/context-usage.ts';
-import { fullResultTool } from '../services/tool-results.ts';
+import { helperModelFor } from '../services/tasks/agent-runner.ts';
+import { REVIEW_GUIDE } from '../services/git/code-review.ts';
+import { compactionFor } from '../services/context/context-usage.ts';
+import { fullResultTool } from '../services/context/tool-results.ts';
 import { postReviewTool } from './review-tool.ts';
-import { repoDir } from '../services/git.ts';
-import { secretsToHide } from '../services/secrets.ts';
-import { modelFor } from '../services/sessions.ts';
-import { machineFor } from '../services/workspace.ts';
-// Registers the model providers (OpenRouter, Vercel, the plans) before this agent resolves a model.
+import { repoDir } from '../services/git/git.ts';
+import { secretsToHide } from '../services/secrets/secrets.ts';
+import { modelFor } from '../services/tasks/sessions.ts';
+import { machineFor } from '../services/sandbox/workspace.ts';
+// Registers the model providers before this agent resolves a model.
 import './providers.ts';
 
 const PROMPT = [
@@ -20,13 +20,8 @@ const PROMPT = [
 	REVIEW_GUIDE,
 ].join(' ');
 
-/**
- * Reads a task's pull request in the task's own sandbox and posts what it
- * finds; it can look and run commands but not change files. It is its own
- * conversation, so the coder never sees how it reasoned, only its comments.
- */
+/** Its own conversation, so the coder never sees how it reasoned, only its comments. */
 export function Reviewer({ id }: AgentProps) {
-	// Its own model — the project's when the task is a thread, else Settings › General's — or the task's.
 	const { model, reasoning } = helperModelFor(id, 'reviewer') ?? modelFor(id);
 	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
 	useSandbox({

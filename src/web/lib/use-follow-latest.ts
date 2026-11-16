@@ -3,7 +3,6 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 /** Closer to the bottom than this counts as at it: a line of slack for rounding and a nudge of the wheel. */
 export const FOLLOW_SLACK = 32;
 
-/** The element that scrolls `el`: `el` itself when it scrolls, else its nearest ancestor that does. */
 function scrollerOf(el: HTMLElement): HTMLElement | null {
 	for (let node: HTMLElement | null = el; node; node = node.parentElement) {
 		const overflow = getComputedStyle(node).overflowY;
@@ -17,13 +16,8 @@ function atBottom(el: HTMLElement) {
 }
 
 /**
- * Keeps a scrolling view at its newest content while it grows, as a reply
- * streams, but only while the reader is already at the bottom. Scrolling up
- * lets go, so what they are reading stays put; scrolling back down, or
- * `follow()` (a message sent, the "Jump to latest" button), picks it up again.
- *
- * `ref` is the scroller, or any element inside it. `enabled: false` never
- * moves the view. A change of `reset` (another conversation) follows anew.
+ * Keeps a scroller at its newest content while it grows, only while the reader is at the bottom; scrolling up lets go,
+ * scrolling down or `follow()` picks it up. `ref` is the scroller or an element in it; a change of `reset` follows anew.
  */
 export function useFollowLatest(ref: RefObject<HTMLElement | null>, { enabled = true, reset }: { enabled?: boolean; reset?: unknown } = {}) {
 	const [following, setFollowing] = useState(true);

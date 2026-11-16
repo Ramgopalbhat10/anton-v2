@@ -8,7 +8,6 @@ import { composioEntryFor } from '@/lib/connector-catalog';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 
-/** The approval a connector tool call made, named at the end of its result. */
 export function toolApprovalOf(output: unknown): string | null {
 	const text = typeof output === 'string' ? output : output && typeof output === 'object' && typeof (output as { output?: unknown }).output === 'string' ? (output as { output: string }).output : '';
 	return /\[approval:(tool_[\w-]+)\]/.exec(text)?.[1] ?? null;
@@ -16,25 +15,18 @@ export function toolApprovalOf(output: unknown): string | null {
 
 const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 
-/** `composio:slack` reads as the app's name; any other connector as it is. */
 const connectorName = (connector: string) => {
 	const toolkit = /^composio:(.+)$/.exec(connector)?.[1];
 	return toolkit ? (composioEntryFor(toolkit)?.name ?? toolkit) : connector;
 };
 
-/** Arguments as the agent gave them, one per line, values kept readable. */
 function argsText(args: Record<string, unknown>): string {
 	return Object.entries(args)
 		.map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
 		.join('\n');
 }
 
-/**
- * A connector tool call the agent asked to run — a post, a create, a delete —
- * with Run and Don't run. Run goes through Anton's server, never the agent,
- * and the agent hears of it as your next message. What happened is kept on
- * the server, so a reload shows it.
- */
+/** Run goes through Anton's server, never the agent, and the agent hears of it as your next message. */
 export const ToolApprovalCard = memo(function ToolApprovalCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
 	const { send: reply, busy } = useContext(ReplyActions);
 	const queryClient = useQueryClient();

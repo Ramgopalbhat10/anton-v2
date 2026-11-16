@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { StepGivenUp, withinDeadline } from '../src/services/step-deadline.ts';
+import { StepGivenUp, withinDeadline } from '../src/services/browser/step-deadline.ts';
 
 const never = () => new Promise<string>(() => undefined);
 

@@ -15,7 +15,6 @@ function useConnectors() {
 	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors });
 }
 
-/** A change to connectors, answered with the new state, which goes straight into the page. */
 function useConnectorMutation<T>(run: (input: T) => Promise<Partial<ConnectorsView>>) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -28,7 +27,6 @@ function ErrorLine({ error }: { error: Error | null }) {
 	return error ? <span className="text-small text-(--bad)">{error.message}</span> : null;
 }
 
-/** A value to paste somewhere else, with a button that copies it. */
 function CopyField({ value, label }: { value: string; label: string }) {
 	const [copied, setCopied] = useState(false);
 	return (
@@ -129,7 +127,6 @@ function GoogleClient({ account, open }: { account: ConnectorAccount; open: bool
 	);
 }
 
-/** Sends the browser to Google's consent page; Google sends it back to Settings › Connectors. */
 function ConnectButton({ mailbox, access, label, variant = 'primary' }: { mailbox: ConnectorMailbox; access: 'read' | 'draft'; label: string; variant?: 'primary' | 'secondary' }) {
 	const connect = useMutation({
 		mutationFn: () => api.connectMailbox(mailbox.id, access),
@@ -222,7 +219,6 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 	);
 }
 
-/** The server's tools as the agent would find them, read now: a check that its address and sign-in work. */
 function ServerTools({ name }: { name: string }) {
 	const tools = useQuery({ queryKey: ['mcp-tools', name], queryFn: () => api.mcpServerTools(name), retry: false, staleTime: 30_000 });
 	if (tools.isPending) return <Spinner size={12} />;
@@ -240,7 +236,6 @@ function SignOut({ name }: { name: string }) {
 	);
 }
 
-/** Sends the browser to the server's sign-in; the server sends it back to Settings › Connectors. */
 function useSignIn(server: McpServer) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -297,7 +292,6 @@ function OwnClient({ server, signIn }: { server: McpServer; signIn: ReturnType<t
 	);
 }
 
-/** Each tool as a chip, its description on hover, as Claude's connector pages list them. */
 function ToolChips({ tools }: { tools: Array<{ name: string; about: string }> }) {
 	return (
 		<ul className="m-0 grid list-none grid-cols-1 gap-1.5 p-0 sm:grid-cols-2">
@@ -317,7 +311,6 @@ function StateBadge({ state }: { state: ConnectorState }) {
 	return state === 'on' ? <Status tone="success">On</Status> : <Status tone="neutral">Off</Status>;
 }
 
-/** The switch that turns a connector on or off for every task, the same one the composer's + menu shows. */
 function OnSwitch({ item, label }: { item: ConnectorItem; label?: ReactNode }) {
 	const queryClient = useQueryClient();
 	const [problem, setProblem] = useState<string | null>(null);
@@ -346,7 +339,6 @@ function useItemMark(item: ConnectorItem | null): Mark {
 
 type Opened = { c?: string; add?: string; connected?: string; problem?: string };
 
-/** A connector on the catalog: its mark, name and what it does, opening its page; its switch, or a +, in the corner. */
 function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; mark: Mark; title: string; mono?: boolean; by: string; tagline: string; corner: ReactNode }) {
 	return (
 		<div className="in-card group relative flex-row items-start gap-3 p-3.5 transition-colors duration-(--t-fast) hover:border-(--line-strong)">
@@ -370,7 +362,6 @@ function Tile({ open, mark, title, mono, by, tagline, corner }: { open: Opened; 
 	);
 }
 
-/** A tile's + corner: the connector is not added yet. */
 const AddCorner = () => (
 	<span aria-hidden className="inline-flex size-7 items-center justify-center text-(--text-3) group-hover:text-(--text)">
 		<Icon icon={Plus} size={16} />
@@ -401,13 +392,11 @@ function OfferedTile({ entry }: { entry: CatalogEntry }) {
 	return <Tile open={{ add: entry.id }} mark={entry.url ? mark : GMAIL} title={entry.name} by={entry.by} tagline={entry.tagline} corner={<AddCorner />} />;
 }
 
-/** A Composio app not added yet: same tile, opening its own page. */
 function OfferedComposioTile({ entry }: { entry: CatalogEntry }) {
 	const mark = useComposioMark(entry.logo, entry.url ?? '', entry.name);
 	return <Tile open={{ add: `composio:${entry.id}` }} mark={mark} title={entry.name} by={entry.by} tagline={entry.tagline} corner={<AddCorner />} />;
 }
 
-/** A Composio catalog hit in the shape the offered tiles and add page take. */
 const entryForToolkit = (hit: ComposioToolkitHit): CatalogEntry => ({
 	id: hit.slug,
 	name: hit.name,
@@ -421,7 +410,6 @@ const entryForToolkit = (hit: ComposioToolkitHit): CatalogEntry => ({
 
 const matches = (words: string, ...texts: string[]) => !words || texts.some((text) => text.toLowerCase().includes(words));
 
-/** Settings › Connectors: the connectors you have, each with its switch, then the ones to add. Each opens a page of its own. */
 export function ConnectorsPage() {
 	const connectors = useConnectors();
 	const navigate = useNavigate();
@@ -515,7 +503,6 @@ function SectionTitle({ count, children }: { count: number; children: ReactNode 
 	);
 }
 
-/** What a sign-in that came back to Anton said: connected, or what went wrong, until dismissed. */
 function Returned({ search }: { search: Opened }) {
 	const navigate = useNavigate();
 	if (!search.connected && !search.problem) return null;
@@ -539,7 +526,6 @@ function Returned({ search }: { search: Opened }) {
 
 type Fact = { label: string; value: ReactNode };
 
-/** A connector's page: its mark, name and main action on top, what it does and its settings beside the facts about it. */
 function DetailFrame({ mark, title, mono, tagline, actions, facts, children }: { mark: Mark; title: string; mono?: boolean; tagline: string; actions?: ReactNode; facts: Fact[]; children: ReactNode }) {
 	return (
 		<div className="flex flex-col gap-5">
@@ -814,7 +800,6 @@ function ServerDetail({ server, search }: { server: McpServer; search: Opened })
 	);
 }
 
-/** A server from the catalog not added yet: what it does, and one button that adds it and opens its sign-in. */
 function OfferedServer({ entry }: { entry: CatalogEntry }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -918,7 +903,6 @@ function ComposioKeyForm({ configured, keyFromEnv }: { configured: boolean; keyF
 	);
 }
 
-/** An app's tools as the agent finds them, read now through Composio. */
 function ComposioTools({ toolkit }: { toolkit: string }) {
 	const tools = useQuery({ queryKey: ['composio-tools', toolkit], queryFn: () => api.composioTools(toolkit), retry: false, staleTime: 60_000 });
 	if (tools.isPending) return <Spinner size={12} />;
@@ -930,7 +914,6 @@ function ComposioTools({ toolkit }: { toolkit: string }) {
 const composioStatus = (account: ComposioAccount) =>
 	account.status === 'active' ? 'Connected' : account.status === 'pending' ? 'Waiting for you to finish signing in' : account.status === 'failed' ? 'The connection failed' : 'Not connected yet';
 
-/** An app connected through Composio: its sign-in on Composio's page, its tools run by Composio. */
 function ComposioDetail({ account, search }: { account: ComposioAccount; search: Opened }) {
 	const navigate = useNavigate();
 	const entry = composioEntryFor(account.toolkit);
@@ -1044,7 +1027,6 @@ function ComposioDetail({ account, search }: { account: ComposioAccount; search:
 	);
 }
 
-/** A Composio app not added yet: what it does, the project key if none is set, and one button that adds it and opens its sign-in. */
 function OfferedComposio({ entry }: { entry: CatalogEntry }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -1102,7 +1084,6 @@ function OfferedComposio({ entry }: { entry: CatalogEntry }) {
 	);
 }
 
-/** The add page of a Composio app outside the offered list, its details read live from Composio's catalog. */
 function OfferedComposioLookup({ slug }: { slug: string }) {
 	const toolkit = useQuery({ queryKey: ['composio-toolkit', slug], queryFn: () => api.composioToolkit(slug), staleTime: 60_000 });
 	if (toolkit.isPending) return <Spinner size={12} />;
@@ -1110,7 +1091,6 @@ function OfferedComposioLookup({ slug }: { slug: string }) {
 	return <OfferedComposio entry={entryForToolkit(toolkit.data)} />;
 }
 
-/** One connector's page: yours to manage, or one from the catalog to add. */
 export function ConnectorDetailPage() {
 	const search = useSearch({ from: '/settings/connectors/view' });
 	const router = useRouter();
@@ -1170,7 +1150,6 @@ export function ConnectorDetailPage() {
 	);
 }
 
-/** The name the breadcrumbs give the connector a page shows. */
 export function ConnectorCrumb() {
 	const search = useSearch({ strict: false }) as Opened;
 	const data = useConnectors().data;

@@ -38,13 +38,6 @@ import { useOnePane } from '@/lib/one-pane';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
-/**
- * The bell's page: the moments in your tasks worth a look, one row each under
- * its day. A row picks the moment; on a wide screen it opens beside the list
- * with the way to its task, on a phone the row goes straight there.
- */
-
-/** How each kind reads: its words, and its mark — a task-state glyph where the moment is a state, else an icon in the colour of what happened. */
 const LOOK: Record<NotificationKind, { label: string; icon: IconComponent; glyph?: GlyphKind; color?: string }> = {
 	question: { label: 'Asked you', icon: MessageCircleQuestion, glyph: 'waiting' },
 	plan: { label: 'Plan ready', icon: ListChecks, glyph: 'review' },
@@ -91,7 +84,6 @@ function saveFilters(filters: Filters): void {
 
 const DAY_MS = 24 * 60 * 60_000;
 
-/** Today, Yesterday, This week and Older, from local midnight. */
 function dayGroup(iso: string, now = new Date()): string {
 	const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 	const at = new Date(iso).getTime();
@@ -101,7 +93,6 @@ function dayGroup(iso: string, now = new Date()): string {
 	return 'Older';
 }
 
-/** What the way there is called: a thread or project opens as itself, anything else as the task it is about. */
 function openLabel(url: string): string {
 	if (url.includes('/threads/')) return 'Open thread';
 	if (url.startsWith('/projects/')) return 'Open project';
@@ -218,7 +209,6 @@ export function InboxPage() {
 		</header>
 	);
 
-	// Nothing to list: one pane, saying why.
 	if (isError || isPending || all.length === 0) {
 		return (
 			<div className="flex min-h-0 flex-1 flex-col">
@@ -348,14 +338,12 @@ export function InboxPage() {
 	);
 }
 
-/** A kind's mark: the task-state glyph it stands for, or the pull request's icon in its colour. */
 function KindMark({ kind, size = 14 }: { kind: NotificationKind; size?: number }) {
 	const look = LOOK[kind];
 	if (look.glyph) return <Glyph kind={look.glyph} size={size} />;
 	return <Icon icon={look.icon} size={size} className={look.color} />;
 }
 
-/** One moment: its mark, the task it is about over what happened, its age and an unread dot. */
 function Row({
 	notification,
 	where,
@@ -418,7 +406,6 @@ function Row({
 	);
 }
 
-/** The picked moment beside the list: where it is from, what it says, and the way to its task. */
 function Detail({
 	notification,
 	where,

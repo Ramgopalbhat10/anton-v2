@@ -47,7 +47,7 @@ With no Modal or Tigris keys, Anton runs everything locally: each task gets a fo
 
 ### Running on this server, sealed secrets and your own files
 
-- **Run on.** The composer's + menu has **Run on**: a task's commands run in its sandbox, or on **This server**, in a folder on the machine Anton runs on, going out from its address (`src/services/runners.ts`, the `host` provider). A task moves between them while its agent is idle: its machine stops, saving its files, and starts on the other side with them. This server is not isolated from the machine Anton runs on, so keep it for tasks you trust. Where `ANTON_SANDBOX=local`, every task already runs here and the menu does not show.
+- **Run on.** The composer's + menu has **Run on**: a task's commands run in its sandbox, or on **This server**, in a folder on the machine Anton runs on, going out from its address (`src/services/tasks/runners.ts`, the `host` provider). A task moves between them while its agent is idle: its machine stops, saving its files, and starts on the other side with them. This server is not isolated from the machine Anton runs on, so keep it for tasks you trust. Where `ANTON_SANDBOX=local`, every task already runs here and the menu does not show.
 - **Sealed secrets** (Settings › Secrets › Sealed) are values the agent can use but never read. None reaches a sandbox, a shell, a file or the model. The agent's `http_request` tool sends one HTTP request from Anton's server and fills them in there: `{{secret:NAME}}` for a value, `{{totp:NAME}}` for the current code of a TOTP secret. Each secret goes only to the hosts it lists, over https, through its proxy if it has one (an encrypted CONNECT tunnel the proxy cannot read; `scripts/trading-proxy/lightsail-launch.sh` sets one up with a fixed IP on Lightsail). Its value is hidden in the answer, and `save` keeps a value the answer holds, such as a sign-in token, as a sealed secret of its own. Values are stored encrypted with `ANTON_SECRETS_KEY`, or a key Anton makes once in its data folder. A task on This server runs as the same user as Anton and could still dig that key out, so a task in a sandbox is the safer place for one that uses sealed secrets.
 - **Your files on the Artifacts page.** **Add files** keeps files of your own beside what the agent made, such as a skill's `SKILL.md`. **+ › From Artifacts** in any composer attaches one to the message, so a task works from it.
 
@@ -139,8 +139,9 @@ Anton has no login of its own. Deploy it behind an access proxy (for example Clo
 | `src/providers/` | Modal, local, S3, disk, GitHub, OpenRouter, ChatGPT-plan, Claude Code, OpenCode Go and Cursor implementations |
 | `src/services/` | Task lifecycle: sessions, workspace, git, checkpoints, files, pull requests, terminal |
 | `src/db/` | libSQL client, versioned migrations, queries |
-| `src/agents/coder.ts` | The Flue agent, its subagents and `open_pull_request` |
+| `src/agents/coder/` | The Flue agent (`index.ts`), its prompts, subagents and tools |
 | `src/agents/reviewer.ts` | The agent that reviews each pull request and posts its findings |
-| `src/app.ts` | HTTP routes |
+| `src/app.ts` | HTTP entry: boot work, error handling, and the route modules mounted in order |
+| `src/routes/` | HTTP routes, one Hono module per area |
 | `src/server.ts` | Production server: API, UI and terminal on one port |
 | `src/web/` | React UI |

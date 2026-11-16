@@ -12,7 +12,6 @@ type WireResponse = {
 	usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
 };
 
-/** Any vision model OpenRouter offers, called with the image and a question and no tools, with the key Anton already has. */
 export function openRouterVision({ apiUrl, apiKey }: VisionOptions): VisionModel {
 	return {
 		runs: (model) => model.startsWith('openrouter/'),

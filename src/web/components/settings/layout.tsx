@@ -17,7 +17,6 @@ import type { ViewSearch } from './skills';
 const NAV_ITEM =
 	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
-/** A nav item's bare icon, lit on the page you are on. */
 function NavIcon({ icon }: { icon: IconComponent }) {
 	return (
 		<span className="inline-flex shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)">
@@ -26,7 +25,6 @@ function NavIcon({ icon }: { icon: IconComponent }) {
 	);
 }
 
-/** A search hit: the page's name over what it decides, since the words that matched may be in the second line. */
 function SearchHit({ section }: { section: (typeof SECTIONS)[number] }) {
 	return (
 		<Link to="/settings/$section" params={{ section: section.id }} className={cn(NAV_ITEM, 'h-auto flex-col items-start gap-0.5 py-1.5')}>
@@ -76,7 +74,6 @@ function Nav() {
 	);
 }
 
-/** How many needed connections are not set up yet, by Connections in the nav; nothing once all are. */
 function SetupLeft() {
 	const setup = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 60_000 });
 	const left = setup.data ? setupLeft(setup.data) : 0;
@@ -85,14 +82,12 @@ function SetupLeft() {
 
 const usePath = () => useRouterState({ select: (state) => state.location.pathname });
 
-/** The plugin a skill page shows, named once it has been read. */
 function PluginCrumb() {
 	const search = useSearch({ strict: false }) as ViewSearch;
 	const preview = usePreview(pickOf(search));
 	return <>{preview.data?.name ?? search.name ?? search.address ?? 'Plugin'}</>;
 }
 
-/** Settings › Section › Repository or plugin, each step a way back. */
 function Crumbs() {
 	const { section, projectId } = useParams({ strict: false }) as { section?: string; projectId?: string };
 	const projects = useProjects();
@@ -126,7 +121,6 @@ function CrumbLink({ to, children }: { to: string; children: ReactNode }) {
 	);
 }
 
-/** The settings frame, as the Settings card shows it: breadcrumbs and a close button, the grouped nav, and the page beside it. */
 export function SettingsLayout() {
 	// Skills and Connectors lay cards out side by side, and a page beside its facts, so they get more room.
 	const path = usePath();

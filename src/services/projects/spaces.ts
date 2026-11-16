@@ -1,0 +1,376 @@
+import type { Reasoning } from '../../core/ports.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Session } from '../../core/types.ts';
+import { announce } from '../../core/changes.ts';
+import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
+import { THREAD_STATES, type ThreadState } from '../../core/thread-state.ts';
+import { getProject, listProjects } from '../../db/projects.ts';
+import { getSessionRecord, updateSession } from '../../db/sessions.ts';
+import { type Autonomy, deleteSpaceRecord, getSpace, insertSpace, listSpaces, type Space, type SpaceState, setSpaceRepos, spaceSpend, touchSpace, updateSpace } from '../../db/spaces.ts';
+import { noteSending, stopAgent } from '../tasks/activity.ts';
+import { sendToAgent } from '../tasks/agent-runner.ts';
+import { projectPictures } from '../artifacts/attachments.ts';
+import { startOfToday } from '../models/budget.ts';
+import { logProblem } from '../../core/log.ts';
+import { findModel } from '../models/models.ts';
+import { readOutputFile, storedOutputs } from '../artifacts/files.ts';
+import { createSession, deleteSession, getSession, listThreads, stopSession } from '../tasks/sessions.ts';
+import { keepThreadFiles } from './space-files.ts';
+import { deletedThreads, noteDeleted } from './deleted-threads.ts';
+
+export const MAX_INSTRUCTIONS = 16_000;
+export const MAX_SPACE_MEMORY = 8_000;
+
+export type SpaceRepo = { id: string; repoFullName: string; defaultBranch: string };
+
+export type SpaceView = Space & {
+	repos: SpaceRepo[];
+	counts: Record<ThreadState, number>;
+	threads: number;
+	activeAt: string;
+};
+
+const emptyCounts = () => Object.fromEntries(THREAD_STATES.map((state) => [state, 0])) as Record<ThreadState, number>;
+
+async function present(space: Space, threads?: Session[]): Promise<SpaceView> {
+	const [list, repos] = await Promise.all([threads ?? listThreads(space.id), Promise.all(space.repoIds.map((id) => getProject(id)))]);
+	const counts = emptyCounts();
+	for (const thread of list) if (thread.threadState) counts[thread.threadState] += 1;
+	const times = list.map((thread) => thread.checkpointAt ?? thread.createdAt);
+	return {
+		...space,
+		repos: repos.flatMap((repo) => (repo ? [{ id: repo.id, repoFullName: repo.repoFullName, defaultBranch: repo.defaultBranch }] : [])),
+		counts,
+		threads: list.length,
+		activeAt: [space.updatedAt, ...times].sort().pop() ?? space.createdAt,
+	};
+}
+
+export async function spacesView(): Promise<SpaceView[]> {
+	const spaces = await listSpaces();
+	return (await Promise.all(spaces.map((space) => present(space)))).sort((a, b) => b.activeAt.localeCompare(a.activeAt));
+}
+
+async function existing(id: string): Promise<Space> {
+	const space = await getSpace(id);
+	if (!space) throw new NotFoundError('Project not found');
+	return space;
+}
+
+export async function spaceView(id: string): Promise<SpaceView> {
+	return present(await existing(id));
+}
+
+/** Only repositories Anton already knows, so every thread can start on one. */
+async function knownRepos(ids: string[]): Promise<string[]> {
+	const known = new Set((await listProjects()).map((project) => project.id));
+	const unknown = ids.filter((id) => !known.has(id));
+	if (unknown.length) throw new InvalidInputError('Add each repository in Settings first');
+	return [...new Set(ids)];
+}
+
+export type SpaceInput = { name: string; icon?: string | null; goal?: string; repoIds?: string[]; instructions?: string; autonomy?: Autonomy; maxParallel?: number };
+
+export async function createSpace(input: SpaceInput): Promise<SpaceView> {
+	const name = input.name.trim();
+	if (!name) throw new InvalidInputError('Name the project');
+	const repoIds = await knownRepos(input.repoIds ?? []);
+	const id = await insertSpace({ name, icon: input.icon?.trim() || null, goal: input.goal?.trim() ?? '', instructions: input.instructions, autonomy: input.autonomy, maxParallel: input.maxParallel });
+	await setSpaceRepos(id, repoIds);
+	return spaceView(id);
+}
+
+export type SpaceChange = Partial<{
+	name: string;
+	icon: string | null;
+	goal: string;
+	instructions: string;
+	memory: string;
+	coordinatorModel: string | null;
+	coordinatorReasoning: Reasoning | null;
+	threadModel: string | null;
+	threadReasoning: Reasoning | null;
+	/** Replaced whole; a null entry follows Settings › General. */
+	agentModels: Record<HelperAgent, AgentModel | null>;
+	maxParallel: number;
+	autonomy: Autonomy;
+	state: SpaceState;
+	repoIds: string[];
+}>;
+
+async function checkModel(model: string | null | undefined): Promise<void> {
+	if (model && !(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+}
+
+export async function editSpace(id: string, change: SpaceChange): Promise<SpaceView> {
+	await existing(id);
+	await Promise.all([
+		checkModel(change.coordinatorModel),
+		checkModel(change.threadModel),
+		...HELPER_AGENTS.map((agent) => checkModel(change.agentModels?.[agent]?.model)),
+	]);
+	const { repoIds, ...fields } = change;
+	if (fields.name !== undefined && !fields.name.trim()) throw new InvalidInputError('Name the project');
+	if ((fields.instructions?.length ?? 0) > MAX_INSTRUCTIONS) throw new InvalidInputError(`Keep the instructions under ${MAX_INSTRUCTIONS.toLocaleString()} characters`);
+	if ((fields.memory?.length ?? 0) > MAX_SPACE_MEMORY) throw new InvalidInputError(`Keep the memory under ${MAX_SPACE_MEMORY.toLocaleString()} characters`);
+	// Removing the last repository is allowed: the project's new threads then start as chats; its threads stay.
+	if (repoIds) await setSpaceRepos(id, await knownRepos(repoIds));
+	await updateSpace(id, {
+		...fields,
+		...(fields.name !== undefined ? { name: fields.name.trim() } : {}),
+		...(fields.icon !== undefined ? { icon: fields.icon?.trim() || null } : {}),
+		...(fields.memory !== undefined ? { memory: fields.memory.trim() } : {}),
+	});
+	// Unpausing, or a higher limit, frees slots for queued threads.
+	if (change.state === 'active' || change.maxParallel !== undefined) await drainQueue(id);
+	return spaceView(id);
+}
+
+export async function removeSpace(id: string): Promise<void> {
+	await existing(id);
+	await stopAgent(id);
+	await deleteSpaceRecord(id);
+}
+
+export async function findThread(spaceId: string, ref: string): Promise<Session> {
+	const wanted = ref.trim().replace(/^\[|\]$/g, '').replace(/^id:/, '');
+	const threads = await listThreads(spaceId);
+	const exact = threads.find((thread) => thread.id === wanted);
+	if (exact) return exact;
+	const matches = wanted.length >= 4 ? threads.filter((thread) => thread.id.startsWith(wanted)) : [];
+	if (matches.length === 1) return matches[0];
+	const titled = threads.filter((thread) => thread.title.toLowerCase() === wanted.toLowerCase());
+	if (titled.length === 1) return titled[0];
+	const deleted = (await deletedThreads(spaceId)).find((thread) => thread.id === wanted || (wanted.length >= 4 && thread.id.startsWith(wanted)) || thread.title.toLowerCase() === wanted.toLowerCase());
+	if (deleted) throw new NotFoundError(`"${deleted.title}" was deleted by the user and takes no messages. Start a new thread instead, with what the user asks and what that thread had found in its brief.`);
+	throw new NotFoundError(`No thread ${ref} in this project`);
+}
+
+/** `projectId` null, or `repo` "none", starts a chat. Without a `title`, the thread is named from its brief by a fast model. */
+export type ThreadInput = {
+	id?: string;
+	title: string;
+	brief: string;
+	projectId?: string | null;
+	repo?: string;
+	model?: string;
+	reasoning?: Reasoning;
+	planMode?: boolean;
+	automationId?: string;
+};
+
+const NO_REPO = new Set(['none', 'no repository', 'chat']);
+
+async function repoFor(space: Space, input: ThreadInput): Promise<string | undefined> {
+	if (input.projectId === null) return undefined;
+	if (input.projectId) {
+		if (!space.repoIds.includes(input.projectId)) throw new InvalidInputError('That repository is not in this project');
+		return input.projectId;
+	}
+	if (input.repo?.trim()) {
+		const wanted = input.repo.trim().toLowerCase();
+		if (NO_REPO.has(wanted)) return undefined;
+		const projects = await Promise.all(space.repoIds.map((id) => getProject(id)));
+		const match = projects.find((project) => project && (project.repoFullName.toLowerCase() === wanted || project.repoFullName.split('/').pop()?.toLowerCase() === wanted));
+		if (!match) throw new InvalidInputError(`${input.repo} is not one of this project's repositories`);
+		return match.id;
+	}
+	return space.repoIds[0];
+}
+
+/** Queued when the project is at its limit or paused. With `wait` false this returns once the thread has its slot, and the brief follows. */
+export async function startThread(spaceId: string, input: ThreadInput, { wait = true }: { wait?: boolean } = {}): Promise<Session> {
+	const space = await existing(spaceId);
+	if (space.state === 'archived') throw new ConflictError('The project is archived; restore it to start threads');
+	const brief = input.brief.trim();
+	if (!brief) throw new InvalidInputError('Say what the thread should do');
+	const projectId = await repoFor(space, input);
+	const title = input.title.trim();
+	const thread = await createSession({
+		id: input.id,
+		projectId,
+		title,
+		...(title ? {} : { titleFrom: brief }),
+		automationId: input.automationId,
+		spaceId,
+		brief,
+		model: input.model ?? space.threadModel ?? undefined,
+		reasoning: input.reasoning ?? (input.model ? undefined : (space.threadReasoning ?? undefined)),
+		planMode: input.planMode,
+	});
+	await touchSpace(spaceId);
+	// Shown at once, even when it waits for a slot or cannot start yet.
+	announce({ kind: 'space', id: spaceId, what: 'threads' });
+	const pass = drainPass(spaceId);
+	await (wait ? pass.started : pass.claimed);
+	return getSession(thread.id);
+}
+
+/** Dispatching returns before the runtime says the reply runs, so they hold their slot until then, or a minute at most. */
+const launching = new Map<string, number>();
+const LAUNCH_MS = 60_000;
+
+export function launched(threadId: string): void {
+	launching.delete(threadId);
+}
+
+async function sendWithPictures(spaceId: string, threadId: string, message: string, model: string): Promise<void> {
+	const { images, note } = await projectPictures(spaceId, threadId, message, model);
+	await sendToAgent(threadId, note ? `${message}\n\n${note}` : message, 'coder', images);
+}
+
+const draining = new Map<string, Promise<unknown>>();
+
+type Claimed = { thread: Session; brief: string; turnedAway: () => void };
+
+/** Passes claim one at a time per project, so two never fill the same slot; handing briefs over runs behind. */
+function drainPass(spaceId: string, finishing?: string): { claimed: Promise<void>; started: Promise<void> } {
+	const previous = draining.get(spaceId) ?? Promise.resolve();
+	const claimed = previous.then(() => claim(spaceId, finishing));
+	draining.set(spaceId, claimed.catch(() => undefined));
+	const started = claimed.then((threads) => handOver(spaceId, threads)).catch((error: unknown) => logProblem('warn', 'Could not start queued threads', error));
+	return { claimed: claimed.then(() => undefined, () => undefined), started };
+}
+
+/** `finishing` still counts as working until its reply settles, but its slot is free. */
+export function drainQueue(spaceId: string, finishing?: string): Promise<void> {
+	return drainPass(spaceId, finishing).started;
+}
+
+async function claim(spaceId: string, finishing?: string): Promise<Claimed[]> {
+	const space = await getSpace(spaceId);
+	if (!space || space.state !== 'active') return [];
+	const threads = await listThreads(spaceId);
+	const now = Date.now();
+	const busy = threads.filter((thread) => {
+		if (thread.id === finishing) return false;
+		if (thread.threadState === 'working') return true;
+		const at = launching.get(thread.id);
+		return at !== undefined && now - at < LAUNCH_MS;
+	}).length;
+	const queued = threads.filter((thread) => thread.brief && !thread.resolvedAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+	const claimed: Claimed[] = [];
+	for (const thread of queued.slice(0, Math.max(0, space.maxParallel - busy))) {
+		launching.set(thread.id, now);
+		await updateSession(thread.id, { brief: null });
+		// Working from here, as a message you send is, while its agent is set up.
+		claimed.push({ thread, brief: thread.brief!, turnedAway: noteSending(thread.id) });
+	}
+	if (claimed.length) announce({ kind: 'space', id: spaceId, what: 'threads' });
+	return claimed;
+}
+
+/** One turned away puts its brief back, so they start once the reason (a spending cap, a restore) is gone. */
+async function handOver(spaceId: string, claimed: Claimed[]): Promise<void> {
+	for (const [index, { thread, brief }] of claimed.entries()) {
+		try {
+			await sendWithPictures(spaceId, thread.id, brief, thread.model);
+		} catch (error) {
+			for (const left of claimed.slice(index)) {
+				launching.delete(left.thread.id);
+				left.turnedAway();
+				await updateSession(left.thread.id, { brief: left.brief });
+			}
+			logProblem('warn', 'A queued thread could not start', error, thread.id);
+			break;
+		}
+	}
+	announce({ kind: 'space', id: spaceId, what: 'threads' });
+}
+
+export async function nudgeThread(spaceId: string, threadId: string, text: string): Promise<Session> {
+	const record = await getSessionRecord(threadId);
+	if (!record || record.spaceId !== spaceId) throw new NotFoundError('No such thread in this project');
+	const message = text.trim();
+	if (!message) throw new InvalidInputError('Say what to send');
+	// A queued thread has not started yet: the note joins its brief.
+	if (record.brief) {
+		await updateSession(threadId, { brief: `${record.brief}\n\n${message}` });
+		return getSession(threadId);
+	}
+	if (record.resolvedAt) await updateSession(threadId, { resolvedAt: null });
+	await updateSession(threadId, { asking: null });
+	await sendWithPictures(spaceId, threadId, message, record.model);
+	return getSession(threadId);
+}
+
+export async function moveToSpace(threadId: string, spaceId: string | null): Promise<Session> {
+	const record = await getSessionRecord(threadId);
+	if (!record) throw new NotFoundError('Session not found');
+	if (spaceId) {
+		const space = await existing(spaceId);
+		if (record.projectId && !space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
+	}
+	await updateSession(threadId, { spaceId, brief: null, reportedState: null });
+	announce({ kind: 'sessions' });
+	if (record.spaceId) announce({ kind: 'space', id: record.spaceId, what: 'threads' });
+	if (spaceId) announce({ kind: 'space', id: spaceId, what: 'threads' });
+	return getSession(threadId);
+}
+
+/** A second press joins it rather than keeping its files in the Library twice. */
+const deleting = new Map<string, Promise<{ kept: string[] }>>();
+
+/** A resolved thread is reopened before it can be deleted. Its Library files are kept as project files, since the coordinator may have passed them on. */
+export function deleteTask(id: string): Promise<{ kept: string[] }> {
+	let deletion = deleting.get(id);
+	if (!deletion) {
+		deletion = removeTask(id).finally(() => deleting.delete(id));
+		deleting.set(id, deletion);
+	}
+	return deletion;
+}
+
+async function removeTask(id: string): Promise<{ kept: string[] }> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	if (!record.spaceId) {
+		await deleteSession(id);
+		return { kept: [] };
+	}
+	if (record.resolvedAt) throw new ConflictError('This thread is resolved. Reopen it to delete it.');
+	// Stopping saves what its sandbox holds, so the Library read below is whole.
+	await stopSession(id);
+	const files = await Promise.all(
+		(await storedOutputs(id)).map(async (output) => ({ path: output.path, bytes: await readOutputFile(id, output.path).catch(() => null) })),
+	);
+	const kept = await keepThreadFiles(
+		record.spaceId,
+		record.title,
+		files.flatMap((file) => (file.bytes ? [{ path: file.path, bytes: file.bytes }] : [])),
+	);
+	await deleteSession(id);
+	// Its coordinator started it or heard from it, and may still route a follow-up to it.
+	await noteDeleted(record.spaceId, { id, title: record.title, lastReply: record.lastReply, at: new Date().toISOString() }).catch((error: unknown) =>
+		logProblem('warn', 'Could not tell the coordinator a thread was deleted', error, id),
+	);
+	announce({ kind: 'space', id: record.spaceId, what: 'threads' });
+	await drainQueue(record.spaceId);
+	return { kept };
+}
+
+export type SpaceUsage = {
+	today: number;
+	month: number;
+	byThread: Array<{ id: string; title: string; tokens: number; cost: number }>;
+	byModel: Array<{ key: string | null; tokens: number; cost: number }>;
+	daily: Array<{ day: string; tokens: number; cost: number }>;
+};
+
+export async function spaceUsage(id: string, now = new Date()): Promise<SpaceUsage> {
+	await existing(id);
+	const month = startOfToday(now);
+	month.setDate(1);
+	// The daily bars cover the last 14 days, which may start last month.
+	const fortnight = startOfToday(now);
+	fortnight.setDate(fortnight.getDate() - 13);
+	const [spend, threads] = await Promise.all([spaceSpend(id, month, fortnight < month ? fortnight : month), listThreads(id)]);
+	const titles = new Map(threads.map((thread) => [thread.id, thread.title]));
+	const todayKey = startOfToday(now).toISOString().slice(0, 10);
+	return {
+		today: spend.daily.filter((day) => day.day >= todayKey).reduce((sum, day) => sum + day.cost, 0),
+		month: spend.byThread.reduce((sum, row) => sum + row.cost, 0),
+		byThread: spend.byThread.map((row) => ({ id: row.key, title: row.key === id ? 'Coordinator' : (titles.get(row.key) ?? 'Removed thread'), tokens: row.tokens, cost: row.cost })),
+		byModel: spend.byModel,
+		daily: spend.daily,
+	};
+}

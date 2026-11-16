@@ -34,7 +34,6 @@ import { cn } from '@/lib/utils';
 /** Rendering every match would be slow; search narrows the rest. */
 const LIMIT = 60;
 
-/** Every source at once. */
 const ALL = 'All';
 
 type ModelList = Awaited<ReturnType<typeof api.models>>;
@@ -65,10 +64,7 @@ export function useModels() {
 	return useQuery({ queryKey: ['models'], queryFn: fetchModels, staleTime: 10 * 60_000, placeholderData: savedModels });
 }
 
-/**
- * The model's vendor on a small tile: its logo when the set has one, else two
- * letters in the vendor's hue. A model on your plan gets a lit corner.
- */
+/** Its logo when the set has one, else two letters in the vendor's hue; a model on your plan gets a lit corner. */
 export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: number }) {
 	const logo = logoFor(model);
 	const hue = vendorHue(model.vendor);
@@ -94,7 +90,6 @@ export function ModelMark({ model, size = 16 }: { model: ModelInfo; size?: numbe
 	);
 }
 
-/** A model's vendor logo on a small tile by its id alone, or its initials when the set has no logo: for rows that name a model without its catalog entry. */
 export function ModelLogo({ model, size = 16, title }: { model: string; size?: number; title?: string }) {
 	const logo = logoFor({ id: model });
 	const vendor = vendorSlug({ id: model });
@@ -115,7 +110,6 @@ export function ModelLogo({ model, size = 16, title }: { model: string; size?: n
 	);
 }
 
-/** A model's name as the catalog gives it, else the last part of its id. */
 export function useModelName(): (model: string) => string {
 	const models = useModels();
 	const byId = useMemo(() => new Map((models.data?.models ?? []).map((model) => [model.id, shortName(model)] as const)), [models.data]);
@@ -125,7 +119,6 @@ export function useModelName(): (model: string) => string {
 	};
 }
 
-/** Rising bars: how hard the model reasons, on its own scale. */
 function ReasoningMeter({ strength, className }: { strength: number; className?: string }) {
 	return (
 		<span aria-hidden className={cn('inline-flex h-2.5 items-end gap-px', className)}>
@@ -140,10 +133,6 @@ function ReasoningMeter({ strength, className }: { strength: number; className?:
 	);
 }
 
-/**
- * The efforts a model accepts, as rising bars along every level there is:
- * lit where it accepts one, brightest at its default. "low – max" beside it.
- */
 export function EffortRange({ levels, preferred, className }: { levels: Reasoning[]; preferred: Reasoning; className?: string }) {
 	const scale = REASONING_LEVELS.filter((level) => level !== 'minimal' || levels.includes('minimal'));
 	const on = levels.filter((level) => level !== 'off');
@@ -169,21 +158,12 @@ export function EffortRange({ levels, preferred, className }: { levels: Reasonin
 	);
 }
 
-/**
- * The columns every row and section header share, so context and prices
- * line up down the list: mark, name, context, input price, output price,
- * check. Fixed widths fit the longest labels ("262K", "$0.435").
- */
 /** Rows drawn when the list opens: a few screens, before the rest follow. */
 const FIRST_ROWS = 40;
 
 const COLUMNS = 'grid grid-cols-[16px_minmax(0,1fr)_32px_40px_40px_12px] items-center gap-x-1 px-2 @min-[350px]/picker:gap-x-2';
 
-/**
- * What a million tokens cost, in and out, in their own columns; a free
- * model's fills both with one word, and a plan's is left blank, since the dot
- * on its mark already says it is on a plan.
- */
+/** A plan's prices are left blank, since the dot on its mark already says it is on a plan. */
 function PriceCells({ model }: { model: ModelInfo }) {
 	if (model.subscription) return <span className="col-span-2" />;
 	if (model.price.input === 0 && model.price.output === 0) {
@@ -197,20 +177,12 @@ function PriceCells({ model }: { model: ModelInfo }) {
 	);
 }
 
-/** What a row's tooltip says: the model in full, and what it costs. */
 function about(model: ModelInfo): string {
 	const billing = model.subscription ? `on your ${model.subscription} plan` : `${dollars(model.price.input)} in · ${dollars(model.price.output)} out per 1M tokens`;
 	return [`${model.vendor}: ${model.name}`, `${tokens(model.contextLength)} context · ${billing}`, model.description].filter(Boolean).join('\n');
 }
 
-/**
- * One line per model on the shared columns: its mark (the vendor shows on
- * hover), its name with a pin beside it, its context, and what it costs. The
- * pin shows on hover, and stays lit on a pinned model. In a section with no
- * prices (a plan's), the context sits at the right edge, where the prices would.
- * A model on a gateway has its routing menus after the pin: on hover, and
- * always on the chosen model.
- */
+/** In a section with no prices (a plan's), the context sits at the right edge, where the prices would. */
 const ModelRow = memo(function ModelRow({
 	model,
 	index,
@@ -224,7 +196,6 @@ const ModelRow = memo(function ModelRow({
 	routing,
 }: {
 	model: ModelInfo;
-	/** Its place in the whole list, which the keys and the pointer move through. */
 	index: number;
 	selected: boolean;
 	active: boolean;
@@ -276,11 +247,6 @@ const ModelRow = memo(function ModelRow({
 	);
 });
 
-/**
- * The model's efforts along one ramp of thin ticks rising left to right, lit
- * up to the end of the chosen level; a dot marks the model's default. Click a
- * level, drag along the row, or use the arrow keys.
- */
 export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; value: Reasoning; onChange: (level: Reasoning) => void }) {
 	const row = useRef<HTMLDivElement>(null);
 	if (!model?.reasoning.length) return <span className="text-micro text-(--text-4)">No reasoning step</span>;
@@ -302,7 +268,6 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 		onChange(levels[Math.min(levels.length - 1, Math.max(0, chosen + step))]);
 	}
 
-	// One ramp of thin ticks rising left to right, a few per level, lit up to the end of the chosen level.
 	const PER = 7;
 	const total = levels.length * PER;
 	const litUpTo = (chosen + 1) * PER - 1;
@@ -363,11 +328,7 @@ export function EffortTrack({ model, value, onChange }: { model?: ModelInfo; val
 	);
 }
 
-/**
- * The context sizes a model comes in, as a segmented ruler: each segment's
- * ticks run as far as its share of the largest, so the standard window reads
- * as a fraction of the 1M one at a glance. Click one, or use the arrow keys.
- */
+/** Each segment's ticks run as far as its share of the largest, so the standard window reads as a fraction of the 1M one. */
 export function ContextRuler({ options, onChange }: { options: ModelOptions; onChange: (context: string | null) => void }) {
 	const sizes = options.contexts;
 	const largest = Math.max(...sizes.map((size) => size.tokens));
@@ -424,7 +385,6 @@ export function ContextRuler({ options, onChange }: { options: ModelOptions; onC
 	);
 }
 
-/** Fast mode as a bolt that lights up and a small switch; its title says what it costs. */
 export function FastToggle({ on, note, onChange }: { on: boolean; note?: string; onChange: (on: boolean) => void }) {
 	return (
 		<button
@@ -448,10 +408,6 @@ export function FastToggle({ on, note, onChange }: { on: boolean; note?: string;
 	);
 }
 
-/**
- * Which providers' models to list, any number at once. With none chosen it is
- * a quiet icon; with some, their logos side by side and a button to clear them.
- */
 function ProviderFilter({
 	providers,
 	chosen,
@@ -570,7 +526,6 @@ function sectionsFor(models: ModelInfo[], visible: ModelInfo[], browsing: boolea
 	].filter((section) => section.total > 0);
 }
 
-/** What a model comes in beside its standard self, above its effort: its context sizes and Fast. */
 function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; note?: string; onChange: (change: Partial<ModelOptions['chosen']>) => void }) {
 	return (
 		<div className="flex items-center gap-3 pt-1.5 pr-2 pl-3">
@@ -586,15 +541,7 @@ function ModelOptionsRow({ options, note, onChange }: { options: ModelOptions; n
 	);
 }
 
-/**
- * Compact model chooser: a search, the models in one list with each source
- * (a plan you signed in to, or a gateway) as a section, and the chosen
- * model's effort along the bottom. Source, filters and sort sit in one menu.
- * Picking a model keeps the panel open so its effort can be set; Enter picks
- * and closes. Every gateway model has provider/sort controls. Persisted choices
- * carry routing in their model specifier; tasks can use `onRoute` to retain
- * their existing separate route field. Both use exactly the same controls.
- */
+/** Picking a model keeps the panel open so its effort can be set; Enter picks and closes. Saved choices carry the route in the model id; tasks pass `onRoute` to keep their separate route field. */
 export const ModelPicker = memo(function ModelPicker({
 	value: storedValue,
 	onChange: onStoredChange,
@@ -614,7 +561,6 @@ export const ModelPicker = memo(function ModelPicker({
 	effort?: boolean;
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
-	/** The models that can be picked here, when not all can. */
 	only?: (model: ModelInfo) => boolean;
 }) {
 	const parsed = parseRouted(storedValue.model);
@@ -658,7 +604,6 @@ export const ModelPicker = memo(function ModelPicker({
 	);
 	const unconnected = sources.filter((entry) => entry.plan && !entry.connected && (source === ALL || source === entry.name));
 	const fromSource = useMemo(() => (source === ALL ? all : all.filter((model) => sourceOf(model) === source)), [all, source]);
-	// The source's providers, busiest first, each with a model to show its logo.
 	const providers = useMemo(() => {
 		const byVendor = new Map<string, { vendor: string; count: number; model: ModelInfo }>();
 		for (const model of fromSource) {
@@ -761,7 +706,6 @@ export const ModelPicker = memo(function ModelPicker({
 	let offset = 0;
 	const routed = selected && !selected.subscription && routable(selected.id) ? selected : undefined;
 
-	/** A gateway row's routing menus: this choice's route on the chosen model, kept in view; on any other, shown on hover, and a pick there picks the model too. */
 	function routingFor(model: ModelInfo) {
 		if (model.id === shown?.id && routed) return <RouteControls model={routed} route={route} onChange={(next) => setRoute(next)} />;
 		return (
@@ -973,7 +917,6 @@ export const ModelPicker = memo(function ModelPicker({
 												onPick={onPickRow}
 												onHover={setCursor}
 												onPin={onPinRow}
-												// The routing menus show on the row under the pointer or the keys, and on the chosen one.
 												routing={!model.subscription && routable(model.id) && (start + index === cursor || model.id === shown?.id) ? routingFor(model) : undefined}
 											/>
 										))}

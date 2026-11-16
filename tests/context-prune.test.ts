@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import type { Context, Message } from '@earendil-works/pi-ai';
-import { compactionPoint, latestStateOnly, noteSent, pruneContext, resetPruning, warmShare } from '../src/services/context-prune.ts';
-import { readFullResult } from '../src/services/tool-results.ts';
+import { compactionPoint, latestStateOnly, noteSent, pruneContext, resetPruning, warmShare } from '../src/services/context/context-prune.ts';
+import { readFullResult } from '../src/services/context/tool-results.ts';
 
 const MINUTE = 60_000;
 const POINT = 200_000;

@@ -89,7 +89,6 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 	);
 }
 
-/** Every distinct state of the task's files, one per agent response that changed something. */
 export function HistoryTab({ sessionId }: { sessionId: string }) {
 	const [selected, setSelected] = useState<string | null>(null);
 	const timeline = useQuery({ ...taskQueries.checkpoints(sessionId), refetchInterval: SAFETY_NET_MS });
@@ -116,7 +115,6 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 			<ol className="in-card m-0 list-none p-1.5" aria-label="Checkpoints">
 				{entries.map((entry, index) => (
 					<li key={entry.at} className="relative">
-						{/* The timeline runs through every checkpoint's node, newest at the top. */}
 						<span aria-hidden className={cn('absolute left-[17px] w-px bg-(--line-strong)', index === 0 ? 'top-1/2' : 'top-0', index === entries.length - 1 ? 'bottom-1/2' : 'bottom-0')} />
 						<button
 							type="button"

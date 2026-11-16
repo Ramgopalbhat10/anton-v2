@@ -4,12 +4,6 @@ import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/brand-marks';
 import { type PatchedFile, patchedFiles } from '../../core/apply-patch';
 
-/*
- * Each tool call as a short sentence with an icon, the same in the thread and
- * in a subagent's transcript in the Agents panel.
- */
-
-/** A tool call as both places know it: what was called, with what, and how it went. */
 export type ToolCall = { toolName: string; input: unknown; state?: string; output?: unknown };
 
 export function field(input: unknown, key: string): string {
@@ -26,7 +20,6 @@ function pullRequestUrl(output: unknown): string {
 	return field(record, 'url') || field(record.output, 'url');
 }
 
-/** A step on the sandbox's desktop, named by what it acted on. */
 function computerStep(input: unknown) {
 	const target = field(input, 'target') ? <Em>{field(input, 'target')}</Em> : <>a point on the screen</>;
 	switch (field(input, 'action')) {
@@ -83,7 +76,6 @@ function computerStep(input: unknown) {
 	}
 }
 
-/** One browser step as a sentence: what was done, and to what. */
 function browserStep(input: unknown) {
 	const target = <Em>{field(input, 'target')}</Em>;
 	switch (field(input, 'action')) {
@@ -140,7 +132,6 @@ export function Em({ children }: { children: ReactNode }) {
 	return <span className="font-mono text-small text-(--text)">{children}</span>;
 }
 
-/** Lines added and removed, as an edit shows them. */
 function counts(added: number, removed?: number): ReactNode {
 	return (
 		<>
@@ -156,7 +147,6 @@ function counts(added: number, removed?: number): ReactNode {
 	);
 }
 
-/** An apply_patch call as the files it changed: one by what happened to it, several by their names and lines in all. */
 function describePatch(files: PatchedFile[]): { icon: IconComponent; body: ReactNode } {
 	if (files.length === 1) {
 		const [file] = files;
@@ -182,7 +172,6 @@ function describePatch(files: PatchedFile[]): { icon: IconComponent; body: React
 	};
 }
 
-/** Where a read was from when it named another repository (`repo`), else nothing. */
 function inRepo(input: unknown): ReactNode {
 	const repo = field(input, 'repo');
 	return repo ? (
@@ -236,7 +225,6 @@ export function describeTool(part: ToolCall): { icon: IconComponent; body: React
 				),
 			};
 		case 'edit': {
-			// One change, or several in its edits list.
 			const edits = input && typeof input === 'object' && Array.isArray((input as { edits?: unknown }).edits) ? ((input as { edits: unknown[] }).edits) : [];
 			const changes = [input, ...edits];
 			const added = changes.reduce<number>((sum, change) => sum + lineCount(field(change, 'newText')), 0);
@@ -404,7 +392,6 @@ export function describeTool(part: ToolCall): { icon: IconComponent; body: React
 			return { icon: GMAIL.icon, body: <>Asked to send an email</> };
 		default:
 			if (part.toolName.startsWith('mcp__')) {
-				// A server's tool given to the agent directly; the thread draws it with the server's own mark.
 				return {
 					icon: MCP.icon,
 					body: (
@@ -425,7 +412,6 @@ export function describeTool(part: ToolCall): { icon: IconComponent; body: React
 	}
 }
 
-/** What kind of work a tool call was, as a colour: commands blue, edits violet, the browser amber, failures red. */
 export function toolTone(toolName: string, failed: boolean): string {
 	if (failed) return 'var(--bad)';
 	switch (toolName) {

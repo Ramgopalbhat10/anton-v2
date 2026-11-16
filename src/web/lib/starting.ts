@@ -2,21 +2,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import type { Reasoning, RunOn, Session } from '@/lib/api';
 
-/**
- * Tasks and threads being made. Starting one opens it at once, by an id the
- * page chose, and lists it everywhere tasks are listed, working; its page
- * shows it as a skeleton until the server has made it (its sandbox, branch
- * and model are the server's to check), or says why it could not.
- */
+/** A task being made: listed and opened at once by an id the page chose; its page shows a skeleton until the server has made it, or says why it could not. */
 export type Starting = {
-	/** As it will read: the lists show it, and its page's header. */
 	session: Session;
 	/** What you asked, shown as your first message while it is made. */
 	prompt: string;
-	/** Why it could not be made; null while it is being made. */
 	error: string | null;
 	retry: () => void;
-	/** Gives up on it: it leaves the lists. */
 	discard: () => void;
 };
 
@@ -44,7 +36,6 @@ export function isStarting(id: string): boolean {
 	return starting.has(id);
 }
 
-/** What you asked of a task or thread this page made, as its skeleton showed it; undefined for any other. */
 export function openingPrompt(id: string): string | undefined {
 	return opened.get(id);
 }
@@ -72,7 +63,6 @@ export function titleFrom(prompt: string): string {
 	return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line;
 }
 
-/** The task as the lists show it while it is made: working on what you asked. */
 export function draftSession(draft: {
 	id: string;
 	title: string;
@@ -126,11 +116,7 @@ export function draftSession(draft: {
 
 type List = { sessions: Session[] };
 
-/**
- * Starts making a task or thread in the background, by `session.id`, and
- * lists it at once; open its page right after. `make` asks the server for
- * it and returns it as made; trying again runs `make` again with the same id.
- */
+/** Starts making a task by `session.id` and lists it at once; `make` asks the server for it, and trying again runs it with the same id. */
 export function startInBackground(queryClient: QueryClient, session: Session, prompt: string, make: () => Promise<Session>): void {
 	const { id } = session;
 	const discard = () => {

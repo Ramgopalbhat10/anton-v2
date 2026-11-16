@@ -1,23 +1,18 @@
 import { Hono } from 'hono';
 import type { Session } from '../core/types.ts';
-import { getSession, listSessions } from '../services/sessions.ts';
-import { waitingMessages } from '../services/waiting.ts';
-import { subagentRuns } from '../services/subagent-runs.ts';
-import { agentNow } from '../services/agent-now.ts';
-import { pullRequestView } from '../services/pull-requests.ts';
-import { spacesView, spaceView } from '../services/spaces.ts';
-import { listModels, pinnedModels } from '../services/models.ts';
-import { defaultModel } from '../services/general.ts';
+import { getSession, listSessions } from '../services/tasks/sessions.ts';
+import { waitingMessages } from '../services/tasks/waiting.ts';
+import { subagentRuns } from '../services/tasks/subagent-runs.ts';
+import { agentNow } from '../services/tasks/agent-now.ts';
+import { pullRequestView } from '../services/git/pull-requests.ts';
+import { spacesView, spaceView } from '../services/projects/spaces.ts';
+import { listModels, pinnedModels } from '../services/models/models.ts';
+import { defaultModel } from '../services/models/general.ts';
 import { NotFoundError } from '../core/errors.ts';
 
-/**
- * The flue agent router's request surface, used internally (the same way
- * `setAgentAbort` reaches `/abort`): the app asks it for a task's conversation
- * instead of speaking flue's wire protocol itself.
- */
+/** The Flue agent router, asked in-process for a task's conversation instead of speaking Flue's wire protocol. */
 export type AgentRouter = { request: (input: string, init?: RequestInit) => Promise<Response> };
 
-/** What a row in the app's task list needs of a session — the rest stays server-side. */
 function trimSession(session: Session) {
 	return {
 		id: session.id,
@@ -50,11 +45,7 @@ function trimSession(session: Session) {
 
 type FluePart = Record<string, unknown> & { type?: string };
 
-/**
- * One message in the transcript, normalized off flue's conversation shape.
- * Parts the client knows are flattened; anything new keeps its original kind
- * under `raw` so an older app still renders the text around it.
- */
+/** Unknown part kinds keep their kind under `raw`, so an older app still renders the text around them. */
 function partOf(part: FluePart) {
 	const type = String(part.type ?? '');
 	const data = (part.input ?? part.data ?? part) as Record<string, unknown>;
@@ -108,12 +99,7 @@ async function transcript(agents: AgentRouter, id: string) {
 	return messages.map((m) => messageOf(m as Record<string, unknown>));
 }
 
-/**
- * `/api/mobile`: the read surface the Android app uses, a stable shape over
- * what the web speaks internally. Sending a message stays on
- * `POST /api/agents/coder/:id` so budget checks and priming still run;
- * live changes ride the same `/api/events` stream.
- */
+/** The Android app's stable read API. Sending stays on `POST /api/agents/coder/:id` so budget checks and priming run. */
 export function mobileApi(agents: AgentRouter, coordinators?: AgentRouter) {
 	const app = new Hono();
 
@@ -136,8 +122,6 @@ export function mobileApi(agents: AgentRouter, coordinators?: AgentRouter) {
 	app.get('/spaces', async (c) => c.json({ spaces: await spacesView() }));
 	app.get('/spaces/:id', async (c) => c.json(await spaceView(c.req.param('id'))));
 
-	// The project's coordinator conversation, normalized like a task transcript.
-	// Sending stays on POST /api/agents/coordinator/:id, same as a prompt on a task.
 	app.get('/spaces/:id/messages', async (c) => {
 		if (!coordinators) return c.json({ messages: [] });
 		return c.json({ messages: await transcript(coordinators, c.req.param('id')) });

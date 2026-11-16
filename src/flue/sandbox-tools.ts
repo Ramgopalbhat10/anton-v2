@@ -12,20 +12,13 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const imageType = (path: string): string | undefined => IMAGE_TYPES[/\.(\w+)$/.exec(path)?.[1]?.toLowerCase() ?? ''];
 
-/** How the agent's model takes an image: as a picture, or in words from the vision model when it cannot see. */
 export type ImageSight = { sees: () => Promise<boolean>; describe: (bytes: Uint8Array, mimeType: string) => Promise<string> };
 
 export const text = (value: string) => ({ type: 'text' as const, text: value });
 
 const ascii = (bytes: Uint8Array, from: number, length: number) => String.fromCharCode(...bytes.subarray(from, from + length));
 
-/**
- * Whether an image's bytes end where its format says it ends. A screenshot read
- * while it was written, or cut short on its way out of the sandbox, otherwise
- * reaches the model as a broken picture: the provider refuses the whole request
- * ("could not parse image"), and as the picture stays in the conversation, every
- * later call of that agent fails the same way.
- */
+/** A cut image makes the provider refuse the whole request ("could not parse image"), and every later call of that agent too. */
 export function isWholeImage(bytes: Uint8Array, mimeType: string): boolean {
 	switch (mimeType) {
 		case 'image/png':
@@ -66,7 +59,6 @@ const EditParams = Type.Object({
 
 const occurrences = (content: string, find: string) => content.split(find).length - 1;
 
-/** The file with every change made in order, or an error naming the change that does not fit; nothing is written then. */
 export function applyChanges(path: string, content: string, changes: Change[]): { content: string; replacements: number } {
 	let replacements = 0;
 	changes.forEach((change, index) => {
@@ -110,14 +102,7 @@ function resolved(sandbox: Sandbox, path: string): string {
 	}
 }
 
-/**
- * Flue's `edit`, taking several changes to a file in one call. Each change
- * the agent made was a step of its own: one model call over its whole
- * context, and a read and a write of the file. One review round on a long
- * thread made 60 such edits, about ten seconds each, mostly to the same few
- * files. Now the changes it already knows go in one call, made in order and
- * written once, or not at all if one of them does not fit.
- */
+/** Several changes to a file in one call: one review round on a long thread made 60 single edits, about ten seconds each. */
 export function createMultiEditTool(sandbox: Sandbox): Tool {
 	return {
 		name: 'edit',
@@ -162,7 +147,7 @@ const APPLY_PATCH_DESCRIPTION = [
 	'Paths are from the working folder, or absolute. *** Move to: after an Update File line renames the file.',
 ].join('\n');
 
-/** Writes what a patch worked out, or, when a write fails, puts back the files already written and says whether it could. */
+/** When a write fails, puts back the files already written and says whether it could. */
 async function writePatched(sandbox: Sandbox, after: PatchState, before: Map<string, string | null>): Promise<void> {
 	const done: string[] = [];
 	const order = [...after].sort(([, a], [, b]) => Number(a === null) - Number(b === null));
@@ -183,12 +168,7 @@ async function writePatched(sandbox: Sandbox, after: PatchState, before: Map<str
 	}
 }
 
-/**
- * `apply_patch`, the editing tool OpenAI's GPT and Codex models are trained on (the format is in
- * src/core/apply-patch.ts). Every file's new content is worked out before anything is written, so a
- * patch with one hunk that does not fit changes nothing; it writes through the sandbox as `write`
- * and `edit` do, behind the same per-file locks, and plan mode refuses its writes and deletes alike.
- */
+/** Every file's new content is worked out before anything is written, so a hunk that does not fit changes nothing. */
 export function createApplyPatchTool(sandbox: Sandbox): Tool {
 	return {
 		name: 'apply_patch',
@@ -217,10 +197,8 @@ export function createApplyPatchTool(sandbox: Sandbox): Tool {
 	};
 }
 
-/** The tools that change files for the profile: `apply_patch` alone, or `write` and `edit` in the order they always had. */
 export const changeTools = (sandbox: Sandbox, profile: ToolProfile): Tool[] => (profile === 'patch' ? [createApplyPatchTool(sandbox)] : [queuedWriteTool(sandbox), createMultiEditTool(sandbox)]);
 
-/** An image's bytes as the model takes them: the picture for a model that sees, the vision model's words for one that does not. */
 export async function imageResult(path: string, bytes: Uint8Array, mimeType: string, sight: ImageSight): Promise<Awaited<ReturnType<Tool['execute']>>> {
 	const details = { path, size: bytes.length };
 	if (bytes.length > MAX_IMAGE_BYTES) {
@@ -234,21 +212,13 @@ export async function imageResult(path: string, bytes: Uint8Array, mimeType: str
 	return { content: [text(`${path} is an image, and your model cannot see images, so a vision model described it:\n\n${words}`)], details };
 }
 
-/** Flue's `write`, waiting on the edits to the same file as they wait on each other, which Flue's own lock no longer covers. */
+/** Waits on the edits to the same file, which Flue's own lock no longer covers. */
 export function queuedWriteTool(sandbox: Sandbox): Tool {
 	const write = createWriteTool(sandbox);
 	return { ...write, execute: (toolCallId, params, signal, onUpdate) => oneAtATime(sandbox, (params as { path: string }).path, () => write.execute(toolCallId, params as Parameters<typeof write.execute>[1], signal, onUpdate)) };
 }
 
-/**
- * Flue's standard file tools, with a `read` that shows an image, the tools that change files for the
- * model's family (`changeTools`): an `edit` that takes several changes, or `apply_patch`, and Anton's `bash`
- * (`shell-tool.ts`), which keeps a long output's start and end.
- * The standard read reads every file as text, so the agent could never look at
- * a picture in its sandbox: a reference image from the project's files, an
- * attachment, or a screenshot it took. An image comes back as a picture for a
- * model that sees, and described by the vision model for one that does not.
- */
+/** Flue's standard read reads every file as text; this one shows an image as a picture, or in the vision model's words. */
 export function sandboxTools(sight: ImageSight, profile: ToolProfile = 'edit'): SandboxToolFactory {
 	return (sandbox) => {
 		const read = createReadTool(sandbox);

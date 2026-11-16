@@ -1,9 +1,4 @@
-/*
- * Model vendors' logos, from LobeHub's MIT-licensed set
- * (@lobehub/icons-static-svg). Each is inlined as SVG text so one-colour
- * logos take the text colour. Only the files listed here are bundled; a
- * vendor without one keeps its initials.
- */
+/* Model vendors' logos from LobeHub's MIT set (@lobehub/icons-static-svg), inlined as SVG text so one-colour logos take the text colour; only the files listed are bundled. */
 import ai21 from '@lobehub/icons-static-svg/icons/ai21.svg?raw';
 import alibaba from '@lobehub/icons-static-svg/icons/alibaba-color.svg?raw';
 import anthropic from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
@@ -168,7 +163,6 @@ export function vendorSlug(model: Pick<ModelInfo, 'id'>): string {
 	return (gateway === 'openrouter' || gateway === 'vercel' ? vendor || gateway : gateway).replace(/^~/, '').toLowerCase();
 }
 
-/** The vendor's logo as SVG markup, or undefined when the set has none for it. */
 export function logoFor(model: Pick<ModelInfo, 'id'>): string | undefined {
 	return LOGOS[vendorSlug(model)];
 }

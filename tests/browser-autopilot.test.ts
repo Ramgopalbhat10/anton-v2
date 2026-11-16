@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import type { Answer, DecisionModel, Question } from '../src/core/ports.ts';
-import type { BrowserInput, BrowserState } from '../src/services/browser.ts';
+import type { BrowserInput, BrowserState } from '../src/services/browser/browser.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-autopilot-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { autopilot, candidatesOf, outcomeNote } = await import('../src/services/browser-autopilot.ts');
+const { autopilot, candidatesOf, outcomeNote } = await import('../src/services/browser/browser-autopilot.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 
 /** Answers each round from `rule`, with whatever the test wants; records what was asked. */

@@ -1,61 +1,37 @@
 import { madeByOpenAi } from './tool-profile.ts';
 import { cacheShare, cacheVerdict, type CacheVerdict, type ModelSpan, type Trace } from './trace.ts';
 
-/*
- * How long a provider keeps a prompt cache, and why a model call missed it.
- * The pruner (src/services/context-prune.ts) waits on a warm cache and clears
- * freely on a cold one, so it needs the first; `npm run cache:misses` needs
- * both, to tell a miss the render caused (a changed system prompt or tool
- * list) from one the provider's cache did on its own.
- */
-
 const MINUTE = 60_000;
 
-/**
- * How long each vendor's cache keeps a prefix after its last use, at the retention Anton asks for. pi-ai asks for the
- * short one unless it is given `cacheRetention: 'long'` or `PI_CACHE_RETENTION=long`, neither of which Anton sets, and
- * the ChatGPT plan drops `prompt_cache_retention` from every request (src/flue/subscription-models.ts).
- */
+/** pi-ai asks for short retention unless given `cacheRetention: 'long'`, which Anton never sets; the ChatGPT plan drops `prompt_cache_retention`. */
 export const CACHE_LIFETIMES = {
-	// Anthropic keeps a prefix five minutes from its last read, each hit starting the five minutes again; pi-ai sends
-	// `cache_control` with no `ttl`, which is that default (Anthropic's prompt caching docs).
+	// Five minutes from the last read, each hit restarting it; pi-ai sends `cache_control` with no `ttl`.
 	anthropic: 5 * MINUTE,
-	// OpenAI keeps a prefix in memory for five to ten minutes of inactivity, at times up to an hour off-peak (OpenAI's
-	// prompt caching guide). Ten, the most it usually holds: a gap shorter than that may still find the cache warm, so
-	// the pruner does not clear as if it were cold, nor does the miss count call such a miss expired.
+	// OpenAI keeps a prefix five to ten minutes idle, at times an hour off-peak: ten, so a shorter gap is not treated as cold.
 	openai: 10 * MINUTE,
 };
-/** Any other provider's: five minutes, the shortest of the common ones, as the pruner assumed of every provider before. */
+/** The shortest of the common ones. */
 export const DEFAULT_CACHE_MS = 5 * MINUTE;
 
-/**
- * How long the cache of the model a specifier names (`<gateway>/<model>`) lasts. The cache is the vendor's that serves
- * the model, and a gateway passes OpenAI's and Anthropic's models on to them, so it goes by the model's maker.
- */
+/** By the model's maker: a gateway passes OpenAI's and Anthropic's models on to them, and the cache is theirs. */
 export function cacheLifetime(model: string): number {
 	if (madeByOpenAi(model)) return CACHE_LIFETIMES.openai;
 	if (/claude/i.test(model)) return CACHE_LIFETIMES.anthropic;
 	return DEFAULT_CACHE_MS;
 }
 
-/** A model call in a conversation, from a reply's trace or a benchmark's events, as the miss count reads it. */
 export type CacheCall = Pick<ModelSpan, 'model' | 'usage' | 'prompt' | 'toolset'> & {
 	task: string;
 	reply: string;
-	/** Its number among the conversation's calls in its reply, from 1. */
+	/** 1-based, within its reply. */
 	number: number;
-	/** When it started and ended, in milliseconds since the epoch. */
+	/** Epoch milliseconds. */
 	start: number;
 	end: number;
-	/** Whether the conversation was compacted since the call before it. */
 	compacted: boolean;
 };
 
-/**
- * Why a call missed, from the most telling cause down. Each refines what `cacheVerdict` says of the call: a changed
- * prompt or tool list is its own verdict, `older prefix` is its Partial, and the rest its Miss or Partial with the
- * prefix held, told apart by what the trace knows besides (the model, a compaction, a context that shrank, the gap).
- */
+/** From the most telling cause down. */
 export const MISS_CLASSES = ['prompt changed', 'tools changed', 'model changed', 'compacted', 'pruned', 'expired', 'older prefix', 'provider miss'] as const;
 export type MissClass = (typeof MISS_CLASSES)[number];
 
@@ -68,11 +44,7 @@ const SHRUNK = 0.9;
 
 const inputOf = (call: CacheCall) => (call.usage ? cacheShare(call.usage).total : 0);
 
-/**
- * Why `call` missed the cache after `previous`, the call before it in the same conversation; null when it did not
- * miss. A miss reads less than half of what the previous call sent (or of its own input, if that is smaller) from the
- * cache, the previous call having sent over 4,000 tokens.
- */
+/** A miss reads less than half of what the previous call sent (or of its own input, if smaller) from the cache, after a previous call over 4,000 tokens. */
 export function missClass(call: CacheCall, previous: CacheCall): MissClass | null {
 	if (!call.usage || !previous.usage) return null;
 	const before = inputOf(previous);
@@ -87,7 +59,6 @@ export function missClass(call: CacheCall, previous: CacheCall): MissClass | nul
 	return read ? 'older prefix' : 'provider miss';
 }
 
-/** The calls that missed in one conversation's calls, in order, each with the calls either side and its trace verdict. */
 export function cacheMisses(calls: CacheCall[]): CacheMiss[] {
 	const misses: CacheMiss[] = [];
 	for (let index = 1; index < calls.length; index++) {
@@ -101,7 +72,6 @@ export function cacheMisses(calls: CacheCall[]): CacheMiss[] {
 export type MissTally = { calls: number; misses: number; byClass: Partial<Record<MissClass, number>>; uncached: number };
 export type MissSummary = MissTally & { models: Array<MissTally & { model: string }> };
 
-/** Calls, misses, misses by class and the input the misses sent uncached, in all and for each model. */
 export function missSummary(conversations: CacheCall[][]): MissSummary {
 	const empty = (): MissTally => ({ calls: 0, misses: 0, byClass: {}, uncached: 0 });
 	const all = empty();
@@ -124,11 +94,7 @@ export function missSummary(conversations: CacheCall[][]): MissSummary {
 	return { ...all, models: [...models].map(([model, tally]) => ({ model, ...tally })).sort((a, b) => b.calls - a.calls) };
 }
 
-/**
- * The main agent's calls in a task's traces, oldest reply first, as one conversation. Calls that sent nothing (a call
- * that failed before the provider counted it) touch no cache and are left out; subagents and compaction's summaries,
- * which have conversations of their own, too.
- */
+/** Calls that sent nothing touch no cache and are left out; so are subagents and compaction's summaries, which have their own conversations. */
 export function callsFromTraces(task: string, traces: Trace[]): CacheCall[] {
 	const calls: CacheCall[] = [];
 	let compacted = false;

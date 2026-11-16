@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils';
 /** Lines a draft shows before it scrolls, until it is opened out to its whole height, up to most of the window. */
 const FOLD = { lines: 5, cap: 0.6 };
 
-/** The same rich draft, completion, caret and editing behavior in both task composers. */
 export function ComposerInput({
 	value,
 	onChange,

@@ -44,16 +44,16 @@ const { useDatabase } = await import('../src/db/client.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
-const { addProject } = await import('../src/services/projects.ts');
-const { setAgentDelivery } = await import('../src/services/agent-runner.ts');
-const { recordAgentEvent } = await import('../src/services/activity.ts');
-const spaces = await import('../src/services/spaces.ts');
-const reports = await import('../src/services/thread-reports.ts');
-const files = await import('../src/services/space-files.ts');
-const { stateBlock } = await import('../src/services/coordinator.ts');
-const sessions = await import('../src/services/sessions.ts');
+const { addProject } = await import('../src/services/projects/projects.ts');
+const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts');
+const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
+const spaces = await import('../src/services/projects/spaces.ts');
+const reports = await import('../src/services/projects/thread-reports.ts');
+const files = await import('../src/services/projects/space-files.ts');
+const { stateBlock } = await import('../src/services/projects/coordinator.ts');
+const sessions = await import('../src/services/tasks/sessions.ts');
 const { updateSession, getSessionRecord } = await import('../src/db/sessions.ts');
-const automations = await import('../src/services/automations.ts');
+const automations = await import('../src/services/automations/automations.ts');
 /** A routine's schedule in the tests: every day at 9:00 on the UTC clock. */
 const DAILY = { frequency: 'daily', time: '09:00', timeZone: 'UTC' } as const;
 
@@ -113,8 +113,8 @@ test('a project needs a name, and only known repositories', async () => {
 });
 
 test("a project's threads run their helper agents on the project's models, else Settings › General's, else the thread's", async () => {
-	const { primeAgent, helperModelFor } = await import('../src/services/agent-runner.ts');
-	const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+	const { primeAgent, helperModelFor } = await import('../src/services/tasks/agent-runner.ts');
+	const { generalSettings, setGeneralSettings } = await import('../src/services/models/general.ts');
 	const before = await generalSettings();
 	try {
 		const space = await spaces.createSpace({ name: 'Helpers', repoIds: [api.id] });
@@ -509,7 +509,7 @@ test('what a thread saves in ../project-files reaches the project, and the next 
 test('a deleted thread leaves the project and keeps its files as project files; a resolved one is reopened first', async () => {
 	const space = await spaces.createSpace({ name: 'Deletes', repoIds: [api.id] });
 	const thread = await spaces.startThread(space.id, { title: 'Draw the diagram', brief: 'Draw it' });
-	const { uploadOutput } = await import('../src/services/files.ts');
+	const { uploadOutput } = await import('../src/services/artifacts/files.ts');
 	await uploadOutput(thread.id, 'diagram.svg', new TextEncoder().encode('<svg/>'));
 	await updateSession(thread.id, { resolvedAt: new Date().toISOString() });
 	await assert.rejects(() => spaces.deleteTask(thread.id), /Reopen it to delete it/);
@@ -538,7 +538,7 @@ test('a deleted thread leaves the project and keeps its files as project files; 
 
 test("a thread gets the files its brief names, or else the ones attached to the user's message", async () => {
 	const space = await spaces.createSpace({ name: 'Pictures', repoIds: [api.id] });
-	const { filesForThread } = await import('../src/services/attachments.ts');
+	const { filesForThread } = await import('../src/services/artifacts/attachments.ts');
 	const { withAttachments } = await import('../src/core/attachments.ts');
 	await files.uploadSpaceFile(space.id, 'pasted-092117.png', new Uint8Array([1, 2, 3]));
 	await files.uploadSpaceFile(space.id, 'spec.md', new TextEncoder().encode('# Spec'));
@@ -553,7 +553,7 @@ test("a thread gets the files its brief names, or else the ones attached to the 
 });
 
 test('a thread whose reply delivers what was asked is done, an answer stays open, and its next message reopens it', async () => {
-	const { recordLatestInput } = await import('../src/services/latest-input.ts');
+	const { recordLatestInput } = await import('../src/services/tasks/latest-input.ts');
 	const finished = (state: Record<string, unknown>) => /Saved diagram\.svg/.test(String(state.reply));
 	setProviders({
 		sandbox: localSandboxProvider(path.join(dir, 'data')),
@@ -581,7 +581,7 @@ test('a thread whose reply delivers what was asked is done, an answer stays open
 });
 
 test('a reply is judged once it has settled, and any task can be done, not only a thread, unless it was sent a message meanwhile', async () => {
-	const { noteSending, recordAgentEvent } = await import('../src/services/activity.ts');
+	const { noteSending, recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 	setProviders({
 		sandbox: localSandboxProvider(path.join(dir, 'data')),
 		store: diskStore(path.join(dir, 'data', 'objects')),
@@ -617,7 +617,7 @@ test('a reply is judged once it has settled, and any task can be done, not only 
 });
 
 test('a thread finishing its reply frees its slot for a queued one at once', async () => {
-	const { recordAgentEvent } = await import('../src/services/activity.ts');
+	const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 	const space = await spaces.createSpace({ name: 'One at a time', repoIds: [], maxParallel: 1 });
 	const first = await spaces.startThread(space.id, { title: 'First', brief: 'Do the first' });
 	const second = await spaces.startThread(space.id, { title: 'Second', brief: 'Do the second' });
@@ -651,7 +651,7 @@ test('tasks and routines are named in a few words by the title model, unless ren
 	try {
 		const space = await spaces.createSpace({ name: 'Names', repoIds: [] });
 		const long = 'Go through the internet and capture the latest news on tech and AI from yesterday, with sources';
-		const { titleFrom, cleanTitle } = await import('../src/services/titles.ts');
+		const { titleFrom, cleanTitle } = await import('../src/services/tasks/titles.ts');
 		assert.equal(titleFrom(long), 'Go through the internet and capture the latest news on…', 'the start of the brief, until the model answers or without one');
 		assert.equal(cleanTitle('Title: **"Q3 pricing review."**\nBecause…'), 'Q3 pricing review');
 		const thread = await spaces.startThread(space.id, { title: '', brief: long });

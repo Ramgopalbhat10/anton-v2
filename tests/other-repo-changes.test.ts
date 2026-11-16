@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import type { Machine } from '../src/core/ports.ts';
-import { otherRepoChanges } from '../src/services/git.ts';
+import { otherRepoChanges } from '../src/services/git/git.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-other-repos-'));
 after(() => rmSync(dir, { recursive: true, force: true }));

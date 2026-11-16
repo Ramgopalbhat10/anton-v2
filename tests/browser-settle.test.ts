@@ -4,7 +4,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { browserFunctions } from '../src/services/browser-step.ts';
+import { browserFunctions } from '../src/services/browser/browser-step.ts';
 
 /** The sandbox's Playwright, where this computer has it, as the sandbox's browser server runs the step. */
 const playwright = (() => {

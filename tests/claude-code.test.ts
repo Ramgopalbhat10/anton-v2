@@ -16,8 +16,8 @@ process.env.ANTON_DATA_DIR = dir;
 const { childEnv, isExtraUsageNotice, startSignIn, statusFrom, toModels, toRuntimeEvents, toWindows, windowOf } = await import('../src/providers/claude-code/runtime.ts');
 const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, IDLE_MS, sweepIdle, transcript } = await import('../src/flue/claude-code-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
-const subscriptions = await import('../src/services/subscriptions.ts');
-const { listModels } = await import('../src/services/models.ts');
+const subscriptions = await import('../src/services/models/subscriptions.ts');
+const { listModels } = await import('../src/services/models/models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
 after(() => {

@@ -1,9 +1,5 @@
 /*
- * The apply_patch format (V4A), which OpenAI's GPT and Codex models are trained
- * to write: Codex CLI gives them this tool for every file change. Parsed and
- * applied here as pure functions; `createApplyPatchTool` in
- * src/flue/sandbox-tools.ts reads and writes the files, and the thread reads a
- * call's files from here too.
+ * The apply_patch format (V4A) that OpenAI's GPT and Codex models are trained to write:
  *
  *   *** Begin Patch
  *   *** Add File: path        then each line as +line
@@ -14,10 +10,9 @@
  *   *** End Patch
  */
 
-/** A patch that cannot be parsed or does not fit: its message is what the model reads. */
+/** Its message is what the model reads. */
 export class PatchError extends Error {}
 
-/** One hunk: the `@@` headers that narrow down where it goes, the lines it replaces and those it leaves. */
 export type PatchHunk = { headers: string[]; old: string[]; new: string[]; endOfFile: boolean };
 
 export type FilePatch =
@@ -33,16 +28,12 @@ const UPDATE = '*** Update File: ';
 const MOVE = '*** Move to: ';
 const END_OF_FILE = '*** End of File';
 
-/** A hunk's `@@` line, bare or naming where the hunk is; a context line that starts with @@ starts with a space. */
+/** A context line that starts with @@ starts with a space. */
 const HUNK_HEADER = /^@@(?: |$)/;
 
 const isFileHeader = (line: string) => [ADD, DELETE, UPDATE].some((header) => line.startsWith(header)) || line === END;
 
-/**
- * The patch out of the wrappers models put around it: code fences, a leading
- * `apply_patch` word (the shell command they know it as), and a heredoc.
- * Nothing else is guessed at.
- */
+/** Strips the wrappers models put around a patch: code fences, a leading `apply_patch` word and a heredoc. Nothing else is guessed at. */
 export function unwrapPatch(text: string): string[] {
 	let lines = text.split(/\r?\n/);
 	const trimEnds = () => {
@@ -68,7 +59,6 @@ export function unwrapPatch(text: string): string[] {
 	return lines;
 }
 
-/** The file changes a patch makes, in order; a patch that does not follow the format throws, naming the line. */
 export function parsePatch(text: string): FilePatch[] {
 	const lines = unwrapPatch(text);
 	if (lines[0]?.trim() !== BEGIN) throw new PatchError(`The patch must start with "${BEGIN}".`);
@@ -148,7 +138,7 @@ export function parsePatch(text: string): FilePatch[] {
 	return files;
 }
 
-/** Typographic punctuation a model may have written as plain ASCII, or the other way round, as Codex folds it. */
+/** Folds typographic punctuation to ASCII, as Codex does. */
 function plainPunctuation(line: string): string {
 	return line
 		.replace(/[\u2010-\u2015\u2212]/g, '-')
@@ -157,16 +147,11 @@ function plainPunctuation(line: string): string {
 		.replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, ' ');
 }
 
-/** How lines are compared, strictest first: exactly, then without trailing space, then without either end's, then with punctuation folded. */
+/** Strictest first. */
 const PASSES: Array<(line: string) => string> = [(line) => line, (line) => line.trimEnd(), (line) => line.trim(), (line) => plainPunctuation(line.trim())];
 
 const fitsAt = (lines: string[], want: string[], at: number, pass: (line: string) => string) => want.every((line, index) => pass(lines[at + index]) === line);
 
-/**
- * Where `pattern` first fits in `lines` from `from` on, with the strictest
- * comparison that finds it, and where else it fits as well; at the end only,
- * for a hunk anchored there.
- */
 function seek(lines: string[], pattern: string[], from: number, atEnd: boolean): { at: number; also: number[] } | null {
 	if (pattern.length > lines.length) return null;
 	const last = lines.length - pattern.length;
@@ -186,7 +171,7 @@ function seek(lines: string[], pattern: string[], from: number, atEnd: boolean):
 
 type Lines = { text: string[]; eols: string[]; finalNewline: boolean; eol: string };
 
-/** A file's lines, each with its own ending, so CRLF stays CRLF and a file without a final newline keeps none. */
+/** Each line keeps its own ending, so CRLF stays CRLF and a file without a final newline keeps none. */
 function splitLines(content: string): Lines {
 	if (content === '') return { text: [], eols: [], finalNewline: true, eol: '\n' };
 	const parts = content.split('\n');
@@ -200,12 +185,7 @@ function splitLines(content: string): Lines {
 
 const quoted = (lines: string[]) => (lines.length ? lines.map((line) => `  ${line}`).join('\n') : '  (no lines)');
 
-/**
- * The file's new content with each hunk applied in order, each found from where
- * the one before ended, or an error naming the hunk that does not fit and the
- * lines it looked for. A hunk whose lines fit more than one place, with no `@@`
- * header or end-of-file anchor to say which, fails too, rather than change the first.
- */
+/** A hunk whose lines fit more than one place, with no `@@` header or end-of-file anchor to say which, fails rather than change the first. */
 export function applyHunks(path: string, content: string, hunks: PatchHunk[]): string {
 	const file = splitLines(content);
 	const lines = file.text;
@@ -257,25 +237,17 @@ export function applyHunks(path: string, content: string, hunks: PatchHunk[]): s
 	return text.map((line, index) => line + (index < text.length - 1 ? eols[index] || file.eol : file.finalNewline ? eols[index] || file.eol : '')).join('');
 }
 
-/** A new file's content: its lines, each ending in a newline. */
 export const addedContent = (lines: string[]) => lines.map((line) => `${line}\n`).join('');
 
-/** What a patch does to each file, in a line the model reads: A, M or D and its path, a move as both paths. */
 export function changeLine(file: FilePatch): string {
 	if (file.kind === 'add') return `A ${file.path}`;
 	if (file.kind === 'delete') return `D ${file.path}`;
 	return file.moveTo ? `M ${file.path} -> ${file.moveTo}` : `M ${file.path}`;
 }
 
-/** A file's state once the patch so far is made: its content, or null once deleted. */
 export type PatchState = Map<string, string | null>;
 
-/**
- * Every file's content once the whole patch is made, worked out before anything
- * is written: `read` gives a file as it is now, and throws for one that is not
- * there; `key` names a path the same way however it was written. A patch that
- * changes a file twice sees its first change the second time.
- */
+/** Works out every file's content before anything is written; a patch that changes a file twice sees its first change the second time. */
 export async function planPatch(files: FilePatch[], read: (path: string) => Promise<string>, key: (path: string) => string = (path) => path): Promise<{ after: PatchState; before: Map<string, string | null> }> {
 	const after: PatchState = new Map();
 	const before = new Map<string, string | null>();
@@ -311,10 +283,8 @@ export async function planPatch(files: FilePatch[], read: (path: string) => Prom
 	return { after, before };
 }
 
-/** A file an apply_patch call changed, for the thread: its path, what happened to it, and the lines it added and removed. */
 export type PatchedFile = { path: string; change: 'add' | 'update' | 'delete' | 'move'; to?: string; added: number; removed: number };
 
-/** The files a patch names, without reading any; empty for a patch that does not parse. */
 export function patchedFiles(text: string): PatchedFile[] {
 	let files: FilePatch[];
 	try {

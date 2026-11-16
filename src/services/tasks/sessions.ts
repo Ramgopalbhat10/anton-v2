@@ -1,0 +1,340 @@
+import { registeredRoutedModels } from '../../core/routed-models.ts';
+import { randomUUID } from 'node:crypto';
+import type { ReviewOf, RunOn, Session, SessionRecord, SessionStatus } from '../../core/types.ts';
+import { config } from '../../config.ts';
+import { announce } from '../../core/changes.ts';
+import { getProject } from '../../db/projects.ts';
+import { deleteSessionRecord, getSessionRecord, insertSession, listSessionRecords, listThreadRecords, updateSession, wasDeleted } from '../../db/sessions.ts';
+import { getProviders } from '../../providers/index.ts';
+import { isWorking, stopAgent } from './activity.ts';
+import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from '../git/checkpoints.ts';
+import { saveSpaceFiles } from '../projects/space-files.ts';
+import { forgetMachine, isStarting, liveMachine, machineFor } from '../sandbox/workspace.ts';
+import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
+import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
+import { type ModelRoute, parseRouted, routable, routedId } from '../../core/model-route.ts';
+import type { Reasoning } from '../../core/ports.ts';
+import { generalSettings } from '../models/general.ts';
+import { closeBrowser } from '../browser/live-browser.ts';
+import { SCRATCH_BASE, SCRATCH_BRANCH } from '../git/git.ts';
+import { forgetScriptCalls } from './script-runs.ts';
+import { forgetResults } from '../context/tool-results.ts';
+import { forgetGate } from '../replies/gate-state.ts';
+import { forgetRepoCheck } from '../sandbox/repo-check.ts';
+import { forgetSubagentRuns } from './subagent-runs.ts';
+import { findModel, reasoningFor } from '../models/models.ts';
+import { logProblem } from '../../core/log.ts';
+import { threadState } from '../../core/thread-state.ts';
+import { nameTask, titleFrom } from './titles.ts';
+import { forgetNotificationsOf } from '../notify/notifications.ts';
+
+/** The sandbox provider is the source of truth for what is running; cached for a few seconds. */
+let runningCache: { at: number; keys: Promise<Set<string>> } | undefined;
+const RUNNING_CACHE_MS = 5_000;
+
+export function runningKeys(): Promise<Set<string>> {
+	if (!runningCache || Date.now() - runningCache.at > RUNNING_CACHE_MS) {
+		runningCache = { at: Date.now(), keys: runningOnAll() };
+	}
+	return runningCache.keys;
+}
+
+export function invalidateRunning(): void {
+	runningCache = undefined;
+	announce({ kind: 'sessions' });
+}
+
+/** A failed setup reads as an error even while its machine is still up. */
+function statusOf(record: SessionRecord, running: Set<string>): SessionStatus {
+	if (isStarting(record.id)) return 'starting';
+	if (record.failed) return 'error';
+	return running.has(record.id) ? 'running' : 'stopped';
+}
+
+export function present(record: SessionRecord, running: Set<string>): Session {
+	const { failed: _failed, machineState: _state, followState: _follow, legacySetup: _legacy, reportedState: _reported, ...session } = record;
+	const shown = { ...session, status: statusOf(record, running), working: isWorking(record.id), workspace: record.machineState !== null };
+	return { ...shown, threadState: threadState(shown) };
+}
+
+/** Tasks keep plain `model` + `route`; helpers and coordinators carry the route in their model specifier. */
+export type ModelChoice = { model: string; reasoning: Reasoning; route?: ModelRoute | null };
+
+/** The agent renders synchronously, so it reads each session's model choice from here; filled before every prompt. */
+const choices = new Map<string, ModelChoice>();
+
+export function modelFor(id: string): ModelChoice {
+	return choices.get(id) ?? { model: config.model, reasoning: 'off' };
+}
+
+export function agentModelFor(id: string): ModelChoice {
+	const choice = modelFor(id);
+	return { ...choice, model: routedId(choice.model, choice.route ?? null) };
+}
+
+export function routedModels(): string[] {
+	return [...new Set([...registeredRoutedModels(), ...[...choices.values()].map((choice) => routedId(choice.model, choice.route ?? null)).filter((model) => parseRouted(model).route)])];
+}
+
+export async function primeModel(id: string): Promise<void> {
+	const record = await getSessionRecord(id);
+	if (!record) return;
+	const info = await findModel(record.model).catch(() => undefined);
+	const route = routable(record.model) ? record.route : null;
+	choices.set(id, { model: record.model, reasoning: reasoningFor(info, record.reasoning), ...(route ? { route } : {}) });
+}
+
+/** Kept in memory only. Fields left out keep what is chosen, so the agent's own priming never resets the composer's pick. */
+export async function primeIncognitoModel(id: string, input: { model?: string; reasoning?: Reasoning | null; route?: ModelRoute | null } = {}): Promise<void> {
+	const current = choices.get(id);
+	const model = input.model ?? current?.model ?? config.model;
+	const info = await findModel(model).catch(() => undefined);
+	const reasoning = input.reasoning !== undefined ? reasoningFor(info, input.reasoning) : (current?.reasoning ?? reasoningFor(info, null));
+	const route = input.route !== undefined ? (routable(model) ? input.route : null) : (current?.route ?? null);
+	choices.set(id, { model, reasoning, ...(route ? { route } : {}) });
+}
+
+export function forgetModelChoice(id: string): void {
+	choices.delete(id);
+}
+
+async function knownModel(model: string): Promise<string> {
+	if (!(await findModel(model))) throw new InvalidInputError(`Unknown model: ${model}`);
+	return model;
+}
+
+function slug(title: string): string {
+	return (
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-|-$/g, '')
+			.slice(0, 40) || 'task'
+	);
+}
+
+async function startingPoint(projectId: string | undefined, branch: string | undefined, sha: string | undefined) {
+	if (!projectId) return { projectId: null, baseBranch: SCRATCH_BRANCH, baseSha: SCRATCH_BASE };
+	const project = await getProject(projectId);
+	if (!project) throw new NotFoundError('Project not found');
+	const baseBranch = branch || project.defaultBranch;
+	return { projectId: project.id, baseBranch, baseSha: sha ?? (await getProviders().git.resolveRef(project.repoFullName, baseBranch)) };
+}
+
+export async function createSession(input: {
+	id?: string;
+	projectId?: string;
+	branch?: string;
+	model?: string;
+	reasoning?: Reasoning;
+	route?: ModelRoute | null;
+	title?: string;
+	planMode?: boolean;
+	spaceId?: string;
+	brief?: string;
+	review?: ReviewOf;
+	prUrl?: string;
+	baseSha?: string;
+	automationId?: string;
+	titleFrom?: string;
+	runOn?: RunOn;
+}): Promise<Session> {
+	// GitHub names the commit while the model is checked, rather than one after the other.
+	const [{ projectId, baseBranch, baseSha }, general, chosen] = await Promise.all([
+		startingPoint(input.projectId, input.branch, input.baseSha),
+		generalSettings(),
+		input.model ? knownModel(input.model) : null,
+		input.id ? freshId(input.id) : null,
+	]);
+	const id = input.id ?? randomUUID();
+	const title = input.title?.trim() || (input.titleFrom && titleFrom(input.titleFrom)) || 'New task';
+	// The default reasoning level belongs to the default model; another model starts at its own default.
+	const { model, route } = parseRouted(chosen ?? general.model ?? config.model);
+	const reasoning = input.reasoning ?? (input.model ? null : general.reasoning);
+	// Plan mode plans changes to code; a chat has none to plan.
+	const planMode = projectId ? (input.planMode ?? general.planMode) : false;
+	const branch = projectId ? branchFor(title, id) : SCRATCH_BRANCH;
+	await insertSession({
+		id,
+		projectId,
+		title,
+		model,
+		reasoning,
+		baseBranch,
+		baseSha,
+		branch,
+		planMode,
+		spaceId: input.spaceId,
+		brief: input.brief,
+		review: input.review,
+		prUrl: input.prUrl,
+		automationId: input.automationId,
+		route: routable(model) ? ('route' in input ? input.route : route) : null,
+		runOn: input.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox',
+	});
+	if (input.titleFrom) void nameTask(id, input.titleFrom);
+	return getSession(id);
+}
+
+/** Never an id a task has or had, since storage cleanup removes what a deleted task left. */
+async function freshId(id: string): Promise<void> {
+	if ((await getSessionRecord(id)) || (await wasDeleted(id))) throw new ConflictError('A task with that id already exists');
+}
+
+const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
+
+/** A new task holding the task's files on a branch and sandbox of its own; the conversation stays with the original. Its sandbox starts at once when there are files. */
+export async function forkSession(id: string): Promise<Session> {
+	const source = await getSessionRecord(id);
+	if (!source) throw new NotFoundError('Session not found');
+	const machine = await liveMachine(id);
+	if (machine) await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before fork failed', error, id));
+	const forkId = randomUUID();
+	const title = `${source.title.slice(0, 190)} (fork)`;
+	const { projectId, model, reasoning, route, baseBranch, baseSha, planMode, spaceId, runOn } = source;
+	await insertSession({ id: forkId, projectId, title, model, reasoning, route, baseBranch, baseSha, branch: projectId ? branchFor(title, forkId) : SCRATCH_BRANCH, planMode, spaceId, runOn });
+	if (await copyCheckpoint(id, forkId)) {
+		machineFor(forkId).catch((error: unknown) => logProblem('warn', 'The fork\'s sandbox did not start', error, forkId));
+	}
+	return getSession(forkId);
+}
+
+export async function listSessions(): Promise<Session[]> {
+	const [records, running] = await Promise.all([listSessionRecords(), runningKeys()]);
+	return records.map((record) => present(record, running));
+}
+
+export async function listThreads(spaceId: string): Promise<Session[]> {
+	const [records, running] = await Promise.all([listThreadRecords(spaceId), runningKeys()]);
+	return records.map((record) => present(record, running));
+}
+
+export async function getSession(id: string): Promise<Session> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	return present(record, await runningKeys());
+}
+
+export async function isRunning(id: string): Promise<boolean> {
+	return (await runningKeys()).has(id);
+}
+
+export type SessionChange = {
+	title?: string;
+	model?: string;
+	reasoning?: Reasoning | null;
+	route?: ModelRoute | null;
+	planMode?: boolean;
+	pinned?: boolean;
+	resolved?: boolean;
+	runOn?: RunOn;
+};
+
+/** A provider belongs to its model, so another model leaves it to the gateway; a sort carries over to a model on a gateway. */
+function routeAfter(record: SessionRecord | null, change: SessionChange, model: string | undefined): ModelRoute | null | undefined {
+	if ('route' in change) return change.route ?? null;
+	if (!model || !record || model === record.model) return undefined;
+	if (!record.route) return undefined;
+	return record.route.sort && routable(model) ? record.route : null;
+}
+
+/** The agent sees a change from the next prompt. */
+export async function editSession(id: string, change: SessionChange): Promise<Session> {
+	if (change.runOn) await moveTask(id, change.runOn);
+	const chosen = change.model && (await knownModel(change.model));
+	const parsed = chosen ? parseRouted(chosen) : undefined;
+	const model = parsed?.model;
+	if (parsed?.route && !('route' in change)) change = { ...change, route: parsed.route };
+	const title = change.title?.trim();
+	const record = 'route' in change || model ? await getSessionRecord(id) : null;
+	const route = routeAfter(record, change, model || undefined);
+	if (route && !routable(model || record?.model || '')) throw new InvalidInputError('Only a model on OpenRouter or Vercel AI Gateway takes a provider or sort.');
+	await updateSession(id, {
+		...(title ? { title } : {}),
+		...(model ? { model } : {}),
+		...(route !== undefined ? { routeJson: route ? JSON.stringify(route) : null } : {}),
+		...('reasoning' in change ? { reasoning: change.reasoning } : {}),
+		// Turning plan mode on or off (approving the plan turns it off) leaves no plan waiting.
+		...(change.planMode !== undefined ? { planMode: change.planMode, plan: null } : {}),
+		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
+		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
+	});
+	return getSession(id);
+}
+
+/** A machine it has is stopped first, saving its files; the next start sets up on the other runner and puts them back. */
+async function moveTask(id: string, runOn: RunOn): Promise<void> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	if (record.runOn === runOn) return;
+	if (runOn === 'host' && !hostRunnerAvailable()) throw new InvalidInputError('Every task already runs on this server.');
+	if (isWorking(id)) throw new ConflictError('Wait for the agent to finish, or stop it, before moving the task.');
+	await stopSession(id);
+	await updateSession(id, { runOn, machineState: null });
+	invalidateRunning();
+}
+
+export async function fallbackModel(id: string): Promise<{ model: string; name: string } | null> {
+	const [record, general] = await Promise.all([getSessionRecord(id), generalSettings()]);
+	if (!record) throw new NotFoundError('Session not found');
+	const model = general.model ?? config.model;
+	if (model === routedId(record.model, record.route)) return null;
+	const info = await findModel(model).catch(() => undefined);
+	return info ? { model, name: info.name } : null;
+}
+
+export async function switchToFallbackModel(id: string): Promise<Session> {
+	const fallback = await fallbackModel(id);
+	if (!fallback) throw new InvalidInputError('This task already runs on the default model.');
+	const { model, route } = parseRouted(fallback.model);
+	return editSession(id, { model, route, reasoning: (await generalSettings()).reasoning });
+}
+
+export async function resumeSession(id: string): Promise<Session> {
+	await machineFor(id);
+	invalidateRunning();
+	return getSession(id);
+}
+
+/** Saving and stopping can take a minute or two, so a second Stop or a Delete meanwhile waits for this one. */
+const stopping = new Map<string, Promise<void>>();
+
+/** Never starts a machine. */
+export async function stopSession(id: string): Promise<Session> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	let stop = stopping.get(id);
+	if (!stop) {
+		stop = stopMachine(id, record.machineState, record.runOn).finally(() => stopping.delete(id));
+		stopping.set(id, stop);
+	}
+	await stop;
+	return getSession(id);
+}
+
+async function stopMachine(id: string, machineState: string | null, runOn: RunOn): Promise<void> {
+	await stopAgent(id);
+	const machine = await liveMachine(id);
+	if (machine && machineState) {
+		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
+		await saveSpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not save the project files before stop', error, id));
+		await runnerFor(runOn).stop(machineState);
+	}
+	forgetMachine(id);
+	invalidateRunning();
+}
+
+/** The pushed branch and any pull request stay on the git host. */
+export async function deleteSession(id: string): Promise<void> {
+	await stopSession(id);
+	// Its Browser panel's browser too, which the host would otherwise keep until it idles out.
+	await closeBrowser(id).catch((error: unknown) => logProblem('warn', 'Could not close the task browser', error, id));
+	await deleteCheckpoints(id);
+	await forgetSubagentRuns(id);
+	await forgetScriptCalls(id);
+	forgetResults(id);
+	forgetGate(id);
+	forgetRepoCheck(id);
+	await deleteSessionRecord(id);
+	await forgetNotificationsOf(id);
+}

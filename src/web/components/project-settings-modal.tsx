@@ -3,13 +3,9 @@ import { lazy } from 'react';
 import { LazyPart } from '@/components/error-boundary';
 import { closeProjectSettings, useProjectSettings } from '@/lib/project-settings-modal';
 
-/** A project's settings, loaded the first time they open (`project-settings.tsx`). */
 const ProjectSettingsCard = lazy(() => import('@/components/project-settings').then((module) => ({ default: module.ProjectSettingsCard })));
 
-/**
- * A project's settings, as a card over the page you are on, like the app's
- * Settings. A link inside it to anywhere else closes it and goes there.
- */
+/** A link inside it to anywhere else closes it and goes there. */
 export function ProjectSettingsModal() {
 	const at = useProjectSettings();
 	return (

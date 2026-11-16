@@ -23,7 +23,6 @@ function oneTimeKey() {
 	return ecdh;
 }
 
-/** Encrypts `plaintext` for one browser: the request body, with the salt and Anton's one-time public key in its header. */
 export function encrypt(target: PushTarget, plaintext: Uint8Array, salt = randomBytes(16), ecdh = oneTimeKey()): Buffer {
 	if (plaintext.length > MAX_PAYLOAD) throw new Error(`A push message holds at most ${MAX_PAYLOAD} bytes`);
 	const receiver = fromB64url(target.keys.p256dh);
@@ -42,7 +41,6 @@ export function encrypt(target: PushTarget, plaintext: Uint8Array, salt = random
 	return Buffer.concat([salt, recordSize, Buffer.from([sender.length]), sender, sealed]);
 }
 
-/** The VAPID token for one push service's origin, signed with Anton's private key. */
 export function vapidToken(audience: string, keys: PushKeys, subject: string, now = Date.now()): string {
 	const point = fromB64url(keys.publicKey);
 	const key = createPrivateKey({

@@ -19,10 +19,7 @@ import { Thread } from '@/components/thread';
 
 const IMAGE_ONLY = 'Look at the attached image.';
 
-/**
- * The composer, stripped to what an incognito chat has: text, images and files, a model,
- * and the user's connectors through ComposerPlus. No session, no sandbox, no plan, no todo.
- */
+/** The composer for an incognito chat: no session, sandbox, plan or todo. */
 function IncognitoComposer({
 	id,
 	agent,
@@ -125,11 +122,7 @@ function IncognitoComposer({
 	);
 }
 
-/**
- * Incognito chat: a throwaway conversation inside a dark frame. The sidebars are gone,
- * nothing is written anywhere, and closing the window — the X in the frame, or leaving —
- * ends it for good.
- */
+/** A throwaway chat: nothing is written anywhere, and closing it (the X, or leaving) ends it for good. */
 export function IncognitoPage() {
 	const [id] = useState(newIncognitoId);
 	const agent = useFlueAgent({ url: `/api/agents/incognito/${id}` });

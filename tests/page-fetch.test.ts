@@ -10,9 +10,9 @@ import { gzipSync } from 'node:zlib';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-page-fetch-'));
 process.env.ANTON_DATA_DIR = dir;
 
-const { fetchForPage, isPublicAddress, pageFetch } = await import('../src/services/page-fetch.ts');
-const { injectBootstrap, pageGuide, renderFrame } = await import('../src/services/renders.ts');
-const { generalSettings, setGeneralSettings } = await import('../src/services/general.ts');
+const { fetchForPage, isPublicAddress, pageFetch } = await import('../src/services/browser/page-fetch.ts');
+const { injectBootstrap, pageGuide, renderFrame } = await import('../src/services/artifacts/renders.ts');
+const { generalSettings, setGeneralSettings } = await import('../src/services/models/general.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { upsertProject } = await import('../src/db/projects.ts');

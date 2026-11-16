@@ -2,11 +2,6 @@ import { type KeyboardEvent, type ReactNode, useId, useMemo, useState } from 're
 import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 
-/* Charts drawn as plain SVG in the instrument style: thin dashed guides,
-   mono labels, bars with a soft top, the peak picked out, and one tooltip
-   that follows the pointer or the arrow keys. Colours come from the
-   --data-* tokens. */
-
 export const DATA_COLORS = ['var(--data-1)', 'var(--data-2)', 'var(--data-3)', 'var(--data-4)', 'var(--data-5)', 'var(--data-6)'];
 
 /** A local date as `YYYY-MM-DD`, the key the usage view's days use. */
@@ -25,7 +20,6 @@ export function lastDays(count: number, now = new Date()): string[] {
 	});
 }
 
-/** "Oct 7" for a `YYYY-MM-DD` key. */
 export function shortDay(key: string): string {
 	const [year, month, day] = key.split('-').map(Number);
 	return new Date(year, month - 1, day).toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -45,15 +39,9 @@ export function niceTicks(top: number, whole = false): number[] {
 
 export type StackRow = { day: string; series: string; value: number };
 
-/** Room for the y labels on the left and the day labels below. */
 const GUTTER = { left: 46, right: 6, top: 18, bottom: 22 };
 
-/**
- * Bars per day, stacked by series, over a fixed run of days so quiet days
- * still take their place. The busiest day is labelled; an optional limit
- * draws as a dashed line once the bars come near it. Hover a day, or focus
- * the chart and use the arrow keys, to read it.
- */
+/** Bars per day stacked by series, over a fixed run of days so quiet days keep their place; an optional limit shows once bars come near it. */
 export function StackedDaysChart({
 	rows,
 	days,
@@ -175,7 +163,6 @@ export function StackedDaysChart({
 										base += part.value;
 										const to = y(base);
 										const last = partIndex === visible.length - 1;
-										// One pixel between stacked parts, and a rounded top on the last.
 										const h = Math.max(1, from - to - (last ? 0 : 1));
 										return (
 											<g key={part.series} pointerEvents="none">
@@ -239,13 +226,7 @@ export function StackedDaysChart({
 	);
 }
 
-/**
- * Days as a dot matrix: a column of small cells per day, lit from the bottom
- * in proportion to the busiest day, brightest at the top of each column. Quiet
- * days keep their unlit column, so a month of little use still reads as a
- * month. The busiest day is labelled; hover a day, or focus the matrix and use
- * the arrow keys, to read it.
- */
+/** Days as a dot matrix lit in proportion to the busiest day; quiet days keep their unlit column, so a month of little use still reads as a month. */
 export function DotMatrix({
 	values,
 	label,
@@ -264,7 +245,6 @@ export function DotMatrix({
 	const [box, { width }] = useElementSize<HTMLDivElement>();
 	const [active, setActive] = useState<number | null>(null);
 	const cols = values.length;
-	// The cells fill the width, up to a size, with gaps that shrink along with them.
 	const gap = width / Math.max(1, cols) < 9 ? 1.5 : 2;
 	const cell = cols ? Math.max(3, Math.min(14, (width - (cols - 1) * gap) / cols)) : 0;
 	const matrixW = cols * cell + (cols - 1) * gap;
@@ -310,7 +290,6 @@ export function DotMatrix({
 								<rect x={x(index) - gap / 2} y={0} width={cell + gap} height={height} fill="transparent" onPointerEnter={() => setActive(index)} />
 								{Array.from({ length: rows }, (_, row) => {
 									const isLit = row < on;
-									// Lit cells brighten towards the top of the column.
 									const opacity = isLit ? 0.35 + 0.65 * ((row + 1) / on) : today ? 0.16 : 0.08;
 									return (
 										<rect
@@ -364,11 +343,7 @@ export function DotMatrix({
 	);
 }
 
-/**
- * A dial of ticks around 220 degrees: lit from the start up to the value, a
- * warning band near the end, and a bright mark riding the arc where the value
- * is. The middle holds whatever matters most about it.
- */
+/** A dial of ticks around 220 degrees: lit up to the value, with a warning band near the end. */
 export function ArcDial({
 	value,
 	max,
@@ -410,7 +385,6 @@ export function ArcDial({
 					const warn = t >= warnAt;
 					const on = fraction > 0 && t <= fraction;
 					const stroke = t >= 1 ? 'var(--bad)' : warn ? 'var(--warn)' : on ? 'var(--accent)' : 'var(--line-strong)';
-					// The lit run fades in towards the value, like a trail behind it.
 					const opacity = on ? 0.45 + 0.55 * (t / Math.max(fraction, 1e-6)) : warn ? 0.45 : major ? 1 : 0.75;
 					return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeOpacity={opacity} strokeWidth={major ? 1.5 : 1} strokeLinecap="round" />;
 				})}

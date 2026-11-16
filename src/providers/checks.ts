@@ -5,11 +5,7 @@ import { githubHost } from './github/host.ts';
 import { openRouterDecisions } from './openrouter/decisions.ts';
 import { s3Store } from './s3/store.ts';
 
-/*
- * Each provider checked with values that are not saved yet, for Test in
- * Settings › Connections: it answers what it found in a sentence, or throws
- * with why it could not. None keeps anything it was given.
- */
+// For Test in Settings › Connections: each answers what it found in a sentence, or throws why. None keeps anything it was given.
 
 export async function checkGitHub(token: string, apiUrl: string): Promise<string> {
 	const name = await githubHost({ token, apiUrl })
@@ -64,7 +60,7 @@ export async function checkDecisionModel(apiUrl: string, apiKey: () => string | 
 	return `${model} answered a test question in ${((Date.now() - started) / 1000).toFixed(1)}s.`;
 }
 
-/** An MCP server that answers the protocol's first request; it is not asked for its tools, which the agent does itself. */
+/** It is not asked for its tools, which the agent does itself. */
 export async function checkMcpServer(url: string, key: string): Promise<string> {
 	const response = await fetch(url, {
 		method: 'POST',

@@ -9,13 +9,7 @@ import { cn } from '@/lib/utils';
 type State = NonNullable<Session['pullRequest']>['state'];
 export const prNumber = (url: string | null) => url ? (/\/pull\/(\d+)/.exec(url)?.[1] ?? null) : null;
 
-/**
- * One colour per thing a pull request can be, the same everywhere it shows
- * (chips, rows, the PR tab, Reviews, Home): open green, draft grey, merged
- * violet, closed red, conflicts orange, and checks passed green, running
- * amber, failing red. Each is a state hue of `styles/aura-tokens.css` with
- * its soft fill behind it.
- */
+/** One colour per pull request state, the same everywhere it shows; each is a state hue of `styles/aura-tokens.css` with its soft fill. */
 export type PrTone = 'open' | 'draft' | 'merged' | 'closed' | 'conflicts' | 'passed' | 'running' | 'failing' | 'unknown';
 const PR_HUE: Record<PrTone, [color: string, soft: string]> = {
 	open: ['var(--ok)', 'var(--ok-soft)'],
@@ -33,13 +27,10 @@ export const prColor = (state?: State | null) => prTone(state ?? 'unknown');
 export const checksTone = (checks: 'passed' | 'pending' | 'failed'): PrTone => ({ passed: 'passed', pending: 'running', failed: 'failing' } as const)[checks];
 export const PR_ICON: Record<State, IconComponent> = { open: GitPullRequest, draft: GitPullRequestDraft, merged: GitMerge, closed: GitPullRequestClosed };
 
-/** A badge tinted in a PR tone: its text in the colour, on the soft fill of it. */
 export const prChipStyle = (tone: PrTone): CSSProperties => ({ color: PR_HUE[tone][0], background: PR_HUE[tone][1] });
 
-/** The shape every PR badge takes: 18px tall, a 4px corner, 11px medium. */
 const PR_BADGE = 'inline-flex h-[18px] shrink-0 items-center gap-1 rounded-inner px-1.5 text-micro leading-none font-medium whitespace-nowrap';
 
-/** A short PR word on a row (Conflicts, Draft, Checks failing), tinted in its tone. */
 export function PrFlag({ tone, children, className }: { tone: PrTone; children: ReactNode; className?: string }) {
 	return <span className={cn(PR_BADGE, className)} style={prChipStyle(tone)}>{children}</span>;
 }

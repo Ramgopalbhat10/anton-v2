@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { evaluate, formMessage, libraryPath, parseFormula, specText, type UiNode } from '../src/core/ui-spec.ts';
-import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../src/services/show.ts';
+import { checkImages, checkSpec, SHOW_INPUT, shownNote } from '../src/services/artifacts/show.ts';
 
 const card = {
 	title: 'Spend this week',

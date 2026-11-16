@@ -11,7 +11,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession, getSessionRecord, addSessionUsage, spentSince, spendBy } = await import('../src/db/sessions.ts');
 const { appDb } = await import('../src/db/client.ts');
-const { recordTurnUsage } = await import('../src/services/usage.ts');
+const { recordTurnUsage } = await import('../src/services/models/usage.ts');
 
 async function session(id: string) {
 	const project = await upsertProject('acme/demo', 'main');
@@ -50,10 +50,10 @@ test('distinct calls with identical usage count separately, and repeated calls a
 	await session('distinct');
 	await recordTurnUsage(event('distinct', 'turn-a'));
 	await recordTurnUsage(event('distinct', 'turn-b'));
-	const reloadPath = '../src/services/usage.ts?reloaded';
+	const reloadPath = '../src/services/models/usage.ts?reloaded';
 	const reloaded = await import(reloadPath);
 	assert.equal(await reloaded.recordTurnUsage(event('distinct', 'turn-a')), null);
-	const url = new URL('../src/services/usage.ts', import.meta.url).href;
+	const url = new URL('../src/services/models/usage.ts', import.meta.url).href;
 	const restarted = spawnSync(
 		process.execPath,
 		[

@@ -66,30 +66,15 @@ function pick<T>(kind: string, table: Record<string, () => T>, name: string): T 
 	return make();
 }
 
-/**
- * A gateway besides OpenRouter that bills per token with a key pasted in Settings › Subscriptions (else its
- * environment variable): its account, the models it offers, and where its key is kept for the calls.
- */
 export type Gateway = { account: GatewayAccount; models: ModelCatalog; key: KeySlot };
 
 /**
- * `gatewayAccount` is OpenRouter's, whose key is pasted in Settings › Subscriptions (else OPENROUTER_API_KEY); without the port the catalog is offered as it is.
- * `gateways` are the other gateways billed per token (Vercel AI Gateway), each offered once it has a key.
- * `decisions` is null without an OpenRouter key or with ANTON_DECISION_MODEL=off; everything works without it, as it did before.
- * `subscriptions` are the plans you can sign in to in Settings › Subscriptions; add one by adding an entry.
- * `runtimes` are plans run by the vendor's own agent program (Claude Code), signed in to through that program.
- * `keyPlans` are plans used with a key from the vendor's dashboard (OpenCode Go, Cursor), pasted in Settings › Subscriptions.
- * `browsers` is null without a KERNEL_API_KEY; the Browser panel then says how to set one.
- * `vision` is null without an OpenRouter key; the computer tool then says it cannot see the screen.
- * `images` is null without an OpenRouter key; the agent then has no generate_image tool.
- * `text` is null without an OpenRouter key; tasks are then named by the start of their first message.
- * `push` sends notifications to phones and closed browsers; without it (tests) nothing is sent.
- * `accounts` are accounts the agent's tools reach (Google), connected in Settings › Connectors on your own OAuth client; `mailboxes` (Gmail) use them.
- * `apps` is the apps platform (Composio) the Connectors page's Composio apps sign in and run through.
+ * Null ports degrade rather than fail: `decisions` without an OpenRouter key or with ANTON_DECISION_MODEL=off; `browsers`
+ * without KERNEL_API_KEY; `vision`, `images` and `text` without an OpenRouter key. `push` and `apps` are absent in tests.
  */
 export type Providers = {
 	sandbox: SandboxProvider;
-	/** Runs a task on this server, in a folder, for a task whose composer says This server; null when `sandbox` already does. */
+	/** Null when `sandbox` already runs on this server. */
 	host?: SandboxProvider | null;
 	store: ObjectStore;
 	git: GitHost;
@@ -107,14 +92,12 @@ export type Providers = {
 	push?: PushSender | null;
 	accounts?: AccountSignIn[];
 	mailboxes?: Mailbox[];
-	/** The apps platform behind Settings › Connectors' Composio apps; absent in tests that do not set one. */
 	apps?: AppsConnector | null;
 };
 
 let providers: Providers | undefined;
 /** Whether `providers` is the real set, which a setting saved in Settings › Connections may rebuild; tests' fakes are left alone. */
 let real = false;
-/** The decision model in use, rebuilt when its model is changed in Settings › Connections. */
 let decisionModel: DecisionModel | null = null;
 
 const makeDecisions = (): DecisionModel | null =>
@@ -172,17 +155,13 @@ export function getProviders(): Providers {
 	return providers;
 }
 
-/**
- * Rebuilds the providers whose settings are read as they are made, after one of them is saved in Settings ›
- * Connections: the code host (its token) and the decision model. The rest wait for a restart.
- */
+/** Only the code host (its token) and the decision model are rebuilt when saved; the rest wait for a restart. */
 export function refreshLiveProviders(): void {
 	if (!providers || !real) return;
 	providers.git = githubHost(config.github);
 	decisionModel = makeDecisions();
 }
 
-/** Tests swap in fakes here. */
 export function setProviders(next: Providers): void {
 	providers = next;
 	real = false;

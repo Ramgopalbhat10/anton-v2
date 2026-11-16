@@ -9,8 +9,8 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-reply-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { checkReply, closingOf, questionOf, recordReplyText, replyEnding, stallReminder, startStallCheck } = await import('../src/services/reply-check.ts');
-const { recordLatestInput } = await import('../src/services/latest-input.ts');
+const { checkReply, closingOf, questionOf, recordReplyText, replyEnding, stallReminder, startStallCheck } = await import('../src/services/replies/reply-check.ts');
+const { recordLatestInput } = await import('../src/services/tasks/latest-input.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession, getSessionRecord } = await import('../src/db/sessions.ts');
@@ -95,7 +95,7 @@ test('a reply comes to its last message of substance and what follows it, not th
 });
 
 test('a question asked with the ask tool marks the task waiting on you, whatever the reply says', async () => {
-	const { noteAsk } = await import('../src/services/asks.ts');
+	const { noteAsk } = await import('../src/services/replies/asks.ts');
 	providers(null);
 	reply('a', 'I compared both options.');
 	noteAsk('a', 'Which database should the app use?');
@@ -108,7 +108,7 @@ test('a question asked with the ask tool marks the task waiting on you, whatever
 });
 
 test('a plan proposed in the reply waits on your approval, until a reply proposes none', async () => {
-	const { notePlan } = await import('../src/services/asks.ts');
+	const { notePlan } = await import('../src/services/replies/asks.ts');
 	providers(null);
 	reply('c', 'The plan is above.');
 	notePlan('c', '1. Change `app.ts`');
@@ -120,7 +120,7 @@ test('a plan proposed in the reply waits on your approval, until a reply propose
 });
 
 test('a reply judged after you already sent the next message leaves the task working on it', async () => {
-	const { noteSending, recordAgentEvent } = await import('../src/services/activity.ts');
+	const { noteSending, recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 	providers({
 		name: 'jev',
 		async decide() {

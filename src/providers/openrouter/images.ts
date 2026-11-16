@@ -8,7 +8,6 @@ const TIMEOUT_MS = 180_000;
 
 type Parameter = { type: 'enum'; values: string[] } | { type: 'range'; min: number; max: number } | { type: 'boolean' };
 
-/** The fields Anton reads from OpenRouter's `GET /images/models`. */
 export type OpenRouterImageModel = {
 	id: string;
 	name: string;
@@ -39,12 +38,7 @@ export function toImageModelInfo(model: OpenRouterImageModel): ImageModelInfo {
 	};
 }
 
-/**
- * OpenRouter's image models, through its Images API (`POST /images`), with the
- * key Anton already has. The list is public and cached for `ttlMs`; a shape or
- * background the model does not offer is left out of the request rather than
- * failing it.
- */
+/** A shape or background the model does not offer is left out of the request rather than failing it. */
 export function openRouterImages({ apiUrl, apiKey, ttlMs }: ImagesOptions): ImageModel {
 	let cached: { at: number; models: Promise<ImageModelInfo[]> } | undefined;
 

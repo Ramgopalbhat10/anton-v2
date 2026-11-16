@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { cacheVerdict, type ModelSpan } from '../src/core/trace.ts';
-import { finishTrace, recordTraceEvent, startTrace } from '../src/services/response-trace.ts';
+import { finishTrace, recordTraceEvent, startTrace } from '../src/services/context/response-trace.ts';
 
 /** Events as the runtime sends them, which the recorder reads only in part. */
 const record = (event: Record<string, unknown>) => recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);

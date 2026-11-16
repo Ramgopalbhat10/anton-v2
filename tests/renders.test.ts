@@ -8,12 +8,12 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-renders-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { injectBootstrap, isRenderPath, PAGE_CSP, pageFrame, pageState, pageTitle, renderFrame, renderPage, savePageState, saveRender } = await import('../src/services/renders.ts');
-const { listArtifacts } = await import('../src/services/artifacts.ts');
-const { removeOutput, uploadOutput } = await import('../src/services/files.ts');
-const { saveOutput } = await import('../src/services/checkpoints.ts');
+const { injectBootstrap, isRenderPath, PAGE_CSP, pageFrame, pageState, pageTitle, renderFrame, renderPage, savePageState, saveRender } = await import('../src/services/artifacts/renders.ts');
+const { listArtifacts } = await import('../src/services/artifacts/artifacts.ts');
+const { removeOutput, uploadOutput } = await import('../src/services/artifacts/files.ts');
+const { saveOutput } = await import('../src/services/git/checkpoints.ts');
 const { onChange } = await import('../src/core/changes.ts');
-const { outputsView } = await import('../src/services/files.ts');
+const { outputsView } = await import('../src/services/artifacts/files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { upsertProject } = await import('../src/db/projects.ts');

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserView, PickedElement } from '@/lib/api';
 import { renderWithQueries, session } from './render';
-import { DESCRIBE_ELEMENT } from '../../src/services/describe-element';
+import { DESCRIBE_ELEMENT } from '../../src/services/browser/describe-element';
 
 const api = vi.hoisted(() => ({
 	browser: vi.fn(),

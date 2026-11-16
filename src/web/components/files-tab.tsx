@@ -12,7 +12,6 @@ import { cn } from '@/lib/utils';
 import { ShowPanel, useFocusedFile } from '@/lib/workspace';
 import { refreshBySource, taskQueries } from '@/lib/task-queries';
 
-/** Paths that match a search, as a flat list. */
 function Matches({
 	paths,
 	selected,
@@ -50,10 +49,8 @@ function Matches({
 }
 
 const MATCHES_SHOWN = 200;
-/** How many changed files the start page offers to open. */
 const CHANGED_SHOWN = 6;
 
-/** What Files shows with nothing open: the changed files to open, and where else to go. */
 function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
 	const showPanel = useContext(ShowPanel);
 	const row = 'flex h-7 items-center gap-2 rounded-control px-2 text-left text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)';

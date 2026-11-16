@@ -14,8 +14,8 @@ const { setProviders } = await import('../src/providers/index.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
-const { browse, browserLiveUrl, closeBrowser } = await import('../src/services/browser.ts');
-const { machineFor } = await import('../src/services/workspace.ts');
+const { browse, browserLiveUrl, closeBrowser } = await import('../src/services/browser/browser.ts');
+const { machineFor } = await import('../src/services/sandbox/workspace.ts');
 
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'objects')), git: {} as never, models: { name: 'x', list: async () => [] } });
 await insertSession({ id: 'live', projectId: null, title: 'Live', model: 'x', reasoning: null, branch: '', baseBranch: '', baseSha: '', planMode: false });

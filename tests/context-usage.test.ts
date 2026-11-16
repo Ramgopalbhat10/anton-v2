@@ -10,14 +10,14 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-context-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { COMPACTION_SUMMARY_EFFORT, compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context-usage.ts');
-const { backfillLatestInputs, recordLatestInput } = await import('../src/services/latest-input.ts');
-const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/subscriptions.ts');
+const { COMPACTION_SUMMARY_EFFORT, compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context/context-usage.ts');
+const { backfillLatestInputs, recordLatestInput } = await import('../src/services/tasks/latest-input.ts');
+const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/models/subscriptions.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
 const { insertSession, getSessionRecord, addSessionUsage } = await import('../src/db/sessions.ts');
 const { setSetting } = await import('../src/db/settings.ts');
-const { compactionCeilingFor } = await import('../src/services/general.ts');
+const { compactionCeilingFor } = await import('../src/services/models/general.ts');
 
 const model = (id: string, contextLength: number, maxOutput: number | null): ModelInfo => ({
 	id,

@@ -1,10 +1,7 @@
 /** Rows shown in the Library; a bigger file is cut, and the download has the rest. */
 export const MAX_ROWS = 500;
 
-/**
- * Splits CSV (or TSV with a tab `separator`) into rows of cells, following
- * RFC 4180 quoting: a quoted cell may hold separators, line breaks and "" for a quote.
- */
+/** Splits CSV (or TSV with a tab `separator`) into rows of cells, following RFC 4180 quoting. */
 export function parseCsv(text: string, separator = ',', maxRows = MAX_ROWS): string[][] {
 	const rows: string[][] = [];
 	let row: string[] = [];

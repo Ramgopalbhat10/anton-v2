@@ -3,10 +3,8 @@ import { lazy } from 'react';
 import { LazyPart } from '@/components/error-boundary';
 import { closeSettings, useSettingsHref } from '@/lib/settings-modal';
 
-/** The settings pages, loaded the first time Settings opens (`card.tsx`). */
 const SettingsCard = lazy(() => import('./card').then((module) => ({ default: module.SettingsCard })));
 
-/** The Settings card, shown while Settings is open. */
 export function SettingsModal() {
 	const href = useSettingsHref();
 	return (

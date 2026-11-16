@@ -32,11 +32,8 @@ function toPiModel(info: ModelInfo, catalog: readonly OpenRouterModel[]): OpenRo
 }
 
 /**
- * pi's OpenRouter provider, with every model from Anton's live catalog
- * added. pi's own entries win where both exist, since they carry tuned
- * wire settings, but take the live list's price. `live` is read on every lookup, so newly listed models
- * resolve without a restart, and `key` on every call, so a key pasted in
- * Settings › Subscriptions takes over from OPENROUTER_API_KEY at once.
+ * pi's own entries win where both exist, since they carry tuned wire settings, but take the live list's price. `live`
+ * is read on every lookup and `key` on every call, so new models and a pasted key apply without a restart.
  */
 export function liveOpenRouterProvider(live: () => readonly ModelInfo[], key: () => Promise<string | null>, routes: () => Iterable<string> = () => []): Provider {
 	const piProvider = openrouterProvider() as Provider<'openai-completions'>;
@@ -75,15 +72,7 @@ export function liveOpenRouterProvider(live: () => readonly ModelInfo[], key: ()
 
 type Payload = Record<string, unknown>;
 
-/**
- * A provider whose models also resolve with a task's route
- * (`<model>#via=<provider>`, `<model>#sort=<sort>`, `src/core/model-route.ts`):
- * `routes` names the routed specifiers in use, each resolving to its model,
- * and a call on one goes out as the model itself with `addRoute` putting the
- * route in the request body. The gateway falls back to its own routing when
- * the route's provider fails, so a route never fails a call the model could
- * answer.
- */
+/** `routes` names the routed specifiers in use; a call on one goes out as the model itself, with `addRoute` putting the route in the body. */
 export function withRoutes(provider: Provider, routes: () => Iterable<string>, addRoute: (payload: Payload, route: ModelRoute) => Payload): Provider {
 	const prefix = `${provider.id}/`;
 	function getModels(): Model<Api>[] {
@@ -97,7 +86,6 @@ export function withRoutes(provider: Provider, routes: () => Iterable<string>, a
 		}
 		return routed.length ? [...models, ...routed] : models;
 	}
-	/** The model as the gateway names it, and the options that add the route to the request. */
 	function unroute<M extends Model<Api>, O extends StreamOptions>(model: M, options: O | undefined): [M, O | undefined] {
 		const { model: id, route } = parseRouted(model.id);
 		if (!route) return [model, options];
@@ -149,13 +137,7 @@ function toVercelModel(info: ModelInfo, catalog: readonly VercelModel[]): Vercel
 	};
 }
 
-/**
- * Vercel AI Gateway (vercel.com/docs/ai-gateway), as `vercel/<creator>/<model>`:
- * every model in its live list, over its Anthropic Messages endpoint as pi's
- * own `vercel-ai-gateway` provider calls it, with pi's tuned entries where it
- * knows the model. `key` is read on every call, so a key pasted in Settings ›
- * Subscriptions takes over from AI_GATEWAY_API_KEY at once.
- */
+/** Over its Anthropic Messages endpoint, as pi's `vercel-ai-gateway` provider calls it; `key` is read on every call. */
 export function liveVercelProvider(live: () => readonly ModelInfo[], key: () => Promise<string | null>, routes: () => Iterable<string> = () => []): Provider {
 	const catalog = (Object.values(VERCEL_AI_GATEWAY_MODELS) as VercelModel[]).map((model) => ({ ...model, provider: 'vercel' }));
 	const base = createProvider<'anthropic-messages'>({

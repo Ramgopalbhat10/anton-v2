@@ -1,15 +1,10 @@
 import WebSocket from 'ws';
 
-/** An event the browser sent: a method name, its parameters, and the page session it came from, if any. */
 export type CdpEvent = { method: string; params: Record<string, unknown>; sessionId?: string };
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
-/**
- * One WebSocket to a browser's Chrome DevTools Protocol endpoint. Commands
- * get replies by id; page commands carry the session id of the page they
- * target (flattened sessions). Every command times out rather than hang.
- */
+/** Page commands carry their page's session id (flattened sessions); every command times out rather than hang. */
 export class CdpConnection {
 	private next = 1;
 	private readonly pending = new Map<number, Pending>();
@@ -60,7 +55,6 @@ export class CdpConnection {
 		});
 	}
 
-	/** Calls `listener` for every event until the returned function is called. */
 	on(listener: (event: CdpEvent) => void): () => void {
 		this.listeners.add(listener);
 		return () => void this.listeners.delete(listener);

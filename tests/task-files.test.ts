@@ -65,10 +65,10 @@ const { config } = await import('../src/config.ts');
 config.prepareImages = false;
 config.prewarmSandbox = false;
 const { upsertProject } = await import('../src/db/projects.ts');
-const sessions = await import('../src/services/sessions.ts');
-const files = await import('../src/services/task-files.ts');
-const runner = await import('../src/services/agent-runner.ts');
-const { runScript, scriptToolDescription } = await import('../src/services/code-mode.ts');
+const sessions = await import('../src/services/tasks/sessions.ts');
+const files = await import('../src/services/sandbox/task-files.ts');
+const runner = await import('../src/services/tasks/agent-runner.ts');
+const { runScript, scriptToolDescription } = await import('../src/services/sandbox/code-mode.ts');
 
 const project = await upsertProject('acme/demo', 'main');
 const session = await sessions.createSession({ projectId: project.id, title: 'Question' });
@@ -255,7 +255,7 @@ type Rendered = { config: { instructions?: string; tools?: Array<{ name: string;
 
 test('a repository task has one system prompt and one tool list before and after its workspace starts', async () => {
 	const flue = await flueInternals();
-	const { Coder } = await import('../src/agents/coder.ts');
+	const { Coder } = await import('../src/agents/coder/index.ts');
 	const task = (await sessions.createSession({ projectId: project.id, title: 'Same prompt' })).id;
 	await runner.primeAgent(task, { warm: false });
 	const render = (): Rendered => flue.render(Coder, { snapshot: new Map(), store: flue.hookState(new Map()), delivery: { kind: 'user', body: 'hi' }, instanceId: task }) as Rendered;
@@ -292,7 +292,7 @@ test('a repository task has one system prompt and one tool list before and after
 
 test('a repository task on an OpenAI model has apply_patch in place of write and edit, and the prompt that names it, before and after its workspace starts', async () => {
 	const flue = await flueInternals();
-	const { Coder } = await import('../src/agents/coder.ts');
+	const { Coder } = await import('../src/agents/coder/index.ts');
 	const task = (await sessions.createSession({ projectId: project.id, title: 'Patches' })).id;
 	// A ChatGPT plan's model, which this test's model list does not have.
 	const { updateSession } = await import('../src/db/sessions.ts');
@@ -317,7 +317,7 @@ test('a repository task on an OpenAI model has apply_patch in place of write and
 
 test('reading, searching and listing, and the explorer, never start a machine for a task without a workspace', async () => {
 	const flue = await flueInternals();
-	const { Coder } = await import('../src/agents/coder.ts');
+	const { Coder } = await import('../src/agents/coder/index.ts');
 	const task = (await sessions.createSession({ projectId: project.id, title: 'Only reads' })).id;
 	await runner.primeAgent(task, { warm: false });
 	const rendered = flue.render(Coder, { snapshot: new Map(), store: flue.hookState(new Map()), delivery: { kind: 'user', body: 'hi' }, instanceId: task }) as Rendered;
@@ -342,7 +342,7 @@ test('reading, searching and listing, and the explorer, never start a machine fo
 
 test('chats and plan mode keep their read-only tools and start_workspace, and no sandbox until they have one', async () => {
 	const flue = await flueInternals();
-	const { Coder } = await import('../src/agents/coder.ts');
+	const { Coder } = await import('../src/agents/coder/index.ts');
 	const render = (task: string) => flue.render(Coder, { snapshot: new Map(), store: flue.hookState(new Map()), delivery: { kind: 'user', body: 'hi' }, instanceId: task }) as Rendered;
 	const chat = (await sessions.createSession({ title: 'A chat' })).id;
 	await runner.primeAgent(chat, { warm: false });

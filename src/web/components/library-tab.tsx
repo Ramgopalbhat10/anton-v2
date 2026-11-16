@@ -30,10 +30,8 @@ export const kindOf = (path: string): Kind => KINDS.find(([pattern]) => pattern.
 
 const size = fileSize;
 
-/** Where one Library file is read: its address and text, and the task whose Library holds it, which a live page needs. */
 export type Place = { path: string; url: string; textKey: QueryKey; text: () => Promise<string>; sessionId?: string };
 
-/** A file in a task's own Library. */
 export const taskPlace = (sessionId: string, path: string): Place => ({
 	path,
 	url: outputUrl(sessionId, path),
@@ -42,7 +40,7 @@ export const taskPlace = (sessionId: string, path: string): Place => ({
 	sessionId,
 });
 
-/** A file in a project's own Library, which every thread of it reads at ../project-files. */
+/** Every thread of the project reads these at ../project-files. */
 export const spacePlace = (spaceId: string, path: string): Place => ({
 	path,
 	url: spaceFileUrl(spaceId, path),
@@ -50,31 +48,22 @@ export const spacePlace = (spaceId: string, path: string): Place => ({
 	text: () => api.spaceFileText(spaceId, path),
 });
 
-/** The folder of a thread's Library that shows its project's files, the ones the coordinator and every thread share. */
 export const PROJECT_FOLDER = 'Project files';
 
-/**
- * What a Library shows and how its files are reached: a task's own, or a
- * project's files with what its threads saved. Each kind of Library brings
- * its files, already fetched; the views below are the same for all.
- */
+/** Each kind of Library brings its files, already fetched; the views below are the same for all. */
 export type LibrarySource = {
 	files: Output[] | undefined;
 	error: Error | null;
 	place: (path: string) => Place;
-	/** Where the agent finds the file, for Copy path. */
 	agentPath: (path: string) => string;
 	upload: (file: File) => Promise<unknown>;
 	/** Null for a Library whose files cannot be deleted from here. */
 	remove: ((path: string) => Promise<unknown>) | null;
 	refresh: () => void;
-	/** Where an added file goes, for the notice that it was added. */
 	addedTo: string;
-	/** What the empty Library says. */
 	empty: string;
 };
 
-/** Reads the file as text, then shows it with `render`. */
 export function TextFile({ sessionId, path, render }: { sessionId: string; path: string; render: (text: string) => ReactNode }) {
 	return <TextAt place={taskPlace(sessionId, path)} render={render} />;
 }
@@ -134,7 +123,6 @@ function Table({ text, separator }: { text: string; separator: string }) {
 	);
 }
 
-/** A file's contents as the Library and Artifacts show them, by its kind. */
 export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string }) => ReactNode> = {
 	page: ({ sessionId, path }) => (
 		<div className="p-3">
@@ -150,7 +138,6 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 	other: () => <EmptyLine className="px-3 py-2.5">No preview for this file type. Download it to open it.</EmptyLine>,
 };
 
-/** A file's source, highlighted, as the Code side of a page or document. */
 export function Source({ sessionId, path }: { sessionId: string; path: string }) {
 	return <SourceAt place={taskPlace(sessionId, path)} />;
 }
@@ -160,7 +147,7 @@ function SourceAt({ place }: { place: Place }) {
 	return <TextAt place={place} render={(text) => <CodeBlock code={text} language={language} className="mb-0! rounded-none! border-0!" />} />;
 }
 
-/** The file by its kind, wherever it is kept. A page runs live only from a task's Library, which serves it as one; elsewhere it shows as its source. */
+/** A page runs live only from a task's Library, which serves it as one; elsewhere it shows as its source. */
 function PreviewAt({ place, code }: { place: Place; code: boolean }) {
 	const kind = kindOf(place.path);
 	if (code || (kind === 'page' && !place.sessionId)) return <SourceAt place={place} />;
@@ -222,7 +209,6 @@ function Preview({ library, output, onBack }: { library: LibrarySource; output: 
 
 const ICONS: Record<Kind, typeof FileText> = { page: AppWindow, image: Image, pdf: FileText, table: Sheet, text: FileText, other: FileText };
 
-/** Each kind keeps one data hue, so a report and a table read apart at a glance. */
 const KIND_TONE: Record<Kind, string> = {
 	page: 'text-(--data-2)',
 	image: 'text-(--data-5)',
@@ -235,7 +221,6 @@ const KIND_TONE: Record<Kind, string> = {
 const extension = (path: string) => (path.includes('.') ? (path.split('.').pop()?.toUpperCase() ?? 'FILE') : 'FILE');
 const nameOf = (path: string) => path.split('/').pop() ?? path;
 
-/** What the Type menu narrows the Library to. */
 const TYPES: Array<{ key: 'all' | Kind; label: string }> = [
 	{ key: 'all', label: 'All types' },
 	{ key: 'page', label: 'Apps' },
@@ -247,12 +232,10 @@ const TYPES: Array<{ key: 'all' | Kind; label: string }> = [
 ];
 
 const modified = (output: Output) => new Date(output.mtimeMs).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-/** The same, in fixed widths (two-digit days and hours), for the list's column. */
 const stamp = (output: Output) => new Date(output.mtimeMs).toLocaleString([], { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 type Folder = { path: string; name: string; count: number; mtimeMs: number };
 
-/** What is directly in `folder`: its subfolders, each with how many files it holds in all, and its own files. */
 function entriesIn(outputs: Output[], folder: string): { folders: Folder[]; files: Output[] } {
 	const prefix = folder ? `${folder}/` : '';
 	const folders = new Map<string, Folder>();
@@ -274,7 +257,6 @@ function entriesIn(outputs: Output[], folder: string): { folders: Folder[]; file
 	return { folders: [...folders.values()].sort((a, b) => a.name.localeCompare(b.name)), files: files.sort((a, b) => b.mtimeMs - a.mtimeMs) };
 }
 
-/** What can be done to one entry: open it, copy where it is, download it, or delete it (asking twice). */
 function ItemActions({
 	library,
 	path,
@@ -389,7 +371,6 @@ function ItemActions({
 	);
 }
 
-/** A folder as a card with a tab, like a paper folder: its name, how much is in it, and when it last changed. */
 function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folder: Folder; onOpen: () => void }) {
 	return (
 		<div className="group relative pt-2.5">
@@ -418,7 +399,6 @@ function FolderCard({ library, folder, onOpen }: { library: LibrarySource; folde
 	);
 }
 
-/** A file as a card: an image fills it, anything else shows its name; its type sits in the corner. */
 function FileCard({ library, output, onOpen }: { library: LibrarySource; output: Output; onOpen: () => void }) {
 	const kind = kindOf(output.path);
 	const place = library.place(output.path);
@@ -475,7 +455,6 @@ function Grid({ library, outputs, folder, onFolder, onOpen }: { library: Library
 	);
 }
 
-/** The tree's own look, in the app's tokens, so it sits in the panel like the rest. */
 const TREE_STYLE = {
 	// The panel's own ground, which also backs the ellipsis a long name truncates to.
 	'--trees-bg-override': 'var(--bg-panel)',
@@ -504,11 +483,7 @@ const TREE_STYLE = {
 const TREE_CSS = `[data-item-section="decoration"] { flex: 1 0 auto; } [data-item-section="decoration"] > span { white-space: pre; font-family: var(--font); font-size: 11px; font-variant-numeric: tabular-nums; }`;
 const COLUMN_GAP = 3;
 
-/**
- * How wide a lane the tree keeps for its scrollbar (none where scrollbars
- * overlay). Rows end before it, but the headings above and the tree's own
- * row menu button measure from the panel's edge, so both allow for it.
- */
+/** The lane the tree keeps for its scrollbar (none where scrollbars overlay): rows end before it, but the headings and the row menu button measure from the panel's edge. */
 function useScrollbarLane(box: RefObject<HTMLElement | null>) {
 	const [lane, setLane] = useState(0);
 	useEffect(() => {
@@ -524,10 +499,6 @@ function useScrollbarLane(box: RefObject<HTMLElement | null>) {
 	return lane;
 }
 
-/**
- * Every saved file in folders, as Pierre's file tree: when each file changed
- * and its size at the row's end, and its actions on the row's menu.
- */
 function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: Output[]; onOpen: (output: Output) => void }) {
 	const byPath = useMemo(() => new Map(outputs.map((output) => [output.path, output])), [outputs]);
 	const latest = useRef(byPath);
@@ -606,7 +577,6 @@ function List({ library, outputs, onOpen }: { library: LibrarySource; outputs: O
 	);
 }
 
-/** Where you are in the Library's folders, each step a link back up. */
 function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string) => void }) {
 	const parts = folder ? folder.split('/') : [];
 	return (
@@ -638,12 +608,7 @@ function Crumbs({ folder, onFolder }: { folder: string; onFolder: (path: string)
 	);
 }
 
-/**
- * Reports, screenshots and exports the agent saved, and files you added: as
- * cards in folders, or as a tree. A project's thread also shows the project's
- * files, which the coordinator and every thread share, in a folder of their
- * own, as the project's Library shows each thread's under From threads.
- */
+/** A project's thread also shows the project's files, shared by the coordinator and every thread, in a folder of their own. */
 export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const queryClient = useQueryClient();
 	const outputs = useQuery({ ...taskQueries.outputs(sessionId), refetchInterval: refreshBySource });
@@ -671,7 +636,6 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 	return <Library library={library} />;
 }
 
-/** A Library of any kind, the same everywhere: a type filter, folders as cards or a tree, previews, and adding files. */
 export function Library({ library }: { library: LibrarySource }) {
 	const [selected, setSelected] = useState<Output | null>(null);
 	const [view, setView] = useStoredState<'grid' | 'list'>('anton.library.view', 'grid');

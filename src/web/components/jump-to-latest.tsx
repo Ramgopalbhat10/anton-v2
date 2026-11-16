@@ -3,11 +3,7 @@ import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/instrument';
 
-/**
- * The way back to the newest content, shown once the reader has scrolled up
- * from it, with a pulsing dot while more is still arriving. Put it last inside
- * the scroller: it rides at the bottom of the view and takes no room of its own.
- */
+/** Put it last inside the scroller: it rides at the bottom of the view and takes no room of its own. */
 export const JumpToLatest = memo(function JumpToLatest({ show, live, onJump, className }: { show: boolean; live?: boolean; onJump: () => void; className?: string }) {
 	return (
 		<div aria-hidden={!show} className={cn('pointer-events-none sticky bottom-3 z-10 flex h-0 justify-center', className)}>

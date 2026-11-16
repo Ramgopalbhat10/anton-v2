@@ -1,10 +1,6 @@
 import { config } from '../../config.ts';
 
-/**
- * Composio's REST API (v3.1): the apps connector's catalog, managed auth and
- * tool execution. Every call carries the project API key in `x-api-key`;
- * connected accounts' tokens stay inside Composio and never reach Anton.
- */
+/** Every call carries the project key in `x-api-key`; connected accounts' tokens stay inside Composio and never reach Anton. */
 
 export type ComposioToolkit = {
 	slug: string;
@@ -28,7 +24,6 @@ export type ComposioTool = {
 export type ComposioAccount = {
 	id: string;
 	toolkit: string;
-	/** word_id or alias, for showing which account is connected. */
 	label: string | null;
 	status: string;
 	statusReason: string | null;
@@ -110,7 +105,6 @@ const rawAccount = (item: Record<string, unknown>) => {
 	} satisfies ComposioAccount;
 };
 
-/** Toolkits matching a search, best first; `slug` narrows to one. */
 export async function listToolkits(apiKey: string, options: { search?: string; slug?: string; limit?: number } = {}): Promise<ComposioToolkit[]> {
 	const page = await call<{ items: Array<Record<string, unknown>> }>(
 		apiKey,
@@ -120,7 +114,6 @@ export async function listToolkits(apiKey: string, options: { search?: string; s
 	return (page.items ?? []).map(rawToolkit).filter((toolkit) => !options.slug || toolkit.slug === options.slug);
 }
 
-/** A toolkit's tools, every page up to `max`; deprecated ones left out. */
 export async function listToolkitTools(apiKey: string, toolkit: string, max = 3): Promise<ComposioTool[]> {
 	const tools: ComposioTool[] = [];
 	let cursor: string | undefined;
@@ -140,7 +133,6 @@ export async function listToolkitTools(apiKey: string, toolkit: string, max = 3)
 	return tools;
 }
 
-/** The project's Composio-managed auth config for a toolkit, made on first use. */
 export async function managedAuthConfig(apiKey: string, toolkit: string): Promise<string> {
 	const found = await call<{ items: Array<Record<string, unknown>> }>(apiKey, 'GET', `/auth_configs${query({ toolkit_slug: toolkit, is_composio_managed: 'true', limit: 50 })}`);
 	const enabled = (found.items ?? []).find((item) => item.status === 'ENABLED' && item.is_composio_managed === true);
@@ -152,7 +144,6 @@ export async function managedAuthConfig(apiKey: string, toolkit: string): Promis
 	return created.auth_config.id;
 }
 
-/** A hosted sign-in page for the user to authorize the toolkit; the account it makes is `accountId`. */
 export async function createLink(apiKey: string, input: { authConfigId: string; userId: string; callbackUrl?: string }): Promise<ComposioLink> {
 	const link = await call<{ redirect_url: string; connected_account_id: string; expires_at: string }>(apiKey, 'POST', '/connected_accounts/link', {
 		auth_config_id: input.authConfigId,
@@ -171,7 +162,6 @@ export async function getConnectedAccount(apiKey: string, id: string): Promise<C
 	}
 }
 
-/** The user's connected accounts for the given toolkits (empty toolkits means all). */
 export async function listConnectedAccounts(apiKey: string, input: { userId: string; toolkits?: string[]; statuses?: string[] }): Promise<ComposioAccount[]> {
 	const page = await call<{ items: Array<Record<string, unknown>> }>(
 		apiKey,
@@ -186,12 +176,10 @@ export async function listConnectedAccounts(apiKey: string, input: { userId: str
 	return (page.items ?? []).map(rawAccount);
 }
 
-/** Forgets an unfinished connection, so connecting again does not leave strays. */
 export async function deleteConnectedAccount(apiKey: string, id: string): Promise<void> {
 	await call(apiKey, 'DELETE', `/connected_accounts/${encodeURIComponent(id)}`).catch(() => undefined);
 }
 
-/** Revokes the grant at the provider, then removes the account. */
 export async function revokeConnectedAccount(apiKey: string, id: string): Promise<void> {
 	await call(apiKey, 'POST', `/connected_accounts/${encodeURIComponent(id)}/revoke`).catch(() => undefined);
 	await deleteConnectedAccount(apiKey, id);
@@ -199,7 +187,7 @@ export async function revokeConnectedAccount(apiKey: string, id: string): Promis
 
 export type ComposioExecution = { data: unknown; error: string | null; successful: boolean; logId: string | null };
 
-/** Runs one tool on the user's connected account; Composio holds and refreshes its credentials. */
+/** Composio holds and refreshes the account's credentials. */
 export async function executeTool(
 	apiKey: string,
 	toolSlug: string,

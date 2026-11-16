@@ -13,15 +13,8 @@ import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/jump-to-latest';
 import { focusRun, useFocusedRun } from '@/lib/workspace';
 
-/*
- * The Agents panel: every piece of work the agent handed to a subagent, live.
- * The list shows who is working and what each finished with; a run opens into
- * its transcript: the brief, each step as it happens, and the answer.
- */
-
 const STATUS_LABEL: Record<SubagentRun['status'], string> = { running: 'Working', done: 'Finished', failed: 'Failed', stopped: 'Stopped' };
 
-/** What a finished run's result is, by how it ended. */
 const RESULT_LABEL: Record<SubagentRun['status'], string> = { running: 'Answer', done: 'Answer', failed: 'Why it failed', stopped: 'Stopped' };
 const RESULT_HEADING: Record<SubagentRun['status'], string> = { running: 'Answer to the agent', done: 'Answer to the agent', failed: 'Why it failed', stopped: 'Stopped' };
 
@@ -30,7 +23,6 @@ const BATCH_MS = 10 * 60_000;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-/** The most runs at work at once in a burst. */
 function peakOf(runs: SubagentRun[], now: number): number {
 	const edges = runs.flatMap((run) => [
 		{ at: Date.parse(run.startedAt), step: 1 },
@@ -45,18 +37,12 @@ function peakOf(runs: SubagentRun[], now: number): number {
 
 const KIND_ORDER = Object.keys(WORK) as WorkKind[];
 
-/** How many steps of each kind of work, most first. */
 export function workMix(runs: SubagentRun[]): Array<{ kind: WorkKind; count: number }> {
 	const counts = new Map<WorkKind, number>();
 	for (const run of runs) for (const step of run.steps) counts.set(workKind(step.tool), (counts.get(workKind(step.tool)) ?? 0) + 1);
 	return [...counts].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
 }
 
-/**
- * The latest burst in a sentence: who ran, side by side or one after
- * another, for how long; then what the work mostly was, which the work-mix
- * bar draws and says to a screen reader; and how many failed.
- */
 export function burstLine(runs: SubagentRun[], now: number): { headline: string; work: string; failed: number } {
 	const agents = new Set(runs.map((run) => run.agent));
 	const noun = (count: number) => plural(count, agents.size === 1 ? lookOf(runs[0]?.agent ?? 'agent').label.toLowerCase() : 'agent');
@@ -84,15 +70,9 @@ export function burstLine(runs: SubagentRun[], now: number): { headline: string;
 /** A duration, in milliseconds under a second so a quick step does not read "0s". */
 const took = (ms: number) => (ms < 1000 ? `${Math.round(ms)}ms` : elapsed(ms));
 
-/** "0:42" or "12:05" from the start of the burst. */
 const mark = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`;
 
-/**
- * One step of a lane as a phase: from when it started to when the next one
- * did (the tool, then the model thinking on what it returned), in its kind's
- * colour. A plain bar, drawn again only when its place or state changes; the
- * lane's one hover card says what it was (`Lane`).
- */
+/** Drawn again only when its place or state changes; the lane's one hover card says what it was (`Lane`). */
 const PhaseBar = memo(function PhaseBar({ index, left, width, tone, running }: { index: number; left: number; width: number; tone: string; running: boolean }) {
 	return (
 		<span
@@ -103,7 +83,6 @@ const PhaseBar = memo(function PhaseBar({ index, left, width, tone, running }: {
 	);
 });
 
-/** What a phase was, when, and how long it took: the lane's hover card. */
 function PhaseCard({ step, run, next, from, now }: { step: SubagentStep; run: SubagentRun; next?: SubagentStep; from: number; now: number }) {
 	const start = Date.parse(step.at);
 	const end = next ? Date.parse(next.at) : runEnd(run, now);
@@ -128,11 +107,7 @@ function PhaseCard({ step, run, next, from, now }: { step: SubagentStep; run: Su
 	);
 }
 
-/**
- * A run's lane on the burst's shared time axis, each step a phase in its
- * kind's colour. One hover card serves the whole lane and follows the phase
- * under the pointer, so a lane of many steps is many plain bars, not a card each.
- */
+/** One hover card serves the whole lane and follows the phase under the pointer, so a lane of many steps is many plain bars, not a card each. */
 function Lane({ run, from, span, now }: { run: SubagentRun; from: number; span: number; now: number }) {
 	const [hover, setHover] = useState<{ index: number; left: number } | null>(null);
 	const step = hover ? run.steps[hover.index] : undefined;
@@ -181,7 +156,6 @@ function Lane({ run, from, span, now }: { run: SubagentRun; from: number; span: 
 
 type Stat = { label: string; value: string; title?: string };
 
-/** Numbers side by side in a well, a mono caption over each: a run's or the task's. */
 function StatWell({ stats, label }: { stats: Stat[]; label: string }) {
 	return (
 		<dl aria-label={label} className="in-well m-0 grid divide-x divide-(--line)" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
@@ -197,11 +171,6 @@ function StatWell({ stats, label }: { stats: Stat[]; label: string }) {
 	);
 }
 
-/**
- * The panel's summary, said once: what the latest burst came to in a
- * sentence, its steps as one bar split by kind, and what the task's
- * subagents spent together. The runs themselves are listed below it.
- */
 function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: SubagentRun[]; now: number }) {
 	const line = burstLine(latest, now);
 	const mix = workMix(latest);
@@ -232,12 +201,6 @@ function Overview({ runs, latest, now }: { runs: SubagentRun[]; latest: Subagent
 	);
 }
 
-/**
- * A run in the panel: its kind, title, how it stands and for how long; its
- * lane on the burst's shared time axis, each step a phase in its kind's
- * colour to rest on; and what it is doing now or what it answered. Opens
- * into its transcript.
- */
 function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: number; span: number; now: number; onOpen: () => void }) {
 	const live = run.status === 'running';
 	const line = runLine(run);
@@ -266,7 +229,7 @@ function RunRow({ run, from, span, now, onOpen }: { run: SubagentRun; from: numb
 	);
 }
 
-/** Runs come newest first; split into bursts, newest burst first, each listed in the order it started, as the thread draws it. */
+/** Runs come newest first; split into bursts, newest burst first, each listed in the order it started. */
 function bursts(runs: SubagentRun[]): SubagentRun[][] {
 	const out: SubagentRun[][] = [];
 	for (const run of runs) {
@@ -277,7 +240,6 @@ function bursts(runs: SubagentRun[]): SubagentRun[][] {
 	return out.map((burst) => burst.reverse());
 }
 
-/** One burst of runs: a line each, on one time axis. */
 function Burst({ sessionId, runs, label, now }: { sessionId: string; runs: SubagentRun[]; label: string; now: number }) {
 	const { from, to } = spanOf(runs, now);
 	return (
@@ -317,16 +279,12 @@ const OUTCOME: Record<string, { label: string; tone: Tone }> = {
 	stopped: { label: 'Stopped', tone: 'neutral' },
 };
 
-/** How sure the decision model was of an action, dimmer as it gets less sure. */
 function Sureness({ p }: { p: number | null }) {
 	if (p === null) return null;
 	return <span className={cn('in-num shrink-0 text-micro', p >= 0.9 ? 'text-(--ok)' : p >= 0.7 ? 'text-(--text-3)' : 'text-(--warn)')}>{p.toFixed(2)}</span>;
 }
 
-/**
- * The calls a run_script step's program made, hanging off its node: the first few, and the rest
- * a click away, so one busy script does not push the steps after it out of view.
- */
+/** The first few calls, the rest a click away, so one busy script does not push the steps after it out of view. */
 function ScriptCalls({ detail }: { detail: StepDetail }) {
 	const [all, setAll] = useState(false);
 	const shown = all ? detail.actions : detail.actions.slice(0, SCRIPT_SHOWN);
@@ -347,10 +305,8 @@ function ScriptCalls({ detail }: { detail: StepDetail }) {
 	);
 }
 
-/** Calls of a script step listed before the rest fold away. */
 const SCRIPT_SHOWN = 4;
 
-/** What the decision model did inside a step: each action with how sure it was, how it ended, and what it cost. */
 function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	const outcome = detail.outcome ? OUTCOME[detail.outcome] : null;
 	return (
@@ -373,22 +329,12 @@ function Decisions({ detail, live }: { detail: StepDetail; live: boolean }) {
 	);
 }
 
-/*
- * A run as one trace: a ribbon of its time across the top, then a spine
- * down the page from the brief, through each step, to the answer. Each step
- * is a node on the spine in its kind's colour, at the time it started; the
- * pause before it (the model thinking on what the last step returned) is a
- * quiet line on the spine saying how long it took. Resting on a stretch
- * of the ribbon lights its step, and a click on it scrolls there.
- */
-
 /** A pause between steps shorter than this is not worth a line of its own. */
 const THOUGHT_MS = 2000;
 
-/** Columns of a spine row: when, the node on the spine, and what happened. */
 const SPINE_ROW = 'grid grid-cols-[36px_16px_minmax(0,1fr)] gap-x-2';
 
-/** A node on the spine: a dot in the step's colour, ringed in the panel's own fill so the spine stops at it. */
+/** Ringed in the panel's own fill so the spine stops at it. */
 function Node({ tone, live, ring, children }: { tone: string; live?: boolean; ring?: boolean; children?: ReactNode }) {
 	return (
 		<span className="relative z-[1] flex h-5 items-center justify-center">
@@ -402,7 +348,6 @@ function Node({ tone, live, ring, children }: { tone: string; live?: boolean; ri
 	);
 }
 
-/** The run's time as one strip: a stretch per step, its tool's share solid and the pause after it faint. */
 function Ribbon({ run, from, to, now, lit, onLight, onPick }: { run: SubagentRun; from: number; to: number; now: number; lit: number | null; onLight: (index: number | null) => void; onPick: (index: number) => void }) {
 	const span = to - from;
 	const at = (ms: number) => Math.max(0, Math.min(100, ((ms - from) / span) * 100));
@@ -437,7 +382,6 @@ function Ribbon({ run, from, to, now, lit, onLight, onPick }: { run: SubagentRun
 	);
 }
 
-/** A step on the spine: the pause before it, its node, the step as a sentence, how long its tool took, and what it did inside. */
 function SpineStep({ step, index, since, from, now, lit, onLight }: { step: SubagentStep; index: number; since: number; from: number; now: number; lit: boolean; onLight: (index: number | null) => void }) {
 	const { icon, body } = stepBody(step);
 	const start = Date.parse(step.at);
@@ -530,7 +474,6 @@ function Transcript({ sessionId, run, now }: { sessionId: string; run: SubagentR
 				{run.steps.length ? <Ribbon run={run} from={from} to={to} now={now} lit={lit} onLight={setLit} onPick={pick} /> : null}
 			</section>
 
-			{/* The spine: one hairline from the brief's node to the answer's, behind every node on the way. */}
 			<div className="relative flex min-w-0 flex-col gap-1">
 				<span aria-hidden className="absolute top-3 bottom-3 left-[51px] w-px bg-(--line-strong)" />
 

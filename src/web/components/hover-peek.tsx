@@ -2,12 +2,7 @@ import { HoverCard, Popover } from 'radix-ui';
 import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-/**
- * The rest of what a one-line row or chip stands for, in a card once the
- * pointer rests on it. Clicks inside stay inside: the card is portalled, but
- * React still bubbles its events to the row that opens on click.
- * `quiet` keeps it shut, while a chip inside the row shows a peek of its own.
- */
+/** Clicks inside stay inside: the card is portalled, but React still bubbles its events to the row that opens on click. `quiet` keeps it shut while a chip inside shows its own peek. */
 export function HoverPeek({
 	content,
 	children,
@@ -49,10 +44,7 @@ export function HoverPeek({
 	);
 }
 
-/** HoverCard intentionally removes tab stops. Interactive peeks need a non-modal
- * popover instead, without stealing focus (or clicks) when opened by hover.
- * Arrow Down enters its controls; Escape returns to the invoking control.
- */
+/** HoverCard removes tab stops, so an interactive peek is a non-modal popover that takes neither focus nor clicks when opened by hover. */
 function InteractivePeek({ content, children, side = 'top', align = 'start', width = 320, openDelay = 350, quiet = false }: Omit<ComponentProps<typeof HoverPeek>, 'interactive'>) {
 	const [open, setOpen] = useState(false);
 	const anchor = useRef<HTMLDivElement>(null);

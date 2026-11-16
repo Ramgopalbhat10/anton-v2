@@ -14,8 +14,8 @@ const { openRouterCatalog } = await import('../src/providers/openrouter/catalog.
 const { openRouterKey, openRouterKeySource } = await import('../src/providers/openrouter/key.ts');
 const { liveOpenRouterProvider } = await import('../src/flue/live-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
-const subscriptions = await import('../src/services/subscriptions.ts');
-const { listModels } = await import('../src/services/models.ts');
+const subscriptions = await import('../src/services/models/subscriptions.ts');
+const { listModels } = await import('../src/services/models/models.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 
 const API = 'https://openrouter.ai/api/v1';

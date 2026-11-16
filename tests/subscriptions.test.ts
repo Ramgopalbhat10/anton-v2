@@ -12,8 +12,8 @@ const { chatGptSubscription, CHATGPT_REDIRECT_URI, toSubscriptionModel, toSubscr
 const { linkVariants, parseVariant, sizeTag, variantId } = await import('../src/core/model-variants.ts');
 const { chatGptPlanProvider, forChatGptPlan } = await import('../src/flue/subscription-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
-const subscriptions = await import('../src/services/subscriptions.ts');
-const { listModels } = await import('../src/services/models.ts');
+const subscriptions = await import('../src/services/models/subscriptions.ts');
+const { listModels } = await import('../src/services/models/models.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { createModels } = await import('@earendil-works/pi-ai');
 

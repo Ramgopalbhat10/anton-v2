@@ -49,7 +49,6 @@ function outputText(output: unknown): string {
 
 const textOf = (message: FlueConversationMessage) => message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 
-/** The thread a tool result names, as `[id:…]`. */
 const threadIdIn = (part: ToolPart) => (part.state === 'output-available' ? (/\[id:([\w-]+)\]/.exec(outputText(part.output))?.[1] ?? null) : null);
 
 /** A thread named by the start of its id, as reports and the coordinator name them. */
@@ -57,7 +56,7 @@ const byPrefix = (threads: Session[], id: string) => threads.find((thread) => th
 
 type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
 
-/** What you sent: its images, its files as chips (the text they carry is the coordinator's to read), and what you typed. */
+/** Files show as chips; the text they carry is the coordinator's to read. */
 function Bubble({ message }: { message: FlueConversationMessage }) {
 	const { text, files } = splitAttachments(textOf(message));
 	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
@@ -79,8 +78,6 @@ function Bubble({ message }: { message: FlueConversationMessage }) {
 	);
 }
 
-/** Thread reports are news, not something you said: one quiet line that opens to a line per thread. */
-/** What a report says happened, in a few words. */
 const REPORTED: Record<Report['state'], string> = {
 	waiting: 'is waiting on you',
 	working: 'is working',
@@ -158,12 +155,7 @@ function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Sess
 	);
 }
 
-/**
- * Threads you or a routine started, not the coordinator: a quiet line saying
- * who, over the same live card the coordinator's threads get, so the feed
- * shows them as they begin and follows them from there. A deleted thread
- * leaves the card.
- */
+/** Threads you or a routine started: a line saying who, over the same live card the coordinator's threads get. A deleted thread leaves the card. */
 function StartedRows({ reports, threads }: { reports: Report[]; threads: Session[] }) {
 	const rows = reports.flatMap((report) => {
 		const thread = byPrefix(threads, report.id);
@@ -182,7 +174,6 @@ function StartedRows({ reports, threads }: { reports: Report[]; threads: Session
 	);
 }
 
-/** A line for what the coordinator did quietly: sent a thread a note, saved to memory, added a repository. */
 function ActionRow({ icon, children, failed }: { icon: typeof Send; children: ReactNode; failed?: boolean }) {
 	return (
 		<div className={cn('flex min-w-0 items-center gap-2 px-1 text-small', failed ? 'text-(--bad)' : 'text-(--text-3)')}>
@@ -192,11 +183,7 @@ function ActionRow({ icon, children, failed }: { icon: typeof Send; children: Re
 	);
 }
 
-/**
- * Something the coordinator wrote somewhere else (a message to a thread, a note to memory): one quiet
- * pill saying where, as thread reports are, that opens to what it wrote. A long message stays out of
- * the conversation's way until you ask for it.
- */
+/** One quiet pill that opens to what the coordinator wrote, so a long message stays out of the conversation's way. */
 function NoteRow({ icon, failed, text, thread, children }: { icon: typeof Send; failed?: boolean; text: string; thread?: Session; children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const openThread = useOpenThread();
@@ -232,7 +219,6 @@ function NoteRow({ icon, failed, text, thread, children }: { icon: typeof Send; 
 
 type Suggestion = { title: string; brief: string; repo?: string };
 
-/** Threads the coordinator proposes: a numbered list, Start on each, Start all below. */
 function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: Suggestion[] }) {
 	const queryClient = useQueryClient();
 	const [started, setStarted] = useState<Record<number, string>>({});
@@ -293,7 +279,6 @@ function SuggestedThreads({ space, suggestions }: { space: Space; suggestions: S
 	);
 }
 
-/** A thread the coordinator is starting, until the server has it: its title, or why it could not start. */
 function Starting({ part }: { part: ToolPart }) {
 	const failed = part.state === 'output-error';
 	// The title streams in with the coordinator's call; until it does, a bar stands in for it.
@@ -315,12 +300,7 @@ function Starting({ part }: { part: ToolPart }) {
 	);
 }
 
-/**
- * The threads a reply started, a live card each, in the order they were
- * started: several at once read as one batch. A thread deleted since
- * leaves the card, as it leaves the sidebar; one the reply being written just
- * started may not be in the list yet, so it shows as starting until it is.
- */
+/** Several threads started at once read as one batch. One the reply being written just started may not be listed yet, so it shows as starting until it is. */
 function Dispatch({ parts, threads, live }: { parts: ToolPart[]; threads: Session[]; live: boolean }) {
 	const rows = parts.flatMap((part) => {
 		const id = threadIdIn(part);
@@ -333,7 +313,6 @@ function Dispatch({ parts, threads, live }: { parts: ToolPart[]; threads: Sessio
 	return <ThreadRows label={rows.length === 1 ? 'Started a thread' : `Started ${rows.length} threads`}>{rows}</ThreadRows>;
 }
 
-/** One of the coordinator's tool calls, as what it did: a thread card, suggestions, or a quiet line. */
 function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Space; threads: Session[]; live: boolean }) {
 	const failed = part.state === 'output-error';
 	const target = byPrefix(threads, field(part.input, 'thread').replace(/^\[|\]$|^id:/g, ''));
@@ -384,7 +363,6 @@ function blocks(parts: FlueConversationPart[]): Block[] {
 	return out;
 }
 
-/** Memoized: the coordinator's stream re-renders the feed with every chunk, and only the reply being written changes. */
 /** A thread named in a reply as `[title](#thread-<id>)` draws as its chip; one the project no longer has, as its words. */
 function threadChips(threads: Session[]): InlineLinks {
 	return (href, children) => {
@@ -419,7 +397,6 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	live: boolean;
 	space: Space;
 	threads: Session[];
-	/** The thread file a link names, as the coordinator passes on what a thread made. */
 	resolveFile: (href: string) => ViewerItem | null;
 }) {
 	const parts = message.parts.filter((part) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool');
@@ -456,7 +433,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	);
 });
 
-/** Something you said, or the threads' reports; compared by its parts, as the client gives your messages a new object each chunk. */
+/** Compared by its parts, as the client gives your messages a new object each chunk. */
 const UserEntry = memo(
 	function UserEntry({ message, threads }: { message: FlueConversationMessage; threads: Session[] }) {
 		const text = textOf(message);
@@ -476,7 +453,6 @@ const UserEntry = memo(
 
 const STARTERS = ['What is running right now?', 'Split this into threads: ', 'Which pull requests are ready for review?'];
 
-/** The empty project: what the coordinator does, and a few ways to begin. */
 function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => void }) {
 	return (
 		<div className="mt-[6vh] flex flex-col items-center gap-6 text-center">
@@ -505,7 +481,6 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 	);
 }
 
-/** Starts a thread yourself, without the coordinator: a repository (or none, for a chat), a brief, and its model. */
 export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => void }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -597,7 +572,6 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	);
 }
 
-/** The coordinator's message box: what you type goes to the coordinator, which answers or starts threads. */
 const CoordinatorComposer = memo(function CoordinatorComposer({
 	space,
 	busy,
@@ -613,7 +587,6 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	draft: string;
 	onDraft: (text: string) => void;
 	onNewThread: () => void;
-	/** A message waiting on its files, for the feed to show as sent while they upload. */
 	onPending: (change: PendingChange) => void;
 }) {
 	const queryClient = useQueryClient();
@@ -625,14 +598,12 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	draftRef.current = draft;
 	const attachments = useAttachments();
 	const { addImages } = attachments;
-	// A drawing on a thread's image, from the viewer, joins the draft.
 	const inbox = useInbox(space.id);
 	useEffect(() => {
 		if (!inbox.length) return;
 		const drawn = takeFromInbox(space.id).flatMap((item) => (item.kind === 'image' ? [item.image] : []));
 		if (drawn.length) addImages(drawn);
 	}, [inbox, space.id, addImages]);
-	/** What is being attached while a message with files is on its way. */
 	const [sending, setSending] = useState<string | null>(null);
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
 	const model = models.data?.models.find((item) => item.id === unrouted(choice.model));
@@ -708,7 +679,6 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					<IconBtn icon={Plus} size="sm" label="Start a thread yourself" onClick={onNewThread} />
 					<AttachButton attachments={attachments} />
 					<ModelPicker value={choice} onChange={(change) => edit.mutate(change)} />
-					{/* Enter sends, as everywhere; the hint speaks up only while the coordinator is busy. */}
 					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-4) max-sm:invisible">
 						{busy ? (
 							<>
@@ -725,11 +695,6 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	);
 });
 
-/**
- * The coordinator's conversation: what you asked, what it answered, the
- * threads it started as live cards under your message, and the threads'
- * reports as quiet rows.
- */
 export function ProjectFeed({
 	space,
 	agent,
@@ -748,10 +713,8 @@ export function ProjectFeed({
 	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const resolveFile = useThreadFileResolver(threads);
-	// A message you sent with files shows while they upload; the ones you send rise in.
 	const { pending, onPending, rises } = useSends();
 
-	// Kept at the newest content while you are at it; scrolling up to read holds the view still.
 	const { following, follow } = useFollowLatest(scroller, { reset: space.id });
 	const sendMessage = agent.sendMessage;
 	const send = useCallback<UseFlueAgentResult['sendMessage']>(

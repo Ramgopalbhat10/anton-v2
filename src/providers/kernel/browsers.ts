@@ -9,11 +9,7 @@ type KernelBrowser = {
 
 const toBrowser = (browser: KernelBrowser): HostedBrowser => ({ id: browser.session_id, cdpUrl: browser.cdp_ws_url, liveViewUrl: browser.browser_live_view_url ?? null });
 
-/**
- * Kernel's hosted Chromium (kernel.sh), over its REST API. Browsers are
- * headful, for the live view, and in kiosk mode, so the live view is the page
- * alone and Anton draws the address bar. Billing stops while a browser is idle.
- */
+/** Headful for the live view, and in kiosk mode, so the live view is the page alone and Anton draws the address bar. */
 export function kernelBrowsers({ apiUrl, apiKey }: { apiUrl: string; apiKey: string }): BrowserHost {
 	async function call<T>(method: string, path: string, body?: unknown): Promise<T | null> {
 		const response = await fetch(`${apiUrl}${path}`, {

@@ -1,18 +1,8 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-/*
- * Values saved in Settings › Connections, kept in `<data dir>/anton.env` under
- * the environment variable each one replaces, and read over the environment
- * when Anton starts. A saved value wins; removing it gives the environment's
- * back. The file is only readable by Anton's own user, as the sealing key is.
- *
- * It is read before anything else (the database URL is in it), so it is a
- * plain file and not a row in the database. Values that are used as they are
- * read (`applyNow`) change the running process at once; the rest, such as
- * which sandbox provider to use, wait for the next start (`bootValue` is
- * what this process runs with).
- */
+// Values saved in Settings › Connections, kept in `<data dir>/anton.env` and laid over the environment at start.
+// A plain file, not a database row: it is read before anything else (the database URL is in it). Only Anton's user can read it.
 
 const FILE = 'anton.env';
 /** One line per value: NAME="json string". */
@@ -20,9 +10,7 @@ const LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 
 let file: string | undefined;
 let saved: Record<string, string> = {};
-/** What the environment itself held for each saved name, before the file was laid over it. */
 const fromEnvironment = new Map<string, string | undefined>();
-/** Each name's value as this process started with it, after the file. */
 const atBoot = new Map<string, string | undefined>();
 
 function parse(text: string): Record<string, string> {
@@ -40,7 +28,7 @@ function parse(text: string): Record<string, string> {
 	return values;
 }
 
-/** Reads the file and lays its values over `process.env`. Called once, by `config.ts`, before any setting is read. */
+/** Called once, by `config.ts`, before any setting is read. */
 export function loadSavedEnv(dataDir: string): void {
 	file = path.join(dataDir, FILE);
 	try {
@@ -54,25 +42,20 @@ export function loadSavedEnv(dataDir: string): void {
 	}
 }
 
-/** The value the environment gives a name, whatever is saved over it. */
 export function environmentValue(name: string): string {
 	return (fromEnvironment.has(name) ? fromEnvironment.get(name) : process.env[name])?.trim() ?? '';
 }
 
-/** The value saved for a name in Settings, or undefined when none is. An empty string is saved too: it turns the environment's off. */
+/** An empty string is saved too: it turns the environment's value off. */
 export function savedValue(name: string): string | undefined {
 	return saved[name];
 }
 
-/** A name's value as this process started with it, whatever has been saved since for the next start. */
 export function bootValue(name: string): string {
 	return (atBoot.has(name) ? atBoot.get(name) : process.env[name])?.trim() ?? '';
 }
 
-/**
- * Saves values (null removes one, giving the environment's back) and writes the file whole, only readable by
- * this user. Names in `applyNow` change `process.env` at once; the others are kept for the next start.
- */
+/** Writes the file whole. Names in `applyNow` change `process.env` at once; the others wait for the next start. */
 export function writeSavedEnv(changes: Record<string, string | null>, applyNow: boolean): void {
 	if (!file) throw new Error('The saved settings file was never loaded');
 	for (const name of Object.keys(changes)) {
@@ -104,7 +87,6 @@ export function writeSavedEnv(changes: Record<string, string | null>, applyNow: 
 	}
 }
 
-/** For tests: forget everything loaded, so the next load starts clean. */
 export function resetSavedEnv(): void {
 	for (const [name, value] of fromEnvironment) {
 		if (value === undefined) delete process.env[name];

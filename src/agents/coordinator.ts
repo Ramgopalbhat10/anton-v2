@@ -2,20 +2,20 @@
 
 import { type AgentProps, defineTool, useAgentStart, useDelivery, useModel, usePersistentState, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { STATE_SIGNAL } from '../services/context-prune.ts';
-import { compactionFor } from '../services/context-usage.ts';
-import { fullResultTool } from '../services/tool-results.ts';
-import { coordinatorBrief, threadActivity, threadLine } from '../services/coordinator.ts';
-import { rememberForSpace } from '../services/memory.ts';
-import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/spaces.ts';
-import { editSession, stopSession } from '../services/sessions.ts';
-import { readSpaceFileForAgent } from '../services/space-files.ts';
-import { filesForThread, projectAttachment } from '../services/attachments.ts';
+import { STATE_SIGNAL } from '../services/context/context-prune.ts';
+import { compactionFor } from '../services/context/context-usage.ts';
+import { fullResultTool } from '../services/context/tool-results.ts';
+import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
+import { rememberForSpace } from '../services/projects/memory.ts';
+import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
+import { editSession, stopSession } from '../services/tasks/sessions.ts';
+import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
+import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { withAttachments } from '../core/attachments.ts';
-import { onPlan } from '../services/subscriptions.ts';
-import { toUsage } from '../services/usage.ts';
+import { onPlan } from '../services/models/subscriptions.ts';
+import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
-// Registers the model providers (OpenRouter, Vercel, the plans) before this agent resolves a model.
+// Registers the model providers before this agent resolves a model.
 import './providers.ts';
 
 const PROMPT = [
@@ -48,11 +48,6 @@ const files = v.optional(
 	),
 );
 
-/**
- * The message with the project files it needs attached, as the composer
- * attaches them: those listed, those it names, or else what the user attached
- * to the message being answered (`answering`).
- */
 async function withFiles(spaceId: string, message: string, listed: string[] = [], answering = ''): Promise<string> {
 	const names = await filesForThread(spaceId, message, listed, answering);
 	if (!names.length) return message;
@@ -60,7 +55,6 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 }
 
 function useCoordinatorTools(spaceId: string) {
-	// The message this reply answers: its attached files go to a thread the coordinator starts or messages without naming any.
 	const delivery = useDelivery();
 	const answering = delivery.kind === 'user' ? delivery.body : '';
 	useTool(
@@ -188,12 +182,7 @@ function useCoordinatorTools(spaceId: string) {
 	);
 }
 
-/**
- * A project's coordinator: one conversation per project (the instance id is
- * the project's id) that answers, routes and starts threads, and hears back
- * from them. It has no sandbox. Its picture of the project is the latest
- * state block in its conversation (`useProjectState`), not its history.
- */
+/** One conversation per project (the instance id is the project's id). Its picture of the project is the latest state block, not its history. */
 export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
 	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: compactionFor(brief.model) });
@@ -218,12 +207,7 @@ const STATE_NOTE =
 /** The state goes again after this many messages even unchanged, so compaction never leaves the coordinator without it. */
 const STATE_EVERY = 10;
 
-/**
- * Puts the project's state in the conversation, after each message it has changed for, rather than in the
- * instructions: instructions that changed with every thread's state missed the prompt cache on every message.
- * The conversation keeps every one; a model call is sent the latest in full and a line for each before it
- * (`latestStateOnly`).
- */
+/** In the conversation, not the instructions: instructions that changed with every thread's state missed the prompt cache. */
 function useProjectState(id: string) {
 	const [, setShown] = usePersistentState<{ body: string; since: number } | null>('project-state', null);
 	useAgentStart(({ append }) => {

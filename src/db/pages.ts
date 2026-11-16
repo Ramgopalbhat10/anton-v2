@@ -1,15 +1,6 @@
 import { appDb } from './client.ts';
 
-/*
- * Pages the agent drew with render_html, and HTML files in a Library: each
- * one's title, and the state every open copy of it shares (in the thread, in
- * a tab of its own, in the Library), with a version that goes up on each save.
- */
-
-/**
- * What a page keeps: its own value, set through `window.anton.setState`, its
- * form fields' values when it keeps none, and what it put in localStorage.
- */
+/** Its own value (`window.anton.setState`), its form fields' values when it keeps none, and its localStorage. */
 export type PageState = { state: unknown; fields: Record<string, string | boolean>; storage: Record<string, string>; version: number };
 
 export type PageRow = { sessionId: string; path: string; title: string; updatedAt: string };
@@ -31,7 +22,7 @@ export async function getPageTitle(sessionId: string, path: string): Promise<str
 	return result.rows[0] ? String(result.rows[0].title) : null;
 }
 
-/** Records a page's title when the agent draws it; drawing it again under the same path keeps its state. */
+/** Drawing it again under the same path keeps its state. */
 export async function notePage(sessionId: string, path: string, title: string): Promise<void> {
 	const db = await appDb();
 	const now = new Date().toISOString();
@@ -42,7 +33,6 @@ export async function notePage(sessionId: string, path: string, title: string): 
 	});
 }
 
-/** Saves what changed (the page's value, its fields, its storage) and returns the new version. */
 export async function putPageState(
 	sessionId: string,
 	path: string,
@@ -74,7 +64,6 @@ export async function deletePage(sessionId: string, path: string): Promise<void>
 	await db.execute({ sql: 'DELETE FROM pages WHERE session_id = ? AND path = ?', args: [sessionId, path] });
 }
 
-/** Every page's title, for the Artifacts page. */
 export async function listPages(): Promise<PageRow[]> {
 	const db = await appDb();
 	const result = await db.execute('SELECT session_id, path, title, updated_at FROM pages');
@@ -96,7 +85,6 @@ const generations = new Map<string, number>();
 
 export const outputIndexGeneration = (sessionId: string) => generations.get(sessionId) ?? 0;
 
-/** Keeps the task's listing, unless its Library changed since `generation` was read. */
 export async function writeOutputIndex(sessionId: string, outputs: IndexedOutput[], generation: number): Promise<void> {
 	if (outputIndexGeneration(sessionId) !== generation) return;
 	const db = await appDb();
@@ -112,8 +100,6 @@ export async function forgetOutputIndex(sessionId: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'DELETE FROM output_index WHERE session_id = ?', args: [sessionId] });
 }
-
-/* Files you deleted from a task's Library, so its replies show them as deleted rather than broken. */
 
 export async function noteDeletedOutput(sessionId: string, path: string): Promise<void> {
 	const db = await appDb();

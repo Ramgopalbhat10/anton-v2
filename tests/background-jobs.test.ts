@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
-const jobs = await import('../src/services/background-jobs.ts');
+const jobs = await import('../src/services/sandbox/background-jobs.ts');
 const { checkJob, digestOf, durationText, hasRunningJob, jobNotice, jobsGate, parseInspect, settledJobs, startJob, startJobsGate, stopReplyJobs } = jobs;
 
 const resources = { runtime: 'container' as const, cpu: 1, memoryMiB: 1024, idleTimeoutMs: 60_000, lifetimeMs: 60_000, regions: [], allowedDomains: [] };
@@ -92,7 +92,7 @@ test('after a restart, a job is read back from its files', async () => {
 	const job = await startJob('t6', 'echo done; exit 4', undefined, deps);
 	await settledJobs('t6');
 	// A second copy of the module is a server that knows none of the jobs.
-	const restarted = '../src/services/background-jobs.ts?restart';
+	const restarted = '../src/services/sandbox/background-jobs.ts?restart';
 	const fresh = (await import(restarted)) as typeof jobs;
 	assert.match(await fresh.checkJob('t6', job.job, {}, deps), new RegExp(`^Job ${job.job} is exited with code 4 after \\d+s\\.\\nLog: `));
 });

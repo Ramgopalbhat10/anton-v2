@@ -15,12 +15,10 @@ import { openProjectSettings } from '@/lib/project-settings-modal';
 import { DEFAULT_VIEW, FACET_KEYS, type FacetKey, filterCount, matches, type TaskView, toggleIn } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
-/** A project's mark: its icon in its tint, or its initial when it has none. */
 export function SpaceMark({ space, size = 24, className }: { space: Pick<Space, 'name' | 'icon'>; size?: number; className?: string }) {
 	return <ProjectIcon value={space.icon} name={space.name} size={size} className={className} />;
 }
 
-/** The amber count of threads waiting on you, or a spinner while threads work. */
 function SpaceSignal({ space }: { space: Space }) {
 	if (space.counts.waiting) {
 		return (
@@ -36,10 +34,8 @@ function SpaceSignal({ space }: { space: Space }) {
 const ROW =
 	'group/row relative flex min-w-0 shrink-0 items-center gap-2 rounded-control px-2 text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)';
 
-/** The page you are on, lifted out as a small card. */
 const LIFTED = 'data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
-/** A sidebar section's heading: its label and count in quiet type, and actions on hover. */
 export function SidebarHeading({ label, count, open, onToggle, children }: { label: string; count?: number; open: boolean; onToggle: () => void; children?: ReactNode }) {
 	return (
 		<div className="group/header mt-2 flex h-6 items-center gap-1">
@@ -59,12 +55,7 @@ export function SidebarHeading({ label, count, open, onToggle, children }: { lab
 	);
 }
 
-/**
- * A top-level group of the sidebar (Projects, Tasks): its name, its count,
- * and its actions at the far end, which show on hover or focus. The sections
- * inside it (Running, Recent) read as its children. With `onToggle` the name
- * folds the group away.
- */
+/** With `onToggle` the name folds the group away. */
 export function GroupHeading({ label, count, open = true, onToggle, children, className }: { label: string; count?: number; open?: boolean; onToggle?: () => void; children?: ReactNode; className?: string }) {
 	const name = (
 		<>
@@ -91,7 +82,6 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 				<h2 className={cn(look, 'm-0')}>{name}</h2>
 			)}
 			<span className="flex-1" />
-			{/* Its actions wait for the pointer or the keyboard, and stay while a menu of theirs is open. */}
 			{children ? (
 				<span className="flex shrink-0 items-center opacity-0 transition-opacity duration-(--t-fast) group-focus-within/group:opacity-100 group-hover/group:opacity-100 has-data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100">
 					{children}
@@ -101,7 +91,6 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 	);
 }
 
-/** The projects in the main sidebar, under Tasks and Reviews: each with what waits on you. */
 export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	const spaces = useSpaces();
 	const [open, setOpen] = useState(true);
@@ -134,7 +123,6 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	);
 }
 
-/** A thread in the project sidebar: its state as an icon, its title, and under it what it asks you or how long since it moved (and its repository when the project has several). */
 function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; active: boolean; repos: number; onNavigate: () => void }) {
 	const state = thread.threadState ?? 'idle';
 	return (
@@ -167,11 +155,6 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 /** Threads narrow by these; their state is what the sections already group by. */
 const THREAD_FACETS = FACET_KEYS.filter((key) => key !== 'status');
 
-/**
- * The heading over a project's threads, with search and filters at its end, as the
- * sidebar's Tasks has: searching takes the heading's row, and filters in use show
- * as chips in its place.
- */
 function ThreadsToolbar({
 	threads,
 	shown,
@@ -236,7 +219,6 @@ function ThreadsToolbar({
 	);
 }
 
-/** A state's threads under its mono label and count; Resolved starts folded. */
 function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: ThreadState; threads: Session[]; activeId?: string; repos: number; onNavigate: () => void }) {
 	const [open, setOpen] = useState(state !== 'resolved' || threads.some((thread) => thread.id === activeId));
 	const active = threads.some((thread) => thread.id === activeId);
@@ -261,11 +243,6 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 	);
 }
 
-/**
- * The sidebar inside a project: a switcher to other projects, the
- * coordinator pinned first, then the threads by state, what needs you on
- * top. "All tasks" goes back to the usual sidebar.
- */
 export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId: string; threadId?: string; onNavigate: () => void }) {
 	const navigate = useNavigate();
 	const spaces = useSpaces();

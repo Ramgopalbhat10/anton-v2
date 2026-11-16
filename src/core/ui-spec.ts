@@ -1,11 +1,4 @@
-/*
- * The components the agent can put in a reply with its `show` tool: a small
- * tree of cards, text, figures, tables, charts and inputs, drawn in the
- * thread with Anton's own components. The server checks a tree against these
- * types and limits before the user sees it (src/services/show.ts); the page
- * draws it (src/web/components/show-card.tsx). Both read this file, so it
- * imports nothing.
- */
+// Shared by the server's checks and the page's drawing, so it imports nothing.
 
 export type UiTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 export type UiFormat = 'text' | 'number' | 'percent' | 'currency' | 'duration';
@@ -50,7 +43,6 @@ export type UiSpec = { title?: string; children: UiNode[] };
 
 export type UiNodeType = UiNode['type'];
 
-/** Limits that keep a card small enough to read and to draw quickly. */
 export const UI_LIMITS = {
 	nodes: 300,
 	depth: 6,
@@ -63,25 +55,20 @@ export const UI_LIMITS = {
 	bytes: 60_000,
 } as const;
 
-/** Inputs whose values a form sends and formulas read. */
 export const INPUT_TYPES = new Set<UiNodeType>(['choice', 'select', 'text_input', 'number', 'toggle']);
 
 export function childrenOf(node: UiNode): UiNode[] {
 	return 'children' in node ? node.children : [];
 }
 
-/**
- * An image's path in the Library. The agent knows the Library as the sandbox's outputs folder,
- * so a path through it (`/workspace/outputs/shot.png`, `../outputs/shot.png`, `outputs/shot.png`)
- * names the Library path after it.
- */
+/** The agent knows the Library as the outputs folder, so a path through it (`/workspace/outputs/x`, `../outputs/x`, `outputs/x`) names the Library path after it. */
 export function libraryPath(path: string): string {
 	const trimmed = path.trim();
 	const inside = /(?:^|\/)outputs\/(.+)$/.exec(trimmed);
 	return inside && (trimmed.startsWith('/') || trimmed.startsWith('../') || trimmed.startsWith('outputs/')) ? inside[1] : trimmed;
 }
 
-/** Every node in the tree, parents before their children. */
+/** Parents before their children. */
 export function walk(nodes: UiNode[], visit: (node: UiNode, depth: number) => void, depth = 1): void {
 	for (const node of nodes) {
 		visit(node, depth);
@@ -89,7 +76,6 @@ export function walk(nodes: UiNode[], visit: (node: UiNode, depth: number) => vo
 	}
 }
 
-/** Whether pressing something in the tree sends a message to the agent. */
 export function isInteractive(spec: UiSpec): boolean {
 	let found = false;
 	walk(spec.children, (node) => {
@@ -203,7 +189,6 @@ export function parseFormula(formula: string): Expr {
 	return expr;
 }
 
-/** The input names a formula reads. */
 export function formulaNames(expr: Expr): string[] {
 	switch (expr.kind) {
 		case 'num':
@@ -361,19 +346,16 @@ function nodeText(node: UiNode, depth: number): string[] {
 	}
 }
 
-/** The card as plain text, Markdown where it helps. */
 export function specText(spec: UiSpec): string {
 	return [spec.title ? `## ${spec.title}` : '', ...spec.children.flatMap((node) => nodeText(node, 1))].filter(Boolean).join('\n');
 }
 
 /* What pressing something sends: the user's next message, in their words as far as possible. */
 
-/** What a button sends. */
 export function buttonMessage(node: Extract<UiNode, { type: 'button' }>): string {
 	return node.message?.trim() || node.label;
 }
 
-/** An input's value as words: the chosen options' labels, a toggle's on or off. */
 export function inputText(node: UiNode, value: unknown): string {
 	if (node.type === 'choice' || node.type === 'select') {
 		const chosen = Array.isArray(value) ? value : value === undefined || value === '' ? [] : [value];
@@ -384,7 +366,6 @@ export function inputText(node: UiNode, value: unknown): string {
 	return String(value);
 }
 
-/** What submitting a form sends: its title, then each input as "label: value". */
 export function formMessage(node: Extract<UiNode, { type: 'form' }>, values: Record<string, unknown>): string {
 	const lines: string[] = [];
 	walk(node.children, (child) => {

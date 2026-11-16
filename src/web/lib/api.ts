@@ -29,11 +29,9 @@ export type ModelInfo = {
 	variant?: { of: string; context: string | null; fast: boolean };
 };
 
-/** One provider a gateway can send a model's calls to, which a task's route can name. */
 export type ModelEndpoint = {
 	slug: string;
 	name: string;
-	/** US dollars per million tokens through this provider. */
 	price: { input: number; output: number };
 	contextLength: number;
 	/** Median seconds to the first token, tokens a second and percent of calls answered, recently, where the gateway says. */
@@ -46,16 +44,16 @@ export type RunOn = 'sandbox' | 'host';
 /** Where tasks can run: the sandbox provider's name, and whether this server is a choice of its own. */
 export type RunnersView = { sandbox: string; host: boolean };
 
-/** A sealed secret, which the agent can use in http_request but never read (src/services/sealed-secrets.ts). */
+/** A sealed secret: the agent can use it in http_request but never read it. */
 export type SealedSecret = { name: string; hosts: string[]; proxy: string | null; readsDirect: boolean; source: { by: 'you' } | { by: 'task'; taskId: string }; updatedAt: string };
 export type SealedSecretChange = { value?: string | null; hosts: string[]; proxy?: string | null; readsDirect?: boolean | null };
 
-/** A task's model and reasoning level; null reasoning runs the model's default. */
+/** Null reasoning runs the model's default. */
 export type ModelChoice = { model: string; reasoning: Reasoning | null };
 
 export type Session = {
 	id: string;
-	/** The repository the task works on; null for a chat, which has none. */
+	/** Null for a chat. */
 	projectId: string | null;
 	/** `owner/name`; empty for a chat. */
 	repo: string;
@@ -68,11 +66,9 @@ export type Session = {
 	baseBranch: string;
 	baseSha: string;
 	status: SessionStatus;
-	/** The agent is working on a message right now. */
 	working: boolean;
 	/** The task has had a machine; until then it reads the repo without a sandbox, clone or branch. */
 	workspace: boolean;
-	/** The agent proposes a plan and changes nothing until it is approved. */
 	planMode: boolean;
 	/** Where its commands run: its sandbox, or `host`, the server Anton runs on. Missing from older servers. */
 	runOn?: RunOn;
@@ -80,7 +76,6 @@ export type Session = {
 	errorMessage: string | null;
 	checkpointAt: string | null;
 	createdAt: string;
-	/** When the task was pinned to the top of the sidebar; null when it is not. */
 	pinnedAt: string | null;
 	/** Its pull request as last read from GitHub; `checks` sums up the head commit's checks. */
 	pullRequest: {
@@ -89,23 +84,18 @@ export type Session = {
 		runs: Array<{ name: string; status: 'pending' | 'passed' | 'failed'; url: string }>;
 		/** Approved on GitHub and not changed since. */
 		approved?: boolean;
-		/** It cannot merge until its conflicts with the base branch are resolved. */
 		conflicts?: boolean;
 	} | null;
-	/** Model tokens and cost (US dollars) across every finished response. */
 	usage: Usage;
-	/** The latest message the task was given (by you, a follow-up or an automation), and when; null for tasks from before Anton kept it. */
+	/** The latest message the task was given (by you, a follow-up or an automation); null for older tasks. */
 	lastInput?: string | null;
 	lastInputAt?: string | null;
 	/** What the agent's last reply asks you, until you send a message. */
 	asking?: string | null;
-	/** The plan the agent's last reply proposed in plan mode, waiting for your approval. */
 	plan?: string | null;
 	/** The project the task is a thread of; null for a task of its own. */
 	spaceId?: string | null;
-	/** Where the task stands, the same for a project's thread and a task of its own (src/core/thread-state.ts). */
 	threadState?: ThreadState | null;
-	/** When the task was marked done. */
 	resolvedAt?: string | null;
 	/** The brief a queued thread starts with once a slot frees. */
 	brief?: string | null;
@@ -113,11 +103,10 @@ export type Session = {
 	lastReply?: string | null;
 	/** Someone else's pull request (`prUrl`) the task reviews; null for a task doing its own work. */
 	review?: { number: number; author: string; trusted: boolean; reviewedHead: string | null; automatic: boolean } | null;
-	/** The routine that started the task; null for one started by you or the coordinator. */
 	automationId?: string | null;
 };
 
-/** Where a task stands, in the order a project lists its threads (src/core/thread-state.ts). */
+/** In the order a project lists its threads. */
 export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
 export type ThreadState = (typeof THREAD_STATES)[number];
 
@@ -166,19 +155,16 @@ export type SpaceUsage = {
 
 /** `inputTokens` counts every input token, cached ones too; `cachedTokens` is the part read from the provider's cache. */
 export type Usage = { inputTokens: number; outputTokens: number; cost: number; cachedTokens?: number };
-/** One side of a reply's usage, the agent's own calls or its subagents', as the reply's metadata carries it. */
 export type UsagePart = Usage & { calls: number };
 
 /** A problem from background work, newest first. */
 export type LogEntry = { at: string; level: 'warn' | 'error'; message: string; detail: string | null; sessionId: string | null };
 
-/** A saved prompt, typed as `/name` in the composer. */
 export type Command = { name: string; prompt: string };
 
-/** Where a plugin lives on GitHub; a null ref is the repository's default branch. */
+/** A null ref is the repository's default branch. */
 export type PluginSource = { repo: string; path: string; ref: string | null };
 
-/** An installed plugin: skills every task's agent can use, kept as they were when installed. */
 export type Plugin = {
 	id: string;
 	name: string;
@@ -197,15 +183,12 @@ export type Plugin = {
 	pick: PluginPick | null;
 };
 
-/** What to install or look at: a marketplace's plugin, a GitHub address, or an installed plugin by its id. */
 export type PluginPick = { marketplace: string; name: string } | { address: string } | { plugin: string };
 
-/** A plugin as installing it would save it, with every file in its folder. */
 export type PluginPreview = {
 	id: string;
 	name: string;
 	description: string;
-	/** Its repository and folder, at the commit shown. */
 	source: PluginSource;
 	sha: string;
 	marketplace: string | null;
@@ -231,20 +214,16 @@ export type CatalogItem = { id: string; name: string; description: string; sourc
 
 export type SkillSummary = { name: string; description: string };
 
-/** One distinct state of the task's files, newest first in the timeline. */
 export type CheckpointSummary = { at: string; files: number; added: number | null; removed: number | null; commit: string | null };
 
-/** How a server's OAuth sign-in stands; `clientId` is a client you pasted for a server that lets no app register itself. */
+/** `clientId` is a client you pasted for a server that lets no app register itself. */
 export type McpSignIn = { state: 'signed-in' | 'needed' | 'none'; since: string | null; problem: string | null; clientId: string | null; pastedClient: boolean };
-/**
- * An MCP server, on or off for every task; the agent finds and calls its tools on demand. Its token is never sent
- * back, only whether it has one. `codeMode: false` keeps run_script's programs from calling it.
- */
+/** Its token is never sent back, only whether it has one. `codeMode: false` keeps run_script's programs from calling it. */
 export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; signIn: McpSignIn; codeMode?: boolean; enabled: boolean; addedAt: string };
 /** A server as saved: a token left null keeps the stored one, and an empty one removes it. */
 export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null };
 
-/** An account the agent's tools reach (Google), signed in to on your own OAuth client; its secret and tokens never leave the server. */
+/** Signed in on your own OAuth client; its secret and tokens never leave the server. */
 export type ConnectorAccount = {
 	id: string;
 	name: string;
@@ -253,7 +232,6 @@ export type ConnectorAccount = {
 	connectedAt: string | null;
 	scopes: string[];
 	problem: string | null;
-	/** Where the vendor sends the browser back, on Anton's own address. */
 	callbackPath: string;
 };
 export type MailboxOptions = { enabled: boolean; draft: boolean; send: boolean };
@@ -267,26 +245,22 @@ export type ConnectorMailbox = {
 	access: { read: true; draft: boolean; send: boolean } | null;
 };
 export type ConnectorsView = { accounts: ConnectorAccount[]; mailboxes: ConnectorMailbox[]; mcpServers: McpServer[]; composio: ComposioView };
-/** An app connected through Composio: Composio holds its sign-in and runs its tools; Anton keeps only its state. */
+/** Composio holds its sign-in and runs its tools; Anton keeps only its state. */
 export type ComposioAccount = {
 	toolkit: string;
 	name: string;
 	description: string;
 	category: string;
 	appUrl: string;
-	/** The logo URL Composio hosts for the app. */
 	logo: string;
 	enabled: boolean;
-	/** none (never connected), pending (a sign-in waits on you), active, failed. */
 	status: 'none' | 'pending' | 'active' | 'failed';
 	statusReason: string | null;
 	connectedAt: string | null;
 	addedAt: string;
-	/** The connected account's id at Composio, shown only while it is active. */
 	account: string | null;
 };
 export type ComposioView = { configured: boolean; keyFromEnv: boolean; accounts: ComposioAccount[] };
-/** An app in Composio's whole catalog, found by search or by its toolkit slug. */
 export type ComposioToolkitHit = {
 	slug: string;
 	name: string;
@@ -297,7 +271,6 @@ export type ComposioToolkitHit = {
 	toolsCount: number;
 	noAuth: boolean;
 };
-/** A connector tool call the agent asked to run, waiting for your Run in the thread or already decided. */
 export type ToolApproval = {
 	id: string;
 	connector: string;
@@ -309,7 +282,6 @@ export type ToolApproval = {
 	createdAt: string;
 	decidedAt: string | null;
 };
-/** An email the agent asked to send, waiting for your Send in the thread or already decided. */
 export type MailApproval = {
 	id: string;
 	connector: string;
@@ -323,7 +295,7 @@ export type MailApproval = {
 	decidedAt: string | null;
 };
 
-/** Repo settings every new sandbox for it gets. Variable values never leave the server, only their names. */
+/** Variable values never leave the server, only their names. */
 export type ProjectSettings = {
 	envKeys: string[];
 	setupScript: string;
@@ -331,7 +303,6 @@ export type ProjectSettings = {
 	checkCommand: string;
 	previewPorts: number[];
 	baseImage: string | null;
-	/** Whether the agent hears about failed checks, merge conflicts and new comments on its pull requests. */
 	followUps: boolean;
 	/** Whether Anton reviews the pull requests people open on the repo, and again after their pushes. */
 	reviewOthers: boolean;
@@ -343,9 +314,8 @@ export type Project = {
 	id: string;
 	repoFullName: string;
 	defaultBranch: string;
-	/** Notes every task's agent reads, one per line. */
 	memory: string;
-	/** When the image new tasks start from (repo cloned, dependencies installed) was built; null when there is none. */
+	/** When the image new tasks start from (repo cloned, dependencies installed) was built. */
 	warmedAt: string | null;
 } & ProjectSettings;
 
@@ -354,7 +324,6 @@ export type SettingsChange = Omit<ProjectSettings, 'envKeys'> & {
 	env: Record<string, string | null>;
 };
 
-/** A way tasks start on their own: from issues with a label, or on a schedule. */
 export type Automation = {
 	id: string;
 	projectId: string;
@@ -367,19 +336,16 @@ export type Automation = {
 	prompt: string;
 	model: string | null;
 	reasoning: Reasoning | null;
-	/** Its tasks start in plan mode and wait for approval. */
 	planFirst: boolean;
 	enabled: boolean;
 	lastRunAt: string | null;
 	lastError: string | null;
 	seen: number[];
-	/** The project its tasks start in, as threads. */
 	spaceId?: string | null;
 	/** A short name for what a schedule does, its runs' title; null until its first run names it. */
 	title?: string | null;
 	/** A skill's script that says whether a due run starts a thread, as `skill-name/scripts/file.js`. */
 	gate?: string | null;
-	/** What the gate last answered. */
 	lastGate?: { at: string; run: boolean; reason: string } | null;
 	createdAt: string;
 };
@@ -436,11 +402,10 @@ export type DiscussionEntry = {
 	path: string | null;
 	line: number | null;
 	at: string;
-	/** A review's verdict in words: approved, changes requested. */
 	verdict: string | null;
 };
 
-/** A pull request as GitHub's page shows it. `mergeable` is null while GitHub works it out. */
+/** `mergeable` is null while GitHub works it out. */
 export type PullRequestDetail = {
 	url: string;
 	number: number;
@@ -479,10 +444,7 @@ export type Budget = { limits: Limits; today: number; task: number | null; block
 export type SpendRow = { key: string | null; tokens: number; cost: number };
 /** One model's spend on one of the last 30 days (`YYYY-MM-DD`, server time); days with nothing spent are left out. */
 export type DailySpend = { day: string; model: string | null; tokens: number; cost: number };
-/**
- * A plan's use as Anton saw it: tokens and calls on its models, and what they would have cost at API prices.
- * The vendor does not say how much of the plan is left; `usagePage` is where it shows that.
- */
+/** A plan's use as Anton saw it, priced at API rates; the vendor does not say how much is left, `usagePage` does. */
 export type PlanUsage = {
 	id: string;
 	name: string;
@@ -496,7 +458,6 @@ export type PlanUsage = {
 	limitHitAt: string | null;
 	usagePage: string | null;
 };
-/** The parts of a task's context window, as the last model call measured them. */
 export type ContextPart = 'messages' | 'tools' | 'systemPrompt' | 'skills' | 'mcpTools';
 export type ContextView = {
 	model: string | null;
@@ -511,7 +472,7 @@ export type ContextView = {
 };
 export type UsageView = { since: string; today: number; month: number; byRepo: SpendRow[]; byModel: SpendRow[]; daily: DailySpend[]; plans?: PlanUsage[] };
 export type Connection = { id: string; name: string; provider: string; detail: string; state: 'ok' | 'set' | 'off' | 'failing' };
-/** One value a connection needs (src/services/setup.ts): where it comes from now, and the value itself unless it is a secret, whose last four characters stand in. */
+/** One value a connection needs: where it comes from now, and the value itself unless it is a secret, whose last four characters stand in. */
 export type SetupField = { env: string; label: string; secret: boolean; optional: boolean; fallback: string | null; source: 'saved' | 'environment' | null; value: string | null; hint: string | null };
 export type SetupOption = { id: string; label: string; fields: SetupField[] };
 /** A slot of Settings › Connections: `provider` is the one the next start uses; `restart` says it differs from what runs now. */
@@ -520,7 +481,7 @@ export type SetupView = { slots: SetupSlot[]; plans: string[]; canRunTasks: bool
 export type SetupInput = { provider: string; values: Record<string, string> };
 /** `enabled` offers the plan's models in the picker; `countAtApiPrices` counts their calls toward the caps at API prices. */
 export type SubscriptionOptions = { enabled: boolean; countAtApiPrices: boolean };
-/** A plan you can sign in to; the sign-in itself never leaves the server. */
+/** The sign-in itself never leaves the server. */
 export type Subscription = {
 	id: string;
 	name: string;
@@ -535,12 +496,9 @@ export type Subscription = {
 	email: string | null;
 	connectedAt: string | null;
 	problem: string | null;
-	/** When the current access token lapses; Anton renews it a few minutes before. */
 	expiresAt: string | null;
 	options: SubscriptionOptions;
-	/** The account's models, each with the tokens it used on the plan this month. */
-	/** `options` names the model's larger context and fast mode ("1M", "Fast"), whose tokens count toward it. */
-	/** A gateway's models also carry their vendor and price per million tokens. */
+	/** Tokens each model used on the plan this month; `options` names its larger context and fast mode ("1M", "Fast"); a gateway's also carry vendor and price. */
 	models: Array<
 		Pick<ModelInfo, 'id' | 'name' | 'contextLength' | 'vision' | 'reasoning' | 'defaultReasoning'> & {
 			tokens: number;
@@ -568,11 +526,9 @@ export type Subscription = {
 	keySource?: 'settings' | 'environment' | null;
 	envVar?: string | null;
 };
-/** One of a plan's own limits as the vendor reports it: five hours, a week, a month. */
 export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
 export type RunningTask = { id: string; title: string; repo: string; createdAt: string };
 export type ComputeView = { provider: string; app: string | null; running: RunningTask[]; others: number };
-/** What every new sandbox gets; see Settings › Sandboxes and Images. */
 export type SandboxSettings = {
 	cpu: number;
 	memoryMiB: number;
@@ -595,11 +551,9 @@ export type GeneralSettings = {
 	visualReplies: 'off' | 'some' | 'more';
 	/** Pages the agent writes can call web APIs, through Anton. */
 	pageNetwork: boolean;
-	/** The model generate_image draws with; null is the server's default. */
 	imageModel: string | null;
 	/** The OpenRouter model that names tasks and routines; null is the server's default. */
 	titleModel: string | null;
-	/** What an unset title model falls back to. */
 	titleModelDefault?: string;
 	/** Each helper agent's own model; null uses the task's. */
 	agentModels: Record<HelperAgent, { model: string; reasoning: Reasoning | null } | null>;
@@ -607,20 +561,16 @@ export type GeneralSettings = {
 	compactAt: 100_000 | 200_000 | 400_000 | null;
 	/** The same for Claude Code's models, which run on the plan's limits. */
 	claudeCodeCompactAt: 100_000 | 200_000 | 400_000 | null;
-	/** The models Anton runs behind the agents for its own work; null uses each one's default. */
 	backgroundModels: Record<BackgroundTask, string | null>;
-	/** The effort each of those models works at; null uses the model's default. */
 	backgroundReasoning: Record<BackgroundTask, Reasoning | null>;
 };
 /** Work Anton has a model do behind the agents: reading long web results, seeing the screen, summarizing on compaction. */
 export type BackgroundTask = 'webDigest' | 'vision' | 'compaction';
-/** A model the agent's generate_image tool can draw with. */
 export type ImageModelInfo = { id: string; name: string; vendor: string; description: string; references: number; aspectRatios: string[]; transparent: boolean };
 export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
 /** Variable names only; values never leave the server. */
 export type SecretsView = { shared: string[]; repos: Array<{ projectId: string; repo: string; names: string[] }> };
-/** A pull request the agent opened or reviews, grouped by who it waits on. */
 export type ReviewGroup = 'failing' | 'checking' | 'ready' | 'merged' | 'closed' | 'unknown';
 export type ReviewItem = {
 	sessionId: string;
@@ -654,25 +604,19 @@ export type BrowserView = {
 		needsYou: string | null;
 	} | null;
 };
-/** The desktop inside the task's sandbox, as the Computer panel shows it. */
 export type ComputerView = {
 	/** The task's sandbox runs. */
 	live: boolean;
-	/** Its desktop runs. */
 	running: boolean;
-	/** Its browser runs, shown through its live view. */
 	browser: boolean;
 	screen: { width: number; height: number };
-	/** The agent is using the computer, or did a moment ago. */
 	agentBusy: boolean;
 	/** You took over: the agent's steps wait until you hand it back. */
 	userControl: boolean;
 };
 
-/** The view with a short-lived address to connect to. */
 export type ComputerConnection = ComputerView & { url: string };
 
-/** An element picked in the Browser panel, as the page described it. */
 export type PickedElement = {
 	tag: string;
 	selector: string;
@@ -687,23 +631,18 @@ export type PickedElement = {
 	image: string | null;
 };
 
-/** One tool call a subagent made, as the Agents panel shows it. */
-/** What a browser step the decision model drove did inside it: each action, how sure the model was, and what it cost. */
-/** One call a run_script program made, as the thread lists it. */
 export type ScriptCall = { tool: string; input: string; state: 'running' | 'done' | 'failed'; durationMs: number | null };
 export type StepDetail = { outcome: string | null; actions: Array<{ what: string; p: number | null; failed?: boolean }>; decisions: number; cost: number; script?: boolean };
 export type SubagentStep = { id: string; tool: string; input: unknown; state: 'running' | 'done' | 'failed'; at: string; durationMs: number | null; detail?: StepDetail };
-/** One piece of work the agent handed to a subagent: its brief, steps, use, and answer. */
-/** The agent's latest todo list for a task (src/services/todos.ts); each one it writes replaces the last. */
+/** Each list the agent writes replaces the last. */
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export type Todo = { content: string; status: TodoStatus; evidence?: string };
 export type TodoList = { todos: Todo[]; updatedAt: string };
 
-/** Where the agent read a message sent while it worked: after which tool call of its reply, and whether the reply had already said its last words (src/services/joins.ts). */
+/** Where the agent read a message sent while it worked: after which tool call, and whether the reply had already said its last words. */
 export type Join = { text: string; afterTool: string; final: boolean; at: string };
-/** A message the agent has not read yet (src/services/waiting.ts), by the runtime's submission id. */
+/** A message the agent has not read yet, by the runtime's submission id. */
 export type WaitingMessage = { id: string; text: string; at: string };
-/** What the agent is doing this moment (src/services/agent-now.ts). */
 export type { AgentNow };
 
 export type SubagentRun = {
@@ -724,13 +663,11 @@ export type SubagentRun = {
 	result: string | null;
 };
 
-/** A device that gets notifications with no Anton tab open (src/services/push.ts). */
 export type PushDevice = { id: string; name: string; addedAt: string; lastSentAt: string | null; lastError: string | null };
 /** `publicKey` is empty when the server cannot send notifications. */
 export type PushView = { publicKey: string; devices: PushDevice[]; finished: boolean };
 export type PushSubscriptionJson = { endpoint: string; keys: { p256dh: string; auth: string } };
 
-/** A moment in a task worth a look, for the Notifications dialog (src/services/notifications.ts). */
 export type NotificationKind =
 	| 'question'
 	| 'plan'
@@ -760,19 +697,15 @@ export type AppNotification = {
 export type NotificationsView = { notifications: AppNotification[]; unread: Record<NotificationCategory, number> };
 
 export type Output = { path: string; size: number; mtimeMs: number };
-/** Who holds the files you add on the Artifacts page: no task (src/services/added-files.ts). */
+/** The owner of files you add on the Artifacts page, which belong to no task. */
 export const ADDED_FILES = 'added-files';
-/** Something the agent made in a task, for the Artifacts page (src/services/artifacts.ts). */
 export type Artifact = Output & { sessionId: string; title: string; task: { title: string; spaceId: string | null; chat: boolean }; /** You added it on the Artifacts page, so it is from no task. */ added?: boolean };
 export type OutputsPayload = { source: Source; at: string | null; outputs: Output[]; /** Files you deleted from the Library, which replies show as deleted. */ deleted: string[] };
 
 /** Statuses a proxy in front of Anton answers with when Anton took too long or could not be reached. */
 const GATEWAY = new Set([502, 503, 504, 522, 524]);
 
-/**
- * What a failed request says, in words a menu or toast can show. Anton answers errors as JSON; a proxy in
- * front of it (Cloudflare closes a request at 100 seconds) answers with a whole HTML page, never shown as is.
- */
+/** A failed request in words a toast can show; a proxy in front of Anton (Cloudflare closes at 100 s) answers with an HTML page, never shown as is. */
 export function errorMessage(status: number, statusText: string, body: string): string {
 	try {
 		const error = (JSON.parse(body) as { error?: unknown }).error;
@@ -818,9 +751,7 @@ export const api = {
 	rebuildPreparedImage: (projectId: string) => post<Project>(`/api/projects/${projectId}/prepared-image/rebuild`),
 	/** Wakes a sandbox for a new task while it is typed, under the id the task will have; asked again while the draft stays. */
 	wakeDraft: (projectId: string, taskId: string, branch?: string) => post<{ waking: boolean }>(`/api/projects/${projectId}/wake`, { taskId, ...(branch ? { branch } : {}) }),
-	/** Lets a draft's sandbox go: its text was cleared, or it moved to another repo. */
 	releaseDraft: (taskId: string) => json<{ released: boolean }>(`/api/drafts/${taskId}/wake`, { method: 'DELETE', keepalive: true }),
-	/** Starts a task's sandbox while a message to it is typed. */
 	wakeSession: (id: string) => post<{ waking: boolean }>(`/api/sessions/${id}/wake`),
 	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
 	backgroundModelDefaults: () => json<{ defaults: Record<BackgroundTask, string | null> }>('/api/settings/background-models'),
@@ -868,7 +799,6 @@ export const api = {
 	setConnectorClient: (account: string, client: { clientId: string; clientSecret: string | null }) =>
 		json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/accounts/${account}/client`, { method: 'PUT', body: JSON.stringify(client) }),
 	disconnectAccount: (account: string) => json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/accounts/${account}`, { method: 'DELETE' }),
-	/** The vendor's consent page, which comes back to Anton and then to Settings › Connectors. */
 	connectMailbox: (id: string, access: 'read' | 'draft') => post<{ url: string }>(`/api/connectors/mailboxes/${id}/connect`, { origin: window.location.origin, access }),
 	setMailboxOptions: (id: string, options: MailboxOptions) =>
 		json<Omit<ConnectorsView, 'mcpServers'>>(`/api/connectors/mailboxes/${id}`, { method: 'PUT', body: JSON.stringify(options) }),
@@ -965,14 +895,12 @@ export const api = {
 	previews: (id: string) => json<PreviewsPayload>(`/api/sessions/${id}/previews`),
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
-	/** A reply's trace, by the id its metadata carries. */
 	trace: (id: string, traceId: string) => json<Trace>(`/api/sessions/${id}/traces/${encodeURIComponent(traceId)}`),
 	/** Stops one running subagent; the agent is told what it had done and carries on. */
 	stopSubagent: async (id: string, runId: string) => void (await post(`/api/sessions/${id}/subagents/${encodeURIComponent(runId)}/stop`)),
 	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),
 	todos: (id: string) => json<{ list: TodoList | null }>(`/api/sessions/${id}/todos`),
 	joins: (id: string) => json<{ joins: Join[] }>(`/api/sessions/${id}/joins`),
-	/** Messages sent while the agent worked that it has not read yet. */
 	waiting: (id: string) => json<{ messages: WaitingMessage[] }>(`/api/sessions/${id}/waiting`),
 	now: (id: string) => json<{ now: AgentNow | null }>(`/api/sessions/${id}/now`),
 	browser: (id: string) => json<BrowserView>(`/api/sessions/${id}/browser`),
@@ -985,7 +913,6 @@ export const api = {
 	browserScreenshot: (id: string) => post<{ data: string; width: number; height: number }>(`/api/sessions/${id}/browser/screenshot`),
 	watchBrowser: (id: string) => post<BrowserView>(`/api/sessions/${id}/browser/watch`),
 	computer: (id: string) => json<ComputerView>(`/api/sessions/${id}/computer`),
-	/** Starts the sandbox if it is not running, then its desktop. */
 	startComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer`),
 	connectComputer: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/connect`),
 	connectSandboxBrowser: (id: string) => post<ComputerConnection>(`/api/sessions/${id}/computer/browser`),
@@ -1011,7 +938,6 @@ export const api = {
 	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
 	downloadArtifacts: async (items: { sessionId: string; path: string }[]) =>
 		(await request('/api/artifacts/download', { method: 'POST', body: JSON.stringify({ items }) })).blob(),
-	/** Adds a file of your own to the Artifacts page. */
 	addArtifact: (file: File) =>
 		json<{ path: string; sessionId: string }>(`/api/artifacts?name=${encodeURIComponent(file.name)}`, {
 			method: 'POST',
@@ -1028,7 +954,6 @@ export const api = {
 			body: file,
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
-	/** A file attached to a message: saved to the task's Library and read as text for the message. */
 	attachToTask: (id: string, file: File) =>
 		json<AttachedFile>(`/api/sessions/${id}/attachments?name=${encodeURIComponent(file.name)}`, {
 			method: 'POST',
@@ -1054,7 +979,6 @@ export const api = {
 			body: file,
 			headers: { 'Content-Type': file.type || 'application/octet-stream' },
 		}),
-	/** A file attached to a message to the coordinator or a new thread's brief: saved to the project's Library. */
 	attachToProject: (id: string, file: File) =>
 		json<AttachedFile>(`/api/spaces/${id}/attachments?name=${encodeURIComponent(file.name)}`, {
 			method: 'POST',
@@ -1063,7 +987,6 @@ export const api = {
 		}),
 	deleteSpaceFile: async (id: string, path: string) => void (await request(spaceFileUrl(id, path), { method: 'DELETE' })),
 	spaceFileText: async (id: string, path: string) => (await request(spaceFileUrl(id, path))).text(),
-	/** Stops the coordinator's current turn. */
 	stopCoordinator: async (id: string) => void (await request(`/api/agents/coordinator/${id}/abort`, { method: 'POST' })),
 	/** An incognito chat's model choice, kept in memory only — there is no session record. */
 	chooseIncognito: (id: string, choice: { model?: string; reasoning?: Reasoning | null; route?: ModelRoute | null }) =>
@@ -1082,11 +1005,7 @@ export const api = {
 
 export const spaceFileUrl = (id: string, path: string) => `/api/spaces/${id}/file?path=${encodeURIComponent(path)}`;
 
-/**
- * Pages refetch when the server says something changed (see live-updates.ts).
- * Polling is only a safety net, for changes nobody announces: a sandbox
- * stopping when idle, or files edited from the terminal.
- */
+/** Pages refetch on server events (live-updates.ts); polling is only a safety net for changes nobody announces, like an idle sandbox stopping or terminal edits. */
 export const SAFETY_NET_MS = 60_000;
 
 /** A live sandbox can change under the terminal, so its views are checked more often. */
@@ -1099,8 +1018,6 @@ export const isChat = (session: Pick<Session, 'projectId'>) => session.projectId
 export const branchLabel = (session: Session) =>
 	isChat(session) ? (session.workspace ? 'scratch sandbox' : 'no sandbox') : session.workspace ? session.branch : `${session.baseBranch} (read-only)`;
 
-/** The repository's short name, or Chat for a task without one. */
 export const repoShort = (session: Pick<Session, 'projectId' | 'repo'>) => (isChat(session) ? 'Chat' : (session.repo.split('/').pop() ?? session.repo));
 
-/** Where a task works, in a line: repository and branch, or Chat and whether it has a sandbox. */
 export const placeLabel = (session: Session) => `${isChat(session) ? 'Chat' : session.repo} · ${branchLabel(session)}`;

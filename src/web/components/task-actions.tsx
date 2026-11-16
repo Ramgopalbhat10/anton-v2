@@ -12,7 +12,6 @@ import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { useModelName } from '@/components/model-picker';
 
-/** The task's pull request, refreshed independently when the header is open. */
 export function PullRequestChip({ session }: { session: Session }) {
 	const pull = useQuery({ queryKey: ['pull-request', session.id, session.prUrl], queryFn: () => api.pullRequest(session.id), enabled: Boolean(session.prUrl), staleTime: 60_000 });
 	const state = pull.data?.state;
@@ -21,7 +20,6 @@ export function PullRequestChip({ session }: { session: Session }) {
 	return <PrStatus thread={{ prUrl: session.prUrl, pullRequest }} link showConflicts={false} showFailing={false} />;
 }
 
-/** Renames the task, showing the new title at once wherever the task is listed. */
 function useRename(session: Session) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -40,7 +38,6 @@ function useRename(session: Session) {
 	});
 }
 
-/** The title being edited: Enter or leaving the field saves, Escape cancels. */
 export function TitleInput({ session, onDone, className }: { session: Session; onDone: () => void; className?: string }) {
 	const rename = useRename(session);
 	const save = (value: string) => {
@@ -64,7 +61,6 @@ export function TitleInput({ session, onDone, className }: { session: Session; o
 	);
 }
 
-/** Click to rename. */
 export function TaskTitle({ session, editing, onEditingChange }: { session?: Session; editing: boolean; onEditingChange: (next: boolean) => void }) {
 	if (editing && session) return <TitleInput session={session} onDone={() => onEditingChange(false)} className="min-w-[100px] flex-auto font-medium" />;
 	return (
@@ -79,7 +75,6 @@ export function TaskTitle({ session, editing, onEditingChange }: { session?: Ses
 	);
 }
 
-/** Pins the task to the top of the sidebar, or unpins it. */
 export function usePin(session: Session) {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -91,7 +86,6 @@ export function usePin(session: Session) {
 	});
 }
 
-/** Forks the task into a new one with its files, and opens it. */
 export function useFork(session: Session) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -104,7 +98,6 @@ export function useFork(session: Session) {
 	});
 }
 
-/** Opens the task with its History panel, where any earlier state of the files can be restored. */
 export function useRewind(session: Session) {
 	const navigate = useNavigate();
 	return () => void navigate({ to: '/agents/$sessionId', params: { sessionId: session.id }, search: { app: 'code', panel: 'History' } });
@@ -112,7 +105,6 @@ export function useRewind(session: Session) {
 
 const taskLink = (session: Session) => new URL(session.spaceId ? `/projects/${session.spaceId}/threads/${session.id}` : `/agents/${session.id}`, window.location.origin).href;
 
-/** Moving a task into a project makes it a thread there; out of one, an ordinary task again. Done threads fold away in the project. */
 function ProjectItems({ session }: { session: Session }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -136,7 +128,6 @@ function ProjectItems({ session }: { session: Session }) {
 	const others = (spaces.data?.spaces ?? []).filter((space) => space.id !== session.spaceId && space.state !== 'archived');
 	return (
 		<>
-			{/* Any task can be done, as a project's thread can: the sidebar and the project show the same states. */}
 			<MenuItem icon={session.resolvedAt ? RotateCcw : CircleCheck} disabled={resolve.isPending} onSelect={() => resolve.mutate(!session.resolvedAt)}>
 				{session.resolvedAt ? (session.spaceId ? 'Reopen thread' : 'Reopen') : 'Mark done'}
 			</MenuItem>
@@ -165,7 +156,6 @@ function ProjectItems({ session }: { session: Session }) {
 	);
 }
 
-/** What the task has cost so far, which model it runs on and the branch it works on. */
 function TaskFacts({ session }: { session: Session }) {
 	const { inputTokens, outputTokens, cost } = session.usage;
 	const modelName = useModelName();
@@ -188,13 +178,7 @@ function TaskFacts({ session }: { session: Session }) {
 	);
 }
 
-/**
- * Everything to do with a task, in the task header and on each sidebar row:
- * rename, copy its link, pin it, go back to an earlier state, fork it, ask
- * for a pull request or a review of it, open the repo's settings, stop the
- * sandbox, or delete the task. Delete asks twice inside the menu, so a stray
- * click never loses a task.
- */
+/** Delete asks twice inside the menu, so a stray click never loses a task. */
 export function TaskMenu({
 	session,
 	onRename,
@@ -209,7 +193,6 @@ export function TaskMenu({
 	onAskForPullRequest?: () => void;
 	onOpenChange?: (open: boolean) => void;
 	size?: 'xs' | 'sm';
-	/** Beside the trigger in the sidebar, below it in the task header. */
 	side?: 'bottom' | 'right';
 }) {
 	const queryClient = useQueryClient();

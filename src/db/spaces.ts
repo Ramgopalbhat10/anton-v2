@@ -4,40 +4,26 @@ import { announce } from '../core/changes.ts';
 import { HELPER_AGENTS, type AgentModel, type HelperAgent } from '../core/types.ts';
 import { appDb } from './client.ts';
 
-/** How a project's coordinator treats new work: starts threads itself, or proposes them for you to start. */
 export type Autonomy = 'start' | 'propose';
 /** A paused project starts no threads; an archived one is put away. Both keep their threads. */
 export type SpaceState = 'active' | 'paused' | 'archived';
 
-/**
- * A project, called a space in code because `projects` already means a
- * repository: a coordinator conversation that hands work to parallel
- * threads, each an ordinary task on one of the project's repositories.
- */
+/** A project, called a space in code because `projects` already means a repository. */
 export type Space = {
 	id: string;
 	name: string;
-	/** One emoji or short mark shown with the name; null shows its initial. */
 	icon: string | null;
-	/** One line on what the project is for. */
 	goal: string;
-	/** Sent to every thread and the coordinator. */
 	instructions: string;
-	/** Notes the coordinator and threads save as they learn: decisions, preferences, pitfalls. */
 	memory: string;
-	/** The coordinator's model; null uses a small default. */
 	coordinatorModel: string | null;
 	coordinatorReasoning: Reasoning | null;
-	/** New threads' model; null uses Settings › General. */
 	threadModel: string | null;
 	threadReasoning: Reasoning | null;
-	/** Each helper agent's own model for the project's threads; null follows Settings › General, which gives it the task's when it names none. */
 	agentModels: Record<HelperAgent, AgentModel | null>;
-	/** Threads working at once; more wait as queued. */
 	maxParallel: number;
 	autonomy: Autonomy;
 	state: SpaceState;
-	/** Repository (`projects`) ids, in the order they were added. */
 	repoIds: string[];
 	createdAt: string;
 	updatedAt: string;
@@ -46,7 +32,7 @@ export type Space = {
 type Row = Record<string, unknown>;
 const optional = (value: unknown) => (value == null ? null : String(value));
 
-/** The project's helper choices, all five keys: the stored JSON names only what was set, and a missing key follows Settings › General. */
+/** The stored JSON names only what was set; a missing key follows Settings › General. */
 function agentModelsOf(value: unknown): Record<HelperAgent, AgentModel | null> {
 	let stored: Record<string, unknown> = {};
 	try {
@@ -157,13 +143,11 @@ export async function updateSpace(id: string, update: SpaceUpdate): Promise<void
 	announce({ kind: 'space', id, what: 'settings' });
 }
 
-/** Marks the project as just used, so it lists first. */
 export async function touchSpace(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE spaces SET updated_at = ? WHERE id = ?', args: [new Date().toISOString(), id] });
 }
 
-/** Sets the project's repositories, in this order. */
 export async function setSpaceRepos(id: string, projectIds: string[]): Promise<void> {
 	const db = await appDb();
 	await db.batch(
@@ -177,7 +161,6 @@ export async function setSpaceRepos(id: string, projectIds: string[]): Promise<v
 	announce({ kind: 'space', id, what: 'settings' });
 }
 
-/** Adds one line to the project's memory while it stays under `maxLength`; false when it is full. */
 export async function appendSpaceMemory(id: string, line: string, maxLength: number): Promise<boolean> {
 	const db = await appDb();
 	const result = await db.execute({
@@ -189,7 +172,7 @@ export async function appendSpaceMemory(id: string, line: string, maxLength: num
 	return result.rowsAffected === 1;
 }
 
-/** Removes the project; its threads stay as tasks of their own, with their branches and pull requests. */
+/** Its threads stay as tasks of their own, with their branches and pull requests. */
 export async function deleteSpaceRecord(id: string): Promise<void> {
 	const db = await appDb();
 	await db.batch(
@@ -207,8 +190,7 @@ export async function deleteSpaceRecord(id: string): Promise<void> {
 	announce({ kind: 'sessions' });
 }
 
-/** Dollars and tokens the project has spent since `since`, by thread (the coordinator under the project's own id) and by model. */
-/** Spend since `since` by thread and model; by day since `dailySince`, which may reach further back. */
+/** By thread (the coordinator under the project's own id) and model; by day since `dailySince`, which may reach further back. */
 export async function spaceSpend(id: string, since: Date, dailySince = since): Promise<{ byThread: Array<{ key: string; tokens: number; cost: number }>; byModel: Array<{ key: string | null; tokens: number; cost: number }>; daily: Array<{ day: string; tokens: number; cost: number }> }> {
 	const db = await appDb();
 	const args = [id, since.toISOString()];

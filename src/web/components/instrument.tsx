@@ -31,16 +31,11 @@ export const toneFill = (tone: Tone) => FILL[tone];
 /** A tone for how much of a cap is used: calm, then amber from 80 percent, red when reached. */
 export const usedTone = (fraction: number): Tone => (fraction >= 1 ? 'danger' : fraction >= 0.8 ? 'warning' : 'accent');
 
-/** The quiet caption under gauges, in card footers and beside a heading. */
 export function Caption({ children, className, tone }: { children: ReactNode; className?: string; tone?: Tone }) {
 	return <span className={cn('in-caption', tone && TEXT[tone], className)}>{children}</span>;
 }
 
-/**
- * The one dot that says a state: grey for off or idle, the accent for live,
- * attention for what waits on you, amber for a caution, red for a failure.
- * It pulses only while something is running.
- */
+/** Pulses only while something is running. */
 export function StatusDot({ tone = 'neutral', color, pulse, title, className }: { tone?: Tone | 'off'; color?: string; pulse?: boolean; title?: string; className?: string }) {
 	return (
 		<span
@@ -52,7 +47,6 @@ export function StatusDot({ tone = 'neutral', color, pulse, title, className }: 
 	);
 }
 
-/** A status as a dot and a word, in a card header or a row: "Live", "2 failing", "Connected". Neutral has no dot. */
 export function Status({ tone = 'neutral', color, pulse, children }: { tone?: Tone; /** A colour of its own, over the tone's (a PR state's). */ color?: string; pulse?: boolean; children: ReactNode }) {
 	return (
 		<span className={cn('in-caption inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap', !color && TEXT[tone])} style={color ? { color } : undefined}>
@@ -62,7 +56,7 @@ export function Status({ tone = 'neutral', color, pulse, children }: { tone?: To
 	);
 }
 
-/** A card's icon: a bare glyph in the tile's footprint, so titles still line up. */
+/** A bare glyph in the tile's footprint, so titles still line up. */
 export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: IconComponent; tone?: Tone; size?: number }) {
 	return (
 		<span
@@ -74,10 +68,6 @@ export function IconTile({ icon, tone = 'neutral', size = 26 }: { icon: IconComp
 	);
 }
 
-/**
- * A titled card: icon, title / what it covers, a status on the right, then its
- * body, and a footer with a caption and the actions that change it.
- */
 export function Card({
 	icon,
 	title,
@@ -123,7 +113,6 @@ export function Card({
 	);
 }
 
-/** A padded stretch of a card, ruled off from the one above it. */
 export function CardSection({ label, hint, children, className, ruled = true }: { label?: ReactNode; hint?: ReactNode; children?: ReactNode; className?: string; ruled?: boolean }) {
 	return (
 		<div className={cn('flex flex-col gap-3 px-4 py-3.5', ruled && 'border-t border-(--line)', className)}>
@@ -138,7 +127,6 @@ export function CardSection({ label, hint, children, className, ruled = true }: 
 	);
 }
 
-/** The bar along a card's bottom: a caption on the left, its actions on the right. */
 export function CardFooter({ caption, children }: { caption?: ReactNode; children?: ReactNode }) {
 	return (
 		<footer className="mt-auto flex min-h-11 flex-wrap items-center gap-2 border-t border-(--line) px-4 py-2">
@@ -153,10 +141,6 @@ export function Well({ children, className, grid }: { children: ReactNode; class
 	return <div className={cn(!grid && 'in-well', 'overflow-hidden', className)}>{children}</div>;
 }
 
-/**
- * A hero number: the value large, its fraction dimmed, a unit and a note in
- * mono beside it. "$160.42" reads as "$160" and ".42".
- */
 export function Figure({
 	value,
 	unit,
@@ -194,7 +178,6 @@ export function Figure({
 	);
 }
 
-/** A change beside a figure: "+12%", "−$0.40", "3 failing". */
 export function Delta({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
 	const bg: Record<Tone, string> = {
 		neutral: 'bg-(--bg-active)',
@@ -207,7 +190,6 @@ export function Delta({ tone = 'neutral', children }: { tone?: Tone; children: R
 	return <span className={cn('in-num inline-flex h-[18px] items-center rounded-inner px-1.5 text-micro font-medium whitespace-nowrap', bg[tone], TEXT[tone])}>{children}</span>;
 }
 
-/** Stats side by side, ruled apart: a value over a caption. */
 export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; color?: string; title?: string }>; className?: string }) {
 	return (
 		<div className={cn('grid border-t border-(--line)', className)} style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}>
@@ -221,7 +203,6 @@ export function StatRow({ stats, className }: { stats: Array<{ label: ReactNode;
 	);
 }
 
-/** Labelled values on a grid, like a spec sheet: a mono caption over each value, two across on a phone and three wider. */
 export function SpecGrid({ items, className }: { items: Array<{ label: ReactNode; value: ReactNode; tone?: Tone; title?: string }>; className?: string }) {
 	return (
 		<dl className={cn('m-0 grid grid-cols-2 gap-x-4 gap-y-3.5 border-t border-(--line) px-4 py-3.5 sm:grid-cols-3', className)}>
@@ -239,10 +220,6 @@ export function SpecGrid({ items, className }: { items: Array<{ label: ReactNode
 
 export type Marker = { at: number; label: string; tone?: Tone };
 
-/**
- * A ruler of ticks from 0 to `max`, lit up to `value`, with labelled markers
- * standing taller at the points that matter: spent, cap, auto-pause.
- */
 export function TickGauge({
 	value,
 	max,
@@ -258,7 +235,6 @@ export function TickGauge({
 	ticks?: number;
 	tone?: Tone;
 	label: string;
-	/** Labels under the ruler, start to end. */
 	scale?: string[];
 }) {
 	const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
@@ -312,7 +288,6 @@ export function TickGauge({
 	);
 }
 
-/** A meter in blocks: so many of `segments` lit, the last few amber past a warning point. */
 export function SegmentMeter({
 	value,
 	segments = 32,
@@ -349,7 +324,6 @@ export function SegmentMeter({
 
 export type Part = { key: string; label: string; value: number; color: string };
 
-/** One bar split by share, with its legend under it. */
 export function SplitBar({ parts, label, legend = true, format }: { parts: Part[]; label: string; legend?: boolean; format?: (part: Part, share: number) => string }) {
 	const total = parts.reduce((sum, part) => sum + part.value, 0);
 	const shown = parts.filter((part) => part.value > 0);
@@ -378,7 +352,6 @@ export function SplitBar({ parts, label, legend = true, format }: { parts: Part[
 	);
 }
 
-/** A ranked row: what it is, a bar for its share of the largest, and its value. */
 export function ShareRow({ label, sub, share, value, color = 'var(--accent)' }: { label: ReactNode; sub?: ReactNode; share: number; value: ReactNode; color?: string }) {
 	return (
 		<div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 py-1.5 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto]">
@@ -394,7 +367,6 @@ export function ShareRow({ label, sub, share, value, color = 'var(--accent)' }: 
 	);
 }
 
-/** Small dots, one per item, coloured by state: the pips beside a pull request's checks. */
 export function Pips({ items, label }: { items: Array<{ tone?: Tone; color?: string; title?: string }>; label: string }) {
 	return (
 		<span role="img" aria-label={label} className="inline-flex items-center gap-[3px]">
@@ -405,7 +377,6 @@ export function Pips({ items, label }: { items: Array<{ tone?: Tone; color?: str
 	);
 }
 
-/** "A · B · C" in mono caption type. */
 export function Facts({ items, className }: { items: ReactNode[]; className?: string }) {
 	return (
 		<span className={cn('in-caption flex min-w-0 items-center gap-1.5 truncate', className)}>
@@ -428,10 +399,6 @@ const CHIP: Record<Tone, string> = {
 	danger: 'bg-(--bad-soft) text-(--bad)',
 };
 
-/**
- * A fact on a one-line row, as a small chip: a pull request, a kind, a count,
- * a time. Rows say what a thing is in a few of these; the rest waits on hover.
- */
 export function Chip({
 	icon,
 	iconColor,
@@ -443,7 +410,6 @@ export function Chip({
 	className,
 }: {
 	icon?: IconComponent;
-	/** Colours only the icon, for a chip that names a kind without shouting it. */
 	iconColor?: string;
 	tone?: Tone;
 	color?: string;
@@ -469,7 +435,6 @@ export function Chip({
 	);
 }
 
-/** A small count beside a tab, a section heading or a nav item: quiet figures, or a filled pill in the accent for what is new. */
 export function Count({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'accent'; className?: string }) {
 	return (
 		<span
@@ -484,7 +449,6 @@ export function Count({ children, tone = 'neutral', className }: { children: Rea
 	);
 }
 
-/** The well a segmented control sits in; its items are `SegmentedItem`s. */
 export function Segmented({ children, label, className, role = 'tablist' }: { children: ReactNode; label: string; className?: string; role?: 'tablist' | 'radiogroup' | 'group' }) {
 	return (
 		<div role={role} aria-label={label} className={cn('inline-flex min-w-0 items-center gap-0.5 rounded-control bg-(--bg-hover) p-0.5 shadow-[inset_0_0_0_1px_var(--line)]', className)}>
@@ -493,7 +457,7 @@ export function Segmented({ children, label, className, role = 'tablist' }: { ch
 	);
 }
 
-/** One option of a segmented control: filled when it is the chosen one. For two to four ways to show the same thing. */
+/** For two to four ways to show the same thing. */
 export function SegmentedItem({
 	on,
 	onClick,
@@ -531,7 +495,6 @@ export function SegmentedItem({
 	);
 }
 
-/** The row the sections of a page sit in, on a rule: a plan, a plugin's parts. Its items are `Tab`s. */
 export function Tabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
 	return (
 		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]', className)}>
@@ -540,7 +503,6 @@ export function Tabs({ label, children, className }: { label: string; children: 
 	);
 }
 
-/** One section of a page: primary text and a rule under it when it is the one shown. */
 export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onSelect: () => void; children: ReactNode; id?: string; controls?: string }) {
 	return (
 		<button
@@ -560,7 +522,7 @@ export function Tab({ on, onSelect, children, id, controls }: { on: boolean; onS
 	);
 }
 
-/** The row open panels or open files sit in, at the top of a pane. Its items are `PanelTab`s; it drags to scroll and `scrollbar` shows a thin one when they overflow. */
+/** Its items are `PanelTab`s; it drags to scroll, and `scrollbar` shows a thin one when they overflow. */
 export function PanelTabs({ label, children, scrollbar, className }: { label: string; children: ReactNode; scrollbar?: boolean; className?: string }) {
 	const dragScroll = useDragScroll();
 	return (
@@ -576,10 +538,7 @@ export function PanelTabs({ label, children, scrollbar, className }: { label: st
 	);
 }
 
-/**
- * One open panel or file, filled when it is the one shown. One that can be
- * closed swaps its mark for the close button while the pointer or focus is on it.
- */
+/** One that can be closed swaps its mark for the close button while the pointer or focus is on it. */
 export function PanelTab({
 	on,
 	onSelect,
@@ -593,7 +552,6 @@ export function PanelTab({
 }: {
 	on: boolean;
 	onSelect: () => void;
-	/** The icon before the name: a panel's, or a file's own. */
 	mark?: ReactNode;
 	children: ReactNode;
 	onClose?: () => void;
@@ -645,10 +603,6 @@ export function PanelTab({
 	);
 }
 
-/**
- * A diff's size as five blocks, the way a pull request shows it: green for
- * lines added, red for lines removed, grey for the rest of a small change.
- */
 export function DiffBars({ added, removed, blocks = 5 }: { added: number; removed: number; blocks?: number }) {
 	const total = added + removed;
 	// Small changes light fewer blocks, so a one-line edit doesn't read like a rewrite.
@@ -668,7 +622,6 @@ export function DiffBars({ added, removed, blocks = 5 }: { added: number; remove
 	);
 }
 
-/** A path as its file name, bright, after its folder, dimmed. */
 export function PathName({ path, className, active }: { path: string; className?: string; active?: boolean }) {
 	const slash = path.lastIndexOf('/');
 	return (

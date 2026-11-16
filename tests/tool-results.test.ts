@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { toolResultCutInterceptor } from '../src/flue/tool-result-cut.ts';
-import { cutHeadAndTail, cutResult, forgetResults, MAX_RESULT_BYTES, partAt, readFullResult } from '../src/services/tool-results.ts';
+import { cutHeadAndTail, cutResult, forgetResults, MAX_RESULT_BYTES, partAt, readFullResult } from '../src/services/context/tool-results.ts';
 
 const result = (text: string, ...more: Array<Record<string, unknown>>) => ({ content: [{ type: 'text', text }, ...more], details: { customTool: 'web_fetch' } });
 const page = (size: number) => Array.from({ length: Math.ceil(size / 10) }, (_, index) => String(index).padStart(9, '0') + '\n').join('').slice(0, size);

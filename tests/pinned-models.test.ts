@@ -8,7 +8,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-pins-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { pinnedModels, setPinnedModels } = await import('../src/services/models.ts');
+const { pinnedModels, setPinnedModels } = await import('../src/services/models/models.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 test('pins are kept once each, in the order made, and announced so open pickers refetch', async () => {

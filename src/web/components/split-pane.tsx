@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-/** A number kept in this browser, such as a panel's width; it works without storage too. */
 export function useStoredState<T>(key: string, fallback: T): [T, (next: T) => void] {
 	const [value, setValue] = useState<T>(() => {
 		try {
@@ -24,10 +23,6 @@ export function useStoredState<T>(key: string, fallback: T): [T, (next: T) => vo
 	];
 }
 
-/**
- * The thin line between two panels that resizes the one before it: drag it,
- * use the arrow keys, or double-click it to go back to the default width.
- */
 export function ResizeHandle({
 	label,
 	width,
@@ -41,7 +36,6 @@ export function ResizeHandle({
 	width: number;
 	min: number;
 	max: number;
-	/** What a double-click goes back to. */
 	initial: number;
 	onResize: (width: number) => void;
 	className?: string;
@@ -91,7 +85,6 @@ export function ResizeHandle({
 			}}
 			className={cn(
 				'group/handle relative flex w-2.5 shrink-0 cursor-col-resize touch-none justify-center outline-none',
-				// A hairline that lights on hover, focus and drag.
 				'before:h-full before:w-px before:rounded-full before:bg-(--line) before:transition-colors before:duration-(--t-fast) hover:before:bg-(--accent-line) focus-visible:before:bg-(--accent) data-dragging:before:bg-(--accent)',
 				className,
 			)}

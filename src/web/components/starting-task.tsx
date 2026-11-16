@@ -12,12 +12,10 @@ import { useOnePane } from '@/lib/one-pane';
 import type { Starting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
-/** A line of text not there yet. */
 function Bar({ width, className }: { width: string; className?: string }) {
 	return <div className={cn('in-pulse h-2.5 rounded-full bg-(--bg-active)', className)} style={{ width }} />;
 }
 
-/** The reply to come: a few lines, as the agent's answer will sit under your message. */
 export function ReplySkeleton() {
 	return (
 		<div aria-hidden className="flex flex-col gap-2.5 pt-1">
@@ -28,7 +26,6 @@ export function ReplySkeleton() {
 	);
 }
 
-/** A conversation loading: a message of yours and the reply under it. */
 export function HistorySkeleton() {
 	return (
 		<div aria-hidden className="flex flex-col gap-5">
@@ -40,7 +37,6 @@ export function HistorySkeleton() {
 	);
 }
 
-/** The workspace as it opens: its tabs and a panel, not loaded yet. */
 function WorkspaceSkeleton() {
 	return (
 		<WorkspacePane expanded={false}>
@@ -58,10 +54,7 @@ function WorkspaceSkeleton() {
 	);
 }
 
-/**
- * The composer as it will be once the task is made: the agent is working, so it reads as one you add to,
- * with your model named, and only its buttons wait. Drawn the same, so nothing blinks out as the page fills in.
- */
+/** Drawn the same as the composer it becomes, so nothing blinks out as the page fills in. */
 function ComposerSkeleton({ model }: { model: string }) {
 	const info = useModels().data?.models.find((item) => item.id === unrouted(model));
 	return (
@@ -84,12 +77,7 @@ function ComposerSkeleton({ model }: { model: string }) {
 	);
 }
 
-/**
- * A task or thread being made, laid out as its page will be: its title, what
- * you asked as your first message, and skeletons for the reply, the composer
- * and the workspace, so it opens the moment you send and fills in once the
- * server has made it. If it could not be made, it says why and offers to try again.
- */
+/** Laid out as the task's page will be, so it opens the moment you send and fills in once the server has made it. */
 export function StartingTask({
 	starting,
 	workspace,
@@ -97,11 +85,8 @@ export function StartingTask({
 	onDiscard,
 }: {
 	starting: Starting;
-	/** The workspace will open beside the conversation. */
 	workspace: boolean;
-	/** Shown before the title, such as the project a thread belongs to. */
 	leading?: ReactNode;
-	/** Where to go once you give up on it. */
 	onDiscard: () => void;
 }) {
 	const { session, prompt, error } = starting;

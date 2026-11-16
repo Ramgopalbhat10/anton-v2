@@ -57,7 +57,6 @@ function RepoRow({ project, sessions }: { project: Project; sessions: Session[] 
 	);
 }
 
-/** Every repository tasks can work on, each opening its own settings. */
 export function RepositoriesPage() {
 	const projects = useProjects();
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });

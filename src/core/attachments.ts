@@ -1,17 +1,9 @@
-/**
- * Files attached to a message. The original is saved where the agent's tools
- * reach it (a task's Library under `uploads/`, or a project's Library), and the
- * message carries each as an `<attachment>` block after the typed text, with
- * the file's text when Anton could read it: the same for every model and
- * runtime, since a runtime takes only images as attachments of their own.
- * Shared by the server (which writes a block's contents) and the page (which
- * shows a sent message's blocks as chips).
- */
+// Attached files reach the agent as `<attachment>` blocks after the typed text, the same for every model and runtime,
+// since a runtime takes only images as attachments of its own. Shared by the server and the page.
 
-/** A file the server saved and read for a message. `text` is null when it has no text Anton can read; `cut` is its full length when `text` was cut. */
+/** `text` is null when Anton cannot read it as text; `cut` is its full length when `text` was cut. */
 export type AttachedFile = { name: string; path: string; size: number; kind: string; text: string | null; cut: number | null };
 
-/** Where an attached file was saved: a task's own Library, or the project's, which the coordinator and every thread read. */
 export type AttachmentPlace = 'task' | 'project';
 
 const OPEN = /<attachment name="([^"]*)" path="([^"]*)" kind="([^"]*)" size="(\d+)"(?: library="project")?>\n?/;
@@ -19,7 +11,7 @@ const CLOSE = '</attachment>';
 
 const attr = (value: string) => value.replace(/["<>\n]/g, '_');
 
-/** The block for one attached file. A closing tag inside the file's text is escaped, so the block ends where it says. */
+/** A closing tag inside the file's text is escaped, so the block ends where it says. */
 export function attachmentBlock(file: AttachedFile, place: AttachmentPlace): string {
 	const head = `<attachment name="${attr(file.name)}" path="${attr(file.path)}" kind="${attr(file.kind)}" size="${file.size}"${place === 'project' ? ' library="project"' : ''}>`;
 	const read = place === 'project' ? 'read_project_file' : 'read_attachment';
@@ -32,12 +24,10 @@ export function attachmentBlock(file: AttachedFile, place: AttachmentPlace): str
 	return `${head}\n${body}\n${CLOSE}`;
 }
 
-/** What a message only of files says, since the agent always gets text. */
 export function attachmentsOnly(count: number): string {
 	return count === 1 ? 'Look at the attached file.' : 'Look at the attached files.';
 }
 
-/** The typed text with each file's block after it. */
 export function withAttachments(text: string, files: AttachedFile[], place: AttachmentPlace): string {
 	if (!files.length) return text;
 	return [text.trim() || attachmentsOnly(files.length), ...files.map((file) => attachmentBlock(file, place))].join('\n\n');
@@ -45,7 +35,6 @@ export function withAttachments(text: string, files: AttachedFile[], place: Atta
 
 export type AttachmentRef = { name: string; path: string; kind: string; size: number; place: AttachmentPlace };
 
-/** A sent message split into what was typed and the files attached to it, for showing it. */
 export function splitAttachments(message: string): { text: string; files: AttachmentRef[] } {
 	const files: AttachmentRef[] = [];
 	let first = -1;

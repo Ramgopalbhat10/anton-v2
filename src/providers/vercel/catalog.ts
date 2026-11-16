@@ -4,7 +4,7 @@ import { cachedEndpoints, cachedList } from '../cached-list.ts';
 /** `apiKey` is read on each listing, so a new key lists the models again; the list itself needs none. */
 export type VercelOptions = { apiUrl: string; ttlMs: number; apiKey?: () => string | null };
 
-/** The fields Anton reads from Vercel AI Gateway's `GET /v1/models` (vercel.com/docs/ai-gateway/sdks-and-apis/rest-api). */
+/** vercel.com/docs/ai-gateway/sdks-and-apis/rest-api */
 export type VercelModel = {
 	id: string;
 	name?: string;
@@ -21,7 +21,6 @@ export type VercelModel = {
 	pricing?: { input?: string; output?: string; input_cache_read?: string; input_cache_write?: string } | null;
 };
 
-/** How the model list names each maker, by the vendor part of its id. */
 const VENDORS: Record<string, string> = {
 	alibaba: 'Alibaba',
 	amazon: 'Amazon',
@@ -108,7 +107,6 @@ export function toModelInfo(model: VercelModel): ModelInfo {
 	};
 }
 
-/** The fields Anton reads from `GET /v1/models/{id}/endpoints`. */
 type VercelEndpoint = {
 	provider_name?: string;
 	context_length?: number | null;
@@ -139,10 +137,7 @@ export function toEndpoints(body: unknown): ModelEndpoint[] {
 	});
 }
 
-/**
- * Vercel AI Gateway's models, cached for `ttlMs` (`cachedList`). The list is
- * the same for every key, so it is public; a key changes only who pays.
- */
+/** The list is the same for every key; a key changes only who pays. */
 export function vercelCatalog({ apiUrl, ttlMs, apiKey = () => null }: VercelOptions): ModelCatalog {
 	async function fetchModels(): Promise<ModelInfo[]> {
 		// Bounded, as a task's first list waits for it.

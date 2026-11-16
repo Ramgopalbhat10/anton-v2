@@ -2,10 +2,9 @@ import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
 
-/** One row of the Notifications dialog, about one task (src/services/notifications.ts says which moments make one). */
 export type NotificationRecord = {
 	id: string;
-	/** What the row stands for, such as a task's last reply; a newer row with the same key replaces it. */
+	/** A newer row with the same key replaces it. */
 	key: string;
 	kind: string;
 	sessionId: string | null;
@@ -34,7 +33,6 @@ function toRecord(row: Row): NotificationRecord {
 	};
 }
 
-/** Keeps the newest `keep` rows; a list of moments worth a look has no use for last month's. */
 export async function insertNotification(record: Omit<NotificationRecord, 'readAt'>, keep: number): Promise<void> {
 	const db = await appDb();
 	await db.batch(
@@ -55,7 +53,6 @@ export async function listNotificationRecords(limit: number): Promise<Notificati
 	return (await db.execute({ sql: 'SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?', args: [limit] })).rows.map(toRecord);
 }
 
-/** Marks rows read (or unread again): the ones named, a task's, or every one. Returns how many changed. */
 export async function setNotificationsRead(which: { ids?: string[]; sessionId?: string; all?: boolean }, readAt: string | null): Promise<number> {
 	const db = await appDb();
 	const changed = readAt ? 'read_at IS NULL' : 'read_at IS NOT NULL';

@@ -2,7 +2,7 @@
 
 Status: built, not yet tried against a real Claude account. Settings › Subscriptions has a Claude card. Where the build differs from the first design, this document now says what was built.
 
-ChatGPT plans already work (`src/services/subscriptions.ts`, `src/providers/chatgpt/`, `src/flue/subscription-models.ts`): Anton signs in with OpenAI's Sign in with ChatGPT, keeps the token, and calls the Responses API with it. Claude cannot work the same way. This document says why, and how Anton can run tasks on a Claude Pro or Max plan anyway.
+ChatGPT plans already work (`src/services/models/subscriptions.ts`, `src/providers/chatgpt/`, `src/flue/subscription-models.ts`): Anton signs in with OpenAI's Sign in with ChatGPT, keeps the token, and calls the Responses API with it. Claude cannot work the same way. This document says why, and how Anton can run tasks on a Claude Pro or Max plan anyway.
 
 ## What Anthropic allows
 
@@ -97,7 +97,7 @@ The ChatGPT `SubscriptionProvider` port is built around Anton holding an OAuth t
 
 - `src/providers/claude-code/runtime.ts`: the Agent SDK, its `accountInfo()` and `supportedModels()`. It is the only file that imports `@anthropic-ai/claude-agent-sdk`.
 - `src/flue/claude-code-models.ts`: the pi provider and the bridge (steps 1–7).
-- `src/services/subscriptions.ts`: lists runtimes next to OAuth plans in `subscriptionsView()`, `subscriptionModels()` and `planUsage()`, with the same options and change announcements; `runtimeHooks()` gives the bridge where to note limits and extra usage. Signing in and out goes through the runtime's `signIn()` and `signOut()`; a runtime without them is refused with its command. Settings › Connections checks the sign-in too.
+- `src/services/models/subscriptions.ts`: lists runtimes next to OAuth plans in `subscriptionsView()`, `subscriptionModels()` and `planUsage()`, with the same options and change announcements; `runtimeHooks()` gives the bridge where to note limits and extra usage. Signing in and out goes through the runtime's `signIn()` and `signOut()`; a runtime without them is refused with its command. Settings › Connections checks the sign-in too.
 - Settings › Subscriptions: the Claude card shows status, the sign-in command with a copy button, the account and plan, the two options, the model list and an extra-usage warning.
 
 ### Tests

@@ -16,11 +16,11 @@ const { diskStore } = await import('../src/providers/disk/store.ts');
 const { insertSession } = await import('../src/db/sessions.ts');
 const { onChange } = await import('../src/core/changes.ts');
 const { DESKTOP_TOOLS, desktopLayout, SCREEN } = await import('../src/core/desktop.ts');
-const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectBrowser, connectComputer, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/computer.ts');
-const { BrowserStopError, closeBrowser } = await import('../src/services/browser.ts');
-const { untilAborted, withinDeadline } = await import('../src/services/step-deadline.ts');
-const { liveMachine, machineFor } = await import('../src/services/workspace.ts');
-const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/vision.ts');
+const { act, asAgentStep, browseOnComputer, computerScreenshot, computerView, connectBrowser, connectComputer, inputCommand, setComputerControl, startComputer, stopComputer, userHasControl } = await import('../src/services/browser/computer.ts');
+const { BrowserStopError, closeBrowser } = await import('../src/services/browser/browser.ts');
+const { untilAborted, withinDeadline } = await import('../src/services/browser/step-deadline.ts');
+const { liveMachine, machineFor } = await import('../src/services/sandbox/workspace.ts');
+const { describe, jsonIn, locate, visionModelFor } = await import('../src/services/models/vision.ts');
 const { openRouterVision } = await import('../src/providers/openrouter/vision.ts');
 
 const local = localSandboxProvider(path.join(dir, 'data'));
@@ -204,7 +204,7 @@ test('a sandbox browser step never asks for, starts or waits on the desktop', as
 	const commands: string[] = [];
 	const machine = { id: 'no-desktop', root: '/tmp/no-desktop', exec: async (command: string) => (commands.push(command), { stdout: new Uint8Array(), stderr: '', exitCode: 0 }) } as unknown as import('../src/core/ports.ts').Machine;
 	const steps: string[] = [];
-	const browser = async (_machine: import('../src/core/ports.ts').Machine, command: import('../src/services/browser.ts').BrowserInput) => {
+	const browser = async (_machine: import('../src/core/ports.ts').Machine, command: import('../src/services/browser/browser.ts').BrowserInput) => {
 		steps.push(command.action);
 		return { url: command.url ?? '', title: 'App', status: 200, problem: null, errors: [], screenshot: null, snapshot: 'App' };
 	};

@@ -3,20 +3,11 @@ import { Icon, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger } from '@/compo
 import type { Session } from '@/lib/api';
 import { FACET_KEYS, FACETS, type FacetKey, optionLabel, type TaskView } from '@/lib/task-view';
 
-/*
- * Filters over a list of tasks, shared by the sidebar's Tasks and a project's
- * threads: a submenu per facet, and the filters in use as chips that remove
- * themselves.
- */
-
 type Filters = TaskView['filters'];
 
 export const FACET_ICON: Record<FacetKey, IconComponent> = { status: CircleDot, sandbox: Server, pr: GitPullRequest, repo: FolderGit2, model: Cpu, created: CalendarDays };
 
-/**
- * A submenu per facet, each option with how many tasks it matches. Picking one
- * keeps the menu open, so several can be picked.
- */
+/** Picking one keeps the menu open, so several can be picked. */
 export function FacetSubmenus({ filters, onToggle, tasks, keys = FACET_KEYS }: { filters: Filters; onToggle: (key: FacetKey, value: string) => void; tasks: Session[]; keys?: FacetKey[] }) {
 	return keys.map((key) => {
 		const options = FACETS[key].options(tasks);
@@ -49,7 +40,6 @@ export function FacetSubmenus({ filters, onToggle, tasks, keys = FACET_KEYS }: {
 	});
 }
 
-/** The filters in use, each a chip that removes itself. */
 export function FilterChips({ filters, onToggle, tasks }: { filters: Filters; onToggle: (key: FacetKey, value: string) => void; tasks: Session[] }) {
 	const chips = FACET_KEYS.flatMap((key) => filters[key].map((value) => ({ key, value, label: optionLabel(key, value, tasks) })));
 	return (

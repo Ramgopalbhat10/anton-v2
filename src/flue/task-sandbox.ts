@@ -1,22 +1,17 @@
 import { Type } from '@earendil-works/pi-ai';
 import { type Sandbox, type SandboxDriver, type SandboxToolFactory, sandboxFromDriver } from '@flue/runtime';
-import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/repo-snapshot.ts';
+import { MAX_READ_LINES, numberedLines, READ_LINES } from '../services/sandbox/repo-snapshot.ts';
 import type { ToolProfile } from '../core/tool-profile.ts';
-import type { GlobInput, GrepInput, ReadInput } from '../services/task-files.ts';
+import type { GlobInput, GrepInput, ReadInput } from '../services/sandbox/task-files.ts';
 import { changeTools, type ImageSight, imageResult, imageType, text, type Tool } from './sandbox-tools.ts';
 import { createShellTool } from './shell-tool.ts';
 
-/** What the runtime reads from a working folder for its system prompt: the repository's instructions and its skills. */
 const DISCOVERED = /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|\.agents\/skills)$/;
 
 /**
- * A repository task's sandbox from its first model call, before it has a machine. The runtime is given it at once,
- * so the tool list and the system prompt are the same before and after the machine starts. Commands and writes wait
- * for the machine (`machine(true)`, which gives the task its workspace); a file read here (an edit's or a patch's) comes from
- * the machine too, while the agent's own reads go through `taskTools`. The runtime reads AGENTS.md, CLAUDE.md,
- * `.agents/skills` and a listing of the working folder into the system prompt when a reply starts: it finds none of
- * them here, as they would come from the snapshot before the machine and from the machine after, and change the
- * prompt. Anton puts the repository's instructions and skills in from the commit the task started at instead.
+ * Given to the runtime from the first model call, so the tool list and system prompt never change. The runtime reads
+ * AGENTS.md, CLAUDE.md, `.agents/skills` and a listing into the prompt when a reply starts; it finds none here, as they
+ * would change the prompt, and Anton adds them from the task's base commit instead.
  */
 export function taskSandbox(cwd: string, machine: (work: boolean) => Promise<Sandbox>): Sandbox {
 	const driver: SandboxDriver = {
@@ -35,7 +30,6 @@ export function taskSandbox(cwd: string, machine: (work: boolean) => Promise<San
 	return sandboxFromDriver(driver, cwd);
 }
 
-/** Where `read`, `grep` and `glob` answer from: the snapshot or the machine, as the task stands (`task-files.ts`). */
 export type TaskFiles = {
 	read: (input: ReadInput) => Promise<string>;
 	bytes: (path: string, repo?: string) => Promise<Uint8Array>;
@@ -71,7 +65,6 @@ const GlobParams = Type.Object({
 	repo: REPO,
 });
 
-/** `read`'s description, which says how its numbered lines go into the profile's editing tool. */
 const READ_DESCRIPTION: Record<ToolProfile, string> = {
 	edit:
 		"Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of edit's oldText). " +
@@ -83,12 +76,7 @@ const READ_DESCRIPTION: Record<ToolProfile, string> = {
 
 const whole = (value: unknown, min: number, max: number) => (typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.floor(value))) : undefined);
 
-/**
- * A repository task's file and shell tools: `read`, `grep` and `glob` of its own, the same schema whether the
- * snapshot or the machine answers, so they never change; the profile's tools that change files (`write` and `edit`,
- * or `apply_patch`) and `bash` as `sandboxTools` has them, waiting for the machine. Paths are taken from the
- * session's folder, which a subagent may be given.
- */
+/** The same schema whether the snapshot or the machine answers, so they never change. */
 export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProfile = 'edit'): SandboxToolFactory {
 	return (sandbox) => {
 		// Another repository's paths are from its root; this task's from the session's folder.
