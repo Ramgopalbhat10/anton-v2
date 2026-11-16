@@ -8,7 +8,7 @@ import { repoDir } from './git.ts';
 import { holdTerminal } from './idle-stop.ts';
 import { invalidateRunning } from './sessions.ts';
 import { machineFor } from './workspace.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 const PATH = /^\/vm\/([\w-]+)\/pty$/;
 

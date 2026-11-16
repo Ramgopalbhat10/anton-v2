@@ -3,7 +3,7 @@ import path from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { expandConfig, isInMemoryConfig } from '@libsql/core/config';
 import { config } from '../config.ts';
-import { logProblem } from '../services/log.ts';
+import { logProblem } from '../core/log.ts';
 import { migrate } from './migrations.ts';
 
 let client: Client | undefined;

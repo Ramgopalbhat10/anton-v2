@@ -5,7 +5,7 @@ import { config } from '../config.ts';
 import { splitAttachments } from '../core/attachments.ts';
 import { appDb } from '../db/client.ts';
 import { updateSession } from '../db/sessions.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /** Long inputs are kept to what a card can show. */
 const MAX_LENGTH = 2000;

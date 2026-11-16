@@ -10,7 +10,7 @@ import { noteSending, stopAgent } from './activity.ts';
 import { sendToAgent } from './agent-runner.ts';
 import { projectPictures } from './attachments.ts';
 import { startOfToday } from './budget.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { findModel } from './models.ts';
 import { readOutputFile, storedOutputs } from './files.ts';
 import { createSession, deleteSession, getSession, listThreads, stopSession } from './sessions.ts';

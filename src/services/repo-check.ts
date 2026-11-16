@@ -10,7 +10,7 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { digestOf, digestScript, durationText, parseInspect, type Seen } from './background-jobs.ts';
 import { changeGate, gate } from './gate-state.ts';
 import { repoDir } from './git.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { envFor, secretsToHide } from './secrets.ts';
 import { liveMachine } from './workspace.ts';
 

@@ -1,30 +1,18 @@
 'use agent';
 
-import { type AgentProps, setProvider, useModel, useSandbox, useTool } from '@flue/runtime';
+import { type AgentProps, useModel, useSandbox, useTool } from '@flue/runtime';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
-import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
-import { withPruning } from '../flue/pruned-models.ts';
-import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
-import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
-import { chatGptPlanProvider } from '../flue/subscription-models.ts';
 import { helperModelFor } from '../services/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/code-review.ts';
 import { compactionFor } from '../services/context-usage.ts';
 import { fullResultTool } from '../services/tool-results.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git.ts';
-import { loadedModels } from '../services/models.ts';
-import { gatewayKey, gatewayKeyOf, gatewayToken, planKey, planRuntime, runtimeFor, runtimeHooks } from '../services/subscriptions.ts';
 import { secretsToHide } from '../services/secrets.ts';
-import { modelFor, routedModels } from '../services/sessions.ts';
+import { modelFor } from '../services/sessions.ts';
 import { machineFor } from '../services/workspace.ts';
-
-setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
-setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
-setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('openai'))));
-setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
-setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
-setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
+// Registers the model providers (OpenRouter, Vercel, the plans) before this agent resolves a model.
+import './providers.ts';
 
 const PROMPT = [
 	"You are Anton's code reviewer. The coding agent working on this task has opened or updated a pull request from this repository's task branch, and you review it before a person does.",

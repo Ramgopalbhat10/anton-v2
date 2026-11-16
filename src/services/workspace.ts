@@ -7,7 +7,7 @@ import { getProject } from '../db/projects.ts';
 import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { applyFiles, copyLibrary, readCheckpoint } from './checkpoints.ts';
 import { isWorking } from './activity.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { notifySandboxFailed, notifySandboxReady } from './notifications.ts';
 import { machineRequest, previewEnv, readMarker, setUpMachine } from './machine-setup.ts';
 import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';

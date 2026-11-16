@@ -18,7 +18,7 @@ import { announce } from '../core/changes.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { getMcpServer, getMcpSignIn, setMcpSignIn } from '../db/mcp-servers.ts';
 import { appOrigin } from './connectors.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Signing in to a remote MCP server with OAuth, the way its spec has clients

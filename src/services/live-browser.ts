@@ -13,7 +13,7 @@ import { quickjsExecute } from './browser-run.ts';
 import { addressToUrl, browserFunctions, clipSnapshot, screenshotFile } from './browser-step.ts';
 import { saveOutput } from './checkpoints.ts';
 import { DESCRIBE_ELEMENT } from './describe-element.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { liveMachine } from './workspace.ts';
 
 /**

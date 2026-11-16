@@ -4,7 +4,7 @@ import { getSessionRecord, listSessionRecords } from '../db/sessions.ts';
 import { onIdle } from './activity.ts';
 import { budget } from './budget.ts';
 import { followUp } from './follow-ups.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { finished, readPullRequest } from './pr-status.ts';
 import { runAutomaticReviews } from './review-tasks.ts';
 

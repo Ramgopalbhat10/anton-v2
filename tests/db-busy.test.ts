@@ -50,7 +50,7 @@ test('a write waits out another connection’s transaction on the same file', as
 });
 
 test('a database that stays locked is reported once a minute, and a write getting through clears it', async (t) => {
-	const { recentProblems } = await import('../src/services/log.ts');
+	const { recentProblems } = await import('../src/core/log.ts');
 	const stuck = () => recentProblems().filter((entry) => /database has been locked/.test(entry.message));
 	let now = 1_000_000;
 	t.mock.method(Date, 'now', () => now);

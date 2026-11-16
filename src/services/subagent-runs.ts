@@ -1,7 +1,7 @@
 import { announce } from '../core/changes.ts';
 import { unrouted } from '../core/model-route.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { toUsage } from './usage.ts';
 
 /**

@@ -126,7 +126,7 @@ Use Anton as the engine behind a specific paid outcome: docs answer engine that 
 1. **Authentication** — Clerk; derive tenant from the authenticated identity, never trust a browser-supplied ID.
 2. **Per-tenant secrets isolation** — one database, storage prefix, and credential set per customer; no shared platform secrets in customer runtimes.
 3. **Billing + metering** — Paddle webhooks (signed, deduped), usage ledger with separate meters: sandbox time, runtime time, browser, storage, managed inference.
-4. **Externalize both databases** — replace `src/db.ts` local `flue.db` with the `@flue/libsql` adapter (or D1); `TURSO_DATABASE_URL` currently moves app metadata only.
+4. **Externalize both databases** — replace `src/db/adapter.ts` local `flue.db` with the `@flue/libsql` adapter (or D1); `TURSO_DATABASE_URL` currently moves app metadata only.
 5. **Durable job ownership** — move authoritative task state, deadlines, and wake-ups out of in-process maps; one live owner per conversation; lease + fencing.
 6. **Realtime event outbox** — replace the in-process `EventEmitter` (`src/core/changes.ts`) with a durable event stream so a browser reconnect recovers missed updates.
 7. **Durable scheduler** — replace `setInterval` automations/cleanup with durable alarms + job records.

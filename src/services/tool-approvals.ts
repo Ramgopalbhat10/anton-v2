@@ -3,7 +3,7 @@ import { announce } from '../core/changes.ts';
 import { ConflictError, NotFoundError } from '../core/errors.ts';
 import { getToolApproval, insertToolApproval, listToolApprovals, moveToolApproval, type ToolApproval, type ToolApprovalState } from '../db/tool-approvals.ts';
 import { executeComposioTool } from './composio.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * Connector tool calls that wait on the user's Run, as mail_approvals do for

@@ -4,7 +4,7 @@ import type { PullRequestStatus, SessionRecord } from '../core/types.ts';
 import { setPullRequestState } from '../db/pull-requests.ts';
 import { listSessionRecords, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { notifyPullRequest } from './notifications.ts';
 import { threadChanged } from './thread-reports.ts';
 

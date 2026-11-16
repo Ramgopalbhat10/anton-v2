@@ -2,7 +2,7 @@ import { announce } from '../core/changes.ts';
 import { stopReplyJobs } from './background-jobs.ts';
 import { stopRepoCheck } from './repo-check.ts';
 import { liveMachine } from './workspace.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { noteRepliesStopping } from './subagent-runs.ts';
 
 /**

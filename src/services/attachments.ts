@@ -3,7 +3,7 @@ import { NotFoundError } from '../core/errors.ts';
 import { safeRelativePath } from '../core/shell.ts';
 import { cachedDocumentText, documentKind, documentSlice } from './documents.ts';
 import { readOutputFile, storedOutputs, uploadOutput } from './files.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import type { DeliveredImage } from './agent-runner.ts';
 import { findModel } from './models.ts';
 import { describeImage } from './vision.ts';

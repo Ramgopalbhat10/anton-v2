@@ -1,6 +1,6 @@
 import { announce } from '../core/changes.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 
 /**
  * What each run_script program called, for the thread: the runtime only shows

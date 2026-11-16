@@ -6,7 +6,7 @@ import { getSessionRecord, updateSession } from '../db/sessions.ts';
 import { getProviders } from '../providers/index.ts';
 import { repoDir, workingPatchCommand } from './git.ts';
 import { bringCommit, hasCommit, OFFLINE_GIT } from './host-commits.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { machineFor } from './workspace.ts';
 
 /** The base a merge brought in, kept in the machine until the merge is committed. */

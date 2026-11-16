@@ -2,7 +2,7 @@
  * Incognito chats: throwaway conversations that live only in memory.
  *
  * An incognito id never gets a session record, a Library file or a flue.db
- * row: `src/db.ts` routes every Flue store to an in-memory database for ids
+ * row: `src/db/adapter.ts` routes every Flue store to an in-memory database for ids
  * with this prefix, so the conversation, its submissions and its attachments
  * die with the process and are never written to disk.
  */

@@ -7,7 +7,7 @@ import { isWorking } from './activity.ts';
 import { budget } from './budget.ts';
 import { requestReview } from './code-review.ts';
 import { generalSettings } from './general.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { addProject } from './projects.ts';
 import { createSession, getSession } from './sessions.ts';
 

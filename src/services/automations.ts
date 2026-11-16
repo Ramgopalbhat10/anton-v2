@@ -26,7 +26,7 @@ import { sendToAgent } from './agent-runner.ts';
 import { budget } from './budget.ts';
 import { createSession, deleteSession } from './sessions.ts';
 import { startThread } from './spaces.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { gateProblem, runGate } from './routine-gate.ts';
 import { wakeSpare } from './spares.ts';
 import { threadStarted } from './thread-reports.ts';

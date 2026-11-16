@@ -5,7 +5,7 @@ import { FILE_CHANGE_TOOLS } from '../core/tool-profile.ts';
 import { decide, yesOf } from './decisions.ts';
 import { reopenFinishReview, requestFor, taskPatch } from './finish-review.ts';
 import { changeGate, gate, loadGate } from './gate-state.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { replyEnding, replyMessages } from './reply-check.ts';
 import { lastSendBack } from './send-backs.ts';
 import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';

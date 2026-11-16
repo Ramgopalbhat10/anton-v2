@@ -3,7 +3,7 @@ import { config } from '../config.ts';
 import { getProviders } from '../providers/index.ts';
 import type { ModelInfo } from '../core/ports.ts';
 import { backgroundModel, backgroundReasoning, textEffort } from './general.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { loadedModels } from './models.ts';
 import { modelFor } from './sessions.ts';
 import { cutHeadAndTail, cutResult, keepResult, limitFor, MORE_TOOL, resultText } from './tool-results.ts';

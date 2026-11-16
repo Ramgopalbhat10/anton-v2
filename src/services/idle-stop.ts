@@ -2,7 +2,7 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { hasRunningJob } from './background-jobs.ts';
 import { userHasControl } from './computer.ts';
-import { logProblem } from './log.ts';
+import { logProblem } from '../core/log.ts';
 import { notifySandboxStopped } from './notifications.ts';
 import { sandboxSettings } from './sandbox-settings.ts';
 import { runningKeys, stopSession } from './sessions.ts';
