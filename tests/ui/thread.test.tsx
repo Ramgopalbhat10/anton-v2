@@ -76,6 +76,63 @@ function show(flue: UseFlueAgentResult, patch = {}) {
 describe('Thread', () => {
 	beforeEach(() => vi.clearAllMocks());
 
+	it('animates one header from submission through tools, text and usage, then leaves a static mark', async () => {
+		const view = show(agent([user('u1', 'Go')], { status: 'submitted' }));
+		const update = (flue: UseFlueAgentResult) => view.rerender(<QueryClientProvider client={view.client}><Thread sessionId="s1" agent={flue} /></QueryClientProvider>);
+		expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+		for (const parts of [[], [tool('bash', { command: 'ls' })], [tool('bash', { command: 'ls' }, { output: 'ok' }), { type: 'text', text: 'Writing the final answer', state: 'streaming' }]]) {
+			update(agent([user('u1', 'Go'), assistant('a1', parts)], { status: 'streaming' }));
+			expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+			expect(view.container.querySelector('.group\\/reply .anton-working')).toBeTruthy();
+		}
+		const done = { ...assistant('a1', [{ type: 'text', text: 'The whole answer', state: 'done' }]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		update(agent([user('u1', 'Go'), done], { status: 'streaming' }));
+		expect(screen.getByRole('status', { name: 'Anton is working' })).toBeTruthy();
+		update(agent([user('u1', 'Go'), done]));
+		await waitFor(() => expect(screen.queryByRole('status', { name: 'Anton is working' })).toBeNull());
+		expect(screen.getByText('The whole answer')).toBeTruthy();
+		expect(view.container.querySelector('.group\\/reply .anton-logo')).toBeTruthy();
+	});
+
+	it.each([['error', false], ['error', true], ['failed', false], ['failed', true], ['aborted', false], ['aborted', true]] as const)('stops the icon on %s (partial reply: %s)', async (outcome, partial) => {
+		const before = [user('u1', 'Go'), ...(partial ? [assistant('a1', [{ type: 'text', text: 'Partial answer', state: 'streaming' }])] : [])];
+		const view = show(agent(before, { status: partial ? 'streaming' : 'submitted' }));
+		if (outcome === 'aborted') {
+			api.stopAgent.mockResolvedValueOnce(undefined);
+			fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }));
+			await waitFor(() => expect(api.stopAgent).toHaveBeenCalledWith('s1'));
+		}
+		const messages = outcome === 'error' ? before : [...before, { id: 'settled', role: 'system', display: 'visible', parts: [], settlement: { outcome } }];
+		view.rerender(<QueryClientProvider client={view.client}><Thread sessionId="s1" agent={agent(messages, { status: outcome === 'error' ? 'error' : 'idle', error: new Error('Disconnected') })} /></QueryClientProvider>);
+		await waitFor(() => expect(screen.queryByRole('status', { name: 'Anton is working' })).toBeNull());
+		if (outcome === 'error') expect(screen.getByText(/Disconnected/)).toBeTruthy();
+		if (partial) expect(screen.getByText('Partial answer')).toBeTruthy();
+	});
+
+	it('does not animate history when submitting a follow-up without usage metadata', () => {
+		const done = { ...assistant('a1', [{ type: 'text', text: 'Earlier reply' }]), submissionId: 'sub-1' };
+		const view = show(agent([done, user('u2', 'Next')], { status: 'submitted', settlements: [{ submissionId: 'sub-1', outcome: 'completed' }] }));
+		expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+		expect(view.container.querySelector('.group\\/reply .anton-working')).toBeNull();
+	});
+
+	it('keeps the single working icon on the first segment when a message joins the reply', async () => {
+		api.joins.mockResolvedValueOnce({ joins: [{ text: 'Are you stuck?', afterTool: 'bash-1', final: false, at: new Date().toISOString() }] });
+		const reply = { ...assistant('a1', [tool('bash', { command: 'npm test' }, { output: 'ok' }), { type: 'text', text: 'Still working', state: 'streaming' }]), submissionId: 'sub-1' };
+		const view = show(agent([user('u1', 'Go'), reply, { ...user('u2', 'Are you stuck?'), submissionId: 'sub-2' }], { status: 'streaming' }));
+		await screen.findByText('Sent while Anton worked, read here');
+		expect(view.container.querySelectorAll('.group\\/reply')).toHaveLength(2);
+		expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+		const mark = view.container.querySelector('.group\\/reply .anton-working');
+		expect(mark).toBeTruthy();
+		const whole = { ...reply, metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		for (const settlements of [[], [{ submissionId: 'sub-1', outcome: 'completed' as const }, { submissionId: 'sub-2', outcome: 'completed' as const, answeredBySubmissionId: 'sub-1' }]]) {
+			view.rerender(<QueryClientProvider client={view.client}><Thread sessionId="s1" agent={agent([user('u1', 'Go'), whole, { ...user('u2', 'Are you stuck?'), submissionId: 'sub-2' }], { status: 'streaming', settlements })} /></QueryClientProvider>);
+			expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+			expect(view.container.querySelector('.group\\/reply .anton-working')).toBe(mark);
+		}
+	});
+
 	it('renders replies as markdown and steps as one card, with a link to the pull request', () => {
 		show(
 			agent([
