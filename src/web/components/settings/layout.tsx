@@ -2,10 +2,10 @@ import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/re
 import { ChevronRight, List, type IconComponent, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Count } from '@/components/instrument';
-import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/signal';
+import { Count } from '@/components/kit/instrument';
+import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/kit/signal';
 import { api } from '@/lib/api';
-import { setupLeft } from '@/components/setup-card';
+import { setupLeft } from '@/components/pages/setup-card';
 import { closeSettings } from '@/lib/settings-modal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';

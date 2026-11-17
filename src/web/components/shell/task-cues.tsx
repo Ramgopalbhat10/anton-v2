@@ -1,0 +1,126 @@
+import { Link } from '@tanstack/react-router';
+import { ArrowUpRight } from '@/lib/icons';
+import { HoverCard } from 'radix-ui';
+import type { ReactNode } from 'react';
+import { Icon } from '@/components/kit/signal';
+import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
+import type { Session } from '@/lib/api';
+import { planReady, prNumber } from '@/lib/task-view';
+import { cn } from '@/lib/utils';
+
+type PullRequest = NonNullable<Session['pullRequest']>;
+type Checks = NonNullable<PullRequest['checks']>;
+
+const CHECKS: Record<Checks, string> = { failed: 'failing', pending: 'running', passed: 'passing' };
+
+const CUE = 'relative inline-flex shrink-0 items-center gap-1 rounded-control outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
+
+function Dot({ checks }: { checks: Checks }) {
+	return <span className={cn('size-1.5 shrink-0 rounded-full', checks === 'pending' && 'animate-pulse')} style={{ background: prTone(checksTone(checks)) }} />;
+}
+
+function ChecksCard({ number, pullRequest, url }: { number: string; pullRequest: PullRequest & { checks: Checks }; url: string }) {
+	const order: Checks[] = ['failed', 'pending', 'passed'];
+	const runs = [...pullRequest.runs].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+	const counts = order.flatMap((status) => {
+		const count = runs.filter((run) => run.status === status).length;
+		return count ? [`${count} ${CHECKS[status]}`] : [];
+	});
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-baseline justify-between gap-3">
+				<span className="text-small font-medium text-(--text)">Checks on {number}</span>
+				<span className="text-micro text-(--text-3)">{counts.join(', ') || CHECKS[pullRequest.checks]}</span>
+			</div>
+			{runs.length ? (
+				<div className="-mx-1 flex max-h-[220px] flex-col overflow-y-auto">
+					{runs.map((run) => (
+						<a
+							key={`${run.name}-${run.url}`}
+							href={run.url || url}
+							target="_blank"
+							rel="noreferrer"
+							className="flex h-6 items-center gap-2 rounded-control px-1 text-small text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+						>
+							<Dot checks={run.status} />
+							<span className="min-w-0 flex-1 truncate">{run.name}</span>
+						</a>
+					))}
+				</div>
+			) : null}
+			<a
+				href={url}
+				target="_blank"
+				rel="noreferrer"
+				className="inline-flex items-center gap-1 self-start text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)"
+			>
+				Open checks on GitHub
+				<Icon icon={ArrowUpRight} size={11} />
+			</a>
+		</div>
+	);
+}
+
+function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; pullRequest: PullRequest & { checks: Checks }; prUrl: string; onCardChange: (open: boolean) => void }) {
+	const url = `${prUrl}/checks`;
+	return (
+		<HoverCard.Root openDelay={250} closeDelay={120} onOpenChange={onCardChange}>
+			<HoverCard.Trigger asChild>
+				<a href={url} target="_blank" rel="noreferrer" aria-label={`Checks ${CHECKS[pullRequest.checks]} on ${number}`} className={cn(CUE, '-ml-1 size-3 justify-center')}>
+					<Dot checks={pullRequest.checks} />
+				</a>
+			</HoverCard.Trigger>
+			<HoverCard.Portal>
+				<HoverCard.Content
+					side="right"
+					align="start"
+					sideOffset={12}
+					collisionPadding={12}
+					className="in-pop z-50 w-[260px] p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+				>
+					<ChecksCard number={number} pullRequest={pullRequest} url={url} />
+				</HoverCard.Content>
+			</HoverCard.Portal>
+		</HoverCard.Root>
+	);
+}
+
+/** In words, not icons: the row's status icon already says the state. Passing checks say nothing. `onCardChange` tells the row while the checks card is open. */
+export function TaskCues({ session, onCardChange }: { session: Session; onCardChange: (open: boolean) => void }) {
+	const cues: ReactNode[] = [];
+	if (planReady(session)) {
+		cues.push(
+			<Link key="plan" to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={cn(CUE, 'text-(--warn)')}>
+				Review plan
+			</Link>,
+		);
+	}
+	if (session.asking && !session.working && !session.resolvedAt) {
+		cues.push(
+			<Link
+				key="asking"
+				to="/agents/$sessionId"
+				params={{ sessionId: session.id }}
+				search={{ app: 'code' }}
+				title={session.asking}
+				className={cn(CUE, 'text-(--warn)')}
+			>
+				Your turn
+			</Link>,
+		);
+	}
+	const pullRequest = session.pullRequest;
+	if (session.prUrl) {
+		const number = `#${prNumber(session) ?? '?'}`;
+		cues.push(<PrStatus key="pr" thread={session} link showConflicts={false} showFailing={false} className={CUE} />);
+		if (pullRequest?.conflicts) {
+			cues.push(
+				<a key="conflicts" href={session.prUrl} target="_blank" rel="noreferrer" title="It cannot merge until its conflicts with the base branch are resolved" className={CUE} style={{ color: prTone('conflicts') }}>
+					Conflicts
+				</a>,
+			);
+		}
+		if (pullRequest?.checks && pullRequest.checks !== 'passed') cues.push(<CiCue key="ci" number={number} pullRequest={{ ...pullRequest, checks: pullRequest.checks }} prUrl={session.prUrl} onCardChange={onCardChange} />);
+	}
+	return cues.length ? <span className="flex shrink-0 items-center gap-1.5">{cues}</span> : null;
+}

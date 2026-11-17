@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
-import { ScheduleEditor } from '@/components/schedule-editor';
+import { ScheduleEditor } from '@/components/settings/schedule-editor';
 import { defaultSchedule, type Schedule } from '../../src/core/schedule';
 
 function Editor({ initial, seen }: { initial: Schedule; seen: Schedule[] }) {

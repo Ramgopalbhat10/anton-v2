@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { ThreadRow } from '@/lib/joined';
-import { ChatNavigation, chatTurns } from '@/components/chat-navigation';
+import { ChatNavigation, chatTurns } from '@/components/thread/chat-navigation';
 
 const row = (id: string, role: 'user' | 'assistant', text: string) => ({ message: { id, role, parts: [{ type: 'text', text }] } }) as ThreadRow;
 

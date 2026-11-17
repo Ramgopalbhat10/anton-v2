@@ -36,8 +36,8 @@ vi.mock('@tanstack/react-router', async (original) => ({
 	},
 }));
 
-const { Thread } = await import('@/components/thread');
-const { OutputViewerHost } = await import('@/components/output-viewer');
+const { Thread } = await import('@/components/thread/thread');
+const { OutputViewerHost } = await import('@/components/content/output-viewer');
 const { closeViewer } = await import('@/lib/viewer');
 const { setPendingPrompt } = await import('@/lib/pending-prompt');
 const { taskStatus } = await import('@/lib/working');

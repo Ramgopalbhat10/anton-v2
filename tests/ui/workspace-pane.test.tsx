@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WorkspacePane } from '@/components/workspace-pane';
+import { WorkspacePane } from '@/components/workspace/workspace-pane';
 
 let available = 1200;
 let resize: (() => void) | undefined;

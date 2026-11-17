@@ -153,7 +153,7 @@ await page
 	});
 if (panel === 'Files') {
 	const tree = page.getByLabel('File tree', { exact: true });
-	for (const folder of ['src', 'web', 'components', 'node_modules', '@tanstack']) await tree.getByRole('button', { name: new RegExp(`^${folder.replace('.', '\\.')}( M)?$`) }).first().click();
+	for (const folder of ['src', 'web', 'components', 'marks', 'node_modules', '@tanstack']) await tree.getByRole('button', { name: new RegExp(`^${folder.replace('.', '\\.')}( M)?$`) }).first().click();
 	await tree.getByRole('button', { name: /^illustrations\.tsx/ }).click();
 	await page.waitForTimeout(1500);
 }

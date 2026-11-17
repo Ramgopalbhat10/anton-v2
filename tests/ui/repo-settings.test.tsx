@@ -26,7 +26,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { RepoSettingsPage } = await import('@/components/repo-settings');
+const { RepoSettingsPage } = await import('@/components/settings/repo-settings');
 
 function open(path: string) {
 	const root = createRootRoute({ component: Outlet });

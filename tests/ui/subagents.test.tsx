@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SubagentRun } from '@/lib/api';
 import { renderWithQueries } from './render';
 
-const { AgentsCard, plainLine } = await import('@/components/subagents');
-const { AgentsTab } = await import('@/components/agents-tab');
+const { AgentsCard, plainLine } = await import('@/components/thread/subagents');
+const { AgentsTab } = await import('@/components/workspace/agents-tab');
 const { ShowPanel, focusRun } = await import('@/lib/workspace');
 
 const now = Date.now();

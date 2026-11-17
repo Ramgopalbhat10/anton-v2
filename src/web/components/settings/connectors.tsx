@@ -2,9 +2,9 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link, useCanGoBack, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Check, Copy, ExternalLink, Plus, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
-import { GMAIL, GOOGLE, type Mark, MarkTile, MCP, useComposioMark, useServerMark } from '@/components/brand-marks';
-import { Status } from '@/components/instrument';
-import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner, Switch } from '@/components/signal';
+import { GMAIL, GOOGLE, type Mark, MarkTile, MCP, useComposioMark, useServerMark } from '@/components/marks/brand-marks';
+import { Status } from '@/components/kit/instrument';
+import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner, Switch } from '@/components/kit/signal';
 import { api, type ComposioAccount, type ComposioToolkitHit, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer, type McpServerInput } from '@/lib/api';
 import { type CatalogEntry, catalogEntryFor, composioEntryFor, COMPOSIO_CATALOG, GMAIL_ENTRY, GMAIL_TOOLS, MCP_CATALOG } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, connectorKey, type ConnectorState, setConnectorOn } from '@/lib/connectors';

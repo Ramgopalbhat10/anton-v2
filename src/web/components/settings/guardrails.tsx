@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Activity, ArrowUpRight, ChevronRight, Globe, ListChecks, type IconComponent, ShieldCheck } from '@/lib/icons';
-import { Status } from '@/components/instrument';
-import { Icon, Spinner, Switch } from '@/components/signal';
+import { Status } from '@/components/kit/instrument';
+import { Icon, Spinner, Switch } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';
 

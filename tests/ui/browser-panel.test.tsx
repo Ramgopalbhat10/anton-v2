@@ -24,8 +24,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { BrowserTab } = await import('@/components/browser-tab');
-const { Composer } = await import('@/components/composer');
+const { BrowserTab } = await import('@/components/workspace/browser-tab');
+const { Composer } = await import('@/components/composer/composer');
 const { addToComposer, elementContext } = await import('@/lib/composer-inbox');
 
 const picked: PickedElement = {

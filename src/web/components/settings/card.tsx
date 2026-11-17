@@ -1,6 +1,6 @@
 import { type AnyRouter, createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useLocation, useRouter } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { RepoSettingsPage } from '@/components/repo-settings';
+import { RepoSettingsPage } from '@/components/settings/repo-settings';
 import { closeSettings } from '@/lib/settings-modal';
 import { ConnectorDetailPage } from './connectors';
 import { SectionPage, SettingsLayout } from './layout';

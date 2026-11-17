@@ -17,10 +17,10 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
 
-const { GitTab } = await import('@/components/git-tab');
-const { HeaderChanges } = await import('@/components/shell');
-const { PullRequestCard } = await import('@/components/reply-cards');
-const { PrTab } = await import('@/components/pr-tab');
+const { GitTab } = await import('@/components/workspace/git-tab');
+const { HeaderChanges } = await import('@/components/shell/shell');
+const { PullRequestCard } = await import('@/components/thread/reply-cards');
+const { PrTab } = await import('@/components/workspace/pr-tab');
 
 const patch = (path: string, line: string) => `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,1 @@\n+${line}\n`;
 

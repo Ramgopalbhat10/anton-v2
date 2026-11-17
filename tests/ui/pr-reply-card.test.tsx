@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PullRequestCard } from '@/components/reply-cards';
+import { PullRequestCard } from '@/components/thread/reply-cards';
 import { renderWithQueries, session } from './render';
 
 describe('pull request reply card', () => {

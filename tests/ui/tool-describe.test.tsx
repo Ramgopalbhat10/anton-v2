@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { describeTool, toolTone } from '@/components/tool-describe';
+import { describeTool, toolTone } from '@/components/thread/tool-describe';
 import { nowText } from '@/lib/now-text';
 
 const sentence = (toolName: string, input: unknown) => render(<p>{describeTool({ toolName, input }).body}</p>).container.textContent;

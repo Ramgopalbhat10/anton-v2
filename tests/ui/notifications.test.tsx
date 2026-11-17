@@ -43,8 +43,8 @@ const api = vi.hoisted(() => ({
 	spaces: vi.fn(async () => ({ spaces: [{ id: 'sp1', name: 'Billing v2', state: 'active', counts: {} }] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { NotificationsBell } = await import('@/components/notifications');
-const { InboxPage } = await import('@/components/inbox-page');
+const { NotificationsBell } = await import('@/components/shell/notifications');
+const { InboxPage } = await import('@/components/pages/inbox-page');
 
 function mount(path = '/') {
 	const root = createRootRoute({

@@ -11,28 +11,28 @@ vi.mock('@flue/react', () => ({ useFlueAgent: () => mocks.agent }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }));
 vi.mock('@/lib/api', () => ({ api: mocks.api }));
 vi.mock('@/lib/flight', () => ({ flyFrom: vi.fn() }));
-vi.mock('@/components/model-picker', () => ({
+vi.mock('@/components/composer/model-picker', () => ({
 	useModels: () => ({ data: { default: 'test/model', models: [] } }),
 	ModelPicker: () => null,
 }));
-vi.mock('@/components/mascot', () => ({ Mascot: () => null, useMascotMood: () => 'idle' }));
-vi.mock('@/components/composer-plus', () => ({ ComposerPlus: () => null }));
-vi.mock('@/components/composer-input', () => ({
+vi.mock('@/components/marks/mascot', () => ({ Mascot: () => null, useMascotMood: () => 'idle' }));
+vi.mock('@/components/composer/composer-plus', () => ({ ComposerPlus: () => null }));
+vi.mock('@/components/composer/composer-input', () => ({
 	ComposerInput: ({ value, onChange }: { value: string; onChange: (text: string) => void }) => (
 		<textarea aria-label="Message" value={value} onChange={(event) => onChange(event.target.value)} />
 	),
 }));
-vi.mock('@/components/attachments', () => ({
+vi.mock('@/components/composer/attachments', () => ({
 	AttachmentTray: () => null,
 	useAttachments: () => ({ images: [], count: 0, dropZone: {}, take: () => ({ files: [], images: [] }) }),
 }));
 // Keep Thread's layout contract: its flex-1 needs a constrained flex-column parent.
 // The browser check exercises the real Thread's geometry; happy-dom has no layout.
-vi.mock('@/components/thread', () => ({
+vi.mock('@/components/thread/thread', () => ({
 	Thread: () => <div data-testid="thread" className="flex min-h-0 min-w-0 flex-1 flex-col" />,
 }));
 
-const { IncognitoPage } = await import('@/components/incognito');
+const { IncognitoPage } = await import('@/components/pages/incognito');
 
 beforeEach(() => {
 	vi.restoreAllMocks();

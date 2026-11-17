@@ -1,0 +1,250 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowUp, ListChecks, SquareDashedMousePointer, Square, X } from '@/lib/icons';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { ComposerPlus } from '@/components/composer/composer-plus';
+import { AttachmentTray, useAttachments } from '@/components/composer/attachments';
+import { ComposerInput } from '@/components/composer/composer-input';
+import { ContextMeter } from '@/components/composer/context-meter';
+import { Mascot, useMascotMood } from '@/components/marks/mascot';
+import type { PendingChange } from '@/components/thread/sent-text';
+import { ModelPicker, useModels } from '@/components/composer/model-picker';
+import { Btn, Icon, IconBtn, Kbd } from '@/components/kit/signal';
+import { TodoPill } from '@/components/composer/todo-pill';
+import { api, isChat, type ModelRoute, type RunOn, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { type ImageAttachment, imageFromBase64, MAX_IMAGES } from '@/lib/attachments';
+import { expandCommand } from '@/lib/completion';
+import { elementContext, elementLabel, type InboxItem, takeFromInbox, useInbox } from '@/lib/composer-inbox';
+import { askToNotify } from '@/lib/notifications';
+import { stateOf } from '@/lib/spaces';
+import { useSessionWake } from '@/lib/wake';
+import { withAttachments } from '../../../core/attachments';
+import { taskQueries } from '@/lib/task-queries';
+
+/** Sent when a message is only images, since the agent always gets text. */
+const IMAGE_ONLY = 'Look at the attached image.';
+const ELEMENT_ONLY = 'Look at the selected element.';
+
+type Element = Extract<InboxItem, { kind: 'element' }>;
+
+function ElementChips({ elements, onRemove }: { elements: Element[]; onRemove: (id: string) => void }) {
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{elements.map(({ id, element }) => (
+				<div
+					key={id}
+					title={`${element.selector}\n${element.url}`}
+					className="flex h-9 max-w-[260px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-1"
+				>
+					{element.image ? (
+						<img src={`data:image/png;base64,${element.image}`} alt="" className="h-7 w-10 shrink-0 rounded-control bg-white object-contain" />
+					) : (
+						<span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-control bg-(--bg-active) text-(--text-3)">
+							<Icon icon={SquareDashedMousePointer} size={13} />
+						</span>
+					)}
+					<span className="flex min-w-0 flex-col">
+						<span className="truncate font-mono text-micro text-(--text)">{elementLabel(element)}</span>
+						<span className="truncate text-micro text-(--text-3)">{element.components[0]?.source ?? element.selector}</span>
+					</span>
+					<button
+						type="button"
+						aria-label={`Remove ${elementLabel(element)}`}
+						onClick={() => onRemove(id)}
+						className="inline-flex size-5 shrink-0 items-center justify-center rounded-control text-(--text-3) hover:bg-(--bg-hover) hover:text-(--text)"
+					>
+						<Icon icon={X} size={10} />
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
+
+export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+	return (
+		<Btn
+			size="sm"
+			variant="ghost"
+			icon={ListChecks}
+			aria-pressed={on}
+			title={on ? 'Plan mode: the agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
+			onClick={() => onChange(!on)}
+			className={on ? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)] hover:bg-(--accent-soft) hover:text-(--accent-text)' : 'text-(--text-2)'}
+		>
+			Plan
+		</Btn>
+	);
+});
+
+/** Messages sent while the agent works join its current turn. Memoized: the thread around it re-renders with every streamed chunk, and the draft need not. */
+export const Composer = memo(function Composer({
+	sessionId,
+	busy,
+	onSend,
+	onStop,
+	onPending,
+}: {
+	sessionId: string;
+	busy?: boolean;
+	onSend: (text: string, images: ImageAttachment[]) => Promise<void>;
+	onStop: () => Promise<void>;
+	/** A message waiting on its files, for the thread to show as sent while they upload. */
+	onPending?: (change: PendingChange) => void;
+}) {
+	const [text, setText] = useState('');
+	const attachments = useAttachments();
+	const { images, addImages } = attachments;
+	const [elements, setElements] = useState<Element[]>([]);
+	const [sending, setSending] = useState<string | null>(null);
+	const inbox = useInbox(sessionId);
+	useEffect(() => {
+		if (!inbox.length) return;
+		const items = takeFromInbox(sessionId);
+		const picked = items.filter((item): item is Element => item.kind === 'element');
+		const drawn = items.flatMap((item) => (item.kind === 'image' ? [item.image] : []));
+		if (picked.length) setElements((current) => [...current, ...picked]);
+		const handed = items.flatMap((item) => (item.kind === 'text' ? [item.text] : []));
+		if (handed.length) setText((current) => [current.trimEnd(), ...handed].filter(Boolean).join('\n\n'));
+		if (drawn.length) addImages(drawn);
+	}, [inbox, sessionId, addImages]);
+	const [stopping, setStopping] = useState(false);
+	const stop = async () => {
+		setStopping(true);
+		await onStop().finally(() => setStopping(false));
+	};
+	const queryClient = useQueryClient();
+	const models = useModels();
+	const session = useQuery(taskQueries.session(sessionId));
+	const chosen = session.data?.model ?? models.data?.default ?? '';
+	const reasoning = session.data?.reasoning ?? null;
+	// One object while the choice holds, so the model picker skips the renders typing causes.
+	const choice = useMemo(() => ({ model: chosen, reasoning }), [chosen, reasoning]);
+	const planning = session.data?.planMode ?? false;
+	const edit = useCallback(
+		(change: Partial<Session>) => {
+			// Show the choice at once; the server's copy replaces it when it lands.
+			queryClient.setQueryData<Session>(['session', sessionId], (current) => current && { ...current, ...change });
+			void api.editSession(sessionId, change).then((updated) => queryClient.setQueryData(['session', sessionId], updated));
+		},
+		[queryClient, sessionId],
+	);
+	const togglePlan = useCallback((planMode: boolean) => edit({ planMode }), [edit]);
+	// Moving a task stops its machine first, which saves its files, so it is not shown as moved until the server says so.
+	const [moving, setMoving] = useState(false);
+	const [moveProblem, setMoveProblem] = useState<string | null>(null);
+	const moveTo = useCallback(
+		(runOn: RunOn) => {
+			setMoving(true);
+			setMoveProblem(null);
+			api.editSession(sessionId, { runOn })
+				.then((updated) => queryClient.setQueryData(['session', sessionId], updated))
+				.catch((error: unknown) => setMoveProblem(error instanceof Error ? error.message : String(error)))
+				.finally(() => setMoving(false));
+		},
+		[queryClient, sessionId],
+	);
+	const working = session.data?.working ?? false;
+	// Typing to a task whose sandbox is stopped starts it, so it is up when the message is sent; the server decides if it needs one.
+	useSessionWake(sessionId, text.trim().length > 0, session.data?.status === 'stopped' && !working);
+	const run = useMemo(
+		() => ({
+			value: session.data?.runOn ?? ('sandbox' as RunOn),
+			onChange: moveTo,
+			locked: moving ? 'Moving the task: its machine stops first, saving its files.' : working ? 'The agent is working. Move the task once it stops.' : null,
+			note: moveProblem,
+		}),
+		[session.data?.runOn, moveTo, moving, moveProblem, working],
+	);
+	const route = session.data?.route ?? null;
+	// A route picked on another model's row picks that model too, in one change.
+	const setRoute = useCallback((next: ModelRoute | null, model?: string) => edit(model ? { model, reasoning: null, route: next } : { route: next }), [edit]);
+	const model = models.data?.models.find((item) => item.id === choice.model);
+	const blind = images.length > 0 && model !== undefined && !model.vision;
+	const budget = useQuery({ ...taskQueries.budget(sessionId), refetchInterval: SAFETY_NET_MS });
+	const blocked = budget.data?.blocked ?? null;
+	const ready = (text.trim() || attachments.count > 0 || elements.length > 0) && !blind && !blocked && !sending && !attachments.limitError;
+	const mood = useMascotMood({ busy: Boolean(busy), waiting: session.data ? stateOf(session.data) === 'waiting' : false, stir: text });
+
+	return (
+		<form
+			className="shrink-0 px-4 pt-1 pb-4"
+			onSubmit={async (event) => {
+				event.preventDefault();
+				if (!ready) return;
+				const taken = attachments.take();
+				const picked = elements;
+				const typed = text;
+				askToNotify();
+				setText('');
+				setElements([]);
+				const attaching = taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`;
+				setSending(attaching);
+				if (attaching) onPending?.({ text: typed.trim(), attaching });
+				try {
+					const attached = await Promise.all(taken.files.map((file) => api.attachToTask(sessionId, file.file)));
+					// Only a /command waits to read the saved commands, so any other message goes at once.
+					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
+					const typedMessage = expandCommand(text.trim(), saved.commands, true);
+					const message = typedMessage || (picked.length ? ELEMENT_ONLY : taken.images.length && !attached.length ? IMAGE_ONLY : '');
+					// Each element goes as text the agent can search the code with, and as its picture when the model can see.
+					const pictures: ImageAttachment[] =
+						model?.vision === false
+							? []
+							: picked.flatMap(({ id, element }) => (element.image ? [imageFromBase64(element.image, `${element.tag}.png`, 'image/png', id)] : []));
+					const context = picked.map(({ element }) => elementContext(element)).join('\n\n');
+					if (attaching) onPending?.('sent');
+					await onSend(withAttachments(context ? `${message}\n\n${context}` : message, attached, 'task'), [...taken.images, ...pictures].slice(0, MAX_IMAGES + picked.length));
+				} catch (error) {
+					// Put the draft back so nothing typed is lost, and say why it did not go.
+					setText((current) => [typed, current].filter(Boolean).join('\n\n'));
+					attachments.restore(taken);
+					setElements((current) => [...picked, ...current]);
+					attachments.setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
+				} finally {
+					onPending?.(null);
+					setSending(null);
+				}
+			}}
+		>
+			<div className="mx-auto mb-1.5 flex max-w-[720px] justify-center empty:hidden">
+				<TodoPill sessionId={sessionId} busy={Boolean(busy)} />
+			</div>
+			<div
+				className="composer relative mx-auto flex max-w-[720px] flex-col gap-2 px-3 pt-3 pb-2"
+				{...attachments.dropZone}
+			>
+				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
+				{elements.length > 0 ? <ElementChips elements={elements} onRemove={(id) => setElements((current) => current.filter((item) => item.id !== id))} /> : null}
+				<AttachmentTray attachments={attachments} />
+				<ComposerInput
+					value={text}
+					onChange={setText}
+					sessionId={sessionId}
+					onPaste={attachments.onPaste}
+					placeholder={busy ? 'Add to what the agent is doing' : planning ? 'Describe what to plan' : session.data && isChat(session.data) ? 'Ask anything' : 'Reply to Anton'}
+				/>
+				{blocked || blind || attachments.limitError || attachments.notice ? (
+					<div className={blocked ? 'text-small text-(--bad)' : 'text-small text-(--warn)'}>
+						{blocked ?? (blind ? `${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.limitError ?? attachments.notice)}
+					</div>
+				) : null}
+				<div className="flex flex-nowrap items-center gap-1.5">
+					<ComposerPlus attachments={attachments} run={run} />
+					<ModelPicker value={choice} onChange={edit} route={route} onRoute={setRoute} />
+					{session.data && isChat(session.data) ? null : <PlanToggle on={planning} onChange={togglePlan} />}
+					{choice.model ? <ContextMeter sessionId={sessionId} model={choice.model} /> : null}
+					<div className="flex min-w-0 flex-[1_1_8px] items-center justify-end gap-1.5 overflow-hidden text-micro whitespace-nowrap text-(--text-4) max-sm:invisible">
+						{busy ? (
+							<>
+								<span className="truncate">Send to the running agent</span>
+								<Kbd keys="enter" size="sm" />
+							</>
+						) : null}
+					</div>
+					{busy ? <IconBtn icon={Square} variant="secondary" label="Stop the agent" onClick={() => void stop()} disabled={stopping} /> : null}
+					<IconBtn type="submit" icon={ArrowUp} variant="inverse" label="Send message" disabled={!ready} />
+				</div>
+			</div>
+		</form>
+	);
+});

@@ -21,7 +21,7 @@ describe('design tokens', () => {
 
 	it('sizes text with the type steps only', () => {
 		// The one logo that is sized by its font size, not a text size. A size in em follows the text it sits in, and is fine.
-		expect(found(/(?<![\w-])text-\[[\d.]+(px|rem)\]/g, ['components/illustrations.tsx'])).toEqual([]);
+		expect(found(/(?<![\w-])text-\[[\d.]+(px|rem)\]/g, ['components/marks/illustrations.tsx'])).toEqual([]);
 		expect(found(/(?<![\w-])text-(xs|sm|base|lg|xl|[2-9]xl)(?![\w-])/g)).toEqual([]);
 	});
 
@@ -34,15 +34,15 @@ describe('design tokens', () => {
 		// Marks and drawings carry their own colours: brand logos, file-type icons, the mascot and the mark,
 		// diagrams, project colours you pick, the sketch pad's inks, and the terminal's 16-colour palette.
 		const drawn = [
-			'components/brand-marks.tsx',
-			'components/file-icons.tsx',
-			'components/illustrations.tsx',
-			'components/mascot.tsx',
-			'components/mermaid-diagram.tsx',
-			'components/project-icon.tsx',
-			'components/signal.tsx',
-			'components/sketch.tsx',
-			'components/terminal-tab.tsx',
+			'components/marks/brand-marks.tsx',
+			'components/marks/file-icons.tsx',
+			'components/marks/illustrations.tsx',
+			'components/marks/mascot.tsx',
+			'components/content/mermaid-diagram.tsx',
+			'components/marks/project-icon.tsx',
+			'components/kit/signal.tsx',
+			'components/content/sketch.tsx',
+			'components/workspace/terminal-tab.tsx',
 		];
 		expect(found(/(?<![\w&])#[0-9a-fA-F]{6}\b/g, drawn).filter((hit) => !hit.includes('lib/'))).toEqual([]);
 	});

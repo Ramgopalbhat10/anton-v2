@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 	notifications: vi.fn(async () => ({ notifications: [], unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0 } })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { ChatSidebar } = await import('@/components/chat-sidebar');
+const { ChatSidebar } = await import('@/components/shell/chat-sidebar');
 const { showWorking } = await import('@/lib/working');
 
 const tasks = [

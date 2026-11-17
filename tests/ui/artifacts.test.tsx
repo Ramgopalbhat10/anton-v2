@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({
 	})),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { ArtifactsPage, ArtifactView } = await import('@/components/artifacts-page');
+const { ArtifactsPage, ArtifactView } = await import('@/components/pages/artifacts-page');
 const { CATEGORIES } = await import('@/lib/artifacts');
 
 const now = Date.now();

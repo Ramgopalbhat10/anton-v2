@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
-import { components, fileRef, Markdown, markdownBlocks } from '@/components/markdown';
+import { components, fileRef, Markdown, markdownBlocks } from '@/components/content/markdown';
 
 /** Code blocks highlight through a query, so the markup renders inside a client. */
 const html = (node: ReactNode) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>);

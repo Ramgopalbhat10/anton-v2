@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { TodoList } from '@/lib/api';
 import { renderWithQueries } from './render';
 
-const { TodoPill } = await import('@/components/todo-pill');
+const { TodoPill } = await import('@/components/composer/todo-pill');
 
 const list: TodoList = {
 	updatedAt: '2026-10-13T00:00:00Z',

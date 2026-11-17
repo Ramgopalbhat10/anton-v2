@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { FACETS, taskNote } from '@/lib/task-view';
-import { needsYou } from '@/components/home-dashboard';
+import { needsYou } from '@/components/pages/home-dashboard';
 import { session } from './render';
 
 describe('Task notes', () => {

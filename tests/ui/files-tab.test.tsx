@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
 
-const { FilesTab } = await import('@/components/files-tab');
+const { FilesTab } = await import('@/components/workspace/files-tab');
 
 const listing = {
 	source: 'base',

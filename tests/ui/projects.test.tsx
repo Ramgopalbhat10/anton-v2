@@ -29,15 +29,15 @@ const api = vi.hoisted(() => ({
 	addSpaceAutomation: vi.fn(async () => ({})),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { ThreadChip, ThreadRow, ThreadPeek, nextSteps } = await import('@/components/thread-card');
-const { InlineLinks, Markdown } = await import('@/components/markdown');
-const { ProjectSidebarBody } = await import('@/components/project-sidebar');
+const { ThreadChip, ThreadRow, ThreadPeek, nextSteps } = await import('@/components/projects/thread-card');
+const { InlineLinks, Markdown } = await import('@/components/content/markdown');
+const { ProjectSidebarBody } = await import('@/components/projects/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
-const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/project-viz');
-const { ProjectRoutines } = await import('@/components/project-panel');
-const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/project-icon');
-const { NewThreadForm, ProjectFeed } = await import('@/components/project-feed');
-const { OutputViewerHost } = await import('@/components/output-viewer');
+const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/projects/project-viz');
+const { ProjectRoutines } = await import('@/components/projects/project-panel');
+const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/marks/project-icon');
+const { NewThreadForm, ProjectFeed } = await import('@/components/projects/project-feed');
+const { OutputViewerHost } = await import('@/components/content/output-viewer');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
