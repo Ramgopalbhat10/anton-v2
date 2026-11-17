@@ -32,7 +32,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 const { ThreadChip, ThreadRow, ThreadPeek, nextSteps } = await import('@/components/projects/thread-card');
 const { InlineLinks, Markdown } = await import('@/components/content/markdown');
-const { ProjectSidebarBody } = await import('@/components/projects/project-sidebar');
+const { ProjectSidebarBody, ProjectSwitcher } = await import('@/components/projects/project-sidebar');
 const { parseReports, groupByState } = await import('@/lib/spaces');
 const { StateSplit, countKinds, activity, ProjectPulse, BurnCard, ticks, tickLabel } = await import('@/components/projects/project-viz');
 const { ProjectRoutines } = await import('@/components/projects/project-panel');
@@ -513,6 +513,16 @@ describe('threads', () => {
 		await userEvent.click(within(screen.getByRole('region', { name: 'Done' })).getByRole('button'));
 		expect(screen.getByText('Old cleanup')).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Coordinator/ }).getAttribute('aria-current')).toBe('page');
+	});
+
+	it('switches projects from one line whose menu also leads back out, closing the phone sheet', async () => {
+		const onNavigate = vi.fn();
+		withRouter(() => <ProjectSwitcher spaceId="space_1" collapsed onNavigate={onNavigate} />);
+		const trigger = await screen.findByRole('button', { name: /Billing/ });
+		expect(trigger.getAttribute('title')).toMatch(/^Billing · \d+ repos? · \d+ threads?$/);
+		await userEvent.click(trigger);
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'All tasks' }));
+		expect(onNavigate).toHaveBeenCalledOnce();
 	});
 
 	it('draws each state as its own glyph, and the project as a split by state', async () => {

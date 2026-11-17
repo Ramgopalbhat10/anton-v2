@@ -244,8 +244,61 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 	);
 }
 
-export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId: string; threadId?: string; onNavigate: () => void }) {
+/** One line, so collapsed it is an icon the size of the rows around it. Its menu is the way out of the project. */
+export function ProjectSwitcher({ spaceId, collapsed = false, onNavigate }: { spaceId: string; collapsed?: boolean; onNavigate: () => void }) {
 	const navigate = useNavigate();
+	const spaces = useSpaces();
+	const space = spaces.data?.spaces.find((item) => item.id === spaceId);
+	const go = (to: () => Promise<void>) => {
+		onNavigate();
+		void to();
+	};
+	const name = space?.name ?? 'Project';
+	const counts = space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : '';
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<button
+					type="button"
+					title={[collapsed ? name : '', counts].filter(Boolean).join(' · ') || undefined}
+					className="sg-nav-pin group/switch mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-control px-[7px] text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
+				>
+					{space ? <SpaceMark space={space} size={18} className="shrink-0" /> : <span className="size-[18px] shrink-0" />}
+					<span className="sg-nav-label min-w-0 flex-1 truncate text-body font-semibold text-(--text)">{name}</span>
+					<Icon icon={ChevronsUpDown} size={13} className="sg-nav-label shrink-0 text-(--text-4) group-hover/switch:text-(--text-2)" />
+				</button>
+			</MenuTrigger>
+			<MenuContent side={collapsed ? 'right' : 'bottom'} align="start" sideOffset={collapsed ? 10 : 4} className="w-[220px]">
+				{(spaces.data?.spaces ?? [])
+					.filter((item) => item.state !== 'archived')
+					.map((item) => (
+						<MenuItem key={item.id} checked={item.id === spaceId} hint={item.counts.waiting || undefined} onSelect={() => go(() => navigate({ to: '/projects/$spaceId', params: { spaceId: item.id } }))}>
+							<span className="flex min-w-0 items-center gap-2">
+								<SpaceMark space={item} size={14} />
+								<span className="truncate">{item.name}</span>
+							</span>
+						</MenuItem>
+					))}
+				<MenuSeparator />
+				<MenuItem icon={Settings} onSelect={() => openProjectSettings(spaceId)}>
+					Project settings
+				</MenuItem>
+				<MenuItem icon={Plus} onSelect={() => go(() => navigate({ to: '/projects', search: { create: true } }))}>
+					New project
+				</MenuItem>
+				<MenuSeparator />
+				<MenuItem icon={LayoutGrid} onSelect={() => go(() => navigate({ to: '/projects' }))}>
+					All projects
+				</MenuItem>
+				<MenuItem icon={ArrowLeft} onSelect={() => go(() => navigate({ to: '/' }))}>
+					All tasks
+				</MenuItem>
+			</MenuContent>
+		</Menu>
+	);
+}
+
+export function ProjectSidebarBody({ spaceId, threadId, collapsed = false, onNavigate }: { spaceId: string; threadId?: string; collapsed?: boolean; onNavigate: () => void }) {
 	const spaces = useSpaces();
 	const { threads } = useThreads(spaceId);
 	const space = spaces.data?.spaces.find((item) => item.id === spaceId);
@@ -262,94 +315,44 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 	const coordinatorActive = !threadId;
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex flex-col gap-1.5 pb-1">
-				<div className="flex h-6 items-center gap-1">
-					<Link to="/" onClick={onNavigate} className="flex h-6 items-center gap-1.5 rounded-control px-1.5 text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
-						<Icon icon={ArrowLeft} size={12} />
-						All tasks
-					</Link>
-					<span className="text-small text-(--text-4)">/</span>
-					<Link to="/projects" onClick={onNavigate} className="flex h-6 items-center rounded-control px-1.5 text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
-						Projects
-					</Link>
-				</div>
-				<Menu>
-					<MenuTrigger asChild>
-						<button
-							type="button"
-							className="flex flex-col rounded-control bg-(--bg-hover) p-1.5 text-left shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
-						>
-							<span className="flex w-full min-w-0 items-center gap-2.5">
-								{space ? <SpaceMark space={space} size={20} /> : <span className="size-5" />}
-								<span className="flex min-w-0 flex-1 flex-col gap-px">
-									<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
-									<span className="in-num truncate text-micro text-(--text-3)">
-										{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
-									</span>
-								</span>
-								<Icon icon={ChevronsUpDown} size={14} className="text-(--text-3)" />
-							</span>
-						</button>
-					</MenuTrigger>
-					<MenuContent align="start" className="w-[220px]">
-						{(spaces.data?.spaces ?? [])
-							.filter((item) => item.state !== 'archived')
-							.map((item) => (
-								<MenuItem key={item.id} checked={item.id === spaceId} hint={item.counts.waiting || undefined} onSelect={() => void navigate({ to: '/projects/$spaceId', params: { spaceId: item.id } })}>
-									<span className="flex min-w-0 items-center gap-2">
-										<SpaceMark space={item} size={14} />
-										<span className="truncate">{item.name}</span>
-									</span>
-								</MenuItem>
-							))}
-						<MenuSeparator />
-						<MenuItem icon={LayoutGrid} onSelect={() => void navigate({ to: '/projects' })}>
-							All projects
-						</MenuItem>
-						<MenuItem icon={Plus} onSelect={() => void navigate({ to: '/projects', search: { create: true } })}>
-							New project
-						</MenuItem>
-						<MenuItem icon={Settings} onSelect={() => openProjectSettings(spaceId)}>
-							Project settings
-						</MenuItem>
-					</MenuContent>
-				</Menu>
-			</div>
 			<div className="-mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 pb-2">
-				<div className="pt-1.5">
+				<div>
 					<Link
 						to="/projects/$spaceId"
 						params={{ spaceId }}
 						onClick={onNavigate}
 						aria-current={coordinatorActive ? 'page' : undefined}
-						className={cn(ROW, 'h-7', coordinatorActive && 'text-(--text)')}
+						title={collapsed ? 'Coordinator' : undefined}
+						className={cn(ROW, 'sg-nav-pin h-7', coordinatorActive && 'text-(--text)')}
 					>
 						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
 						<span className="relative inline-flex shrink-0 items-center justify-center text-(--accent-text)">
 							<Icon icon={Waypoints} size={15} />
 						</span>
-						<span className="relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
+						<span className="sg-nav-label relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
 					</Link>
 				</div>
-				{threads.length ? (
-					<ThreadsToolbar
-						threads={threads}
-						shown={shown.length}
-						filters={filters}
-						onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
-						onClear={() => setFilters(DEFAULT_VIEW.filters)}
-						query={query}
-						onQuery={setQuery}
-					/>
-				) : null}
-				{groups.map((group) => (
-					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
-				))}
-				{threads.length === 0 ? (
-					<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
-				) : narrowed && shown.length === 0 ? (
-					<div className="px-2 pt-2 text-small text-(--text-4)">No thread matches.</div>
-				) : null}
+				<div className="sg-nav-more flex flex-col">
+					{threads.length ? (
+						<ThreadsToolbar
+							threads={threads}
+							shown={shown.length}
+							filters={filters}
+							onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
+							onClear={() => setFilters(DEFAULT_VIEW.filters)}
+							query={query}
+							onQuery={setQuery}
+						/>
+					) : null}
+					{groups.map((group) => (
+						<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
+					))}
+					{threads.length === 0 ? (
+						<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
+					) : narrowed && shown.length === 0 ? (
+						<div className="px-2 pt-2 text-small text-(--text-4)">No thread matches.</div>
+					) : null}
+				</div>
 			</div>
 		</div>
 	);

@@ -2,8 +2,8 @@ import { type UseFlueAgentResult, useFlueAgent } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { Check, ChevronRight, FileDiff, GitBranch, PanelRight } from '@/lib/icons';
-import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChatSidebar, SidebarRail } from '@/components/shell/chat-sidebar';
+import { type CSSProperties, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { ChatSidebar } from '@/components/shell/chat-sidebar';
 import { CommandPalette } from '@/components/shell/command-palette';
 import { MobileNav } from '@/components/shell/mobile-nav';
 import { ErrorBoundary } from '@/components/kit/error-boundary';
@@ -42,6 +42,18 @@ function readCollapsed() {
 	}
 }
 
+/** The width where the sidebar can collapse to its icon rail (`md` in aura-components.css); below it the sidebar is a full drawer whatever was saved. */
+const RAIL_QUERY = '(min-width: 768px)';
+const railMedia = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(RAIL_QUERY) : null);
+function subscribeRail(onChange: () => void): () => void {
+	const list = railMedia();
+	list?.addEventListener('change', onChange);
+	return () => list?.removeEventListener('change', onChange);
+}
+function useRailWidth(): boolean {
+	return useSyncExternalStore(subscribeRail, () => railMedia()?.matches ?? true, () => true);
+}
+
 /** Its own component, so a change to the task list does not re-render the whole shell. */
 function TaskNotifications() {
 	useTaskNotifications();
@@ -63,6 +75,7 @@ export function AppShell() {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
 	const [navOpen, setNavOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(readCollapsed);
+	const railWidth = useRailWidth();
 	const [storedWidth, setNavWidth] = useStoredState('anton.sidebarWidth', NAV_DEFAULT);
 	// A width saved under other limits, or not a number at all, comes back inside these.
 	const navWidth = Number.isFinite(storedWidth) ? Math.min(NAV_MAX, Math.max(NAV_MIN, storedWidth)) : NAV_DEFAULT;
@@ -75,14 +88,11 @@ export function AppShell() {
 	// The same function on every render, so nothing that opens the sidebar draws again when the shell does.
 	const openNav = useCallback(() => setNavOpen(true), []);
 	const collapse = useCallback(() => setCollapsed(true), []);
+	const expand = useCallback(() => setCollapsed(false), []);
 	const openPalette = useCallback(() => {
 		setNavOpen(false);
 		setPaletteOpen(true);
 	}, []);
-	const openNotifications = useCallback(() => {
-		setNavOpen(false);
-		void navigate({ to: '/inbox' });
-	}, [navigate]);
 	useLiveUpdates();
 
 	useEffect(() => {
@@ -125,7 +135,7 @@ export function AppShell() {
 					className="sg-nav-scrim fixed inset-0 z-20 bg-(--bg-scrim) md:hidden"
 					onClick={() => setNavOpen(false)}
 				/>
-				{/* The sidebar and its rail share a column that narrows as the sidebar slides out, so the page follows it smoothly. */}
+				{/* The column narrows over a sidebar that never moves, so the page slides across it like a sheet and the icons that stay keep their place. */}
 				{incognito ? null : (
 					<div className="sg-nav-column" data-collapsed={collapsed} style={{ '--nav-w': `${navWidth}px` } as CSSProperties}>
 						{collapsed ? null : (
@@ -140,13 +150,13 @@ export function AppShell() {
 								className="absolute inset-y-0 right-0 z-10 hidden w-2 before:bg-transparent md:flex"
 							/>
 						)}
-						<SidebarRail shown={collapsed} onExpand={() => setCollapsed(false)} onOpenNotifications={openNotifications} />
 						<ErrorBoundary label="The sidebar" className="m-3">
 							<ChatSidebar
 								open={navOpen}
-								collapsed={collapsed}
+								collapsed={collapsed && railWidth}
 								onNavigate={closeNav}
 								onCollapse={collapse}
+								onExpand={expand}
 								onOpenPalette={openPalette}
 							/>
 						</ErrorBoundary>

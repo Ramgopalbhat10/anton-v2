@@ -47,8 +47,8 @@ const tasks = [
 	}),
 ];
 
-function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={false} onNavigate={() => {}} onCollapse={() => {}} onOpenPalette={() => {}} /> });
+function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }), { collapsed = false, onExpand = () => {} } = {}) {
+	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={collapsed} onNavigate={() => {}} onCollapse={() => {}} onExpand={onExpand} onOpenPalette={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),
@@ -87,6 +87,23 @@ describe('sidebar', () => {
 		// One task's pull request is open; the merged one is not counted.
 		await screen.findByText('Red checks');
 		expect(within(screen.getByRole('link', { name: /^Reviews/ })).getByText('1')).toBeTruthy();
+	});
+
+	it('has no Home row, since the logo and New task already go home', async () => {
+		open();
+		const pages = await screen.findByRole('navigation', { name: 'Pages' });
+		expect(within(pages).queryByRole('link', { name: 'Home' })).toBeNull();
+		expect(within(pages).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/inbox', '/tasks', '/reviews', '/projects', '/artifacts']);
+	});
+
+	it('collapses in place: the same rows stay, named by tooltips, and the logo opens it again', async () => {
+		const onExpand = vi.fn();
+		open(undefined, { collapsed: true, onExpand });
+		const artifacts = await screen.findByRole('link', { name: 'Artifacts' });
+		expect(artifacts.getAttribute('title')).toBe('Artifacts');
+		expect(screen.getByRole('link', { name: /New task/ }).getAttribute('title')).toBe('New task');
+		await userEvent.click(screen.getByRole('button', { name: 'Show sidebar' }));
+		expect(onExpand).toHaveBeenCalledOnce();
 	});
 
 	it('moves a task waiting on you to Running the moment you answer it', async () => {

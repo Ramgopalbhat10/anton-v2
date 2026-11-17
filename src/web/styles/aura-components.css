@@ -437,12 +437,13 @@
  pointer-events: none;
 }
 
-/* The sidebar slides like a sheet: its column narrows to the rail while the
-   sidebar keeps its 236px and moves out, so nothing in it reflows. On a phone
-   it is a sheet over the page, slid in from the left. */
+/* Collapsing, the sidebar never moves or reflows: its column narrows to 48px
+   over it, so the page slides across like a sheet. What stays (.sg-nav-pin)
+   narrows to its icon in step with the column; labels fade, the rest
+   (.sg-nav-more) hides. On a phone it is a sheet over the page, slid in from
+   the left. */
 .sg-nav { transition: transform var(--t-slow) var(--ease), visibility 0s; }
-.sg-nav-rail { transition: opacity var(--t-slow) var(--ease), visibility 0s; }
-.sg-nav-rail[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
+.sg-nav-expand, .sg-nav-dot { opacity: 0; visibility: hidden; }
 .sg-nav-scrim { transition: opacity var(--t-slow) var(--ease), visibility 0s; }
 .sg-nav-scrim[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
 @media (max-width: 767.98px) {
@@ -464,7 +465,18 @@
  /* While its edge is dragged the column follows the pointer, not an easing. */
  .sg-nav-column:has(> [data-dragging]) { transition: none; user-select: none; }
  .sg-nav-column[data-collapsed='true'] { width: 48px; }
- .sg-nav[data-collapsed='true'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
+ /* Both shrink by the same 188px on the same curve, so a pin keeps its 8px from the column's edge all the way. */
+ .sg-nav-pin { max-width: 100%; overflow: hidden; transition: max-width var(--t-slow) var(--ease), background var(--t-fast), box-shadow var(--t-fast); }
+ .sg-nav-label, .sg-nav-logo, .sg-nav-dot { transition: opacity var(--t) var(--ease); }
+ .sg-nav-more { transition: opacity var(--t) var(--ease), visibility 0s; }
+ .sg-nav[data-collapsed='true'] .sg-nav-pin { max-width: 32px; }
+ /* Only faded, not hidden: a label is still its link's name. */
+ .sg-nav[data-collapsed='true'] .sg-nav-label { opacity: 0; }
+ .sg-nav[data-collapsed='true'] .sg-nav-more { opacity: 0; visibility: hidden; transition: opacity var(--t) var(--ease), visibility 0s var(--t); }
+ .sg-nav[data-collapsed='true'] .sg-nav-dot { opacity: 1; visibility: visible; }
+ .sg-nav[data-collapsed='true'] .sg-nav-expand { visibility: visible; transition: opacity var(--t-fast) var(--ease); }
+ .sg-nav[data-collapsed='true'] .sg-nav-expand:is(:hover, :focus-visible) { opacity: 1; }
+ .sg-nav[data-collapsed='true'] .sg-nav-brand:has(.sg-nav-expand:is(:hover, :focus-visible)) .sg-nav-logo { opacity: 0; }
 }
 
 .sg-workspace { flex: 1 1 0%; }
