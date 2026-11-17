@@ -25,7 +25,6 @@ import {
 	Square,
 	SquarePen,
 	Sun,
-	Waypoints,
 	X,
 } from '@/lib/icons';
 import { memo, type ReactNode, useMemo, useState } from 'react';
@@ -33,7 +32,7 @@ import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator,
 import { Count, toneFill, usedTone } from '@/components/kit/instrument';
 import { Logo } from '@/components/marks/illustrations';
 import { loudUnread, useNotifications } from '@/components/shell/notifications';
-import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/projects/project-sidebar';
+import { GroupHeading, ProjectSidebarBody, ProjectSwitcher, ProjectsSection } from '@/components/projects/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/shell/task-actions';
 import { TaskCues } from '@/components/shell/task-cues';
 import { TaskPeek } from '@/components/shell/task-peek';
@@ -551,13 +550,14 @@ export function ChatSidebar({
 				</div>
 			</div>
 
+			{params.spaceId ? <ProjectSwitcher spaceId={params.spaceId} collapsed={collapsed} onNavigate={onNavigate} /> : null}
 			<Link
 				{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 				onClick={onNavigate}
 				title={tip(inProject ? 'New thread' : 'New task')}
 				className="sg-nav-pin sg-btn sg-btn--secondary mb-2 shrink-0 justify-start px-2"
 			>
-				<Icon icon={inProject ? Waypoints : SquarePen} size={15} className="shrink-0" />
+				<Icon icon={SquarePen} size={15} className="shrink-0" />
 				<span className="sg-nav-label min-w-0 flex-1 truncate text-left">{inProject ? 'New thread' : 'New task'}</span>
 				{inProject ? null : (
 					<span className="sg-nav-label max-md:hidden">

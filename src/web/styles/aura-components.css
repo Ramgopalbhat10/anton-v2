@@ -443,9 +443,6 @@
    (.sg-nav-more) hides. On a phone it is a sheet over the page, slid in from
    the left. */
 .sg-nav { transition: transform var(--t-slow) var(--ease), visibility 0s; }
-.sg-nav-card { background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--line); transition: background var(--t-fast), box-shadow var(--t-fast); }
-.sg-nav-card:hover, .sg-nav-card[data-state='open'] { background: var(--bg-active); }
-.sg-nav-card:focus-visible { box-shadow: var(--focus); }
 .sg-nav-expand, .sg-nav-dot { opacity: 0; visibility: hidden; }
 .sg-nav-scrim { transition: opacity var(--t-slow) var(--ease), visibility 0s; }
 .sg-nav-scrim[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
@@ -476,7 +473,6 @@
  /* Only faded, not hidden: a label is still its link's name. */
  .sg-nav[data-collapsed='true'] .sg-nav-label { opacity: 0; }
  .sg-nav[data-collapsed='true'] .sg-nav-more { opacity: 0; visibility: hidden; transition: opacity var(--t) var(--ease), visibility 0s var(--t); }
- .sg-nav[data-collapsed='true'] .sg-nav-card:not(:hover, :focus-visible, [data-state='open']) { background: transparent; box-shadow: none; }
  .sg-nav[data-collapsed='true'] .sg-nav-dot { opacity: 1; visibility: visible; }
  .sg-nav[data-collapsed='true'] .sg-nav-expand { visibility: visible; transition: opacity var(--t-fast) var(--ease); }
  .sg-nav[data-collapsed='true'] .sg-nav-expand:is(:hover, :focus-visible) { opacity: 1; }
