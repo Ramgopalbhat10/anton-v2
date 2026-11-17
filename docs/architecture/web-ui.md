@@ -26,6 +26,7 @@ Linked from [AGENTS.md](../../AGENTS.md). Paths below are under `src/web/` unles
 - Settings › Connections (`components/settings/connections.tsx`) is the health board and first-run setup (server side in [server-and-providers](server-and-providers.md)). Save unlocks only after a passing Test. Until a model can answer, Home shows `components/pages/setup-card.tsx` instead of the composer.
 - New tasks and threads open the moment you send, by an id the page chose (`lib/starting.ts`, skeleton in `components/thread/starting-task.tsx`).
 - Phone width (`useOnePane`, `lib/one-pane.ts`): a task opens on its conversation, side panels on demand; below `md` the sidebar is a drawer and `components/shell/mobile-nav.tsx` is the bottom bar.
+- The sidebar receives the rendered collapse state (saved preference **and** viewport ≥768px). The project switcher's right-side menu belongs only to the desktop rail; the full mobile drawer uses bottom placement even when collapse was saved on desktop.
 
 ## Data and performance rules
 
