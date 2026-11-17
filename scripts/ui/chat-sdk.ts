@@ -28,7 +28,7 @@ export type ChatControls = {
 	/** The conversation's URL and its message count. */
 	info: () => { url: string; messages: number; streaming: boolean };
 };
-export type ReplyOptions = { chars?: number; ms?: number };
+export type ReplyOptions = { chars?: number; ms?: number; text?: string };
 
 declare global {
 	interface Window {
@@ -92,9 +92,9 @@ export function createFlueClient({ url }: { url: string }) {
 		publish({ ...conversation, messages: conversation.messages.map((message) => (message.id === id ? { ...message, parts: [text(value, state)] } : message)) });
 
 	/** Streams a reply to `submissionId` in even chunks over `ms`, then settles it. */
-	function stream(submissionId: string, { chars = 3000, ms = 3000 }: ReplyOptions = {}): Promise<void> {
+	function stream(submissionId: string, { chars = 3000, ms = 3000, text: body }: ReplyOptions = {}): Promise<void> {
 		const id = `reply-${submissionId}`;
-		const whole = answerText(chars);
+		const whole = body ?? answerText(chars);
 		const chunks = Math.max(1, Math.round(ms / CHUNK_MS));
 		live++;
 		publish({ ...conversation, messages: [...conversation.messages, { id, role: 'assistant', purpose: 'assistant', display: 'visible', submissionId, parts: [] }] });

@@ -11,6 +11,24 @@ export type ViewerState = {
 
 let state: ViewerState | null = null;
 const listeners = new Set<() => void>();
+let dock: HTMLElement | null = null;
+const dockListeners = new Set<() => void>();
+
+export function setViewerDock(next: HTMLElement | null): void {
+	dock = next;
+	for (const listener of dockListeners) listener();
+}
+
+export function useViewerDock(): HTMLElement | null {
+	return useSyncExternalStore(
+		(listener) => {
+			dockListeners.add(listener);
+			return () => void dockListeners.delete(listener);
+		},
+		() => dock,
+		() => null,
+	);
+}
 
 function set(next: ViewerState | null): void {
 	state = next;
