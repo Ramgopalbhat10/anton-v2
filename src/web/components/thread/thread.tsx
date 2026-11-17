@@ -258,7 +258,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const settlements = agent.settlements;
 	const joins = useQuery(taskQueries.joins(sessionId)).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
-	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, liveReply), [messages, joins, answeredBy, liveReply]);
+	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, workingReply), [messages, joins, answeredBy, workingReply]);
 	const notes = useMemo(() => {
 		const live = liveReply ? messages.indexOf(liveReply) : -1;
 		const map = new Map<string, string>();

@@ -123,7 +123,14 @@ describe('Thread', () => {
 		await screen.findByText('Sent while Anton worked, read here');
 		expect(view.container.querySelectorAll('.group\\/reply')).toHaveLength(2);
 		expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
-		expect(view.container.querySelector('.group\\/reply .anton-working')).toBeTruthy();
+		const mark = view.container.querySelector('.group\\/reply .anton-working');
+		expect(mark).toBeTruthy();
+		const whole = { ...reply, metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		for (const settlements of [[], [{ submissionId: 'sub-1', outcome: 'completed' as const }, { submissionId: 'sub-2', outcome: 'completed' as const, answeredBySubmissionId: 'sub-1' }]]) {
+			view.rerender(<QueryClientProvider client={view.client}><Thread sessionId="s1" agent={agent([user('u1', 'Go'), whole, { ...user('u2', 'Are you stuck?'), submissionId: 'sub-2' }], { status: 'streaming', settlements })} /></QueryClientProvider>);
+			expect(screen.getAllByRole('status', { name: 'Anton is working' })).toHaveLength(1);
+			expect(view.container.querySelector('.group\\/reply .anton-working')).toBe(mark);
+		}
 	});
 
 	it('renders replies as markdown and steps as one card, with a link to the pull request', () => {
