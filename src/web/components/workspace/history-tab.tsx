@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, ChevronLeft, History, RotateCcw } from '@/lib/icons';
 import { useMemo, useState } from 'react';
-import { DiffList } from '@/components/workspace/git-tab';
+import { DiffList } from '@/components/workspace/diff-list';
 import { useRefreshTask } from '@/components/workspace/source-bar';
 import { HistoryArt } from '@/components/marks/illustrations';
 import { DiffBars, Status } from '@/components/kit/instrument';

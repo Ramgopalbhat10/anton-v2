@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Cpu, FolderGit2, GitPullRequest, Plus, Search, X } from '@/lib/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TasksArt } from '@/components/marks/illustrations';
-import { useModelName } from '@/components/composer/model-picker';
+import { useModelName } from '@/lib/models';
 import { MenuButton } from '@/components/kit/nav';
 import { EmptyState, FilterMenu, Icon, Kbd, SearchField, Spinner } from '@/components/kit/signal';
 import { TaskRow } from '@/components/pages/task-row';

@@ -12,7 +12,7 @@ import { ReadNotificationsOf } from '@/components/shell/notifications';
 import { Launcher } from '@/components/pages/launcher';
 import { MenuButton, NavContext } from '@/components/kit/nav';
 import { Badge, DiffStat, Icon, IconBtn } from '@/components/kit/signal';
-import { useChanges } from '@/components/workspace/git-tab';
+import { useChanges } from '@/lib/changes';
 import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/shell/task-actions';
 import { Thread } from '@/components/thread/thread';
 import { type PanelName, panels, VmPanel } from '@/components/workspace/vm-panel';

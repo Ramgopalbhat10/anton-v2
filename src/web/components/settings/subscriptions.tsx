@@ -4,7 +4,8 @@ import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, KeyRound, RotateC
 import { type ReactNode, useState } from 'react';
 import { PlanLinkArt } from '@/components/marks/illustrations';
 import { Caption, Card, CardFooter, CardSection, SegmentMeter, SpecGrid, Status, StatusDot, Tab, Tabs, usedTone, Well } from '@/components/kit/instrument';
-import { EffortRange, useModels } from '@/components/composer/model-picker';
+import { EffortRange } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { AREA } from '@/components/settings/repo-settings';
 import { Btn, EmptyLine, Icon, InfoTip, InlineCode, SearchField, Spinner, Switch } from '@/components/kit/signal';
 import { api, type PlanWindow, type Subscription, type SubscriptionOptions } from '@/lib/api';

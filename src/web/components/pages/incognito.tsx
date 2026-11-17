@@ -13,7 +13,8 @@ import { AttachmentTray, useAttachments } from '@/components/composer/attachment
 import { ComposerInput } from '@/components/composer/composer-input';
 import { ComposerPlus } from '@/components/composer/composer-plus';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import { ModelPicker, useModels } from '@/components/composer/model-picker';
+import { ModelPicker } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { Icon, IconBtn } from '@/components/kit/signal';
 import { Thread } from '@/components/thread/thread';
 

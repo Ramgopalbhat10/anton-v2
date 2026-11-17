@@ -12,8 +12,10 @@ vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }))
 vi.mock('@/lib/api', () => ({ api: mocks.api }));
 vi.mock('@/lib/flight', () => ({ flyFrom: vi.fn() }));
 vi.mock('@/components/composer/model-picker', () => ({
-	useModels: () => ({ data: { default: 'test/model', models: [] } }),
 	ModelPicker: () => null,
+}));
+vi.mock('@/lib/models', () => ({
+	useModels: () => ({ data: { default: 'test/model', models: [] } }),
 }));
 vi.mock('@/components/marks/mascot', () => ({ Mascot: () => null, useMascotMood: () => 'idle' }));
 vi.mock('@/components/composer/composer-plus', () => ({ ComposerPlus: () => null }));

@@ -6,7 +6,7 @@ import { CopyButton } from '@/components/content/code-block';
 import { frameUrl } from '@/components/content/html-frame';
 import { LibraryArt } from '@/components/marks/illustrations';
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
-import { kindOf } from '@/components/workspace/library-tab';
+import { kindOf } from '@/lib/library';
 import { MenuButton } from '@/components/kit/nav';
 import { DeletedArtifact, OutputPreview, OutputThumb } from '@/components/content/output-viewer';
 import { TopBar } from '@/components/kit/page-frame';
