@@ -2,7 +2,7 @@
 
 Linked from [AGENTS.md](../../AGENTS.md).
 
-- Settings › Connectors (`src/web/components/settings/connectors.tsx`, catalog in `src/web/lib/connector-catalog.ts`) turns each connector on or off for every task.
+- Settings › Connectors (`src/web/components/settings/connectors.tsx`; detail pages in `connector-mailbox.tsx`, `connector-mcp.tsx` and `connector-composio.tsx`, shared pieces in `connector-parts.tsx`; catalog in `src/web/lib/connector-catalog.ts`) turns each connector on or off for every task.
 - The agent never gets a connector's tools in its tool list: `connector_tools` lists them and `connector_call` calls one (`src/services/connectors/connector-tools.ts`), reading the state as they run. Switching a connector changes neither tools nor instructions, so the prompt cache holds.
 - MCP servers live in `mcp_servers` (`src/services/connectors/mcp-servers.ts`); OAuth sign-in is `src/services/connectors/mcp-sign-in.ts`. Tokens reach connections as a bearer, never a view.
 - Accounts (Google, `src/providers/google/sign-in.ts`) sign in with PKCE on the owner's OAuth client; `src/services/connectors/connectors.ts` keeps their tokens on the server, never in a sandbox, a view or the model.
