@@ -231,8 +231,8 @@ export function ReviewsPage() {
 
 	return (
 		<div className="flex min-h-0 flex-1">
-			<div className={cn('flex min-h-0 min-w-0 flex-col bg-(--bg-panel) md:w-[400px] md:shrink-0 md:shadow-[-1px_0_0_var(--line)_inset]', current ? 'max-md:hidden' : 'max-md:flex-1')}>
-				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-2">
+			<div className={cn('flex min-h-0 min-w-0 flex-col bg-(--bg-panel) md:w-[380px] md:shrink-0 md:shadow-[-1px_0_0_var(--line)_inset]', current ? 'max-md:hidden' : 'max-md:flex-1')}>
+				<header className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-2 md:pl-4">
 					<MenuButton />
 					<nav aria-label="Where you are" className="flex min-w-0 shrink-0 items-center text-body">
 						<span className="font-medium text-(--text)">Reviews</span>

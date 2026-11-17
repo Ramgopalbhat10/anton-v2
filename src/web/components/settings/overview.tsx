@@ -185,7 +185,7 @@ export function SettingsOverview() {
 	return (
 		<div className="flex flex-col gap-6">
 			<div className="flex flex-col gap-2">
-				<h1 className="m-0 text-h1 leading-[32px] font-semibold tracking-[-0.022em]">Settings</h1>
+				<h1 className="m-0 text-h1 leading-[32px] font-semibold tracking-[-0.02em]">Settings</h1>
 				<p className="m-0 max-w-[72ch] text-body leading-[20px] text-pretty text-(--text-3)">What Anton may spend, work on and keep.</p>
 			</div>
 			<div className="grid gap-3 sm:grid-cols-2">

@@ -64,3 +64,31 @@ export function LazyPart({ label, children, className }: Props) {
 		</ErrorBoundary>
 	);
 }
+
+/** A page that failed outside the guarded parts: the app's own notice, not the router's bare one. */
+export function RouteError({ error, reset }: { error: unknown; reset: () => void }) {
+	const stale = isChunkError(error);
+	return (
+		<div role="alert" className="flex h-full min-h-0 flex-1 items-center justify-center bg-(--bg-panel) p-6">
+			<div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
+				<Icon icon={CircleAlert} size={20} className="text-(--bad)" />
+				<div className="flex flex-col gap-1">
+					<span className="text-body-lg leading-[20px] font-semibold text-(--text)">{stale ? 'Anton was updated' : 'This page could not be shown'}</span>
+					<span className="text-body leading-[18px] break-words text-(--text-3)">
+						{stale ? 'Reload to get the newest version.' : error instanceof Error ? error.message : String(error)}
+					</span>
+				</div>
+				<div className="flex gap-2">
+					{stale ? null : (
+						<Btn variant="secondary" onClick={reset}>
+							Try again
+						</Btn>
+					)}
+					<Btn variant={stale ? 'primary' : 'ghost'} onClick={() => window.location.reload()}>
+						Reload
+					</Btn>
+				</div>
+			</div>
+		</div>
+	);
+}

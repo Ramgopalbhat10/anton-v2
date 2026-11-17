@@ -1,6 +1,6 @@
 import { useFlueAgent } from '@flue/react';
 import { useNavigate } from '@tanstack/react-router';
-import { EyeOff, Send, Square, X } from '@/lib/icons';
+import { ArrowUp, EyeOff, Square, X } from '@/lib/icons';
 import { type FormEvent, type Ref, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withAttachments } from '../../../core/attachments';
 import { newIncognitoId } from '../../../core/incognito';
@@ -89,7 +89,7 @@ function IncognitoComposer({
 	}
 
 	return (
-		<form ref={formRef} className={cn('relative mx-auto flex w-full max-w-[680px] flex-col gap-2 px-4 pt-1 pb-4', className)} onSubmit={submit} {...attachments.dropZone}>
+		<form ref={formRef} className={cn('relative mx-auto flex w-full max-w-[760px] flex-col gap-2 pt-1 pr-6 pb-4 pl-4', className)} onSubmit={submit} {...attachments.dropZone}>
 			<AttachmentTray attachments={attachments} />
 			<div className="in-card relative flex flex-col gap-2 px-3 pt-3 pb-2 focus-within:border-(--line-strong)">
 				<Mascot mood={mood} className="absolute right-5 bottom-[calc(100%-1px)]" />
@@ -116,8 +116,8 @@ function IncognitoComposer({
 						side="bottom"
 					/>
 					<div className="min-w-0 flex-[1_1_8px]" />
-					{busy ? <IconBtn icon={Square} size="sm" label="Stop" onClick={stop} /> : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send" disabled={!ready} />
+					{busy ? <IconBtn icon={Square} variant="secondary" label="Stop" onClick={stop} /> : null}
+					<IconBtn type="submit" icon={ArrowUp} variant="inverse" label="Send" disabled={!ready} />
 				</div>
 			</div>
 		</form>
@@ -185,6 +185,7 @@ export function IncognitoPage() {
 			route={route}
 			onRoute={setRoute}
 			onSend={markStarted}
+			className={chatting ? undefined : 'max-w-[680px] px-4'}
 		/>
 	);
 

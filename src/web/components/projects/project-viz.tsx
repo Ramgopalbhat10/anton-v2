@@ -11,7 +11,7 @@ import { Glyph, type GlyphKind, glyphKind, KIND_LABEL, KINDS, STATE_COLOR } from
 import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
 import type { Space } from '@/lib/api/spaces';
-import { age, dollars, elapsed, tokens } from '@/lib/format';
+import { age, dollars, elapsed, tokens, when } from '@/lib/format';
 import { stateOf, threadActiveAt, threadLine } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
@@ -137,7 +137,7 @@ function StripCell({ thread, onOpen }: { thread: Session; onOpen: () => void }) 
 					<span className="flex items-center gap-1.5">
 						<Glyph kind={kind} size={12} />
 						<span className={cn('in-caption', kind === 'waiting' ? 'text-(--warn)' : kind === 'failed' ? 'text-(--bad)' : kind === 'working' ? 'text-(--accent-text)' : 'text-(--text-2)')}>{KIND_LABEL[kind]}</span>
-						<span className="in-caption ml-auto">{age(threadActiveAt(thread))}</span>
+						<span className="in-caption ml-auto">{when(threadActiveAt(thread))}</span>
 					</span>
 					<span className="truncate text-body text-(--text)">{thread.title}</span>
 					{threadLine(thread) ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{threadLine(thread)}</span> : null}
@@ -256,7 +256,7 @@ export function WaitTracks({ threads }: { threads: Session[] }) {
 								</button>
 								<Caption className="hidden shrink-0 @min-[420px]/workspace:inline">{repoShort(thread)}</Caption>
 								<span className="flex-1" />
-								<span className={cn('in-num shrink-0 text-small', index === 0 ? 'text-(--warn)' : 'text-(--text-3)')}>{age(threadActiveAt(thread), now)}</span>
+								<span className={cn('in-num shrink-0 text-small', index === 0 ? 'text-(--warn)' : 'text-(--text-3)')}>{when(threadActiveAt(thread), now)}</span>
 								<NextSteps thread={thread} size="xs" />
 							</div>
 							<div className="relative ml-[21px] h-3">

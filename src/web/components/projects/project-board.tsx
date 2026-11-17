@@ -36,11 +36,11 @@ function BoardCard({ thread }: { thread: Session }) {
 				<Glyph kind={kind} size={13} className="mt-[3px]" />
 				<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[18px] font-medium text-(--text)">{thread.title}</span>
 			</span>
-			<span className="flex min-w-0 items-center gap-1.5 text-small text-(--text-3)">
+			<span className="flex h-[18px] min-w-0 items-center gap-1.5 text-small text-(--text-3)">
 				<Icon icon={thread.projectId ? FolderGit2 : MessageSquare} size={11} className="shrink-0" />
 				<span className="min-w-0 truncate">{repoShort(thread)}</span>
 				{thread.prUrl ? (
-					<span className="min-w-0 truncate">
+					<span className="flex min-w-0 overflow-hidden">
 						<PrStatus thread={thread} />
 					</span>
 				) : null}

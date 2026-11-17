@@ -108,7 +108,7 @@ describe('Context meter', () => {
 		]);
 		fireEvent.click(screen.getByRole('button', { name: 'Context window' }));
 		expect(screen.getByText(/Measured from the agent's next reply/)).toBeTruthy();
-		expect(screen.getByText('$0.750').nextSibling?.textContent).toBe('This task');
+		expect(screen.getByText('$0.75').nextSibling?.textContent).toBe('This task');
 		expect(screen.getByText('$2.50').nextSibling?.textContent).toBe('Today, all tasks');
 		expect(screen.getByText('$10').nextSibling?.textContent).toBe('Daily cap');
 		expect(screen.getByRole('meter', { name: "Today's spend: 25% of the daily cap" })).toBeTruthy();

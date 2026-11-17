@@ -11,7 +11,7 @@ import { SpaceMark } from '@/components/projects/project-sidebar';
 import { AREA } from '@/components/settings/repo-settings';
 import { Block, FIELD, HelperModel, HELPERS, PageHeading, SaveState, Select, SettingRow, SubBlock } from '@/components/settings/parts';
 import { useGeneralSettings } from '@/components/settings/general';
-import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Spinner } from '@/components/kit/signal';
+import { Btn, EmptyState, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Spinner } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import type { Autonomy, Space, SpaceChange } from '@/lib/api/spaces';
 import type { HelperAgent } from '@/lib/api/settings';
@@ -332,7 +332,7 @@ const SECTIONS: Array<{ id: ProjectSection; label: string; icon: IconComponent }
 ];
 
 const NAV_ITEM =
-	'group/nav relative flex h-8 shrink-0 items-center gap-2.5 rounded-control pr-2 pl-1 text-body text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[active=true]:bg-(--bg-active) data-[active=true]:text-(--text)';
+	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[active=true]:bg-(--bg-active) data-[active=true]:text-(--text)';
 
 function Section({ space, section }: { space: Space; section: ProjectSection }) {
 	switch (section) {
@@ -391,18 +391,16 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 				<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 				<span className="min-w-0 truncate text-(--text)">{current.label}</span>
 				<span className="flex-1" />
+				<Kbd keys="esc" size="sm" />
 				<IconBtn icon={X} size="sm" label="Close project settings" onClick={closeProjectSettings} />
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col md:flex-row">
 				<nav
 					aria-label="Project settings"
 					data-noscrollbar
-					className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-(--line) px-2.5 py-2 md:w-[232px] md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:pt-2.5 md:pb-4"
+					className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-(--line) px-2 py-2 md:w-[220px] md:flex-col md:gap-px md:overflow-y-auto md:border-r md:border-b-0 md:bg-(--bg-panel) md:pt-3 md:pb-4"
 				>
-					<div className="hidden items-center gap-2 px-2 pt-1 pb-1.5 md:flex">
-						<SectionLabel className="shrink-0">Project</SectionLabel>
-						<span aria-hidden className="h-px flex-1 bg-(--line)" />
-					</div>
+					<SectionLabel className="hidden h-6 items-center px-2 md:flex">Project</SectionLabel>
 					{SECTIONS.map((item) => (
 						<button
 							key={item.id}
@@ -414,12 +412,12 @@ export function ProjectSettingsCard({ spaceId, section }: { spaceId: string; sec
 						>
 							<span
 								className={cn(
-									'inline-flex size-6 shrink-0 items-center justify-center text-(--text-3) group-hover/nav:text-(--text-2)',
-									item.id === current.id && 'text-(--accent-text) group-hover/nav:text-(--accent-text)',
+									'inline-flex shrink-0 text-(--text-3) group-hover/nav:text-(--text-2)',
+									item.id === current.id && 'text-(--text) group-hover/nav:text-(--text)',
 									item.id === 'lifecycle' && item.id === current.id && 'text-(--bad) group-hover/nav:text-(--bad)',
 								)}
 							>
-								<Icon icon={item.icon} size={15} />
+								<Icon icon={item.icon} size={14} />
 							</span>
 							<span className="min-w-0 truncate whitespace-nowrap">{item.label}</span>
 						</button>

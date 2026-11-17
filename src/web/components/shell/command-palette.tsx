@@ -6,7 +6,7 @@ import { SECTION_LIST } from '@/components/settings/section-list';
 import { Badge, Icon, Kbd, SectionLabel } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import { repoShort } from '@/lib/api/sessions';
-import { age } from '@/lib/format';
+import { when } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { openSettings } from '@/lib/settings-modal';
 import { chooseProject, useProjects } from '@/lib/projects';
@@ -104,7 +104,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 				return {
 					id: session.id,
 					label: session.title,
-					meta: `${session.spaceId ? `${spaceName.get(session.spaceId) ?? 'Project'} · ` : ''}${repoShort(session)} · ${age(session.createdAt)}`,
+					meta: `${session.spaceId ? `${spaceName.get(session.spaceId) ?? 'Project'} · ` : ''}${repoShort(session)} · ${when(session.createdAt)}`,
 					icon: CircleCheck,
 					mark: <TaskStatusIcon session={session} size={12} />,
 					href,
@@ -174,7 +174,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 	return (
 		<div
-			className="fixed inset-0 z-[200] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4 backdrop-blur-[2px]"
+			className="fixed inset-0 z-[200] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4"
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}

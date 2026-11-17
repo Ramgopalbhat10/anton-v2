@@ -136,7 +136,7 @@ export function DetailFrame({ mark, title, mono, tagline, actions, facts, childr
 			<div className="flex flex-wrap items-center gap-4 border-b border-(--line) pb-5">
 				<MarkTile mark={mark} size={64} label={mark.title} className="rounded-control" />
 				<div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-1">
-					<h1 className={cn('m-0 truncate text-h1 leading-[32px] font-semibold tracking-[-0.022em]', mono && 'text-h1')}>{title}</h1>
+					<h1 className={cn('m-0 truncate text-h1 leading-[32px] font-semibold tracking-[-0.02em]', mono && 'text-h1')}>{title}</h1>
 					<p className="m-0 text-body leading-[19px] text-pretty text-(--text-3)">{tagline}</p>
 				</div>
 				{actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}

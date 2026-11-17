@@ -4,7 +4,7 @@ import { Icon } from '@/components/kit/signal';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { PrStatus } from '@/components/marks/pr-status';
 import { isChat, repoShort, type Session } from '@/lib/api/sessions';
-import { age, dollars } from '@/lib/format';
+import { dollars, when } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** The right-hand facts are fixed-width and tabular so the columns line up; `active` is the list's keyboard cursor, not a task state. */
@@ -26,13 +26,17 @@ export function TaskRow({ session, modelName, active = false }: { session: Sessi
 			<span className="min-w-0 flex-1 truncate text-body text-(--text)">{session.title}</span>
 			<PrStatus thread={session} />
 			<span className="hidden w-[104px] shrink-0 items-center gap-1.5 text-small text-(--text-3) md:inline-flex">
-				<Icon icon={chat ? MessageSquare : Github} size={12} className="shrink-0 text-(--text-4)" />
-				<span className="truncate">{repoShort(session)}</span>
+				{repoShort(session) ? (
+					<>
+						<Icon icon={chat ? MessageSquare : Github} size={12} className="shrink-0 text-(--text-4)" />
+						<span className="truncate">{repoShort(session)}</span>
+					</>
+				) : null}
 			</span>
 			<span className="hidden w-[120px] shrink-0 truncate text-small text-(--text-3) lg:inline">{session.model ? modelName(session.model) : null}</span>
 			<span className="in-num hidden w-[64px] shrink-0 text-right text-small text-(--text-3) sm:inline">{session.usage.cost ? dollars(session.usage.cost) : null}</span>
 			<span className="in-num w-11 shrink-0 text-right text-small text-(--text-3)" title={new Date(session.createdAt).toLocaleString()}>
-				{age(session.createdAt)}
+				{when(session.createdAt)}
 			</span>
 		</Link>
 	);

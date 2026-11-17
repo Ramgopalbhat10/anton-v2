@@ -15,6 +15,7 @@ import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
 import { bootTheme } from '@/lib/theme';
 import { OutputViewerHost } from '@/components/content/output-viewer';
+import { RouteError } from '@/components/kit/error-boundary';
 import { AppShell, HomePage, SessionPage } from '@/components/shell/shell';
 import { TitleTips } from '@/components/shell/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -227,7 +228,7 @@ const routeTree = rootRoute.addChildren([
 	oldRepoSettingsRoute,
 	settingsRoute.addChildren([settingsIndexRoute, settingsSectionRoute, skillRoute, connectorRoute, repoSettingsRoute]),
 ]);
-const router = createRouter({ routeTree });
+const router = createRouter({ routeTree, defaultErrorComponent: RouteError });
 
 declare module '@tanstack/react-router' {
 	interface Register {

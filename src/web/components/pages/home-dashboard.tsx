@@ -8,7 +8,7 @@ import { StatusDot } from '@/components/kit/instrument';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
-import { age, dollars } from '@/lib/format';
+import { dollars, when } from '@/lib/format';
 import { activeAt, repoName } from '@/lib/task-view';
 import { stateOf, useSpaceName } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -110,7 +110,7 @@ function NeedsYou({ sessions }: { sessions: Session[] }) {
 						<span aria-hidden className="sg-btn sg-btn--secondary sg-btn--sm pointer-events-none hidden shrink-0 sm:inline-flex">
 							{nextStep(session)}
 						</span>
-						<span className={AGE}>{age(activeAt(session))}</span>
+						<span className={AGE}>{when(activeAt(session))}</span>
 						</CardRow>
 					))}
 					{sessions.length > shown.length ? (
@@ -139,7 +139,7 @@ function Running({ sessions }: { sessions: Session[] }) {
 					<CardRow key={session.id} session={session}>
 						<span className="in-num shrink-0 text-small text-(--text-3)">
 							{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
-							{age(session.lastInputAt ?? session.createdAt)}
+							{when(session.lastInputAt ?? session.createdAt)}
 						</span>
 					</CardRow>
 				))}
@@ -168,7 +168,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 						<span className="hidden max-w-[40%] min-w-0 items-center gap-1.5 text-small text-(--text-3) sm:flex">
 							<Where session={session} />
 						</span>
-						<span className={AGE}>{age(activeAt(session))}</span>
+						<span className={AGE}>{when(activeAt(session))}</span>
 					</TaskLink>
 				))}
 			</div>

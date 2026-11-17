@@ -405,7 +405,7 @@ function Detail({ preview }: { preview: PluginPreview }) {
 				<Glyph bundle={preview.skills.length !== 1} size="lg" />
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex flex-wrap items-center gap-2">
-						<h1 className="m-0 min-w-0 break-words text-h2 leading-[26px] font-semibold tracking-[-0.017em]">{preview.name}</h1>
+						<h1 className="m-0 min-w-0 break-words text-h2 leading-[26px] font-semibold tracking-[-0.015em]">{preview.name}</h1>
 						{preview.installed ? <Status tone="success">Installed</Status> : null}
 						{preview.update ? <Status tone="accent" pulse>Update available</Status> : null}
 					</div>

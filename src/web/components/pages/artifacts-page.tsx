@@ -649,7 +649,7 @@ export function ArtifactsPage() {
 			<TopBar crumbs={['Artifacts']}>
 				<SearchField value={query} onChange={(next) => setSearch({ type, q: next || undefined })} placeholder="Search artifacts" label="Search artifacts" size="sm" className="w-[220px] max-w-[46vw] shrink" />
 			</TopBar>
-			<div {...dragScroll} data-noscrollbar className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4">
+			<div {...dragScroll} data-noscrollbar className="sg-fade-x flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-4">
 				<FilterChip label="All" count={found.length} on={!type} onToggle={() => setSearch({ q: query || undefined })} />
 				{CATEGORIES.filter((category) => counts.get(category.key) || type === category.key).map((category) => (
 					<FilterChip

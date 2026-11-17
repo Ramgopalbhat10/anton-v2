@@ -232,7 +232,7 @@ export function InboxPage() {
 		<div className="flex min-h-0 flex-1">
 			<div className="flex min-h-0 w-full min-w-0 shrink-0 flex-col md:w-[380px] md:shadow-[-1px_0_0_var(--line)_inset]">
 				{header}
-				<div {...dragScroll} data-noscrollbar className="flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-3.5">
+				<div {...dragScroll} data-noscrollbar className="sg-fade-x flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-(--line) px-3.5">
 					<FilterChip
 						label="Unread"
 						count={unreadCount}

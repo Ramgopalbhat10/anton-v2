@@ -170,7 +170,7 @@ export const Composer = memo(function Composer({
 
 	return (
 		<form
-			className="shrink-0 px-4 pt-1 pb-4"
+			className="shrink-0 pt-1 pr-6 pb-4 pl-4"
 			onSubmit={async (event) => {
 				event.preventDefault();
 				if (!ready) return;
