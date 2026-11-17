@@ -368,7 +368,8 @@ export function TaskWorkspace({
 	const onePane = useOnePane();
 	const [paneOpen, setPaneOpen] = useState(false);
 	const viewer = useViewer();
-	const open = onePane ? paneOpen : panels.open || Boolean(viewer);
+	const workspaceOpen = onePane ? paneOpen : panels.open;
+	const open = workspaceOpen || (!onePane && Boolean(viewer));
 
 	const setOpen = useCallback(
 		(next: boolean) => {
@@ -436,6 +437,7 @@ export function TaskWorkspace({
 						<PaneSlideContext.Provider value={slide}>
 							<VmPanel
 								sessionId={sessionId}
+								contentOpen={workspaceOpen}
 								tabs={tabs}
 								active={active}
 								onTabsChange={changeTabs}
