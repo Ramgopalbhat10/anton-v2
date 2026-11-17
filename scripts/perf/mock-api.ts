@@ -240,6 +240,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (ticks % 30 === 0) send({ kind: 'task', id: SESSION_ID, what: 'state' });
 	}, 100).unref();
 
+	const attachments = new Map<string, { bytes: Buffer; type: string }>();
 	const json = (res: ServerResponse, body: unknown) => {
 		res.setHeader('content-type', 'application/json');
 		res.end(JSON.stringify(body));
@@ -262,6 +263,30 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			res.write(': hello\n\n');
 			clients.add(res);
 			req.on('close', () => clients.delete(res));
+			return;
+		}
+		// Attached files land after a beat, and a stored picture loads after one, as over a real network.
+		const stored = path.match(/^\/api\/fixture\/attachments\/([^/]+)$/)?.[1];
+		const attaching = /^\/api\/(spaces|sessions)\/[^/]+\/attachments$/.test(path) && req.method === 'POST';
+		if ((stored && req.method === 'POST') || attaching) {
+			const chunks: Buffer[] = [];
+			req.on('data', (chunk: Buffer) => chunks.push(chunk));
+			req.on('end', () => {
+				const name = stored ? decodeURIComponent(stored) : (url.searchParams.get('name') ?? 'file');
+				const bytes = Buffer.concat(chunks);
+				attachments.set(name, { bytes, type: String(req.headers['content-type'] ?? 'application/octet-stream') });
+				const kind = /\.(png|jpe?g|gif|webp)$/i.test(name) ? `${name.split('.').pop()!.toUpperCase()} image` : 'File';
+				setTimeout(() => json(res, { name, path: name, size: bytes.length, kind, text: null, cut: null }), stored ? 0 : 1200);
+			});
+			return;
+		}
+		if (stored) {
+			const file = attachments.get(decodeURIComponent(stored));
+			setTimeout(() => {
+				if (!file) return void res.writeHead(404).end();
+				res.setHeader('content-type', file.type);
+				res.end(file.bytes);
+			}, 700);
 			return;
 		}
 		const task = `/api/sessions/${SESSION_ID}`;

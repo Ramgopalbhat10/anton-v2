@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-export type ViewerItem = { sessionId: string; path: string };
+/** A file in a task's Library, or (`src`) a picture sent with a message, which lives at its own URL and in no Library: its `path` is just its name. */
+export type ViewerItem = { sessionId: string; path: string; src?: string };
 
 export type ViewerState = {
 	items: ViewerItem[];
@@ -35,7 +36,7 @@ function set(next: ViewerState | null): void {
 	for (const listener of listeners) listener();
 }
 
-export const sameItem = (a: ViewerItem, b: ViewerItem) => a.sessionId === b.sessionId && a.path === b.path;
+export const sameItem = (a: ViewerItem, b: ViewerItem) => a.sessionId === b.sessionId && a.path === b.path && a.src === b.src;
 
 export function openViewer(item: ViewerItem, items: ViewerItem[], composer: string | null): void {
 	const list = items.some((other) => sameItem(other, item)) ? items : [item];

@@ -20,11 +20,14 @@ import { cn } from '@/lib/utils';
 import { closeViewer, openViewer, setViewerDock, stepViewer, useViewer, useViewerDock, type ViewerItem, type ViewerState } from '@/lib/viewer';
 import { isImagePath } from '../../../core/outputs';
 
-const keyOf = (item: ViewerItem) => `${item.sessionId}\n${item.path}`;
+const keyOf = (item: ViewerItem) => `${item.sessionId}\n${item.path}\n${item.src ?? ''}`;
+const urlOf = (item: ViewerItem) => item.src ?? outputUrl(item.sessionId, item.path);
+/** Only pictures carry their own URL, whatever their name says. */
+const isImageItem = (item: ViewerItem) => Boolean(item.src) || isImagePath(item.path);
 
 function download(item: ViewerItem) {
 	const link = document.createElement('a');
-	link.href = outputUrl(item.sessionId, item.path);
+	link.href = urlOf(item);
 	link.download = nameOf(item.path);
 	link.click();
 }
@@ -80,11 +83,11 @@ export function OutputThumb({ item, className, fit }: { item: ViewerItem; classN
 	const [wide, setWide] = useState(false);
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 	if (deleted) return <DeletedArtifact path={item.path} variant="thumb" />;
-	if (!isImagePath(item.path) || broken) return <FileFace path={item.path} />;
+	if (!isImageItem(item) || broken) return <FileFace path={item.path} />;
 	const contain = (fit ?? (wide ? 'contain' : 'cover')) === 'contain';
 	return (
 		<img
-			src={outputUrl(item.sessionId, item.path)}
+			src={urlOf(item)}
 			alt=""
 			loading="lazy"
 			onError={() => setBroken(true)}
@@ -194,7 +197,7 @@ function ImageStage({ item }: { item: ViewerItem }) {
 	useEffect(() => {
 		setActual(false);
 		setBroken(false);
-	}, [item.sessionId, item.path]);
+	}, [item.sessionId, item.path, item.src]);
 	if (deleted) return <DeletedArtifact path={item.path} variant="stage" />;
 	if (broken)
 		return (
@@ -209,7 +212,7 @@ function ImageStage({ item }: { item: ViewerItem }) {
 	return (
 		<div className={cn('flex h-full min-h-0 overflow-auto p-4', !actual && 'items-center justify-center')}>
 			<img
-				src={outputUrl(item.sessionId, item.path)}
+				src={urlOf(item)}
 				alt={nameOf(item.path)}
 				onError={() => setBroken(true)}
 				onClick={() => setActual((current) => !current)}
@@ -245,8 +248,8 @@ async function rasterize(url: string): Promise<{ src: string; width: number; hei
 
 function MarkupStage({ item, composer, onDone }: { item: ViewerItem; composer: string; onDone: (added: boolean) => void }) {
 	const picture = useQuery({
-		queryKey: ['viewer-picture', item.sessionId, item.path],
-		queryFn: () => rasterize(outputUrl(item.sessionId, item.path)),
+		queryKey: ['viewer-picture', item.sessionId, item.path, item.src],
+		queryFn: () => rasterize(urlOf(item)),
 		staleTime: Number.POSITIVE_INFINITY,
 		gcTime: 60_000,
 	});
@@ -288,14 +291,14 @@ export function OutputViewerDock({ active }: { active: boolean }) {
 
 function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean }) {
 	const item = viewer.items[viewer.index];
-	const image = isImagePath(item.path);
+	const image = isImageItem(item);
 	const [marking, setMarking] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
 	const many = viewer.items.length > 1;
 	const info = categoryInfo(categoryOf(item.path));
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 
-	useEffect(() => setMarking(false), [item.sessionId, item.path, deleted]);
+	useEffect(() => setMarking(false), [item.sessionId, item.path, item.src, deleted]);
 	useEffect(() => {
 		if (!notice) return;
 		const timer = setTimeout(() => setNotice(null), 3000);
@@ -335,7 +338,7 @@ function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean 
 						{nameOf(item.path)}
 					</span>
 					<span className="truncate text-micro leading-[15px] text-(--text-3)">
-						{notice ?? (item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Library')}
+						{notice ?? (item.src ? 'Sent with a message' : item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Library')}
 					</span>
 				</div>
 				{many ? (
@@ -354,16 +357,19 @@ function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean 
 				) : null}
 				{deleted ? null : (
 					<>
-						<a
-							href={outputUrl(item.sessionId, item.path)}
-							target="_blank"
-							rel="noreferrer"
-							aria-label="Open in a new tab"
-							title="Open in a new tab"
-							className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm shrink-0"
-						>
-							<Icon icon={ExternalLink} size={14} />
-						</a>
+						{/* Browsers refuse to open a data: URL in a tab: a picture is one until its message is stored. */}
+						{item.src?.startsWith('data:') ? null : (
+							<a
+								href={urlOf(item)}
+								target="_blank"
+								rel="noreferrer"
+								aria-label="Open in a new tab"
+								title="Open in a new tab"
+								className="sg-btn sg-icon-btn sg-btn--ghost sg-btn--sm shrink-0"
+							>
+								<Icon icon={ExternalLink} size={14} />
+							</a>
+						)}
 						<IconBtn icon={Download} size="sm" label="Download" onClick={() => download(item)} className="shrink-0" />
 					</>
 				)}

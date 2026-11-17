@@ -2,7 +2,10 @@ import { ChevronDown, ChevronUp } from '@/lib/icons';
 import { Fragment, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { FileLinks, fileRef } from '@/components/content/markdown';
 import { IconBtn, Spinner } from '@/components/kit/signal';
+import { UploadingFiles } from '@/components/composer/attachments';
+import { SentImages, type SentPicture } from '@/components/thread/sent-images';
 import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
+import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
 
@@ -67,8 +70,8 @@ export function SentText({ text, className }: { text: string; className?: string
 	);
 }
 
-/** A message you sent whose files are still on their way: it shows at once, where it will stay, and goes once the files are in. */
-export type PendingSend = { text: string; attaching: string };
+/** A message you sent whose files are still on their way: it shows at once, where it will stay, and goes once the files are in. Its pictures and files show as they will once sent. */
+export type PendingSend = { text: string; attaching: string; pictures?: SentPicture[]; files?: { name: string; size: number }[] };
 
 /** What a composer says of a message with files: on its way (`PendingSend`), sent now and shown by the conversation (`'sent'`), or neither. */
 export type PendingChange = PendingSend | 'sent' | null;
@@ -97,14 +100,28 @@ export function useSends() {
 	return { pending, onPending, rises };
 }
 
+/** What a message's attachments show as while it waits on them: the pictures from the bytes in hand, the files by name. */
+export const placeholders = (taken: { images: ImageAttachment[]; files: FileAttachment[] }): Pick<PendingSend, 'pictures' | 'files'> => ({
+	pictures: taken.images.map((image) => ({ src: image.preview, name: image.filename })),
+	files: taken.files.map((file) => ({ name: file.name, size: file.size })),
+});
+
 export function PendingMessage({ pending }: { pending: PendingSend }) {
+	const pictures = pending.pictures ?? [];
+	const files = pending.files ?? [];
 	return (
-		<div className="in-sent flex flex-col items-end gap-1.5">
+		<div className="in-sent flex flex-col items-end gap-1.5" aria-busy="true">
+			<SentImages pictures={pictures} uploading />
+			<UploadingFiles files={files} />
 			{pending.text ? <SentText text={pending.text} className="max-w-[min(520px,100%)]" /> : null}
-			<div className="flex items-center gap-1.5 text-small text-(--text-3)">
-				<Spinner size={11} tone="neutral" />
-				Attaching {pending.attaching}
-			</div>
+			{pictures.length || files.length ? (
+				<span className="sr-only">Attaching {pending.attaching}</span>
+			) : (
+				<div className="flex items-center gap-1.5 text-small text-(--text-3)">
+					<Spinner size={11} tone="neutral" />
+					Attaching {pending.attaching}
+				</div>
+			)}
 		</div>
 	);
 }

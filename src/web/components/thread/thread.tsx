@@ -409,7 +409,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 						) : null}
 						{firstPrompt ? (
 							<div className="flex flex-col gap-5">
-								<UserMessage message={openingMessage(firstPrompt)} meta={meta} />
+								<UserMessage message={openingMessage(firstPrompt)} meta={meta} composer={sessionId} />
 								{busy ? null : session.data?.threadState === 'queued' ? (
 									<div className="flex items-center gap-2 text-small text-(--text-3)">
 										<Icon icon={Clock} size={12} className="text-(--text-3)" />
@@ -448,7 +448,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />
 							) : row.message.role === 'user' ? (
 								<div key={row.message.id} data-chat-input={row.message.id} className={cn(rises(row.message.id, row === rows[0] && !fresh) && 'in-sent', row !== rows[rows.length - 1] && 'thread-row-settled')}>
-									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} />
+									<UserMessage message={row.message} meta={meta} note={notes.get(row.message.id)} composer={sessionId} />
 								</div>
 							) : (
 								<AssistantMessage

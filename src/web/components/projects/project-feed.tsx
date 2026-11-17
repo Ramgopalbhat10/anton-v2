@@ -6,10 +6,11 @@ import { ArrowUp, Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPl
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerPlus } from '@/components/composer/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/composer/attachments';
+import { besidePictures, SentImages, sentPictures } from '@/components/thread/sent-images';
 import { ComposerInput } from '@/components/composer/composer-input';
 import { PlanToggle } from '@/components/composer/composer';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/thread/sent-text';
+import { type PendingChange, PendingMessage, placeholders, SentText, useSends } from '@/components/thread/sent-text';
 import { Caption } from '@/components/kit/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/content/markdown';
 import { OutputCards } from '@/components/content/output-viewer';
@@ -58,25 +59,14 @@ const threadIdIn = (part: ToolPart) => (part.state === 'output-available' ? (/\[
 /** A thread named by the start of its id, as reports and the coordinator name them. */
 const byPrefix = (threads: Session[], id: string) => threads.find((thread) => thread.id === id || (id.length >= 6 && thread.id.startsWith(id)));
 
-type FilePart = Extract<FlueConversationPart, { type: 'file' }>;
-
 /** Files show as chips; the text they carry is the coordinator's to read. */
-function Bubble({ message }: { message: FlueConversationMessage }) {
+function Bubble({ message, composer }: { message: FlueConversationMessage; composer: string }) {
 	const { text, files } = splitAttachments(textOf(message));
-	const images = message.parts.filter((part): part is FilePart => part.type === 'file' && part.mediaType.startsWith('image/') && Boolean(part.url));
+	const pictures = sentPictures(message);
 	return (
 		<div className="flex flex-col items-end gap-1.5">
-			{images.length > 0 ? (
-				<div className="flex max-w-[520px] flex-wrap justify-end gap-1.5">
-					{images.map((image, index) => (
-						<a key={image.url ?? index} href={image.url} target="_blank" rel="noreferrer">
-							<img src={image.url} alt={image.filename ?? 'Attached image'} className="block max-h-40 max-w-60 rounded-card border border-(--line)" />
-						</a>
-					))}
-				</div>
-			) : null}
-			{/* Images sent with the message are saved to the Library too; their pictures above already show them. */}
-			<SentAttachments files={images.length ? files.filter((file) => !/ image$/.test(file.kind)) : files} />
+			<SentImages pictures={pictures} composer={composer} />
+			<SentAttachments files={besidePictures(files, pictures)} />
 			{text ? <SentText text={text} className="max-w-[min(560px,100%)]" /> : null}
 		</div>
 	);
@@ -439,10 +429,10 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 
 /** Compared by its parts, as the client gives your messages a new object each chunk. */
 const UserEntry = memo(
-	function UserEntry({ message, threads }: { message: FlueConversationMessage; threads: Session[] }) {
+	function UserEntry({ message, threads, composer }: { message: FlueConversationMessage; threads: Session[]; composer: string }) {
 		const text = textOf(message);
 		const reports = useMemo(() => parseReports(text), [text]);
-		if (!reports) return <Bubble message={message} />;
+		if (!reports) return <Bubble message={message} composer={composer} />;
 		const started = reports.filter((report) => report.started);
 		const changed = reports.filter((report) => !report.started);
 		return (
@@ -452,7 +442,7 @@ const UserEntry = memo(
 			</>
 		);
 	},
-	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads,
+	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads && prev.composer === next.composer,
 );
 
 const STARTERS = ['What is running right now?', 'Split this into threads: ', 'Which pull requests are ready for review?'];
@@ -639,7 +629,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				const attaching = count === 0 ? null : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`;
 				setSending(attaching);
 				// The message shows in the feed at once; it goes once its files are in the project's Library.
-				if (attaching) onPending({ text, attaching });
+				if (attaching) onPending({ text, attaching, ...placeholders(taken) });
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
@@ -751,10 +741,10 @@ export function ProjectFeed({
 						if (message.role === 'user')
 							return rises(message.id, false) ? (
 								<div key={message.id} className="in-sent flex flex-col gap-5">
-									<UserEntry message={message} threads={threads} />
+									<UserEntry message={message} threads={threads} composer={space.id} />
 								</div>
 							) : (
-								<UserEntry key={message.id} message={message} threads={threads} />
+								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} />
 							);
 						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
 					})}

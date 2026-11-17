@@ -6,7 +6,7 @@ import { AttachmentTray, useAttachments } from '@/components/composer/attachment
 import { ComposerInput } from '@/components/composer/composer-input';
 import { ContextMeter } from '@/components/composer/context-meter';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import type { PendingChange } from '@/components/thread/sent-text';
+import { type PendingChange, placeholders } from '@/components/thread/sent-text';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/kit/signal';
@@ -182,7 +182,7 @@ export const Composer = memo(function Composer({
 				setElements([]);
 				const attaching = taken.files.length === 0 ? null : taken.files.length === 1 ? taken.files[0]!.name : `${taken.files.length} files`;
 				setSending(attaching);
-				if (attaching) onPending?.({ text: typed.trim(), attaching });
+				if (attaching) onPending?.({ text: typed.trim(), attaching, ...placeholders(taken) });
 				try {
 					const attached = await Promise.all(taken.files.map((file) => api.attachToTask(sessionId, file.file)));
 					// Only a /command waits to read the saved commands, so any other message goes at once.

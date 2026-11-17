@@ -1,9 +1,9 @@
 import { File as FileGlyph, FileArchive, FileCode, FileImage, FileSpreadsheet, FileText, type IconComponent, Paperclip, Presentation, X } from '@/lib/icons';
 import { type ClipboardEvent, type DragEvent, useCallback, useRef, useState } from 'react';
-import { Icon, IconBtn } from '@/components/kit/signal';
+import { Icon, IconBtn, Spinner } from '@/components/kit/signal';
 import type { AttachmentRef } from '../../../core/attachments';
 import { uniqueUploadNames } from '../../../core/upload-name';
-import { type FileAttachment, type ImageAttachment, MAX_FILES, MAX_IMAGES, readAttachments } from '@/lib/attachments';
+import { type FileAttachment, type ImageAttachment, MAX_FILES, MAX_IMAGES, readAttachments, sentAsImage } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
 const EXTENSION_ICONS: Array<[RegExp, IconComponent]> = [
@@ -25,10 +25,16 @@ export function fileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FileChip({ name, note, title, onRemove }: { name: string; note: string; title?: string; onRemove?: () => void }) {
+function FileChip({ name, note, title, uploading, onRemove }: { name: string; note: string; title?: string; uploading?: boolean; onRemove?: () => void }) {
 	return (
 		<div title={title ?? name} className="flex h-9 max-w-[240px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-2">
-			<Icon icon={fileGlyph(name)} size={14} className="shrink-0 text-(--text-2)" />
+			{uploading ? (
+				<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+					<Spinner size={12} tone="neutral" />
+				</span>
+			) : (
+				<Icon icon={fileGlyph(name)} size={14} className="shrink-0 text-(--text-2)" />
+			)}
 			<span className="flex min-w-0 flex-col">
 				<span className="truncate text-small text-(--text)">{name}</span>
 				<span className="truncate text-micro text-(--text-3)">{note}</span>
@@ -66,13 +72,19 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<FileAttachment[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
+	/** Pictures still being read, which the tray holds a place for. */
+	const [reading, setReading] = useState(0);
 	const latest = useRef({ images, files });
 	latest.current = { images, files };
 	const attach = useCallback(
 		async (list: File[]) => {
 			if (list.length === 0) return;
 			const current = latest.current;
-			const read = await readAttachments(list, { images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length }, imagesAsFiles);
+			const pictures = imagesAsFiles ? 0 : Math.min(list.filter(sentAsImage).length, Math.max(0, MAX_IMAGES - current.images.length));
+			setReading((count) => count + pictures);
+			const read = await readAttachments(list, { images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length }, imagesAsFiles).finally(() =>
+				setReading((count) => count - pictures),
+			);
 			// Clamped here too: two quick pastes both read the counts from before either landed.
 			setImages((before) => [...before, ...read.images.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
 			setFiles((before) => uniqueFiles([...before, ...read.files.slice(0, Math.max(0, MAX_FILES - before.length))]));
@@ -124,6 +136,7 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 	return {
 		images,
 		files,
+		reading,
 		notice,
 		limitError,
 		setNotice,
@@ -141,8 +154,8 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 }
 
 export function AttachmentTray({ attachments, className }: { attachments: Attachments; className?: string }) {
-	const { images, files, removeImage, removeFile } = attachments;
-	if (images.length === 0 && files.length === 0) return null;
+	const { images, files, reading, removeImage, removeFile } = attachments;
+	if (images.length === 0 && files.length === 0 && reading === 0) return null;
 	return (
 		<div className={cn('flex flex-wrap items-center gap-1.5', className)}>
 			{images.map((image) => (
@@ -157,6 +170,10 @@ export function AttachmentTray({ attachments, className }: { attachments: Attach
 						<Icon icon={X} size={10} />
 					</button>
 				</div>
+			))}
+			{/* Shown only if reading takes long enough to notice, so a quick paste never blinks a placeholder. */}
+			{Array.from({ length: reading }, (_, index) => (
+				<div key={`reading-${index}`} aria-hidden className="in-enter in-sweep size-14 rounded-control border border-(--line) bg-(--bg-raised)" style={{ animationDelay: '150ms' }} />
 			))}
 			{files.map((file) => (
 				<FileChip key={file.id} name={file.name} note={fileSize(file.size)} onRemove={() => removeFile(file.id)} />
@@ -195,6 +212,18 @@ export function SentAttachments({ files, className }: { files: AttachmentRef[]; 
 					note={`${file.kind} · ${fileSize(file.size)}`}
 					title={`${file.name}\n${file.place === 'project' ? 'In the project Library' : `In the Library at ${file.path}`}`}
 				/>
+			))}
+		</div>
+	);
+}
+
+/** Files of a message still on their way, as the chips the sent message will show. */
+export function UploadingFiles({ files, className }: { files: { name: string; size: number }[]; className?: string }) {
+	if (!files.length) return null;
+	return (
+		<div className={cn('flex max-w-[520px] flex-wrap justify-end gap-1.5', className)}>
+			{files.map((file, index) => (
+				<FileChip key={index} name={file.name} note={`Uploading · ${fileSize(file.size)}`} uploading />
 			))}
 		</div>
 	);
