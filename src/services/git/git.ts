@@ -14,6 +14,9 @@ const AUTHOR = ['user.name "Anton"', 'user.email "anton@users.noreply.github.com
 const withScratchIndex = (command: string) =>
 	`export GIT_INDEX_FILE="$(mktemp)"; cp .git/index "$GIT_INDEX_FILE" 2>/dev/null; git add -A >/dev/null 2>&1; ${command}; status=$?; rm -f "$GIT_INDEX_FILE"; exit $status`;
 
+/** A machine on this server reads the user's own git config, whose diff.mnemonicPrefix, diff.noprefix or colors would break the `a/` and `b/` paths patches are read and applied by. */
+const PATCH = 'git diff --cached --no-renames --binary --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/';
+
 /** A chat's sandbox is an empty folder under git, so its changes and checkpoints work as a repo's. The first commit is empty and dated the epoch, so every chat's is the same. */
 export const SCRATCH_BRANCH = 'scratch';
 export const SCRATCH_BASE = '5dbaf08032448172a03f0a1292bf74bcd21a8898';
@@ -55,7 +58,7 @@ export async function changes(machine: Machine, baseSha: string, since: string |
 	const from = since ?? baseSha;
 	const [names, patch, log, pushed] = await Promise.all([
 		run(machine, withScratchIndex(`git diff --cached --no-renames --raw -z ${from}`), { cwd }),
-		run(machine, withScratchIndex(`git diff --cached --no-renames --binary ${from}`), { cwd }),
+		run(machine, withScratchIndex(`${PATCH} ${from}`), { cwd }),
 		run(machine, `git log --format='%H%x09%s%x09%cI' ${baseSha}..HEAD`, { cwd }),
 		since ? run(machine, `git rev-list ${baseSha}..${since}`, { cwd }) : null,
 	]);
@@ -63,7 +66,7 @@ export async function changes(machine: Machine, baseSha: string, since: string |
 	return { patch, files: parseRaw(names), log: parseLog(log).map((entry) => (host ? { ...entry, pushed: host.has(entry.sha) } : entry)) };
 }
 
-export const workingPatchCommand = (from: string) => `(${withScratchIndex(`git diff --cached --no-renames --binary ${from}`)})`;
+export const workingPatchCommand = (from: string) => `(${withScratchIndex(`${PATCH} ${from}`)})`;
 
 /** So a build's untracked output never comes back whole. */
 const MAX_OTHER_PATCH = 200_000;
@@ -77,7 +80,7 @@ export async function otherRepoChanges(machine: Machine, since: Date, under = '/
 		'd="${g%/.git}"',
 		`[ "$d" = ${quote(repoDir(machine))} ] && continue`,
 		`if ${git} -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1; then base=$(${git} -C "$d" rev-list -1 --before=@${epoch} HEAD 2>/dev/null); else base=; fi`,
-		`(cd "$d" && export GIT_INDEX_FILE="$(mktemp)"; cp .git/index "$GIT_INDEX_FILE" 2>/dev/null; ${git} add -A >/dev/null 2>&1; ${git} diff --cached --no-renames --binary --src-prefix="a$d/" --dst-prefix="b$d/" "\${base:-${EMPTY_TREE}}"; rm -f "$GIT_INDEX_FILE")`,
+		`(cd "$d" && export GIT_INDEX_FILE="$(mktemp)"; cp .git/index "$GIT_INDEX_FILE" 2>/dev/null; ${git} add -A >/dev/null 2>&1; ${git} diff --cached --no-renames --binary --no-color --no-ext-diff --no-textconv --src-prefix="a$d/" --dst-prefix="b$d/" "\${base:-${EMPTY_TREE}}"; rm -f "$GIT_INDEX_FILE")`,
 		`done | head -c ${MAX_OTHER_PATCH}; true`,
 	].join('\n');
 	return run(machine, script, { cwd: machine.root, timeoutMs: 60_000 });

@@ -2242,6 +2242,18 @@ test('Changes holds only what GitHub lacks, and after a squash merge the next pu
 	}
 });
 
+test("Changes keeps a/ and b/ paths whatever diff prefixes and colors the server's git config asks for", async () => {
+	const chat = await sessions.createSession({ title: 'Odd git config' });
+	const machine = await machineFor(chat.id);
+	// The repo's own config stands in for a user's global one, which a machine on this server reads.
+	await run(machine, "git config diff.mnemonicPrefix true && git config color.diff always && printf 'one\\n' > one.txt");
+	sessions.invalidateRunning();
+	const { patch } = await files.changesView(chat.id);
+	assert.deepEqual(pathsIn(patch), ['one.txt']);
+	assert.match(patch, /^\+\+\+ b\/one\.txt$/m);
+	assert.doesNotMatch(patch, /\x1b\[/);
+});
+
 test('retargeting a PR at the same commit invalidates its metadata only when a ref changes', async () => {
 	const { onChange } = await import('../src/core/changes.ts');
 	const { readPullRequest } = await import('../src/services/git/pr-status.ts');
