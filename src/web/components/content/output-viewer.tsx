@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, FileX2, PencilLine, X } from '@/lib/icons';
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { HtmlFrame } from '@/components/content/html-frame';
 import { kindOf } from '@/lib/library';
 import { PREVIEWS, Source, TextFile } from '@/components/content/file-previews';
@@ -14,8 +15,9 @@ import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer } from '@/lib/composer-inbox';
 import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import { useElementSize } from '@/lib/use-element-size';
+import { useOnePane } from '@/lib/one-pane';
 import { cn } from '@/lib/utils';
-import { closeViewer, openViewer, stepViewer, useViewer, type ViewerItem, type ViewerState } from '@/lib/viewer';
+import { closeViewer, openViewer, setViewerDock, stepViewer, useViewer, useViewerDock, type ViewerItem, type ViewerState } from '@/lib/viewer';
 import { isImagePath } from '../../../core/outputs';
 
 const keyOf = (item: ViewerItem) => `${item.sessionId}\n${item.path}`;
@@ -280,39 +282,17 @@ function MarkupStage({ item, composer, onDone }: { item: ViewerItem; composer: s
 	);
 }
 
-/** The narrowest side panel the viewer takes the place of; a narrower one leaves it at its own width. */
-const DOCK_MIN = 440;
-
-/** Over the page's side panel when it has one wide enough, so the conversation stays as it was; else at its own width along the right edge. */
-function useDock(): CSSProperties | undefined {
-	const [box, setBox] = useState<DOMRect | null>(null);
-	useLayoutEffect(() => {
-		const panel = document.querySelector<HTMLElement>('.sg-workspace');
-		if (!panel) return;
-		const measure = () => {
-			const rect = panel.getBoundingClientRect();
-			setBox(rect.width >= DOCK_MIN && rect.left > 0 ? rect : null);
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(panel);
-		window.addEventListener('resize', measure);
-		return () => {
-			observer.disconnect();
-			window.removeEventListener('resize', measure);
-		};
-	}, []);
-	return box ? { top: box.top, left: box.left, width: box.width, height: box.height, bottom: 'auto' } : undefined;
+export function OutputViewerDock({ active }: { active: boolean }) {
+	return <div ref={setViewerDock} className={cn('min-h-0 min-w-0 flex-1 flex-col', active ? 'flex' : 'hidden')} />;
 }
 
-function ViewerPanel({ viewer }: { viewer: ViewerState }) {
+function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean }) {
 	const item = viewer.items[viewer.index];
 	const image = isImagePath(item.path);
 	const [marking, setMarking] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
 	const many = viewer.items.length > 1;
 	const info = categoryInfo(categoryOf(item.path));
-	const dock = useDock();
 	const deleted = useDeletedOutput(item.sessionId, item.path);
 
 	useEffect(() => setMarking(false), [item.sessionId, item.path, deleted]);
@@ -341,11 +321,13 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 	return (
 		<aside
 			aria-label={`Viewing ${nameOf(item.path)}`}
-			style={dock}
-			className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-(--line-strong) bg-(--bg-panel) shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.55)] duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]"
+			className={cn(
+				'@container/viewer flex min-h-0 min-w-0 flex-col overflow-hidden bg-(--bg-panel)',
+				docked ? 'flex-1' : 'sg-viewer-sheet fixed z-40 rounded-card shadow-(--sh-2) duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]',
+			)}
 		>
-			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3">
-				<span className="inline-flex size-[26px] shrink-0 items-center justify-center">
+			<header className="flex h-11 min-w-0 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-3 @min-[480px]/viewer:gap-2">
+				<span className="hidden size-[26px] shrink-0 items-center justify-center @min-[480px]/viewer:inline-flex">
 					<Icon icon={info.icon} size={16} className={info.tone} />
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col">
@@ -359,15 +341,15 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 				{many ? (
 					<span className="flex shrink-0 items-center gap-0.5">
 						<IconBtn icon={ChevronLeft} size="sm" label="Previous file" disabled={marking} onClick={() => stepViewer(-1)} />
-						<span className="in-num min-w-[42px] text-center text-micro text-(--text-3)">
+						<span className="in-num sr-only text-center text-micro text-(--text-3) @min-[480px]/viewer:not-sr-only @min-[480px]/viewer:min-w-[42px]">
 							{viewer.index + 1} of {viewer.items.length}
 						</span>
 						<IconBtn icon={ChevronRight} size="sm" label="Next file" disabled={marking} onClick={() => stepViewer(1)} />
 					</span>
 				) : null}
 				{image && viewer.composer && !deleted ? (
-					<Btn size="sm" variant={marking ? 'secondary' : 'ghost'} icon={PencilLine} onClick={() => setMarking((current) => !current)} className="shrink-0">
-						<span className="max-sm:hidden">{marking ? 'Drawing' : 'Mark up'}</span>
+					<Btn size="sm" variant={marking ? 'secondary' : 'ghost'} icon={PencilLine} aria-label={marking ? 'Drawing' : 'Mark up'} onClick={() => setMarking((current) => !current)} className="shrink-0">
+						<span className="hidden @min-[600px]/viewer:inline">{marking ? 'Drawing' : 'Mark up'}</span>
 					</Btn>
 				) : null}
 				{deleted ? null : (
@@ -430,7 +412,10 @@ function ViewerPanel({ viewer }: { viewer: ViewerState }) {
 
 export function OutputViewerHost(): ReactNode {
 	const viewer = useViewer();
+	const dock = useViewerDock();
+	const onePane = useOnePane();
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
 	useEffect(() => closeViewer(), [pathname]);
-	return viewer ? <ViewerPanel viewer={viewer} /> : null;
+	if (!viewer) return null;
+	return dock && !onePane ? createPortal(<ViewerPanel viewer={viewer} docked />, dock) : <ViewerPanel viewer={viewer} docked={false} />;
 }

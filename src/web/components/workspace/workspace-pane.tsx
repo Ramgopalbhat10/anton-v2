@@ -1,5 +1,8 @@
 import { type CSSProperties, createContext, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useViewer } from '@/lib/viewer';
+import { useOnePane } from '@/lib/one-pane';
+import { OutputViewerDock } from '@/components/content/output-viewer';
 
 const WIDTH_KEY = 'anton.workspace-width';
 const MIN_WIDTH = 360;
@@ -44,6 +47,9 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 	const [requested, setRequested] = useState(savedWidth);
 	const [resizing, setResizing] = useState(false);
 	const slide = useContext(PaneSlideContext);
+	const viewer = useViewer();
+	const onePane = useOnePane();
+	const viewing = Boolean(viewer) && !onePane;
 	useLayoutEffect(() => {
 		const parent = pane.current?.parentElement;
 		if (!parent) return;
@@ -58,7 +64,7 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 	const minimum = Math.min(MIN_WIDTH, available);
 	const maximum = Math.max(minimum, available - CONVERSATION_WIDTH);
 	const clamp = (value: number) => Math.round(Math.min(maximum, Math.max(minimum, value)));
-	const width = narrow ? Math.min(NARROW_WIDTH, maximum) : clamp(requested ?? available * 0.46);
+	const width = narrow && !viewing ? Math.min(NARROW_WIDTH, maximum) : clamp(requested ?? available * 0.46);
 	function choose(value: number) {
 		const next = clamp(value);
 		setRequested(next);
@@ -83,7 +89,7 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 			data-slide={slide}
 			style={{ '--workspace-width': available ? `${width}px` : '46%' } as CSSProperties}
 		>
-			{!expanded && !compact && !narrow && slide === 'still' ? (
+			{!expanded && !compact && (!narrow || viewing) && slide === 'still' ? (
 				<div
 					role="separator"
 					aria-label="Resize workspace"
@@ -124,7 +130,10 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 					}}
 				/>
 			) : null}
-			<div className="sg-workspace-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+			<div className="sg-workspace-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				<div className={cn('min-h-0 min-w-0 flex-1 flex-col', viewing ? 'hidden' : 'flex')}>{children}</div>
+				<OutputViewerDock active={viewing} />
+			</div>
 		</section>
 	);
 }

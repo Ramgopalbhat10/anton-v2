@@ -75,16 +75,7 @@ function ResumeButton({ sessionId }: { sessionId: string }) {
 	);
 }
 
-export const VmPanel = memo(function VmPanel({
-	sessionId,
-	tabs,
-	active,
-	onTabsChange,
-	onActiveChange,
-	expanded,
-	onToggleExpanded,
-	onClose,
-}: {
+type VmPanelProps = {
 	sessionId: string;
 	tabs: PanelName[];
 	active: PanelName | null;
@@ -93,7 +84,21 @@ export const VmPanel = memo(function VmPanel({
 	expanded: boolean;
 	onToggleExpanded: () => void;
 	onClose: () => void;
-}) {
+};
+
+export const VmPanel = memo(function VmPanel({ contentOpen = true, ...props }: VmPanelProps & { contentOpen?: boolean }) {
+	// A viewer-only dock must not initialize a saved Terminal (which starts a sandbox), but an existing panel keeps its state.
+	const [initialized, setInitialized] = useState(contentOpen);
+	if (contentOpen && !initialized) setInitialized(true);
+	const current = props.active && props.tabs.includes(props.active) ? props.active : null;
+	return (
+		<WorkspacePane expanded={props.expanded} narrow={current === null && !props.expanded}>
+			{contentOpen || initialized ? <VmPanelContent {...props} /> : null}
+		</WorkspacePane>
+	);
+});
+
+function VmPanelContent({ sessionId, tabs, active, onTabsChange, onActiveChange, expanded, onToggleExpanded, onClose }: VmPanelProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const changed = useChanges(sessionId).files.length;
 	const pinned = usePinnedPanels();
@@ -116,7 +121,7 @@ export const VmPanel = memo(function VmPanel({
 	const View = current ? VIEWS[current] : null;
 
 	return (
-		<WorkspacePane expanded={expanded} narrow={current === null && !expanded}>
+		<>
 			<div className="flex h-11 min-w-0 shrink-0 items-center gap-2 border-b border-(--line) px-2">
 				<IconBtn icon={ArrowLeft} size="sm" label="Back to the conversation" onClick={onClose} className="shrink-0 @min-[700px]/workspace:hidden" />
 				<PanelTabs label="Workspace panels">
@@ -223,6 +228,6 @@ export const VmPanel = memo(function VmPanel({
 					</LazyPart>
 				) : null}
 			</div>
-		</WorkspacePane>
+		</>
 	);
-});
+}

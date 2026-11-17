@@ -32,6 +32,7 @@ import { ProjectSettingsModal } from '@/components/projects/project-settings-mod
 import { SettingsModal } from '@/components/settings/modal';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
+import { useViewer } from '@/lib/viewer';
 
 function readCollapsed() {
 	try {
@@ -366,7 +367,9 @@ export function TaskWorkspace({
 	// On a phone the workspace covers the conversation, so it shows only once you open it here; the saved choice is the wide screen's.
 	const onePane = useOnePane();
 	const [paneOpen, setPaneOpen] = useState(false);
-	const open = onePane ? paneOpen : panels.open;
+	const viewer = useViewer();
+	const workspaceOpen = onePane ? paneOpen : panels.open;
+	const open = workspaceOpen || (!onePane && Boolean(viewer));
 
 	const setOpen = useCallback(
 		(next: boolean) => {
@@ -434,6 +437,7 @@ export function TaskWorkspace({
 						<PaneSlideContext.Provider value={slide}>
 							<VmPanel
 								sessionId={sessionId}
+								contentOpen={workspaceOpen}
 								tabs={tabs}
 								active={active}
 								onTabsChange={changeTabs}

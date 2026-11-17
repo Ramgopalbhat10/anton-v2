@@ -12,6 +12,7 @@ import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
 import { mockSetup } from './mock-setup.ts';
+import { viewerArtifacts } from '../ui/artifact-fixture.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
 
@@ -284,7 +285,14 @@ export function mockApi(): Plugin {
 		}
 		if (path === `${task}/changes`) return json(res, { source: 'live', at: null, branch: 'anton/perf', baseBranch: 'main', patch, log: [{ sha: 'abcdef1234567', subject: 'Work in progress', at: session.createdAt }] });
 		if (path === `${task}/subagents`) return json(res, { runs: runsAt(elapsed(), startedAt) });
-		if (path === `${task}/outputs`) return json(res, { source: 'live', at: null, outputs: [] });
+		if (path === `${task}/outputs`) return json(res, { source: 'live', at: null, outputs: [...viewerArtifacts].map(([path, file]) => ({ path, size: file.body.length, mtimeMs: 1 })) });
+		if (path === `${task}/output`) {
+			const file = viewerArtifacts.get(url.searchParams.get('path') ?? '');
+			if (file) {
+				res.setHeader('content-type', file.type);
+				return res.end(file.body);
+			}
+		}
 		if (path === `${task}/previews`) return json(res, { live: true, previews: [] });
 		if (path === `${task}/checkpoints`) return json(res, { checkpoints: [] });
 		if (path === `${task}/pull-request`) return json(res, null);
