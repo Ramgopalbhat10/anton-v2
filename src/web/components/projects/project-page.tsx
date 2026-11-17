@@ -8,7 +8,7 @@ import { ProjectBoard } from '@/components/projects/project-board';
 import { NewThreadForm, ProjectFeed } from '@/components/projects/project-feed';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
-import { useModelName, useModels } from '@/components/composer/model-picker';
+import { useModelName, useModels } from '@/lib/models';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell/shell';
 import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/kit/signal';
 import { useOnePane } from '@/lib/one-pane';

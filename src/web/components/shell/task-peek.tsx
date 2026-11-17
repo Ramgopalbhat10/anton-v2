@@ -7,7 +7,7 @@ import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';
-import { useModelName } from '@/components/composer/model-picker';
+import { useModelName } from '@/lib/models';
 import { activeAt, taskNote, type Tone } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 

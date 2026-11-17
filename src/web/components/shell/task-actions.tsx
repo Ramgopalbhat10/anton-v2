@@ -10,7 +10,7 @@ import { api, branchLabel, isChat, type Session } from '@/lib/api';
 import { dollars, tokens } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
-import { useModelName } from '@/components/composer/model-picker';
+import { useModelName } from '@/lib/models';
 
 export function PullRequestChip({ session }: { session: Session }) {
 	const pull = useQuery({ queryKey: ['pull-request', session.id, session.prUrl], queryFn: () => api.pullRequest(session.id), enabled: Boolean(session.prUrl), staleTime: 60_000 });

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { DiffList } from '@/components/workspace/git-tab';
+import { DiffList } from '@/components/workspace/diff-list';
 import { Count, Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Markdown } from '@/components/content/markdown';
 import { MergeBox } from '@/components/workspace/pr-merge';

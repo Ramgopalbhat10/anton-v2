@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleDot, Clock, Pencil, Play, Plus, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
-import { ModelPicker, useModels } from '@/components/composer/model-picker';
+import { ModelPicker } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { nextRunText, ScheduleEditor, whenItRuns } from '@/components/settings/schedule-editor';
 import { Btn, Icon, IconBtn, Spinner, Switch } from '@/components/kit/signal';
 import { Input } from '@/components/ui/input';

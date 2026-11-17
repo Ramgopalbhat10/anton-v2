@@ -1,151 +1,21 @@
-import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { IconComponent } from '@/lib/icons';
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FileText, Image, LayoutGrid, List as List_, MoreVertical, Plus, Sheet, Trash2 } from '@/lib/icons';
-import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CodeBlock } from '@/components/content/code-block';
-import { frameUrl, HtmlFrame, PageThumbnail } from '@/components/content/html-frame';
+import { type CSSProperties, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { frameUrl, PageThumbnail } from '@/components/content/html-frame';
 import { LibraryArt } from '@/components/marks/illustrations';
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
-import { Btn, EmptyLine, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/kit/signal';
+import { Btn, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuTrigger, Spinner } from '@/components/kit/signal';
 import { useStoredState } from '@/components/kit/split-pane';
-import { api, type Output, outputUrl, spaceFileUrl } from '@/lib/api';
-import { MAX_ROWS, parseCsv } from '@/lib/csv';
+import { api, type Output } from '@/lib/api';
 import { age, fileSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { refreshBySource, taskQueries } from '@/lib/task-queries';
-
-type Kind = 'page' | 'image' | 'pdf' | 'table' | 'text' | 'other';
-
-const KINDS: Array<[RegExp, Kind]> = [
-	// HTML shows as the page it is, live, with its source a click away.
-	[/\.html?$/i, 'page'],
-	[/\.(png|jpe?g|gif|webp|avif|svg)$/i, 'image'],
-	[/\.pdf$/i, 'pdf'],
-	[/\.(csv|tsv)$/i, 'table'],
-	[/\.(md|txt|log|json|ya?ml|xml|html?|diff|patch|sh|[cm]?[jt]sx?|py|go|rs|sql)$/i, 'text'],
-];
-
-export const kindOf = (path: string): Kind => KINDS.find(([pattern]) => pattern.test(path))?.[1] ?? 'other';
+import { plain, PREVIEWS, SourceAt, Table, TextAt } from '@/components/content/file-previews';
+import { type Kind, kindOf, type LibrarySource, nameOf, type Place, PROJECT_FOLDER, spacePlace, taskPlace } from '@/lib/library';
 
 const size = fileSize;
-
-export type Place = { path: string; url: string; textKey: QueryKey; text: () => Promise<string>; sessionId?: string };
-
-export const taskPlace = (sessionId: string, path: string): Place => ({
-	path,
-	url: outputUrl(sessionId, path),
-	textKey: ['output', sessionId, path],
-	text: () => api.outputText(sessionId, path),
-	sessionId,
-});
-
-/** Every thread of the project reads these at ../project-files. */
-export const spacePlace = (spaceId: string, path: string): Place => ({
-	path,
-	url: spaceFileUrl(spaceId, path),
-	textKey: ['space-file', spaceId, path],
-	text: () => api.spaceFileText(spaceId, path),
-});
-
-export const PROJECT_FOLDER = 'Project files';
-
-/** Each kind of Library brings its files, already fetched; the views below are the same for all. */
-export type LibrarySource = {
-	files: Output[] | undefined;
-	error: Error | null;
-	place: (path: string) => Place;
-	agentPath: (path: string) => string;
-	upload: (file: File) => Promise<unknown>;
-	/** Null for a Library whose files cannot be deleted from here. */
-	remove: ((path: string) => Promise<unknown>) | null;
-	refresh: () => void;
-	addedTo: string;
-	empty: string;
-};
-
-export function TextFile({ sessionId, path, render }: { sessionId: string; path: string; render: (text: string) => ReactNode }) {
-	return <TextAt place={taskPlace(sessionId, path)} render={render} />;
-}
-
-function TextAt({ place, render }: { place: Place; render: (text: string) => ReactNode }) {
-	const content = useQuery({ queryKey: place.textKey, queryFn: place.text });
-	if (content.isPending) {
-		return (
-			<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-3)">
-				<Spinner size={12} />
-				Reading
-			</div>
-		);
-	}
-	if (content.isError) return <div className="px-3 py-2.5 text-small text-(--bad)">{content.error.message}</div>;
-	return render(content.data);
-}
-
-const plain = (text: string) => (
-	<pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-2)">{text}</pre>
-);
-
-/** The first row is the header; a file cut at MAX_ROWS says so. */
-function Table({ text, separator }: { text: string; separator: string }) {
-	const parsed = parseCsv(text, separator, MAX_ROWS + 1);
-	const [header = [], ...rows] = parsed.slice(0, MAX_ROWS);
-	const cell = 'max-w-[320px] truncate border-b border-(--line) px-3 py-1.5 text-left';
-	const head = 'max-w-[320px] truncate border-b border-(--line-strong) px-3 py-2 text-left';
-	return (
-		<div className="overflow-x-auto">
-			<table className="w-full border-collapse text-small">
-				<thead className="bg-(--bg-surface)">
-					<tr>
-						{header.map((name, index) => (
-							<th key={index} className={`${head} in-caption font-medium text-(--text-3)`}>
-								{name}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody className="text-(--text-2)">
-					{rows.map((row, index) => (
-						<tr key={index} className="hover:bg-(--bg-hover)">
-							{row.map((value, column) => (
-								<td key={column} className={`${cell} ${/^-?[\d.,]+%?$/.test(value) ? 'in-num' : ''}`} title={value}>
-									{value}
-								</td>
-							))}
-						</tr>
-					))}
-				</tbody>
-			</table>
-			{parsed.length > MAX_ROWS ? (
-				<div className="px-3 py-2 text-small text-(--text-3)">Showing the first {MAX_ROWS} rows. Download the file for the rest.</div>
-			) : null}
-		</div>
-	);
-}
-
-export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string }) => ReactNode> = {
-	page: ({ sessionId, path }) => (
-		<div className="p-3">
-			<HtmlFrame sessionId={sessionId} path={path} title={nameOf(path)} actions={false} />
-		</div>
-	),
-	image: ({ sessionId, path }) => <img src={outputUrl(sessionId, path)} alt={path} className="block max-w-full" />,
-	pdf: ({ sessionId, path }) => <iframe src={outputUrl(sessionId, path)} title={path} className="block h-[70vh] w-full border-0 bg-white" />,
-	table: ({ sessionId, path }) => (
-		<TextFile sessionId={sessionId} path={path} render={(text) => <Table text={text} separator={/\.tsv$/i.test(path) ? '\t' : ','} />} />
-	),
-	text: ({ sessionId, path }) => <TextFile sessionId={sessionId} path={path} render={plain} />,
-	other: () => <EmptyLine className="px-3 py-2.5">No preview for this file type. Download it to open it.</EmptyLine>,
-};
-
-export function Source({ sessionId, path }: { sessionId: string; path: string }) {
-	return <SourceAt place={taskPlace(sessionId, path)} />;
-}
-
-function SourceAt({ place }: { place: Place }) {
-	const language = place.path.split('.').pop()?.toLowerCase() ?? 'txt';
-	return <TextAt place={place} render={(text) => <CodeBlock code={text} language={language} className="mb-0! rounded-none! border-0!" />} />;
-}
 
 /** A page runs live only from a task's Library, which serves it as one; elsewhere it shows as its source. */
 function PreviewAt({ place, code }: { place: Place; code: boolean }) {
@@ -219,8 +89,6 @@ const KIND_TONE: Record<Kind, string> = {
 };
 
 const extension = (path: string) => (path.includes('.') ? (path.split('.').pop()?.toUpperCase() ?? 'FILE') : 'FILE');
-const nameOf = (path: string) => path.split('/').pop() ?? path;
-
 const TYPES: Array<{ key: 'all' | Kind; label: string }> = [
 	{ key: 'all', label: 'All types' },
 	{ key: 'page', label: 'Apps' },

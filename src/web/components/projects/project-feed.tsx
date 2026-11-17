@@ -13,7 +13,8 @@ import { type PendingChange, PendingMessage, SentText, useSends } from '@/compon
 import { Caption } from '@/components/kit/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/content/markdown';
 import { OutputCards } from '@/components/content/output-viewer';
-import { ModelPicker, useModels } from '@/components/composer/model-picker';
+import { ModelPicker } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/kit/signal';
 import { ProjectRoute } from '@/components/projects/project-viz';
 import { THREAD_CARD, ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/projects/thread-card';

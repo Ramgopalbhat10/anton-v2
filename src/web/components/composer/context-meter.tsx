@@ -4,7 +4,7 @@ import { ArrowUpRight } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, useState } from 'react';
 import { DATA_COLORS } from '@/components/kit/charts';
-import { useModels } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { SegmentMeter, usedTone } from '@/components/kit/instrument';
 import { Icon } from '@/components/kit/signal';
 import { api, type ContextPart, type ContextView, type PlanUsage } from '@/lib/api';

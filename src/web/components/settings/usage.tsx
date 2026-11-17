@@ -3,7 +3,7 @@ import { Activity, ArrowUpRight, CalendarDays, ChevronDown, Coins, CreditCard, F
 import { useMemo, useState } from 'react';
 import { DATA_COLORS, dayKey, lastDays, shortDay, StackedDaysChart, type StackRow } from '@/components/kit/charts';
 import { Card, CardFooter, CardSection, Figure, Segmented, SegmentedItem, ShareRow, SplitBar, StatRow, Status, TickGauge, usedTone } from '@/components/kit/instrument';
-import { useModels } from '@/components/composer/model-picker';
+import { useModels } from '@/lib/models';
 import { Btn, Icon, Spinner } from '@/components/kit/signal';
 import { api, type Budget, type Limits, type PlanUsage, type SpendRow, type UsageView } from '@/lib/api';
 import { age, dollars, tokens } from '@/lib/format';

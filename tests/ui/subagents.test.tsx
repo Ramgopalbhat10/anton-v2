@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SubagentRun } from '@/lib/api';
 import { renderWithQueries } from './render';
 
-const { AgentsCard, plainLine } = await import('@/components/thread/subagents');
+const { AgentsCard } = await import('@/components/thread/subagents');
+const { plainLine } = await import('@/lib/subagents');
 const { AgentsTab } = await import('@/components/workspace/agents-tab');
 const { ShowPanel, focusRun } = await import('@/lib/workspace');
 

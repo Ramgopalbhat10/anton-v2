@@ -3,7 +3,8 @@ import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Glob
 import { type ComponentType, lazy, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace/workspace-pane';
 import { LazyPart } from '@/components/kit/error-boundary';
-import { GitTab, useChanges } from '@/components/workspace/git-tab';
+import { GitTab } from '@/components/workspace/git-tab';
+import { useChanges } from '@/lib/changes';
 import { LibraryTab } from '@/components/workspace/library-tab';
 import { useResume } from '@/components/workspace/source-bar';
 import { Count, PanelTab, PanelTabs } from '@/components/kit/instrument';
