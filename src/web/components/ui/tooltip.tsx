@@ -3,13 +3,15 @@ import { cn } from "@/lib/utils"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 
 function TooltipProvider({
-  delayDuration = 0,
+  delayDuration = 450,
+  skipDelayDuration = 600,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       delayDuration={delayDuration}
+      skipDelayDuration={skipDelayDuration}
       {...props}
     />
   )
@@ -39,7 +41,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "tip z-[100] inline-flex w-fit max-w-xs origin-(--radix-tooltip-content-transform-origin) items-center gap-1.5 has-data-[slot=kbd]:pr-1.5 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+          "tip z-[100] inline-flex w-fit max-w-xs origin-(--radix-tooltip-content-transform-origin) items-center gap-1.5 has-data-[slot=kbd]:pr-1.5",
           className
         )}
         {...props}

@@ -6,7 +6,7 @@ import { Icon } from '@/components/kit/signal';
 import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api/sessions';
-import { age, dollars, tokens } from '@/lib/format';
+import { dollars, tokens, whenAgo } from '@/lib/format';
 import { useModelName } from '@/lib/models';
 import { activeAt, taskNote, type Tone } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ function Fact({ label, children, mono }: { label: string; children: ReactNode; m
 	);
 }
 
-const ago = (iso: string) => (age(iso) === 'now' ? 'just now' : `${age(iso)} ago`);
+const ago = whenAgo;
 
 function Peek({ session }: { session: Session }) {
 	const modelName = useModelName();
@@ -111,7 +111,7 @@ export function TaskPeek({ session, disabled, children }: { session: Session; di
 					align="start"
 					sideOffset={12}
 					collisionPadding={12}
-					className="in-pop z-50 w-[300px] p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+					className="in-pop z-50 w-[300px] p-3 outline-none"
 				>
 					<Peek session={session} />
 				</HoverCard.Content>

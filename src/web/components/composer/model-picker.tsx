@@ -669,7 +669,7 @@ export const ModelPicker = memo(function ModelPicker({
 					sideOffset={6}
 					collisionPadding={12}
 					onKeyDown={onKeyDown}
-					className="@container/picker z-50 flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="@container/picker z-50 flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none"
 				>
 					<div className="flex h-10 shrink-0 items-center gap-2 border-b border-(--line) pr-1.5 pl-3">
 						<Icon icon={Search} size={13} className="text-(--text-3)" />

@@ -16,7 +16,7 @@ import { useNow } from '@/components/thread/subagents';
 import { ThreadStateIcon } from '@/components/projects/thread-card';
 import { api } from '@/lib/api';
 import type { Space } from '@/lib/api/spaces';
-import { age } from '@/lib/format';
+import { when, whenAgo } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { stateOf, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
@@ -94,11 +94,11 @@ function ProjectCard({ space }: { space: Space }) {
 							<div key={thread.id} className="flex h-[26px] items-center gap-2 px-1.5">
 								<ThreadStateIcon thread={thread} size={12} />
 								<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">{thread.title}</span>
-								<span className="in-num shrink-0 text-micro text-(--text-4)">{age(threadActiveAt(thread))}</span>
+								<span className="in-num shrink-0 text-micro text-(--text-4)">{when(threadActiveAt(thread))}</span>
 							</div>
 						))
 					) : (
-						<div className="flex h-[26px] items-center px-1.5 text-small text-(--text-3)">All quiet{space.activeAt ? ` · active ${age(space.activeAt)} ago` : ''}</div>
+						<div className="flex h-[26px] items-center px-1.5 text-small text-(--text-3)">All quiet{space.activeAt ? ` · active ${whenAgo(space.activeAt)}` : ''}</div>
 					)}
 				</div>
 			</div>
@@ -262,7 +262,7 @@ export function ProjectsPage() {
 				<div className="mx-auto flex w-full max-w-[1080px] flex-col gap-5 px-6 py-7 md:px-8">
 					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
 						<div className="flex min-w-0 flex-col gap-1">
-							<h1 className="m-0 text-h1 font-semibold tracking-[-0.01em] text-(--text)">Projects</h1>
+							<h1 className="m-0 text-h1 font-semibold tracking-[-0.02em] text-(--text)">Projects</h1>
 							<p className="m-0 max-w-[560px] text-body text-(--text-3)">A goal, its repositories, and a coordinator that runs threads in parallel.</p>
 						</div>
 						{active.length > 0 ? <Summary spaces={active} /> : null}

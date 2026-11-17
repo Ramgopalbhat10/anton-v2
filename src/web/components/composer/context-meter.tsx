@@ -29,7 +29,7 @@ const BUFFER = 'repeating-linear-gradient(135deg, var(--track) 0 2px, transparen
 /** How full the window is, as a colour: calm, then amber from 70 percent, red from 90. */
 const toneOf = (share: number) => (share >= 0.9 ? 'var(--bad)' : share >= 0.7 ? 'var(--warn)' : 'var(--accent)');
 
-const percent = (value: number, of: number) => (of > 0 ? `${((value / of) * 100).toFixed(value / of < 0.1 ? 1 : 0)}%` : '—');
+const percent = (value: number, of: number) => (of > 0 ? `${((value / of) * 100).toFixed(value / of < 0.1 ? 1 : 0).replace(/\.0$/, '')}%` : '—');
 
 function Ring({ share, size = 14 }: { share: number; size?: number }) {
 	const r = (size - 3) / 2;
@@ -170,7 +170,7 @@ export const ContextMeter = memo(function ContextMeter({ sessionId, model }: { s
 					align="end"
 					sideOffset={8}
 					collisionPadding={12}
-					className="z-50 flex w-[min(320px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex w-[min(320px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none"
 				>
 					<section className="flex flex-col gap-2.5 px-3.5 pt-3 pb-3">
 						<div className="flex items-baseline gap-2">

@@ -25,7 +25,7 @@ export function TraceModal({ sessionId, traceId, onClose }: { sessionId: string;
 	const trace = useQuery({ queryKey: ['trace', sessionId, traceId], queryFn: () => api.trace(sessionId, traceId), staleTime: Infinity, retry: 1 });
 	return createPortal(
 		<div
-			className="fixed inset-0 z-[150] flex items-center justify-center bg-(--bg-scrim) p-2 backdrop-blur-[2px] sm:p-6"
+			className="fixed inset-0 z-[150] flex items-center justify-center bg-(--bg-scrim) p-2 sm:p-6"
 			onMouseDown={(event) => event.target === event.currentTarget && onClose()}
 		>
 			<div role="dialog" aria-modal="true" aria-label="Reply trace" className="in-pop in-pop--modal flex h-[min(820px,100%)] w-[min(1240px,100%)] flex-col overflow-hidden">

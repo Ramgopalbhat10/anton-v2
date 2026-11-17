@@ -40,7 +40,7 @@ import { FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { isLive, TaskStatusIcon } from '@/components/marks/task-status';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
-import { age, dollars } from '@/lib/format';
+import { dollars, when } from '@/lib/format';
 import {
 	activeAt,
 	DEFAULT_VIEW,
@@ -346,7 +346,7 @@ function HoverActions({ session, place }: { session: Session; place: Place }) {
 
 function Subtitle({ session, show, onCardChange }: { session: Session; show: TaskView['show']; onCardChange: (open: boolean) => void }) {
 	const spaceName = useSpaceName(session.spaceId);
-	const details = [show.repo && (spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')), show.time && age(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
+	const details = [show.repo && (spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')), show.time && when(activeAt(session)), show.spend && session.usage.cost > 0 && dollars(session.usage.cost)].filter(
 		(part): part is string => Boolean(part),
 	);
 	return (
@@ -645,7 +645,7 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="sg-nav-more -mx-2 -mb-2 flex shrink-0 flex-col gap-1.5 border-t border-(--line) px-3.5 pt-2 pb-2.5">
+			<div className="sg-nav-more -mx-2 -mb-2 flex shrink-0 flex-col gap-1.5 border-t border-(--line) px-4 pt-2 pb-2.5">
 				<SpentToday />
 				<div className="flex items-center gap-2">
 					<Avatar name={name} />

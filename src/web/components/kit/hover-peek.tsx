@@ -34,7 +34,7 @@ export function HoverPeek({
 					sideOffset={6}
 					collisionPadding={12}
 					onClick={(event) => event.stopPropagation()}
-					className={cn('in-pop z-50 flex flex-col gap-2.5 p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0')}
+					className={cn('in-pop z-50 flex flex-col gap-2.5 p-3 outline-none')}
 					style={{ width, maxWidth: 'calc(100vw - 24px)' }}
 				>
 					{content}
@@ -85,7 +85,7 @@ function InteractivePeek({ content, children, side = 'top', align = 'start', wid
 				onPointerEnter={clear} onPointerLeave={hide} onFocus={clear}
 				onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { clear(); timer.current = setTimeout(() => setOpen(false), 90); } }}
 				onClick={(event) => event.stopPropagation()}
-				className="in-pop z-50 flex flex-col gap-2.5 p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+				className="in-pop z-50 flex flex-col gap-2.5 p-3 outline-none"
 				style={{ width, maxWidth: 'calc(100vw - 24px)' }}
 			>{content}</Popover.Content>
 		</Popover.Portal>

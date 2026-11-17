@@ -10,7 +10,7 @@ import { ThreadStateIcon } from '@/components/projects/thread-card';
 import { Glyph } from '@/components/marks/thread-glyph';
 import { repoShort, type Session } from '@/lib/api/sessions';
 import type { Space, ThreadState } from '@/lib/api/spaces';
-import { age } from '@/lib/format';
+import { when } from '@/lib/format';
 import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { DEFAULT_VIEW, FACET_KEYS, type FacetKey, filterCount, matches, type TaskView, toggleIn } from '@/lib/task-view';
@@ -144,7 +144,7 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 					<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
 						<PrStatus thread={thread} />
 						<span className="min-w-0 truncate">
-						{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), age(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+						{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), when(threadActiveAt(thread))].filter(Boolean).join(' · ')}
 						</span>
 					</span>
 				</span>

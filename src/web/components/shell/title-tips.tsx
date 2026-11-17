@@ -7,7 +7,7 @@ const DELAY = 450;
 const WARM = 600;
 const GAP = 6;
 
-type Tip = { text: string; x: number; y: number; below: boolean };
+type Tip = { text: string; x: number; y: number; below: boolean; instant?: boolean };
 
 function owner(target: EventTarget | null): HTMLElement | null {
 	if (!(target instanceof Element)) return null;
@@ -52,7 +52,7 @@ export function TitleTips() {
 			current.current = element;
 			const warm = Date.now() - lastHidden.current < WARM;
 			const open = () => {
-				if (current.current === element && element.isConnected) setTip(place(element));
+				if (current.current === element && element.isConnected) setTip({ ...place(element), instant: warm });
 			};
 			if (warm) open();
 			else {
@@ -112,6 +112,7 @@ export function TitleTips() {
 			ref={ref}
 			role="tooltip"
 			className="tip pointer-events-none fixed z-[100]"
+			data-instant={tip.instant || undefined}
 			style={{ left: tip.x + shift, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
 		>
 			{tip.text}

@@ -9,6 +9,21 @@ export function age(iso: string, now = Date.now()): string {
 	return `${Math.floor(hours / 24)}d`;
 }
 
+/** A list row's time: its age for the past week ("now", "4m", "2h", "6d"), then the date ("Oct 13", or "Oct 13, 2024" in another year). */
+export function when(iso: string, now = Date.now()): string {
+	const at = new Date(iso);
+	if (now - at.getTime() < 7 * 86_400_000) return age(iso, now);
+	const sameYear = at.getFullYear() === new Date(now).getFullYear();
+	return at.toLocaleDateString('en-US', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** The same time in a sentence: "just now", "4m ago", "6d ago", then "on Oct 13". */
+export function whenAgo(iso: string, now = Date.now()): string {
+	const short = when(iso, now);
+	if (short === 'now') return 'just now';
+	return /^\d+[mhd]$/.test(short) ? `${short} ago` : `on ${short}`;
+}
+
 /** Elapsed duration for live work: "12s", "4m 12s", "1h 3m". */
 export function elapsed(ms: number): string {
 	const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -41,7 +56,7 @@ export function until(iso: string, now = Date.now()): string {
 export function dollars(amount: number): string {
 	if (amount === 0) return '$0';
 	if (amount < 0.001) return '<$0.001';
-	return `$${amount.toFixed(amount < 1 ? 3 : 2)}`;
+	return `$${amount.toFixed(amount < 0.1 ? 3 : 2)}`;
 }
 
 /** Fractions of a cent, as the decision model costs: "$0.0009". */

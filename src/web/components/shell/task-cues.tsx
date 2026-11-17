@@ -76,7 +76,7 @@ function CiCue({ number, pullRequest, prUrl, onCardChange }: { number: string; p
 					align="start"
 					sideOffset={12}
 					collisionPadding={12}
-					className="in-pop z-50 w-[260px] p-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+					className="in-pop z-50 w-[260px] p-3 outline-none"
 				>
 					<ChecksCard number={number} pullRequest={pullRequest} url={url} />
 				</HoverCard.Content>

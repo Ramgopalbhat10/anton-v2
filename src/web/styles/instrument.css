@@ -280,6 +280,29 @@
 	border-radius: var(--r-12);
 	box-shadow: var(--sh-3);
 }
+/* Every anchored menu, popover and picker opens the same way: a quick fade and
+   a slight grow out of the control that opened it, and leaves faster than it came. */
+[data-radix-popper-content-wrapper] > .in-pop {
+	transform-origin: var(--radix-popper-transform-origin);
+}
+[data-radix-popper-content-wrapper] > .in-pop[data-state='open'] {
+	animation: in-pop-open var(--t) var(--ease);
+}
+[data-radix-popper-content-wrapper] > .in-pop[data-state='closed'] {
+	animation: in-pop-close var(--t-fast) var(--ease) forwards;
+}
+@keyframes in-pop-open {
+	from {
+		opacity: 0;
+		transform: scale(0.97);
+	}
+}
+@keyframes in-pop-close {
+	to {
+		opacity: 0;
+		transform: scale(0.97);
+	}
+}
 
 /* The chosen one of a set: one grey fill and primary text on any surface; the accent is kept for focus and for what wants you. */
 .in-chosen,
@@ -325,7 +348,7 @@
 	}
 }
 .viz-in {
-	animation: viz-in 320ms var(--ease) both;
+	animation: viz-in var(--t-slow) var(--ease) both;
 	animation-delay: calc(var(--i, 0) * 50ms);
 }
 @media (prefers-reduced-motion: reduce) {

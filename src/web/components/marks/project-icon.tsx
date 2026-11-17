@@ -261,7 +261,7 @@ export function IconPicker({ value, name, onChange, size = 36 }: { value: string
 						const content = event.currentTarget as HTMLElement;
 						requestAnimationFrame(() => content.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' }));
 					}}
-					className="z-50 flex w-[min(316px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]"
+					className="z-50 flex w-[min(316px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none"
 				>
 					<div className="flex items-center gap-2 border-b border-(--line) px-2.5 py-2">
 						<Icon icon={Search} size={13} className="text-(--text-3)" />

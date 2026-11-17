@@ -143,7 +143,7 @@ export function TasksPage() {
 				<nav aria-label="Where you are" className="flex min-w-0 shrink-0 items-center text-body">
 					<span className="font-medium text-(--text)">Tasks</span>
 				</nav>
-				<div role="tablist" aria-label="Kind of tasks" className="ml-2 flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+				<div role="tablist" aria-label="Kind of tasks" className="sg-fade-x ml-2 flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
 					{KINDS.map((entry) => {
 						const count = searched.filter(entry.test).length;
 						const on = kind === entry.id;

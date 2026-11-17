@@ -2,7 +2,7 @@ import { unrouted } from '../../../core/model-route';
 import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAgentResult } from '@flue/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from '@/lib/icons';
+import { ArrowUp, Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from '@/lib/icons';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerPlus } from '@/components/composer/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/composer/attachments';
@@ -464,7 +464,7 @@ function Welcome({ space, onPick }: { space: Space; onPick: (text: string) => vo
 				<ProjectRoute space={space} />
 			</div>
 			<div className="flex max-w-[52ch] flex-col items-center gap-1.5">
-				<h1 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.02em]">{space.name}</h1>
+				<h1 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.015em]">{space.name}</h1>
 				<p className="m-0 text-body leading-[19px] text-pretty text-(--text-3)">
 					{space.goal || 'Describe the work. The coordinator splits it into threads that run in parallel, each on its own branch and sandbox, and reports back here.'}
 				</p>
@@ -691,8 +691,8 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 							</>
 						) : null}
 					</div>
-					{busy ? <IconBtn icon={Square} size="sm" variant="secondary" label="Stop the coordinator" onClick={() => void api.stopCoordinator(space.id)} /> : null}
-					<IconBtn type="submit" icon={Send} size="sm" variant="primary" label="Send message" disabled={!ready} />
+					{busy ? <IconBtn icon={Square} variant="secondary" label="Stop the coordinator" onClick={() => void api.stopCoordinator(space.id)} /> : null}
+					<IconBtn type="submit" icon={ArrowUp} variant="inverse" label="Send message" disabled={!ready} />
 				</div>
 			</div>
 		</form>

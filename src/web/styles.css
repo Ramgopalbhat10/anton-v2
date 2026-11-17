@@ -126,6 +126,11 @@ textarea::placeholder {
 	overflow-wrap: anywhere;
 	animation: tip-in var(--t) var(--ease);
 }
+/* A tip that follows another (moving along a toolbar) shows at once, with no fade. */
+.tip[data-instant],
+.tip[data-state='instant-open'] {
+	animation: none;
+}
 @keyframes tip-in {
 	from {
 		opacity: 0;

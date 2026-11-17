@@ -23,7 +23,12 @@
 		background var(--t-fast),
 		color var(--t-fast),
 		box-shadow var(--t-fast),
-		opacity var(--t-fast);
+		opacity var(--t-fast),
+		transform var(--t) var(--ease);
+}
+/* A press answers at once: the button gives a little under the pointer. */
+.sg-btn:active {
+	transform: scale(0.97);
 }
 .sg-btn svg {
 	opacity: 0.85;
@@ -65,6 +70,11 @@
 .sg-btn--primary.is-hover {
 	background: var(--accent-hover);
 }
+.sg-btn--primary:active,
+.sg-btn--primary.is-active {
+	background: var(--accent);
+	box-shadow: none;
+}
 .sg-btn--primary:focus-visible {
 	box-shadow: var(--focus);
 }
@@ -76,6 +86,9 @@
 .sg-btn--inverse:hover,
 .sg-btn--inverse.is-hover {
 	opacity: 0.9;
+}
+.sg-btn--inverse:active {
+	opacity: 0.8;
 }
 .sg-btn--secondary {
 	background: var(--bg-raised);
@@ -545,3 +558,44 @@
 .sg-markdown .sg-output-deleted--block{display:flex;width:fit-content;max-width:100%;align-items:center;gap:4px;margin:8px 0;padding:8px 12px;border:1px dashed var(--line-strong);border-radius:var(--r-6);background:var(--bg-app);font-size:var(--fs-12);text-decoration:none}
 .sg-markdown .sg-output-deleted--block .sg-output-deleted__tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
 
+
+/* A row that scrolls sideways fades out at the edge it can still scroll toward,
+   so a chip cut by the edge reads as "more this way". Its bottom hairline stays
+   whole. Where scroll timelines are unsupported the row is simply unfaded. */
+@property --fade-l {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
+@property --fade-r {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
+.sg-fade-x {
+	mask:
+		linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent),
+		linear-gradient(#000 0 0) bottom / 100% 1px no-repeat;
+}
+@supports (animation-timeline: scroll()) {
+	.sg-fade-x {
+		animation: sg-fade-x linear both;
+		animation-timeline: scroll(self inline);
+	}
+}
+@keyframes sg-fade-x {
+	0% {
+		--fade-l: 0px;
+		--fade-r: 28px;
+	}
+	8% {
+		--fade-l: 28px;
+	}
+	92% {
+		--fade-r: 28px;
+	}
+	100% {
+		--fade-l: 28px;
+		--fade-r: 0px;
+	}
+}
