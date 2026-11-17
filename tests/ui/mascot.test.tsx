@@ -1,6 +1,6 @@
 import { act, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Mascot, useMascotMood } from '@/components/mascot';
+import { Mascot, useMascotMood } from '@/components/marks/mascot';
 
 describe('The mascot on the composer', () => {
 	beforeEach(() => vi.useFakeTimers());

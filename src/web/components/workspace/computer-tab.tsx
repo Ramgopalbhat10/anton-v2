@@ -1,0 +1,424 @@
+import RFB from '@novnc/novnc';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bot, Globe, Hand, Monitor, Pause, PencilLine, Power, RotateCw } from '@/lib/icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWindowShown } from '@/components/workspace/browser-tab';
+import { Sketch } from '@/components/content/sketch';
+import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/kit/signal';
+import { api, type ComputerView } from '@/lib/api';
+import { imageFromDataUrl } from '@/lib/attachments';
+import { addToComposer } from '@/lib/composer-inbox';
+import { useElementSize } from '@/lib/use-element-size';
+import { cn } from '@/lib/utils';
+import { StatusDot } from '@/components/kit/instrument';
+import { taskQueries } from '@/lib/task-queries';
+
+/* Looking at the panel never starts the sandbox; Start computer does, and the agent's first sandbox browser step brings the browser up. */
+
+/** The screen stops streaming after a spell with no sign of you or the agent; the computer keeps running. */
+const PAUSE_AFTER_MS = 5 * 60_000;
+
+function useScreenAwake(on: boolean, agentBusy: boolean): [boolean, () => void] {
+	const shown = useWindowShown();
+	const [paused, setPaused] = useState(false);
+	const lastSeen = useRef(Date.now());
+	const busy = useRef(agentBusy);
+	busy.current = agentBusy;
+	const wake = useCallback(() => {
+		lastSeen.current = Date.now();
+		setPaused(false);
+	}, []);
+	useEffect(() => {
+		const seen = () => {
+			lastSeen.current = Date.now();
+		};
+		// Captured, as the screen stops the events it takes for the computer.
+		window.addEventListener('pointermove', seen, { capture: true, passive: true });
+		window.addEventListener('keydown', seen, { capture: true });
+		return () => {
+			window.removeEventListener('pointermove', seen, { capture: true });
+			window.removeEventListener('keydown', seen, { capture: true });
+		};
+	}, []);
+	useEffect(() => {
+		lastSeen.current = Date.now();
+	}, [shown]);
+	useEffect(() => {
+		if (agentBusy) wake();
+	}, [agentBusy, wake]);
+	useEffect(() => {
+		if (!on || paused) return;
+		const timer = setInterval(() => {
+			if (busy.current) lastSeen.current = Date.now();
+			else if (Date.now() - lastSeen.current > PAUSE_AFTER_MS) setPaused(true);
+		}, 15_000);
+		return () => clearInterval(timer);
+	}, [on, paused]);
+	return [on && shown && !paused, wake];
+}
+
+type Link = { state: 'connecting' | 'connected' | 'closed'; error?: string };
+
+/** A connection that drops uncleanly is tried again twice, each with a fresh address. */
+function Screen({ sessionId, viewOnly, onLink }: { sessionId: string; viewOnly: boolean; onLink: (link: Link) => void }) {
+	const target = useRef<HTMLDivElement>(null);
+	const client = useRef<RFB | null>(null);
+	const readOnly = useRef(viewOnly);
+	readOnly.current = viewOnly;
+	const [attempt, setAttempt] = useState(0);
+	useEffect(() => {
+		let cancelled = false;
+		let rfb: RFB | null = null;
+		onLink({ state: 'connecting' });
+		api
+			.connectComputer(sessionId)
+			.then(({ url }) => {
+				if (cancelled || !target.current) return;
+				rfb = new RFB(target.current, url, { shared: true, wsProtocols: ['binary'] });
+				rfb.scaleViewport = true;
+				rfb.resizeSession = false;
+				rfb.background = 'transparent';
+				rfb.viewOnly = readOnly.current;
+				rfb.addEventListener('connect', () => onLink({ state: 'connected' }));
+				rfb.addEventListener('disconnect', (event) => {
+					client.current = null;
+					if (cancelled) return;
+					const clean = (event as CustomEvent<{ clean?: boolean }>).detail?.clean;
+					if (!clean && attempt < 2) setTimeout(() => setAttempt((count) => count + 1), 1000);
+					else onLink({ state: 'closed' });
+				});
+				client.current = rfb;
+			})
+			.catch((error: Error) => !cancelled && onLink({ state: 'closed', error: error.message }));
+		return () => {
+			cancelled = true;
+			rfb?.disconnect();
+			client.current = null;
+		};
+	}, [sessionId, attempt, onLink]);
+	useEffect(() => {
+		if (!client.current) return;
+		client.current.viewOnly = viewOnly;
+		if (!viewOnly) client.current.focus();
+	}, [viewOnly]);
+	return <div ref={target} data-testid="computer-screen" aria-label="Computer screen" className={cn('absolute inset-0', viewOnly && '[&_canvas]:cursor-default!')} />;
+}
+
+const BUTTONS = ['left', 'middle', 'right'] as const;
+/** Mouse moves sent at most this often, as each is a step in the sandbox's browser. */
+const MOVE_MS = 30;
+
+/** Only the latest frame is drawn when frames come faster than the page can draw. A connection that drops uncleanly is tried again twice, each with a fresh address. */
+function BrowserScreen({ sessionId, viewOnly, onLink, canvas }: { sessionId: string; viewOnly: boolean; onLink: (link: Link) => void; canvas: React.RefObject<HTMLCanvasElement | null> }) {
+	const socket = useRef<WebSocket | null>(null);
+	const lastMove = useRef(0);
+	const [attempt, setAttempt] = useState(0);
+	useEffect(() => {
+		let cancelled = false;
+		let ws: WebSocket | null = null;
+		let latest: Blob | null = null;
+		let drawing = false;
+		const draw = async () => {
+			drawing = true;
+			while (latest && !cancelled) {
+				const blob = latest;
+				latest = null;
+				const image = await createImageBitmap(blob).catch(() => null);
+				const target = canvas.current;
+				if (image && target) target.getContext('2d')?.drawImage(image, 0, 0, target.width, target.height);
+				image?.close();
+			}
+			drawing = false;
+		};
+		onLink({ state: 'connecting' });
+		api
+			.connectSandboxBrowser(sessionId)
+			.then(({ url }) => {
+				if (cancelled) return;
+				ws = new WebSocket(url);
+				ws.binaryType = 'blob';
+				ws.onopen = () => onLink({ state: 'connected' });
+				ws.onmessage = (event: MessageEvent<Blob | string>) => {
+					if (typeof event.data === 'string') {
+						const message = JSON.parse(event.data) as { type: string; width?: number; height?: number };
+						if (message.type === 'size' && canvas.current && message.width && message.height) {
+							canvas.current.width = message.width;
+							canvas.current.height = message.height;
+						}
+						return;
+					}
+					latest = event.data;
+					if (!drawing) void draw();
+				};
+				ws.onclose = (event) => {
+					socket.current = null;
+					if (cancelled) return;
+					if (!event.wasClean && attempt < 2) setTimeout(() => setAttempt((count) => count + 1), 1000);
+					else onLink({ state: 'closed' });
+				};
+				socket.current = ws;
+			})
+			.catch((error: Error) => !cancelled && onLink({ state: 'closed', error: error.message }));
+		return () => {
+			cancelled = true;
+			ws?.close();
+			socket.current = null;
+		};
+	}, [sessionId, attempt, onLink, canvas]);
+	useEffect(() => {
+		if (!viewOnly) canvas.current?.focus();
+	}, [viewOnly, canvas]);
+
+	const send = (message: Record<string, unknown>) => {
+		if (!viewOnly && socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message));
+	};
+	const at = (event: { clientX: number; clientY: number }) => {
+		const target = canvas.current;
+		if (!target) return { x: 0, y: 0 };
+		const box = target.getBoundingClientRect();
+		return { x: ((event.clientX - box.left) / box.width) * target.width, y: ((event.clientY - box.top) / box.height) * target.height };
+	};
+	const button = (event: React.PointerEvent) => BUTTONS[event.button] ?? 'left';
+	return (
+		<canvas
+			ref={canvas}
+			width={1280}
+			height={800}
+			tabIndex={viewOnly ? -1 : 0}
+			data-testid="browser-screen"
+			aria-label="Sandbox browser"
+			className={cn('absolute inset-0 h-full w-full outline-none', viewOnly && 'cursor-default')}
+			onPointerDown={(event) => {
+				if (viewOnly) return;
+				event.currentTarget.focus();
+				event.currentTarget.setPointerCapture?.(event.pointerId);
+				send({ type: 'down', ...at(event), button: button(event), clicks: event.detail || 1 });
+			}}
+			onPointerUp={(event) => send({ type: 'up', ...at(event), button: button(event), clicks: event.detail || 1 })}
+			onPointerMove={(event) => {
+				if (viewOnly || Date.now() - lastMove.current < MOVE_MS) return;
+				lastMove.current = Date.now();
+				send({ type: 'move', ...at(event) });
+			}}
+			onWheel={(event) => send({ type: 'wheel', ...at(event), dx: event.deltaX * (event.deltaMode === 1 ? 16 : 1), dy: event.deltaY * (event.deltaMode === 1 ? 16 : 1) })}
+			onContextMenu={(event) => !viewOnly && event.preventDefault()}
+			onKeyDown={(event) => {
+				if (viewOnly) return;
+				// Pasting goes through the paste event below, with the text itself.
+				if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') return;
+				event.preventDefault();
+				send({ type: 'keydown', key: event.key });
+			}}
+			onKeyUp={(event) => {
+				if (viewOnly) return;
+				event.preventDefault();
+				send({ type: 'keyup', key: event.key });
+			}}
+			onPaste={(event) => {
+				if (viewOnly) return;
+				event.preventDefault();
+				send({ type: 'text', text: event.clipboardData.getData('text') });
+			}}
+		/>
+	);
+}
+
+function StartComputer({ sessionId, live }: { sessionId: string; live: boolean }) {
+	const queryClient = useQueryClient();
+	const start = useMutation({
+		mutationFn: () => api.startComputer(sessionId),
+		onSuccess: ({ url: _, ...next }) => queryClient.setQueryData<ComputerView>(['computer', sessionId], next),
+	});
+	return (
+		<EmptyState
+			icon={Monitor}
+			title="A computer for this task"
+			body={
+				live
+					? 'A desktop inside this task’s sandbox, where the agent uses programs and pages and you can take over. The sandbox is running, so the desktop starts at once; with nothing running, the sandbox stops itself after a quiet spell.'
+					: 'A desktop inside this task’s sandbox, where the agent uses programs and pages and you can take over. Starting it starts the sandbox.'
+			}
+		>
+			<Btn size="sm" variant="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+				{start.isPending ? 'Starting…' : 'Start computer'}
+			</Btn>
+			{start.isError ? <p className="m-0 text-small text-(--bad)">{start.error.message}</p> : null}
+		</EmptyState>
+	);
+}
+
+function Overlay({ children }: { children: React.ReactNode }) {
+	return <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-(--bg-app) px-6 text-center">{children}</div>;
+}
+
+export function ComputerTab({ sessionId }: { sessionId: string }) {
+	const queryClient = useQueryClient();
+	const view = useQuery(taskQueries.computer(sessionId));
+	const computer = view.data;
+	const running = Boolean(computer?.live && computer.running);
+	const browsing = Boolean(computer?.live && computer.browser);
+	// With both up, the browser shows unless you pick the desktop.
+	const [picked, setPicked] = useState<'browser' | 'desktop' | null>(null);
+	const mode = running && browsing ? (picked ?? 'browser') : browsing ? 'browser' : 'desktop';
+	const browserCanvas = useRef<HTMLCanvasElement | null>(null);
+	const screen = computer?.screen ?? { width: 1280, height: 800 };
+	const [area, room] = useElementSize<HTMLDivElement>();
+	const scale = Math.min(room.width / screen.width, room.height / screen.height);
+	const size = { width: Math.floor(screen.width * scale), height: Math.floor(screen.height * scale) };
+	const [showing, wake] = useScreenAwake(running || browsing, Boolean(computer?.agentBusy));
+	const [link, setLink] = useState<Link>({ state: 'connecting' });
+	const [connection, setConnection] = useState(0);
+	const [sketch, setSketch] = useState<{ data: string; width: number; height: number } | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
+
+	const control = useMutation({
+		mutationFn: (driver: 'user' | 'agent') => api.setComputerControl(sessionId, driver),
+		onSuccess: (next) => queryClient.setQueryData(['computer', sessionId], next),
+	});
+	const capture = useMutation({ mutationFn: () => api.computerScreenshot(sessionId), onSuccess: setSketch });
+	const turnOff = useMutation({
+		mutationFn: () => api.stopComputer(sessionId),
+		onSuccess: (next) => {
+			setSketch(null);
+			queryClient.setQueryData(['computer', sessionId], next);
+		},
+	});
+
+	useEffect(() => {
+		if (!notice) return;
+		const timer = setTimeout(() => setNotice(null), 2500);
+		return () => clearTimeout(timer);
+	}, [notice]);
+
+	if (view.isPending) {
+		return (
+			<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
+				<Spinner size={12} />
+				Checking the computer
+			</div>
+		);
+	}
+	if (view.isError) return <EmptyState title="Computer unavailable" body={view.error.message} />;
+	if (!(running || browsing) || !computer) return <StartComputer sessionId={sessionId} live={Boolean(computer?.live)} />;
+
+	const yours = computer.userControl;
+	const status = capture.error?.message ?? control.error?.message ?? turnOff.error?.message ?? notice;
+
+	return (
+		<div className="flex h-full min-h-0 flex-col gap-2">
+			<div className="flex h-8 shrink-0 items-center gap-1.5">
+				<span className="flex min-w-0 flex-1 items-center gap-1.5 pl-1 text-small text-(--text-2)">
+					{yours ? (
+						<>
+							<Icon icon={Hand} size={12} className="shrink-0 text-(--accent-text)" />
+							<span className="truncate">You have the computer. The agent cannot use it until you give it back.</span>
+						</>
+					) : computer.agentBusy ? (
+						<>
+							<StatusDot tone="accent" pulse />
+							<span className="truncate">The agent is using the computer</span>
+						</>
+					) : (
+						<span className="truncate text-(--text-3)">Watching. Take over to use it yourself.</span>
+					)}
+				</span>
+				{running && browsing ? (
+					<>
+						<IconBtn icon={Globe} size="sm" label="Show the sandbox browser" aria-pressed={mode === 'browser'} onClick={() => setPicked('browser')} className={cn(mode === 'browser' && 'bg-(--accent-soft) text-(--accent-text)')} />
+						<IconBtn icon={Monitor} size="sm" label="Show the desktop" aria-pressed={mode === 'desktop'} onClick={() => setPicked('desktop')} className={cn(mode === 'desktop' && 'bg-(--accent-soft) text-(--accent-text)')} />
+					</>
+				) : null}
+				<IconBtn
+					icon={PencilLine}
+					size="sm"
+					label={sketch ? 'Stop drawing' : 'Draw on the screen'}
+					aria-pressed={Boolean(sketch)}
+					disabled={capture.isPending}
+					onClick={() => {
+						if (sketch) return setSketch(null);
+						const frame = browserCanvas.current;
+						// The browser's tab is drawn from the frame on screen, as the desktop's screenshot needs the desktop.
+						if (mode === 'browser' && frame) setSketch({ data: frame.toDataURL('image/png').split(',')[1] ?? '', width: frame.width, height: frame.height });
+						else capture.mutate();
+					}}
+					className={cn(sketch && 'bg-(--accent-soft) text-(--accent-text)', capture.isPending && '[&_svg]:animate-pulse')}
+				/>
+				<IconBtn
+					icon={Power}
+					size="sm"
+					label={computer.agentBusy ? 'The agent is using the computer' : 'Turn off the computer'}
+					disabled={turnOff.isPending || computer.agentBusy}
+					onClick={() => turnOff.mutate()}
+					className={cn(turnOff.isPending && '[&_svg]:animate-pulse')}
+				/>
+				<Btn size="sm" variant={yours ? 'primary' : 'secondary'} icon={yours ? Bot : Hand} disabled={control.isPending} onClick={() => control.mutate(yours ? 'agent' : 'user')}>
+					{yours ? 'Give back' : 'Take over'}
+				</Btn>
+			</div>
+			<div ref={area} className="relative flex min-h-[240px] flex-1 items-center justify-center">
+				<div className="in-well relative overflow-hidden bg-(--bg-app)" style={{ width: size.width, height: size.height }}>
+					{showing ? (
+						mode === 'browser' ? (
+							<BrowserScreen key={`browser-${connection}`} sessionId={sessionId} viewOnly={!yours} onLink={setLink} canvas={browserCanvas} />
+						) : (
+							<Screen key={connection} sessionId={sessionId} viewOnly={!yours} onLink={setLink} />
+						)
+					) : null}
+					{!showing ? (
+						<Overlay>
+							<Icon icon={Pause} size={16} className="text-(--text-3)" />
+							<div className="text-body text-(--text)">Paused while nobody watched</div>
+							<p className="m-0 max-w-[300px] text-small text-(--text-3)">The computer keeps running in the sandbox.</p>
+							<Btn size="sm" variant="primary" onClick={wake}>
+								Resume
+							</Btn>
+						</Overlay>
+					) : link.state === 'connecting' ? (
+						<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-(--bg-app) text-small text-(--text-3)">
+							<Spinner size={12} />
+							Connecting to the computer
+						</div>
+					) : link.state === 'closed' ? (
+						<Overlay>
+							<div className="text-body text-(--text)">The connection closed</div>
+							{link.error ? <p className="m-0 max-w-[300px] text-small text-(--text-3)">{link.error}</p> : null}
+							<Btn
+								size="sm"
+								variant="primary"
+								icon={RotateCw}
+								onClick={() => {
+									setConnection((count) => count + 1);
+									void view.refetch();
+								}}
+							>
+								Reconnect
+							</Btn>
+						</Overlay>
+					) : null}
+					{sketch ? (
+						<div className="absolute inset-0 z-20">
+							<Sketch
+								src={`data:image/png;base64,${sketch.data}`}
+								width={sketch.width}
+								height={sketch.height}
+								onClose={() => setSketch(null)}
+								onAttach={(png) => {
+									addToComposer(sessionId, { kind: 'image', image: imageFromDataUrl(png, 'drawing.png') });
+									setNotice('Added the drawing to the message');
+									setSketch(null);
+								}}
+							/>
+						</div>
+					) : null}
+					{status ? (
+						<div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
+							<span role="status" className="in-pop flex items-center gap-1.5 px-2.5 py-1 text-small text-(--text-2)">
+								{status}
+							</span>
+						</div>
+					) : null}
+				</div>
+			</div>
+		</div>
+	);
+}

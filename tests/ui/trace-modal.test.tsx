@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ModelSpan, Trace } from '../../src/core/trace';
 import { renderWithQueries } from './render';
 
-const { TraceModal } = await import('@/components/trace-modal');
+const { TraceModal } = await import('@/components/thread/trace-modal');
 const { autoZoom, modelChanges, modelsUsed, traceRows, traceStats, traceTree } = await import('@/lib/trace-view');
 
 const usage = (input: number, cacheRead: number, cacheWrite = 0) => ({ input, output: 50, cacheRead, cacheWrite, cost: 0.002 });

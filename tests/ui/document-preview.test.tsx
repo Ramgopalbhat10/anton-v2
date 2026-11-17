@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { FileView } from '@/components/file-view';
-import { FileImages, Markdown } from '@/components/markdown';
+import { FileView } from '@/components/content/file-view';
+import { FileImages, Markdown } from '@/components/content/markdown';
 import readme from '../fixtures/skills/anatomy-readme.md?raw';
 import skill from '../fixtures/skills/SKILL.md?raw';
 

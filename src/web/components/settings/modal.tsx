@@ -1,6 +1,6 @@
 import { Dialog } from 'radix-ui';
 import { lazy } from 'react';
-import { LazyPart } from '@/components/error-boundary';
+import { LazyPart } from '@/components/kit/error-boundary';
 import { closeSettings, useSettingsHref } from '@/lib/settings-modal';
 
 const SettingsCard = lazy(() => import('./card').then((module) => ({ default: module.SettingsCard })));

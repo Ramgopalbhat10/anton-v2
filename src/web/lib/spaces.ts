@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleAlert, CircleCheck, Clock, GitMerge, GitPullRequest, type IconComponent, MessageCircleQuestion, Moon } from '@/lib/icons';
-import type { Tone } from '@/components/instrument';
+import type { Tone } from '@/components/kit/instrument';
 import { useCallback, useMemo } from 'react';
 import { api, SAFETY_NET_MS, type Session, type Space, THREAD_STATES, type ThreadState } from '@/lib/api';
 import { threadState } from '../../core/thread-state';

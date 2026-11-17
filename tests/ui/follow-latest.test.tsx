@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { JumpToLatest } from '@/components/jump-to-latest';
+import { JumpToLatest } from '@/components/kit/jump-to-latest';
 import { useFollowLatest } from '@/lib/use-follow-latest';
 
 function Feed() {

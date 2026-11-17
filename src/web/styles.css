@@ -104,7 +104,7 @@ textarea::placeholder {
 	background: var(--surface-fill, var(--bg-panel));
 }
 
-/* Every title (components/title-tips.tsx) and every Radix tooltip. */
+/* Every title (components/shell/title-tips.tsx) and every Radix tooltip. */
 .tip {
 	/* Its own width, not what is left of the window: a fixed tip near the right
 	   edge would otherwise shrink to a sliver and wrap letter by letter before

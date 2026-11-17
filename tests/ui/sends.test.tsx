@@ -1,6 +1,6 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PendingMessage, useSends } from '@/components/sent-text';
+import { PendingMessage, useSends } from '@/components/thread/sent-text';
 
 describe('sends', () => {
 	it('shows a message waiting on its files, and the one that takes over from it does not rise again', () => {

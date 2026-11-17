@@ -70,7 +70,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { SubscriptionsPage } = await import('@/components/settings/subscriptions');
-const { ModelPicker } = await import('@/components/model-picker');
+const { ModelPicker } = await import('@/components/composer/model-picker');
 const { sourcesOf, visibleModels } = await import('@/lib/model-catalog');
 const { logoFor, vendorSlug } = await import('@/lib/provider-logos');
 
@@ -664,7 +664,7 @@ describe('OpenRouter', () => {
 
 describe('Plan link drawing', () => {
 	it('seats the plug with a spark only when a plan connects on screen, not when it is already connected', async () => {
-		const { PlanLinkArt } = await import('@/components/illustrations');
+		const { PlanLinkArt } = await import('@/components/marks/illustrations');
 		const { render } = await import('@testing-library/react');
 		const already = render(<PlanLinkArt linked plan="Claude" />);
 		expect(already.container.querySelector('.fa-seat, .fa-spark')).toBeNull();

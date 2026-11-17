@@ -21,7 +21,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { Composer } = await import('@/components/composer');
+const { Composer } = await import('@/components/composer/composer');
 
 const model = {
 	id: 'openrouter/test/model',
