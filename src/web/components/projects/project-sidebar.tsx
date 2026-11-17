@@ -244,7 +244,7 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 	);
 }
 
-export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId: string; threadId?: string; onNavigate: () => void }) {
+export function ProjectSidebarBody({ spaceId, threadId, collapsed = false, onNavigate }: { spaceId: string; threadId?: string; collapsed?: boolean; onNavigate: () => void }) {
 	const navigate = useNavigate();
 	const spaces = useSpaces();
 	const { threads } = useThreads(spaceId);
@@ -263,7 +263,7 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<div className="flex flex-col gap-1.5 pb-1">
-				<div className="flex h-6 items-center gap-1">
+				<div className="sg-nav-more flex h-6 items-center gap-1">
 					<Link to="/" onClick={onNavigate} className="flex h-6 items-center gap-1.5 rounded-control px-1.5 text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
 						<Icon icon={ArrowLeft} size={12} />
 						All tasks
@@ -277,17 +277,18 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 					<MenuTrigger asChild>
 						<button
 							type="button"
-							className="flex flex-col rounded-control bg-(--bg-hover) p-1.5 text-left shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:bg-(--bg-active) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-active)"
+							title={collapsed ? (space?.name ?? 'Project') : undefined}
+							className="sg-nav-pin sg-nav-card flex flex-col rounded-control p-1.5 text-left outline-none"
 						>
 							<span className="flex w-full min-w-0 items-center gap-2.5">
-								{space ? <SpaceMark space={space} size={20} /> : <span className="size-5" />}
-								<span className="flex min-w-0 flex-1 flex-col gap-px">
+								{space ? <SpaceMark space={space} size={20} className="shrink-0" /> : <span className="size-5 shrink-0" />}
+								<span className="sg-nav-label flex min-w-0 flex-1 flex-col gap-px">
 									<span className="truncate text-body font-semibold text-(--text)">{space?.name ?? 'Project'}</span>
 									<span className="in-num truncate text-micro text-(--text-3)">
 										{space ? `${space.repos.length} repo${space.repos.length === 1 ? '' : 's'} · ${space.threads} thread${space.threads === 1 ? '' : 's'}` : ' '}
 									</span>
 								</span>
-								<Icon icon={ChevronsUpDown} size={14} className="text-(--text-3)" />
+								<Icon icon={ChevronsUpDown} size={14} className="sg-nav-label shrink-0 text-(--text-3)" />
 							</span>
 						</button>
 					</MenuTrigger>
@@ -322,34 +323,37 @@ export function ProjectSidebarBody({ spaceId, threadId, onNavigate }: { spaceId:
 						params={{ spaceId }}
 						onClick={onNavigate}
 						aria-current={coordinatorActive ? 'page' : undefined}
-						className={cn(ROW, 'h-7', coordinatorActive && 'text-(--text)')}
+						title={collapsed ? 'Coordinator' : undefined}
+						className={cn(ROW, 'sg-nav-pin h-7', coordinatorActive && 'text-(--text)')}
 					>
 						{coordinatorActive ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
 						<span className="relative inline-flex shrink-0 items-center justify-center text-(--accent-text)">
 							<Icon icon={Waypoints} size={15} />
 						</span>
-						<span className="relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
+						<span className="sg-nav-label relative min-w-0 flex-1 truncate text-body font-medium">Coordinator</span>
 					</Link>
 				</div>
-				{threads.length ? (
-					<ThreadsToolbar
-						threads={threads}
-						shown={shown.length}
-						filters={filters}
-						onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
-						onClear={() => setFilters(DEFAULT_VIEW.filters)}
-						query={query}
-						onQuery={setQuery}
-					/>
-				) : null}
-				{groups.map((group) => (
-					<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
-				))}
-				{threads.length === 0 ? (
-					<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
-				) : narrowed && shown.length === 0 ? (
-					<div className="px-2 pt-2 text-small text-(--text-4)">No thread matches.</div>
-				) : null}
+				<div className="sg-nav-more flex flex-col">
+					{threads.length ? (
+						<ThreadsToolbar
+							threads={threads}
+							shown={shown.length}
+							filters={filters}
+							onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
+							onClear={() => setFilters(DEFAULT_VIEW.filters)}
+							query={query}
+							onQuery={setQuery}
+						/>
+					) : null}
+					{groups.map((group) => (
+						<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
+					))}
+					{threads.length === 0 ? (
+						<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>
+					) : narrowed && shown.length === 0 ? (
+						<div className="px-2 pt-2 text-small text-(--text-4)">No thread matches.</div>
+					) : null}
+				</div>
 			</div>
 		</div>
 	);

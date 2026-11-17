@@ -5,7 +5,6 @@ import {
 	ChevronRight,
 	Eye,
 	FolderKanban,
-	Home,
 	GitBranch,
 	GitPullRequest,
 	Inbox,
@@ -33,7 +32,7 @@ import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/kit/signal';
 import { Count, toneFill, usedTone } from '@/components/kit/instrument';
 import { Logo } from '@/components/marks/illustrations';
-import { loudUnread, NotificationsBell, useNotifications } from '@/components/shell/notifications';
+import { loudUnread, useNotifications } from '@/components/shell/notifications';
 import { GroupHeading, ProjectSidebarBody, ProjectsSection } from '@/components/projects/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/shell/task-actions';
 import { TaskCues } from '@/components/shell/task-cues';
@@ -65,7 +64,7 @@ import { isStarting } from '@/lib/starting';
 import { cn } from '@/lib/utils';
 
 const NAV_ROW =
-	'group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
+	'sg-nav-pin group/nav relative flex h-7 shrink-0 items-center gap-2 rounded-control px-2 text-body font-medium text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[status=active]:bg-(--bg-active) data-[status=active]:text-(--text)';
 
 function NavIcon({ icon }: { icon: IconComponent }) {
 	return <Icon icon={icon} size={15} className="shrink-0 text-(--text-3) group-hover/nav:text-(--text-2) group-data-[status=active]/nav:text-(--text)" />;
@@ -96,23 +95,6 @@ function SpentToday() {
 				</span>
 			) : null}
 		</Link>
-	);
-}
-
-export function SidebarRail({ shown, onExpand, onOpenNotifications }: { shown: boolean; onExpand: () => void; onOpenNotifications: () => void }) {
-	const navigate = useNavigate();
-	return (
-		<nav
-			data-shown={shown}
-			className="sg-nav-rail absolute inset-y-0 left-0 hidden w-12 flex-col items-center gap-1 bg-(--bg-app) py-3 md:flex"
-		>
-			<div className="mb-2 flex h-7 items-center">
-				<Logo size={18} />
-			</div>
-			<IconBtn icon={PanelLeft} size="sm" label="Show sidebar" onClick={onExpand} />
-			<IconBtn icon={SquarePen} size="sm" label="New task" onClick={() => void navigate({ to: '/' })} />
-			<NotificationsBell size="sm" onOpen={onOpenNotifications} />
-		</nav>
 	);
 }
 
@@ -495,12 +477,14 @@ export function ChatSidebar({
 	collapsed,
 	onNavigate,
 	onCollapse,
+	onExpand,
 	onOpenPalette,
 }: {
 	open: boolean;
 	collapsed: boolean;
 	onNavigate: () => void;
 	onCollapse: () => void;
+	onExpand: () => void;
 	onOpenPalette: () => void;
 }) {
 	const params = useParams({ strict: false }) as { sessionId?: string; spaceId?: string; threadId?: string };
@@ -531,6 +515,8 @@ export function ChatSidebar({
 		onToggle: () => changeView({ ...view, collapsed: folded(place) ? view.collapsed.filter((item) => item !== place) : [...view.collapsed, place] }),
 	});
 	const rows = (tasks: Session[], place: Place) => <Rows tasks={tasks} place={place} view={view} activeId={params.sessionId} onNavigate={onNavigate} />;
+	// Collapsed, a row is only its icon, so resting on it names it.
+	const tip = (label: string) => (collapsed ? label : undefined);
 
 	return (
 		<aside
@@ -539,62 +525,88 @@ export function ChatSidebar({
 			className="sg-nav flex w-[min(288px,86vw)] min-w-0 shrink-0 flex-col bg-(--bg-app) p-2 md:w-(--nav-w,236px)"
 		>
 			<div className="mb-1 flex h-9 shrink-0 items-center gap-0.5 pl-0.5">
-				<Link to="/" onClick={onNavigate} aria-label="Anton: home" className="flex h-7 min-w-0 items-center gap-2 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
-					<Logo size={18} />
-					<span className="truncate text-body font-semibold text-(--text)">Anton</span>
-				</Link>
+				<div className="sg-nav-brand relative flex min-w-0">
+					<Link to="/" onClick={onNavigate} aria-label="Anton: home" className="flex h-7 min-w-0 items-center gap-2 rounded-control px-1.5 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)">
+						<span className="sg-nav-logo inline-flex shrink-0">
+							<Logo size={18} />
+						</span>
+						<span className="sg-nav-label truncate text-body font-semibold text-(--text)">Anton</span>
+					</Link>
+					{/* Collapsed, the logo is where the sidebar opens again: the page sheet covers the button that hides it. */}
+					<button
+						type="button"
+						onClick={onExpand}
+						aria-label="Show sidebar"
+						title="Show sidebar"
+						className="sg-nav-expand absolute top-0 left-0 inline-flex size-7 items-center justify-center rounded-control text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
+					>
+						<Icon icon={PanelLeft} size={15} />
+					</button>
+				</div>
 				<div className="min-w-1 flex-1" />
-				<IconBtn icon={Search} size="sm" label="Search or jump to" onClick={onOpenPalette} />
-				<IconBtn icon={PanelLeft} size="sm" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
-				<IconBtn icon={X} size="sm" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
+				<div className="sg-nav-more flex shrink-0 items-center gap-0.5">
+					<IconBtn icon={Search} size="sm" label="Search or jump to" onClick={onOpenPalette} />
+					<IconBtn icon={PanelLeft} size="sm" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
+					<IconBtn icon={X} size="sm" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
+				</div>
 			</div>
 
 			<Link
 				{...(params.spaceId ? { to: '/projects/$spaceId' as const, params: { spaceId: params.spaceId }, search: { new: true } } : { to: '/' as const })}
 				onClick={onNavigate}
-				className="sg-btn sg-btn--secondary mb-2 shrink-0 justify-start"
+				title={tip(inProject ? 'New thread' : 'New task')}
+				className="sg-nav-pin sg-btn sg-btn--secondary mb-2 shrink-0 justify-start px-2"
 			>
-				<Icon icon={inProject ? Waypoints : SquarePen} size={14} />
-				<span className="min-w-0 flex-1 truncate text-left">{inProject ? 'New thread' : 'New task'}</span>
+				<Icon icon={inProject ? Waypoints : SquarePen} size={15} className="shrink-0" />
+				<span className="sg-nav-label min-w-0 flex-1 truncate text-left">{inProject ? 'New thread' : 'New task'}</span>
 				{inProject ? null : (
-					<span className="max-md:hidden">
+					<span className="sg-nav-label max-md:hidden">
 						<Kbd keys="c" size="sm" />
 					</span>
 				)}
 			</Link>
 
-			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} onNavigate={onNavigate} /> : null}
+			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} collapsed={collapsed} onNavigate={onNavigate} /> : null}
 			<nav aria-label="Pages" className={cn('flex shrink-0 flex-col gap-px', inProject && 'hidden')}>
-				<Link to="/" onClick={onNavigate} activeOptions={{ exact: true }} className={NAV_ROW}>
-					<NavIcon icon={Home} />
-					<span className="min-w-0 flex-1 truncate">Home</span>
-				</Link>
-				<Link to="/inbox" onClick={onNavigate} aria-label={unread ? `Inbox, ${unread} unread` : 'Inbox'} className={NAV_ROW}>
+				<Link to="/inbox" onClick={onNavigate} aria-label={unread ? `Inbox, ${unread} unread` : 'Inbox'} title={tip('Inbox')} className={NAV_ROW}>
 					<NavIcon icon={Inbox} />
-					<span className="min-w-0 flex-1 truncate">Inbox</span>
-					{unread ? <Count tone="accent">{unread > 99 ? '99+' : unread}</Count> : null}
+					{unread ? <span aria-hidden className="sg-nav-dot absolute top-[5px] left-[19px] size-1.5 rounded-full bg-(--accent)" /> : null}
+					<span className="sg-nav-label min-w-0 flex-1 truncate">Inbox</span>
+					{unread ? (
+						<span className="sg-nav-label">
+							<Count tone="accent">{unread > 99 ? '99+' : unread}</Count>
+						</span>
+					) : null}
 				</Link>
-				<Link to="/tasks" onClick={onNavigate} className={NAV_ROW}>
+				<Link to="/tasks" onClick={onNavigate} title={tip('Tasks')} className={NAV_ROW}>
 					<NavIcon icon={ListTodo} />
-					<span className="min-w-0 flex-1 truncate">Tasks</span>
-					{sessions.length ? <Count>{sessions.length}</Count> : null}
+					<span className="sg-nav-label min-w-0 flex-1 truncate">Tasks</span>
+					{sessions.length ? (
+						<span className="sg-nav-label">
+							<Count>{sessions.length}</Count>
+						</span>
+					) : null}
 				</Link>
-				<Link to="/reviews" onClick={onNavigate} className={NAV_ROW}>
+				<Link to="/reviews" onClick={onNavigate} title={tip('Reviews')} className={NAV_ROW}>
 					<NavIcon icon={GitPullRequest} />
-					<span className="min-w-0 flex-1 truncate">Reviews</span>
-					{openPulls ? <Count>{openPulls}</Count> : null}
+					<span className="sg-nav-label min-w-0 flex-1 truncate">Reviews</span>
+					{openPulls ? (
+						<span className="sg-nav-label">
+							<Count>{openPulls}</Count>
+						</span>
+					) : null}
 				</Link>
-				<Link to="/projects" onClick={onNavigate} className={NAV_ROW}>
+				<Link to="/projects" onClick={onNavigate} title={tip('Projects')} className={NAV_ROW}>
 					<NavIcon icon={FolderKanban} />
-					<span className="min-w-0 flex-1 truncate">Projects</span>
+					<span className="sg-nav-label min-w-0 flex-1 truncate">Projects</span>
 				</Link>
-				<Link to="/artifacts" onClick={onNavigate} className={NAV_ROW}>
+				<Link to="/artifacts" onClick={onNavigate} title={tip('Artifacts')} className={NAV_ROW}>
 					<NavIcon icon={Shapes} />
-					<span className="min-w-0 flex-1 truncate">Artifacts</span>
+					<span className="sg-nav-label min-w-0 flex-1 truncate">Artifacts</span>
 				</Link>
 			</nav>
 
-			<div className={cn('-mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 *:shrink-0', inProject && 'hidden')}>
+			<div className={cn('sg-nav-more -mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 *:shrink-0', inProject && 'hidden')}>
 				<ProjectsSection onNavigate={onNavigate} />
 				<Toolbar view={view} onChange={changeView} tasks={sessions} query={query} onQuery={setQuery} />
 				{pinned.length ? (
@@ -633,7 +645,7 @@ export function ChatSidebar({
 				<div className="h-3 shrink-0" />
 			</div>
 
-			<div className="-mx-2 -mb-2 flex shrink-0 flex-col gap-1.5 border-t border-(--line) px-3.5 pt-2 pb-2.5">
+			<div className="sg-nav-more -mx-2 -mb-2 flex shrink-0 flex-col gap-1.5 border-t border-(--line) px-3.5 pt-2 pb-2.5">
 				<SpentToday />
 				<div className="flex items-center gap-2">
 					<Avatar name={name} />
