@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { HoverPeek } from '@/components/hover-peek';
+import { HoverPeek } from '@/components/kit/hover-peek';
 
 const content = <><a href="https://github.com/acme/demo/pull/42">PR #42</a><span tabIndex={0}>Source branch</span><span tabIndex={0}>Target branch</span><button>Open thread</button></>;
 

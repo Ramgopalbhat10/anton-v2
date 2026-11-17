@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorsView, MailApproval, ToolApproval } from '@/lib/api';
+import type { ConnectorsView } from '@/lib/api/connectors';
+import type { MailApproval, ToolApproval } from '@/lib/api/notify';
 import { renderWithQueries } from './render';
 
 const { api } = vi.hoisted(() => ({
@@ -38,10 +39,10 @@ const { api } = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { ConnectorDetailPage, ConnectorsPage } = await import('@/components/settings/connectors');
-const { MailSendCard } = await import('@/components/mail-card');
-const { ToolApprovalCard } = await import('@/components/tool-approval-card');
-const { ReplyActions } = await import('@/components/reply-cards');
-const { GOOGLE, MCP, serverMark } = await import('@/components/brand-marks');
+const { MailSendCard } = await import('@/components/thread/mail-card');
+const { ToolApprovalCard } = await import('@/components/thread/tool-approval-card');
+const { ReplyActions } = await import('@/components/thread/reply-cards');
+const { GOOGLE, MCP, serverMark } = await import('@/components/marks/brand-marks');
 const brands = await import('@/lib/brand-icons');
 
 const google = (patch: Partial<ConnectorsView['accounts'][number]> = {}): ConnectorsView['accounts'][number] => ({

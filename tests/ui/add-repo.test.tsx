@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { AddRepo } = await import('@/components/launcher');
+const { AddRepo } = await import('@/components/pages/launcher');
 
 function open(onAdded = vi.fn()) {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

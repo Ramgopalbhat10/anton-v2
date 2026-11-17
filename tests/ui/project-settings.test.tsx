@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { Space } from '@/lib/api';
+import type { Space } from '@/lib/api/spaces';
 
 const model = (id: string, name: string) => ({
 	id,
@@ -33,9 +33,9 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { ProjectSettingsModal } = await import('@/components/project-settings-modal');
+const { ProjectSettingsModal } = await import('@/components/projects/project-settings-modal');
 // The card loads its sections on first open; loaded here, so a test waits for a render, not a module.
-await import('@/components/project-settings');
+await import('@/components/projects/project-settings');
 const { closeProjectSettings, openProjectSettings } = await import('@/lib/project-settings-modal');
 
 const general = {

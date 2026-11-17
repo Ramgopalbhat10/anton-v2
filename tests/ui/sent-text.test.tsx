@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { FileLinks } from '@/components/markdown';
-import { SentText } from '@/components/sent-text';
+import { FileLinks } from '@/components/content/markdown';
+import { SentText } from '@/components/thread/sent-text';
 import { richRanges } from '@/lib/rich-text';
 
 describe('Rich text', () => {

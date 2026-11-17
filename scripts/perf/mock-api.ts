@@ -220,7 +220,7 @@ const models = Array.from({ length: 300 }, (_, index) => ({
 
 export function mockApi(): Plugin {
 	const tree = paths();
-	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread.tsx src/web/components/subagents.tsx src/web/components/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
+	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread/thread.tsx src/web/components/thread/subagents.tsx src/web/components/workspace/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
 	const changed = [...patch.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => ({ path: match[1], status: 'M' }));
 	let startedAt = 0;
 	const elapsed = () => (startedAt ? Date.now() - startedAt : -1);

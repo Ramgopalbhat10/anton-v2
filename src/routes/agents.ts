@@ -9,7 +9,7 @@ import { purgeIncognito } from '../db/adapter.ts';
 import { getSessionRecord } from '../db/sessions.ts';
 import { getSpace } from '../db/spaces.ts';
 import { isIncognitoId } from '../core/incognito.ts';
-import { mobileApi } from '../api/mobile.ts';
+import { mobileApi } from './mobile.ts';
 import { noteSending, setAgentAbort } from '../services/tasks/activity.ts';
 import { MAX_UPLOAD_BYTES } from '../services/artifacts/files.ts';
 import { primeIncognitoModel, forgetModelChoice } from '../services/tasks/sessions.ts';

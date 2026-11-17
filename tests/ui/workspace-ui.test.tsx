@@ -3,8 +3,10 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { TaskPanels } from '@/components/shell';
-import type { ContextView, ModelInfo, PlanUsage, Session } from '@/lib/api';
+import type { TaskPanels } from '@/components/shell/shell';
+import type { ContextView, Session } from '@/lib/api/sessions';
+import type { ModelInfo } from '@/lib/api/plans';
+import type { PlanUsage } from '@/lib/api/settings';
 import { renderWithQueries, session } from './render';
 
 const api = vi.hoisted(() => ({
@@ -21,10 +23,10 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { ContextMeter } = await import('@/components/context-meter');
-const { ArcDial, DotMatrix, StackedDaysChart } = await import('@/components/charts');
-const { VmPanel } = await import('@/components/vm-panel');
-const { usePanelChange } = await import('@/components/shell');
+const { ContextMeter } = await import('@/components/composer/context-meter');
+const { ArcDial, DotMatrix, StackedDaysChart } = await import('@/components/kit/charts');
+const { VmPanel } = await import('@/components/workspace/vm-panel');
+const { usePanelChange } = await import('@/components/shell/shell');
 
 const model = (patch: Partial<ModelInfo>): ModelInfo => ({
 	id: 'openai/gpt-6-luna',
@@ -252,7 +254,7 @@ describe('Workspace panel header', () => {
 	});
 
 	it('pins panels from its menu, and a task then opens on the pinned ones, or on the list with none', async () => {
-		const { startingPanels } = await import('@/components/shell');
+		const { startingPanels } = await import('@/components/shell/shell');
 		localStorage.removeItem('anton.pinned-panels');
 		expect(startingPanels()).toEqual({ tabs: [], active: null, open: true });
 		panel('running');

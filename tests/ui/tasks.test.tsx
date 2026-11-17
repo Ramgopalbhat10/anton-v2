@@ -15,8 +15,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { TasksPage } = await import('@/components/tasks-page');
-const { ReviewsPage } = await import('@/components/reviews-page');
+const { TasksPage } = await import('@/components/pages/tasks-page');
+const { ReviewsPage } = await import('@/components/pages/reviews-page');
 
 function open(path: string) {
 	const root = createRootRoute({ component: Outlet });

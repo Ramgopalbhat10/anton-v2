@@ -1,5 +1,5 @@
 import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
-import type { Join } from '@/lib/api';
+import type { Join } from '@/lib/api/sessions';
 
 /** The runtime lists a message sent while the agent worked after the whole reply it joined, so the reply is cut after the tool call where the agent read it (joins.ts). */
 

@@ -1,0 +1,438 @@
+import type { IconComponent } from '@/lib/icons';
+import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from '@/lib/icons';
+import type { ReactNode } from 'react';
+import { GMAIL, MCP } from '@/components/marks/brand-marks';
+import { type PatchedFile, patchedFiles } from '../../../core/apply-patch';
+
+export type ToolCall = { toolName: string; input: unknown; state?: string; output?: unknown };
+
+export function field(input: unknown, key: string): string {
+	if (input && typeof input === 'object' && key in input) {
+		const value = (input as Record<string, unknown>)[key];
+		return typeof value === 'string' ? value : value == null ? '' : String(value);
+	}
+	return '';
+}
+
+/** The tool returns `{ url }`; the runtime may wrap it as `{ output: { url } }`. */
+function pullRequestUrl(output: unknown): string {
+	const record = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
+	return field(record, 'url') || field(record.output, 'url');
+}
+
+function computerStep(input: unknown) {
+	const target = field(input, 'target') ? <Em>{field(input, 'target')}</Em> : <>a point on the screen</>;
+	switch (field(input, 'action')) {
+		case 'click':
+			return <>Clicked {target}</>;
+		case 'double_click':
+			return <>Double-clicked {target}</>;
+		case 'right_click':
+			return <>Right-clicked {target}</>;
+		case 'move':
+			return <>Pointed at {target}</>;
+		case 'drag':
+			return (
+				<>
+					Dragged {target}
+					{field(input, 'to') ? (
+						<>
+							{' '}
+							to <Em>{field(input, 'to')}</Em>
+						</>
+					) : null}
+				</>
+			);
+		case 'type':
+			return (
+				<>
+					Typed <Em>{field(input, 'text')}</Em>
+				</>
+			);
+		case 'key':
+			return (
+				<>
+					Pressed <Em>{field(input, 'keys')}</Em>
+				</>
+			);
+		case 'scroll':
+			return <>Scrolled {field(input, 'direction') || 'down'}</>;
+		case 'wait':
+			return <>Waited for the screen</>;
+		case 'open':
+			return (
+				<>
+					Opened <Em>{field(input, 'url')}</Em> on the computer
+				</>
+			);
+		case 'launch':
+			return (
+				<>
+					Started <Em>{field(input, 'command')}</Em> on the computer
+				</>
+			);
+		default:
+			return <>Looked at the screen</>;
+	}
+}
+
+function browserStep(input: unknown) {
+	const target = <Em>{field(input, 'target')}</Em>;
+	switch (field(input, 'action')) {
+		case 'open':
+			return (
+				<>
+					Opened <Em>{field(input, 'url')}</Em>
+				</>
+			);
+		case 'click':
+			return <>Clicked {target}</>;
+		case 'type':
+			return (
+				<>
+					Typed <Em>{field(input, 'text')}</Em> into {target}
+				</>
+			);
+		case 'select':
+			return (
+				<>
+					Chose <Em>{field(input, 'text')}</Em> in {target}
+				</>
+			);
+		case 'press':
+			return (
+				<>
+					Pressed <Em>{field(input, 'key')}</Em>
+				</>
+			);
+		case 'hover':
+			return <>Hovered over {target}</>;
+		case 'scroll':
+			return <>Scrolled the page</>;
+		case 'back':
+			return <>Went back</>;
+		case 'wait':
+			return <>Waited{field(input, 'target') ? <> for {target}</> : null}</>;
+		case 'do':
+			return (
+				<>
+					Drove the page to <Em>{field(input, 'goal')}</Em>
+				</>
+			);
+		default:
+			return <>Looked at the page</>;
+	}
+}
+
+function lineCount(text: string) {
+	return text ? text.split('\n').length : 0;
+}
+
+export function Em({ children }: { children: ReactNode }) {
+	return <span className="font-mono text-small text-(--text)">{children}</span>;
+}
+
+function counts(added: number, removed?: number): ReactNode {
+	return (
+		<>
+			{' '}
+			<span className="text-(--ok)">+{added}</span>
+			{removed === undefined ? null : (
+				<>
+					{' '}
+					<span className="text-(--bad)">-{removed}</span>
+				</>
+			)}
+		</>
+	);
+}
+
+function describePatch(files: PatchedFile[]): { icon: IconComponent; body: ReactNode } {
+	if (files.length === 1) {
+		const [file] = files;
+		if (file.change === 'add') return { icon: FilePlus, body: <>Wrote <Em>{file.path}</Em>{counts(file.added)}</> };
+		if (file.change === 'delete') return { icon: FileMinus, body: <>Deleted <Em>{file.path}</Em></> };
+		if (file.change === 'move') return { icon: Pencil, body: <>Moved <Em>{file.path}</Em> to <Em>{file.to}</Em>{counts(file.added, file.removed)}</> };
+		return { icon: Pencil, body: <>Edited <Em>{file.path}</Em>{counts(file.added, file.removed)}</> };
+	}
+	if (!files.length) return { icon: Pencil, body: <>Applied a patch</> };
+	const shown = files.slice(0, 3).map((file) => file.to ?? file.path);
+	const more = files.length - shown.length;
+	const added = files.reduce((sum, file) => sum + file.added, 0);
+	const removed = files.reduce((sum, file) => sum + file.removed, 0);
+	return {
+		icon: Pencil,
+		body: (
+			<>
+				Edited {files.length} files <Em>{shown.join(', ')}</Em>
+				{more ? ` and ${more} more` : ''}
+				{counts(added, removed)}
+			</>
+		),
+	};
+}
+
+function inRepo(input: unknown): ReactNode {
+	const repo = field(input, 'repo');
+	return repo ? (
+		<>
+			{' '}
+			in <Em>{repo}</Em>
+		</>
+	) : null;
+}
+
+export function describeTool(part: ToolCall): { icon: IconComponent; body: ReactNode } {
+	const input = part.input;
+	switch (part.toolName) {
+		// read_file, search_code and list_files are the read-only tools of chats, plans and reviews before their sandbox,
+		// and of every repository task begun before its read, grep and glob read the snapshot too.
+		case 'read':
+		case 'read_file': {
+			const offset = Number(field(input, 'offset')) || 0;
+			const limit = Number(field(input, 'limit')) || 0;
+			const range = limit ? `:${offset || 1}-${(offset || 1) + limit - 1}` : '';
+			return {
+				icon: FileText,
+				body: (
+					<>
+						Read <Em>{field(input, 'path') + range}</Em>
+						{inRepo(input)}
+					</>
+				),
+			};
+		}
+		case 'grep':
+		case 'search_code':
+			return {
+				icon: Search,
+				body: (
+					<>
+						Searched <Em>{field(input, 'pattern')}</Em>
+						{inRepo(input)}
+					</>
+				),
+			};
+		case 'glob':
+		case 'list_files':
+			return {
+				icon: FolderSearch,
+				body: (
+					<>
+						Listed <Em>{field(input, 'pattern') || field(input, 'glob') || field(input, 'path') || 'the repository'}</Em>
+						{inRepo(input)}
+					</>
+				),
+			};
+		case 'edit': {
+			const edits = input && typeof input === 'object' && Array.isArray((input as { edits?: unknown }).edits) ? ((input as { edits: unknown[] }).edits) : [];
+			const changes = [input, ...edits];
+			const added = changes.reduce<number>((sum, change) => sum + lineCount(field(change, 'newText')), 0);
+			const removed = changes.reduce<number>((sum, change) => sum + lineCount(field(change, 'oldText')), 0);
+			return {
+				icon: Pencil,
+				body: (
+					<>
+						Edited <Em>{field(input, 'path')}</Em> <span className="text-(--ok)">+{added}</span>{' '}
+						<span className="text-(--bad)">-{removed}</span>
+					</>
+				),
+			};
+		}
+		case 'apply_patch':
+			return describePatch(patchedFiles(field(input, 'input')));
+		case 'write':
+			return {
+				icon: FilePlus,
+				body: (
+					<>
+						Wrote <Em>{field(input, 'path')}</Em> <span className="text-(--ok)">+{lineCount(field(input, 'content'))}</span>
+					</>
+				),
+			};
+		case 'bash':
+			return {
+				icon: SquareTerminal,
+				body: (
+					<>
+						Ran <Em>{field(input, 'command').split('\n')[0]}</Em>
+					</>
+				),
+			};
+		case 'run_in_background':
+			return {
+				icon: SquareTerminal,
+				body: (
+					<>
+						Started <Em>{field(input, 'command').split('\n')[0]}</Em> in the background
+					</>
+				),
+			};
+		case 'check_job': {
+			const job = <Em>job {field(input, 'job')}</Em>;
+			if (field(input, 'stop') === 'true') return { icon: Hourglass, body: <>Stopped {job}</> };
+			return { icon: Hourglass, body: Number(field(input, 'wait')) > 0 ? <>Waited for {job}</> : <>Checked {job}</> };
+		}
+		case 'run_script': {
+			const file = field(input, 'file').split('/').pop();
+			return { icon: Braces, body: file ? <>Ran <Em>{file}</Em></> : <>Ran a script</> };
+		}
+		case 'task':
+			return {
+				icon: Bot,
+				body: (
+					<>
+						Delegated to <Em>{field(input, 'agent') || 'a subagent'}</Em>
+						{field(input, 'description') ? ` — ${field(input, 'description')}` : ''}
+					</>
+				),
+			};
+		case 'open_pull_request': {
+			const url = pullRequestUrl(part.state === 'output-available' ? part.output : undefined);
+			return {
+				icon: GitPullRequest,
+				body: url ? (
+					<>
+						Opened{' '}
+						<a href={url} target="_blank" rel="noreferrer" className="text-(--accent-text) underline underline-offset-2">
+							{url.replace(/^https:\/\/github\.com\//, '')}
+						</a>
+					</>
+				) : (
+					<>Opening a pull request</>
+				),
+			};
+		}
+		case 'screenshot':
+			return {
+				icon: Camera,
+				body: (
+					<>
+						Took a screenshot of <Em>{field(input, 'url')}</Em>
+					</>
+				),
+			};
+		case 'browser':
+			// A step the decision model drove reads as one quick move, not a single click.
+			return { icon: field(input, 'action') === 'do' ? Zap : Globe, body: browserStep(input) };
+		case 'computer':
+			return { icon: Monitor, body: computerStep(input) };
+		case 'ask':
+			return {
+				icon: MessageCircleQuestion,
+				body: (
+					<>
+						Asked <Em>{field(input, 'question')}</Em>
+					</>
+				),
+			};
+		case 'show':
+			return {
+				icon: LayoutPanelTop,
+				body: field(input, 'title') ? (
+					<>
+						Showed <Em>{field(input, 'title')}</Em>
+					</>
+				) : (
+					<>Showed a card</>
+				),
+			};
+		case 'generate_image':
+			return {
+				icon: ImagePlus,
+				body: (
+					<>
+						{field(input, 'from') ? 'Changed an image' : 'Made an image'}: <Em>{field(input, 'prompt')}</Em>
+					</>
+				),
+			};
+		case 'render_html':
+			return {
+				icon: AppWindow,
+				body: (
+					<>
+						Drew the page <Em>{field(input, 'title')}</Em>
+					</>
+				),
+			};
+		case 'connector_tools':
+			return {
+				icon: Plug,
+				body: field(input, 'query') ? (
+					<>
+						Looked up connector tools for <Em>{field(input, 'query')}</Em>
+					</>
+				) : (
+					<>Looked up connector tools</>
+				),
+			};
+		case 'gmail_search':
+			return {
+				icon: GMAIL.icon,
+				body: field(input, 'query') ? (
+					<>
+						Searched Gmail for <Em>{field(input, 'query')}</Em>
+					</>
+				) : (
+					<>Listed the newest mail</>
+				),
+			};
+		case 'gmail_read_thread':
+			return { icon: GMAIL.icon, body: <>Read an email conversation</> };
+		case 'gmail_draft':
+			return {
+				icon: GMAIL.icon,
+				body: (
+					<>
+						{field(input, 'draft_id') ? 'Rewrote' : 'Drafted'} <Em>{field(input, 'subject') || 'a reply'}</Em>
+					</>
+				),
+			};
+		case 'gmail_send':
+			return { icon: GMAIL.icon, body: <>Asked to send an email</> };
+		default:
+			if (part.toolName.startsWith('mcp__')) {
+				return {
+					icon: MCP.icon,
+					body: (
+						<>
+							Called <Em>{part.toolName.replace(/^mcp__/, '').replace('__', ' · ')}</Em>
+						</>
+					),
+				};
+			}
+			return {
+				icon: Wrench,
+				body: (
+					<>
+						Called <Em>{part.toolName}</Em>
+					</>
+				),
+			};
+	}
+}
+
+export function toolTone(toolName: string, failed: boolean): string {
+	if (failed) return 'var(--bad)';
+	switch (toolName) {
+		case 'bash':
+		case 'run_in_background':
+		case 'check_job':
+		case 'run_script':
+			return 'var(--data-1)';
+		case 'edit':
+		case 'write':
+		case 'apply_patch':
+			return 'var(--data-2)';
+		case 'screenshot':
+		case 'browser':
+		case 'computer':
+			return 'var(--data-3)';
+		case 'open_pull_request':
+			return 'var(--data-4)';
+		case 'task':
+			return 'var(--data-5)';
+		default:
+			return 'var(--text-4)';
+	}
+}

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PrMetadata } from '@/components/pr-status';
+import { PrMetadata } from '@/components/marks/pr-status';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { renderWithQueries } from './render';
 

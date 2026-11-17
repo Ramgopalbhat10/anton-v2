@@ -1,0 +1,109 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Send, X } from '@/lib/icons';
+import { memo, useContext } from 'react';
+import { GMAIL, MarkTile } from '@/components/marks/brand-marks';
+import { ReplyActions, type ReplyPlace } from '@/components/thread/reply-cards';
+import { Btn, Icon, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { MailApproval } from '@/lib/api/notify';
+import { cn } from '@/lib/utils';
+import { taskQueries } from '@/lib/task-queries';
+
+/** The tools that ask the user to send an email: the thread draws each as the email with Send and Don't send. */
+export const MAIL_SEND_TOOLS = new Set(['gmail_send']);
+
+export function approvalOf(output: unknown): string | null {
+	const text = typeof output === 'string' ? output : output && typeof output === 'object' && typeof (output as { output?: unknown }).output === 'string' ? (output as { output: string }).output : '';
+	return /\[approval:(mail_[\w-]+)\]/.exec(text)?.[1] ?? null;
+}
+
+const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
+
+function Row({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="flex min-w-0 gap-2 text-small leading-[18px]">
+			<span className="w-14 shrink-0 text-(--text-3)">{label}</span>
+			<span className="min-w-0 flex-1 break-words text-(--text)">{value}</span>
+		</div>
+	);
+}
+
+/** Send sends it from Anton's server, never from the agent, and the agent hears of it as your next message. */
+export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
+	const { send: reply, busy } = useContext(ReplyActions);
+	const queryClient = useQueryClient();
+	const approvals = useQuery(taskQueries.mail(sessionId));
+	const approval = approvals.data?.approvals.find((item) => item.id === approvalId);
+	const decide = useMutation({
+		mutationFn: (send: boolean) => api.decideMail(sessionId, approvalId, send),
+		onSuccess: (next, send) => {
+			queryClient.setQueryData<{ approvals: MailApproval[] }>(['mail', sessionId], (current) =>
+				current ? { approvals: current.approvals.map((item) => (item.id === next.id ? next : item)) } : current,
+			);
+			// The agent waits for an answer; one already working hears of it when it next reads the thread.
+			if (place.latest && !busy) reply(send ? `I sent the email "${next.subject}".` : `Don't send the email "${next.subject}".`);
+		},
+		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['mail', sessionId] }),
+	});
+	if (!approval) {
+		return approvals.isPending ? (
+			<div className="flex h-9 items-center gap-2 rounded-control border border-dashed border-(--line) px-3 text-small text-(--text-3)">
+				<Spinner size={12} />
+				Preparing the email
+			</div>
+		) : null;
+	}
+	const pending = approval.state === 'pending' || approval.state === 'sending';
+	const status =
+		approval.state === 'sent' ? (
+			<span className="inline-flex items-center gap-1.5 text-(--ok)">
+				<Icon icon={Check} size={12} />
+				Sent {time(approval.decidedAt)}
+			</span>
+		) : approval.state === 'declined' ? (
+			<span className="inline-flex items-center gap-1.5 text-(--text-3)">
+				<Icon icon={X} size={12} />
+				Not sent
+			</span>
+		) : approval.state === 'changed' ? (
+			<span className="text-(--warn)">The draft changed after you were shown it, so it was not sent.</span>
+		) : null;
+	return (
+		<section className={cn('in-callout overflow-hidden', pending && 'in-callout--warn')} aria-label="Email to send">
+			<header className="flex items-start gap-2.5 px-3.5 pt-3 pb-2">
+				<MarkTile mark={GMAIL} size={22} className="mt-px rounded-control" />
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<h3 className="m-0 truncate text-body leading-[20px] font-medium text-(--text)">{approval.subject || '(no subject)'}</h3>
+					<span className="text-small text-(--text-3)">{pending ? 'The agent asks to send this from Gmail' : 'Email from Gmail'}</span>
+				</div>
+			</header>
+			<div className="flex flex-col gap-0.5 px-3.5 pb-2">
+				<Row label="To" value={approval.to.join(', ')} />
+				{approval.cc.length ? <Row label="Cc" value={approval.cc.join(', ')} /> : null}
+				{approval.bcc.length ? <Row label="Bcc" value={approval.bcc.join(', ')} /> : null}
+			</div>
+			<div
+				className={cn(
+					'mx-3.5 mb-3 overflow-auto rounded-control border border-(--line) bg-(--bg-raised) px-3 py-2 text-body leading-[19px] whitespace-pre-wrap text-(--text-2)',
+					pending ? 'max-h-[320px]' : 'max-h-[120px]',
+				)}
+			>
+				{approval.body}
+			</div>
+			<footer className="flex min-h-11 flex-wrap items-center justify-end gap-2 border-t border-(--line) px-3.5 py-2 text-small">
+				{decide.error ? <span className="mr-auto text-(--bad)">{decide.error.message}</span> : null}
+				{status ? <span className="mr-auto">{status}</span> : null}
+				{pending ? (
+					<>
+						<Btn size="sm" variant="ghost" disabled={decide.isPending || approval.state === 'sending'} onClick={() => decide.mutate(false)}>
+							Don't send
+						</Btn>
+						<Btn size="sm" variant="primary" icon={Send} disabled={decide.isPending || approval.state === 'sending'} onClick={() => decide.mutate(true)}>
+							{decide.isPending || approval.state === 'sending' ? 'Sending…' : 'Send'}
+						</Btn>
+					</>
+				) : null}
+			</footer>
+		</section>
+	);
+});

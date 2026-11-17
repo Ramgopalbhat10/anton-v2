@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellRing, Download, ListChecks, MonitorSmartphone, Send, Smartphone, Trash2 } from '@/lib/icons';
 import { useEffect, useState } from 'react';
-import { Status } from '@/components/instrument';
-import { Btn, EmptyLine, IconBtn, Spinner, Switch } from '@/components/signal';
-import { api, type PushView } from '@/lib/api';
+import { Status } from '@/components/kit/instrument';
+import { Btn, EmptyLine, IconBtn, Spinner, Switch } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { PushView } from '@/lib/api/notify';
 import { age } from '@/lib/format';
 import { canPromptInstall, currentSubscription, deviceIdOf, isInstalled, isIos, onInstallChange, promptInstall, pushSupport, turnOffPush, turnOnPush } from '@/lib/push';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';

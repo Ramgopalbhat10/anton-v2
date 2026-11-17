@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PullRequestChip } from '@/components/task-actions';
-import { PrChecks, PrStatus, prColor, prSummary, prTone } from '@/components/pr-status';
+import { PullRequestChip } from '@/components/shell/task-actions';
+import { PrChecks, PrStatus, prColor, prSummary, prTone } from '@/components/marks/pr-status';
 import { renderWithQueries, session } from './render';
 
 const url = 'https://github.com/acme/demo/pull/42?x=1';

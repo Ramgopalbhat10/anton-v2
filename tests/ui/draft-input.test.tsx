@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { DraftInput } from '@/components/draft-input';
+import { DraftInput } from '@/components/composer/draft-input';
 
 const tokens = [{ value: '@src/server.ts', label: '@server.ts', title: 'src/server.ts', kind: 'file' as const }];
 function Editor({ initial = '' }: { initial?: string }) {

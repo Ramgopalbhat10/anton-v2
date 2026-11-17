@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BrowserView, PickedElement } from '@/lib/api';
+import type { BrowserView, PickedElement } from '@/lib/api/workspace';
 import { renderWithQueries, session } from './render';
 import { DESCRIBE_ELEMENT } from '../../src/services/browser/describe-element';
 
@@ -24,8 +24,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { BrowserTab } = await import('@/components/browser-tab');
-const { Composer } = await import('@/components/composer');
+const { BrowserTab } = await import('@/components/workspace/browser-tab');
+const { Composer } = await import('@/components/composer/composer');
 const { addToComposer, elementContext } = await import('@/lib/composer-inbox');
 
 const picked: PickedElement = {

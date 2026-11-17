@@ -10,7 +10,8 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
-const { Library, LibraryTab, taskPlace } = await import('@/components/library-tab');
+const { Library, LibraryTab } = await import('@/components/workspace/library-tab');
+const { taskPlace } = await import('@/lib/library');
 
 const at = Date.parse('2026-10-09T12:00:00Z');
 const listing = {

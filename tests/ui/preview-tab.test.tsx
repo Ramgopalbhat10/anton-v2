@@ -5,7 +5,7 @@ import { renderWithQueries, session } from './render';
 
 const api = vi.hoisted(() => ({ previews: vi.fn(), session: vi.fn() }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { PreviewTab } = await import('@/components/preview-tab');
+const { PreviewTab } = await import('@/components/workspace/preview-tab');
 
 it('opens the Computer panel to watch a test without changing the Preview iframe', async () => {
 	api.session.mockResolvedValue(session({ status: 'running' }));

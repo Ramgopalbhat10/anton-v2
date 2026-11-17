@@ -3,7 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppNotification, NotificationsView } from '@/lib/api';
+import type { AppNotification, NotificationsView } from '@/lib/api/notify';
 import { session } from './render';
 
 const now = new Date();
@@ -43,8 +43,8 @@ const api = vi.hoisted(() => ({
 	spaces: vi.fn(async () => ({ spaces: [{ id: 'sp1', name: 'Billing v2', state: 'active', counts: {} }] })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-const { NotificationsBell } = await import('@/components/notifications');
-const { InboxPage } = await import('@/components/inbox-page');
+const { NotificationsBell } = await import('@/components/shell/notifications');
+const { InboxPage } = await import('@/components/pages/inbox-page');
 
 function mount(path = '/') {
 	const root = createRootRoute({

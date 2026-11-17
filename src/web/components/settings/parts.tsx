@@ -1,11 +1,12 @@
 import type { IconComponent } from '@/lib/icons';
 import { ChevronDown } from '@/lib/icons';
 import { Children, type ReactNode } from 'react';
-import { ModelPicker } from '@/components/model-picker';
-import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/signal';
-import type { HelperAgent, Reasoning } from '@/lib/api';
+import { ModelPicker } from '@/components/composer/model-picker';
+import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/kit/signal';
+import type { HelperAgent } from '@/lib/api/settings';
+import type { Reasoning } from '@/lib/api/plans';
 import { cn } from '@/lib/utils';
-import { StatusDot } from '@/components/instrument';
+import { StatusDot } from '@/components/kit/instrument';
 
 export const FIELD =
 	'sg-field h-7 min-w-0 px-2 text-body';

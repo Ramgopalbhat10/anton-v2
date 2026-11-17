@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, SquareTerminal, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
-import { Status } from '@/components/instrument';
-import { Btn, EmptyLine, IconBtn, Spinner } from '@/components/signal';
-import { api, type Command } from '@/lib/api';
+import { Status } from '@/components/kit/instrument';
+import { Btn, EmptyLine, IconBtn, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { Command } from '@/lib/api/plugins';
 import { Block, FIELD, PageHeading, SaveState } from './parts';
 
 function Commands({ saved }: { saved: Command[] }) {

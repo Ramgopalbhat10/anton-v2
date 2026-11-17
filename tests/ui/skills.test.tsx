@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import anatomyReadme from '../fixtures/skills/anatomy-readme.md?raw';
 import anatomySkill from '../fixtures/skills/SKILL.md?raw';
-import type { CatalogItem, Plugin, PluginPreview } from '@/lib/api';
+import type { CatalogItem, Plugin, PluginPreview } from '@/lib/api/plugins';
 
 const installed: Plugin = {
 	id: 'plugin_1',

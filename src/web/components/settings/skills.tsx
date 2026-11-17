@@ -3,9 +3,11 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Blocks, FileText, Github, Plus, ScrollText, Search, Settings2, Star, Store, Trash2, X } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/instrument';
-import { Btn, EmptyLine, EmptyState, FilterChip, Icon, IconBtn, Spinner, Switch } from '@/components/signal';
-import { ADDED_FILES, api, type CatalogItem, type GitHubSearch, type Plugin, type PluginPick } from '@/lib/api';
+import { Caption, Count, Segmented, SegmentedItem, Status } from '@/components/kit/instrument';
+import { Btn, EmptyLine, EmptyState, FilterChip, Icon, IconBtn, Spinner, Switch } from '@/components/kit/signal';
+import { ADDED_FILES } from '@/lib/api/outputs';
+import { api } from '@/lib/api';
+import type { CatalogItem, GitHubSearch, Plugin, PluginPick } from '@/lib/api/plugins';
 import { cn } from '@/lib/utils';
 import { FIELD, Note, PageHeading } from './parts';
 

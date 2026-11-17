@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, Cpu, Globe, Timer } from '@/lib/icons';
 import { useState } from 'react';
-import { Btn, Spinner } from '@/components/signal';
-import { api, type SandboxSettings, type SandboxView } from '@/lib/api';
+import { Btn, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { SandboxSettings, SandboxView } from '@/lib/api/settings';
 import { Block, PageHeading, SaveState, Select, SubBlock } from './parts';
 
 const MACHINES = [

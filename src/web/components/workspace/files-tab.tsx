@@ -1,0 +1,238 @@
+import { useQuery } from '@tanstack/react-query';
+import { FileDiff, Folder, Search } from '@/lib/icons';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { EditorBar, EditorPane } from '@/components/content/editor-pane';
+import { FileIcon, FileIcons } from '@/components/marks/file-icons';
+import { PanelTab, PanelTabs } from '@/components/kit/instrument';
+import { Branch, buildTree, FileView, isMarkdown, MarkdownToggle, StatusChip } from '@/components/content/file-view';
+import { EmptyLine, EmptyState, Icon, SearchField, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import { isChat } from '@/lib/api/sessions';
+import { matchPaths } from '@/lib/completion';
+import { cn } from '@/lib/utils';
+import { ShowPanel, useFocusedFile } from '@/lib/workspace';
+import { refreshBySource, taskQueries } from '@/lib/task-queries';
+
+function Matches({
+	paths,
+	selected,
+	onOpen,
+	statusOf,
+}: {
+	paths: string[];
+	selected: string | null;
+	onOpen: (path: string) => void;
+	statusOf: (path: string) => string | undefined;
+}) {
+	if (paths.length === 0) return <EmptyLine>No files match.</EmptyLine>;
+	return (
+		<div className="flex flex-col gap-px">
+			{paths.map((path) => {
+				const status = statusOf(path);
+				const slash = path.lastIndexOf('/');
+				return (
+					<button
+						type="button"
+						key={path}
+						onClick={() => onOpen(path)}
+						aria-current={selected === path ? 'true' : undefined}
+						className="sg-file-row flex h-[26px] items-center gap-2 rounded-control pr-1.5 pl-2 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
+					>
+						<FileIcon path={path} />
+						<span className={cn('shrink-0 text-small', selected === path ? 'text-(--text)' : 'text-(--text-2)')}>{path.slice(slash + 1)}</span>
+						<span className="min-w-0 flex-1 truncate text-micro text-(--text-4)">{path.slice(0, Math.max(slash, 0))}</span>
+						{status ? <StatusChip status={status} /> : null}
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+const MATCHES_SHOWN = 200;
+const CHANGED_SHOWN = 6;
+
+function StartPage({ changed, onOpen, onFind }: { changed: Array<[string, string]>; onOpen: (path: string) => void; onFind: () => void }) {
+	const showPanel = useContext(ShowPanel);
+	const row = 'flex h-7 items-center gap-2 rounded-control px-2 text-left text-small outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)';
+	return (
+		<div className="flex min-h-0 flex-1 justify-center overflow-auto px-4 pt-[14vh] pb-6">
+			<div className="flex w-full max-w-[340px] flex-col gap-4">
+				{changed.length ? (
+					<div className="flex flex-col gap-px">
+						<span className="in-caption px-2 pb-1">Changed files</span>
+						{changed.slice(0, CHANGED_SHOWN).map(([path, status]) => {
+							const slash = path.lastIndexOf('/');
+							return (
+								<button type="button" key={path} onClick={() => onOpen(path)} title={path} className={row}>
+									<FileIcon path={path} />
+									<span className="shrink-0 text-(--text-2)">{path.slice(slash + 1)}</span>
+									<span className="min-w-0 flex-1 truncate text-micro text-(--text-4)">{path.slice(0, Math.max(slash, 0))}</span>
+									<StatusChip status={status} />
+								</button>
+							);
+						})}
+					</div>
+				) : null}
+				<div className="flex flex-col gap-px">
+					<button type="button" onClick={onFind} className={cn(row, 'text-(--text-3) hover:text-(--text-2)')}>
+						<Icon icon={Search} size={13} />
+						Find a file by name
+					</button>
+					<button type="button" onClick={() => showPanel('Changes')} className={cn(row, 'text-(--text-3) hover:text-(--text-2)')}>
+						<Icon icon={FileDiff} size={13} />
+						Review what changed
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+export function FilesTab({ sessionId }: { sessionId: string }) {
+	const [selected, setSelected] = useState<string | null>(null);
+	const [opened, setOpened] = useState<string[]>([]);
+	const viewerId = useId();
+	const open = (path: string) => {
+		setOpened((current) => (current.includes(path) ? current : [...current, path]));
+		setSelected(path);
+	};
+	const close = (path: string) => {
+		const next = opened.filter((item) => item !== path);
+		setOpened(next);
+		if (selected === path) setSelected(next[Math.min(opened.indexOf(path), next.length - 1)] ?? null);
+	};
+	// A file a reply points at, such as src/app.ts:42, opens at its line.
+	const focus = useFocusedFile(sessionId);
+	useEffect(() => {
+		if (!focus) return;
+		open(focus.path);
+		if (focus.line && isMarkdown(focus.path)) setSourceShown((current) => new Set(current).add(focus.path));
+	}, [focus?.at]);
+	const [query, setQuery] = useState('');
+	const search = useRef<HTMLInputElement>(null);
+	// How each open Markdown file shows, chosen in the tab bar; rendered until you pick its source.
+	const [sourceShown, setSourceShown] = useState<Set<string>>(() => new Set());
+	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+	const session = useQuery(taskQueries.session(sessionId));
+	const chat = session.data ? isChat(session.data) : false;
+	const listing = useQuery({ ...taskQueries.files(sessionId), refetchInterval: refreshBySource });
+	const tree = useMemo(() => buildTree(listing.data?.paths ?? []), [listing.data?.paths]);
+	const changes = useMemo(() => new Map((listing.data?.changes ?? []).map((change) => [change.path, change.status])), [listing.data?.changes]);
+
+	function statusOf(path: string, folder: boolean) {
+		if (!folder) return changes.get(path);
+		for (const changed of changes.keys()) if (changed.startsWith(`${path}/`)) return 'M';
+		return undefined;
+	}
+
+
+	return (
+		<FileIcons>
+			<EditorPane
+				name="files"
+				sessionId={sessionId}
+				mode="files"
+				sideLabel="File tree"
+				opened={selected}
+				side={
+					<>
+					<SearchField size="sm" inputRef={search} value={query} onChange={setQuery} placeholder="Find a file" className="mb-1.5 shrink-0" />
+					{listing.isError ? (
+						<EmptyState title="Files unavailable" body={listing.error.message} />
+					) : listing.isPending ? (
+						<div className="flex h-7 items-center gap-2 text-small text-(--text-3)">
+							<Spinner size={12} />
+							Listing files
+						</div>
+					) : query.trim() ? (
+						<Matches
+							selected={selected}
+							paths={matchPaths(listing.data.paths, query.trim(), MATCHES_SHOWN)}
+							onOpen={open}
+							statusOf={(path) => changes.get(path)}
+						/>
+					) : tree.children.size === 0 ? (
+						<EmptyState
+							icon={Folder}
+							title={chat ? 'No files yet' : 'Repository is empty'}
+							body={chat ? 'This chat has no repository. Files the agent makes in its scratch sandbox show up here.' : 'Files the agent creates show up here.'}
+						/>
+					) : (
+						<Branch
+							selected={selected}
+							node={tree}
+							depth={0}
+							expanded={expanded}
+							onToggle={(path) =>
+								setExpanded((current) => {
+									const next = new Set(current);
+									if (next.has(path)) next.delete(path);
+									else next.add(path);
+									return next;
+								})
+							}
+							onOpen={open}
+							statusOf={statusOf}
+						/>
+					)}
+					</>
+				}
+				main={(sideToggle) => (
+					<>
+					{opened.length ? (
+						<EditorBar sideToggle={sideToggle}>
+							<PanelTabs label="Open files" scrollbar>
+								{opened.map((path) => (
+									<PanelTab
+										key={path}
+										on={selected === path}
+										id={`${viewerId}-${encodeURIComponent(path)}`}
+										controls={viewerId}
+										title={path}
+										mark={<FileIcon path={path} />}
+										onSelect={() => setSelected(path)}
+										onClose={() => close(path)}
+										closeLabel={`Close ${path}`}
+									>
+										{path.split('/').pop()}
+									</PanelTab>
+								))}
+							</PanelTabs>
+							{selected && isMarkdown(selected) ? (
+								<MarkdownToggle
+									preview={!sourceShown.has(selected)}
+									onChange={(preview) =>
+										setSourceShown((current) => {
+											const next = new Set(current);
+											if (preview) next.delete(selected);
+											else next.add(selected);
+											return next;
+										})
+									}
+									className="shrink-0"
+								/>
+							) : null}
+						</EditorBar>
+					) : null}
+					{selected ? (
+						<div role="tabpanel" id={viewerId} aria-labelledby={`${viewerId}-${encodeURIComponent(selected)}`} className="flex min-h-0 flex-1 flex-col">
+							<FileView
+									key={selected}
+									path={selected}
+									queryKey={['file', sessionId, selected]}
+									read={() => api.file(sessionId, selected)}
+									preview={!sourceShown.has(selected)}
+									line={focus?.path === selected ? focus.line : undefined}
+									className="bg-transparent"
+								/>
+						</div>
+					) : (
+						<StartPage changed={[...changes.entries()]} onOpen={open} onFind={() => search.current?.focus()} />
+					)}
+					</>
+				)}
+			/>
+		</FileIcons>
+	);
+}

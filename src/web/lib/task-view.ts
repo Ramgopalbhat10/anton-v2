@@ -1,6 +1,6 @@
-import { isLive } from '@/components/task-status';
-import { type GlyphKind, glyphKind } from '@/components/thread-glyph';
-import type { Session } from '@/lib/api';
+import { isLive } from '@/components/marks/task-status';
+import { type GlyphKind, glyphKind } from '@/components/marks/thread-glyph';
+import type { Session } from '@/lib/api/sessions';
 
 /** How the sidebar lists tasks; kept in the browser. */
 export type TaskView = {

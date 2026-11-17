@@ -1,7 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback } from 'react';
-import { api, type ModelRoute, type Reasoning, type RunOn } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { ModelRoute, Reasoning } from '@/lib/api/plans';
+import type { RunOn } from '@/lib/api/sessions';
 import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
 import { askToNotify } from '@/lib/notifications';
 import { setPendingPrompt } from '@/lib/pending-prompt';

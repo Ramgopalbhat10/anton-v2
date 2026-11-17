@@ -1,0 +1,326 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { BookOpen, Box, Plus, Trash2, Workflow, X } from '@/lib/icons';
+import { type ReactNode, useEffect, useState } from 'react';
+import { Automations } from '@/components/settings/automations';
+import { Block, FIELD as WELL_FIELD, PageHeading, SaveState, SubBlock } from '@/components/settings/parts';
+import { Btn, EmptyState, IconBtn, Spinner, Switch } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { Project, SettingsChange } from '@/lib/api/projects';
+import { useProjects } from '@/lib/projects';
+
+/** A variable row; a stored one keeps its value unless a new one is typed. */
+export type Variable = { name: string; value: string; stored: boolean };
+
+const FIELD = WELL_FIELD;
+
+export const AREA =
+	'sg-field w-full resize-y px-2 py-2';
+
+function Section({ title, help, info, children }: { title: string; help?: ReactNode; info?: ReactNode; children: ReactNode }) {
+	return (
+		<SubBlock label={title} help={help} info={info}>
+			{children}
+		</SubBlock>
+	);
+}
+
+function parsePorts(text: string): number[] {
+	return [...new Set(text.split(/[\s,]+/).filter(Boolean).map(Number))];
+}
+
+type Draft = { variables: Variable[]; setupScript: string; checkCommand: string; ports: string; baseImage: string; fullVm: boolean; followUps: boolean; reviewOthers: boolean };
+
+export const storedVariables = (names: string[]): Variable[] => names.map((name) => ({ name, value: '', stored: true }));
+
+/** The rows as a change for the server: null keeps a stored value. */
+export function toEnv(variables: Variable[]): Record<string, string | null> {
+	const named = variables.filter((row) => row.name.trim());
+	// Two rows with one name would let an empty new row replace the stored value.
+	if (new Set(named.map((row) => row.name.trim())).size !== named.length) throw new Error('Each variable needs its own name.');
+	return Object.fromEntries(named.map((row) => [row.name.trim(), row.stored && !row.value ? null : row.value]));
+}
+
+function toChange({ variables, setupScript, checkCommand, ports, baseImage, fullVm, followUps, reviewOthers }: Draft): SettingsChange {
+	return { env: toEnv(variables), setupScript, checkCommand: checkCommand.trim(), previewPorts: parsePorts(ports), baseImage: baseImage.trim() || null, fullVm, followUps, reviewOthers };
+}
+
+export function VariablesEditor({ rows, onChange }: { rows: Variable[]; onChange: (rows: Variable[]) => void }) {
+	const update = (index: number, patch: Partial<Variable>) => onChange(rows.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+	return (
+		<div className="flex flex-col gap-1.5">
+			{rows.map((row, index) => (
+				<div key={index} className="flex items-center gap-1.5">
+					<input
+						value={row.name}
+						readOnly={row.stored}
+						onChange={(event) => update(index, { name: event.target.value })}
+						placeholder="NAME"
+						aria-label="Variable name"
+						className={`${FIELD} w-[40%] font-mono read-only:text-(--text-2)`}
+					/>
+					<input
+						type="password"
+						autoComplete="new-password"
+						value={row.value}
+						onChange={(event) => update(index, { value: event.target.value })}
+						placeholder={row.stored ? 'Saved. Type to replace' : 'value'}
+						aria-label={`Value of ${row.name || 'the variable'}`}
+						className={`${FIELD} flex-1 font-mono`}
+					/>
+					<IconBtn icon={X} size="sm" label="Remove variable" onClick={() => onChange(rows.filter((_, at) => at !== index))} />
+				</div>
+			))}
+			<Btn
+				size="sm"
+				variant="ghost"
+				icon={Plus}
+				className="self-start"
+				onClick={() => onChange([...rows, { name: '', value: '', stored: false }])}
+			>
+				Add a variable
+			</Btn>
+		</div>
+	);
+}
+
+function SettingsForm({ project }: { project: Project }) {
+	const queryClient = useQueryClient();
+	const [variables, setVariables] = useState(() => storedVariables(project.envKeys));
+	const [setupScript, setSetupScript] = useState(project.setupScript);
+	const [checkCommand, setCheckCommand] = useState(project.checkCommand ?? '');
+	const [ports, setPorts] = useState(project.previewPorts.join(', '));
+	const [baseImage, setBaseImage] = useState(project.baseImage ?? '');
+	const [fullVm, setFullVm] = useState(project.fullVm);
+	const [followUps, setFollowUps] = useState(project.followUps);
+	const [reviewOthers, setReviewOthers] = useState(project.reviewOthers);
+	const save = useMutation({
+		mutationFn: async () => api.updateProjectSettings(project.id, toChange({ variables, setupScript, checkCommand, ports, baseImage, fullVm, followUps, reviewOthers })),
+		onSuccess: (saved) => {
+			setVariables(storedVariables(saved.envKeys));
+			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+		},
+	});
+
+	return (
+		<form
+			onSubmit={(event) => {
+				event.preventDefault();
+				save.mutate();
+			}}
+		>
+			<Block
+				title="Every new sandbox"
+				icon={Box}
+				help="What this repository's sandboxes get."
+				footer={
+					<>
+						<SaveState pending={save.isPending} success={save.isSuccess} error={save.error} saved="Saved. New sandboxes use these settings." />
+						<Btn type="submit" size="sm" variant="primary" disabled={save.isPending}>
+							{save.isPending ? 'Saving…' : 'Save settings'}
+						</Btn>
+					</>
+				}
+			>
+				<Section
+					title="Environment variables"
+					help="For the agent's commands and the terminal."
+					info="Over any of the same name in Settings › Secrets. Values are stored by Anton and never shown again. Git credentials are not needed here."
+				>
+					<VariablesEditor rows={variables} onChange={setVariables} />
+				</Section>
+				<Section
+					title="Setup script"
+					help="Runs before the agent starts, at each setup."
+					info="Install dependencies or seed a database here. A failure stops the task's setup."
+				>
+					<textarea
+						value={setupScript}
+						onChange={(event) => setSetupScript(event.target.value)}
+						rows={6}
+						spellCheck={false}
+						placeholder="npm ci"
+						className={`${AREA} font-mono text-small leading-[18px]`}
+					/>
+				</Section>
+				<Section
+					title="Check command"
+					help="Runs after the agent changes files and tells it only of failures. A fast one works best, such as npm run check:types."
+					info="A type check or lint rather than the whole test suite: it runs in the task's sandbox after each change, for up to three minutes. It should not change tracked files. Leave it empty to run none."
+				>
+					<input
+						value={checkCommand}
+						onChange={(event) => setCheckCommand(event.target.value)}
+						spellCheck={false}
+						placeholder="npm run check:types"
+						aria-label="Check command"
+						className={`${FIELD} font-mono`}
+					/>
+				</Section>
+				<Section title="Preview ports" help="Public URLs in the Preview panel." info="Up to eight, separated by commas.">
+					<input value={ports} onChange={(event) => setPorts(event.target.value)} placeholder="3000, 5173" className={`${FIELD} max-w-[320px] font-mono`} />
+				</Section>
+				<Section
+					title="Base image"
+					help="Instead of Anton's default image."
+					info="For languages the default does not include. Anton adds git and its tools on top."
+				>
+					<input
+						value={baseImage}
+						onChange={(event) => setBaseImage(event.target.value)}
+						placeholder="Default image"
+						className={`${FIELD} font-mono`}
+					/>
+				</Section>
+				<Section
+					title="Full virtual machine"
+					help="For Docker, FUSE and system services."
+					info="Runs each task's sandbox on Modal as a virtual machine with its own kernel instead of a container, at the same price. Its desktop in the Computer panel works either way. Sandboxes started after you save use it."
+				>
+					<Switch checked={fullVm} onChange={setFullVm} label="Run sandboxes as full VMs" className="self-start" />
+				</Section>
+				<Section
+					title="Pull request follow-ups"
+					help="Conflicts, failing checks and reviews go back to the agent."
+					info="Every five minutes Anton checks the pull requests its agents opened, up to five follow-ups per task."
+				>
+					<Switch checked={followUps} onChange={setFollowUps} label="Follow up on conflicts, CI and reviews" className="self-start" />
+				</Section>
+				<Section
+					title="Review every pull request"
+					help="Pull requests people open get a review too."
+					info="Each in a task of its own: a correctness pass and a security pass, posted on GitHub, and again after each push, up to three times. Only pull requests opened or updated after you turn this on, and not drafts or ones from people who can't push to the repository. Paste any pull request on the Reviews page to review it by hand."
+				>
+					<Switch checked={reviewOthers} onChange={setReviewOthers} label="Review others' pull requests" className="self-start" />
+				</Section>
+				<Section
+					title="MCP servers"
+					help={
+						<>
+							Added once for every task, in{' '}
+							<Link to="/settings/$section" params={{ section: 'connectors' }} className="text-(--accent-text) hover:underline">
+								Settings › Connectors
+							</Link>
+							.
+						</>
+					}
+				>
+					{null}
+				</Section>
+			</Block>
+		</form>
+	);
+}
+
+/** The repo's notes, saved on their own: the agent adds to them while the settings form is open. */
+function MemoryEditor({ project }: { project: Project }) {
+	const queryClient = useQueryClient();
+	const [memory, setMemory] = useState(project.memory);
+	const [base, setBase] = useState(project.memory);
+	// Notes the agent added since the page loaded show up, unless you are editing.
+	useEffect(() => {
+		if (memory === base) setMemory(project.memory);
+		setBase(project.memory);
+	}, [project.memory]);
+	const save = useMutation({
+		mutationFn: () => api.saveMemory(project.id, memory),
+		onSuccess: (saved) => {
+			setMemory(saved.memory);
+			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+		},
+	});
+	return (
+		<Block
+			title="Memory"
+			icon={BookOpen}
+			help="Notes every task's agent reads about this repository."
+			info="The agent adds what it learns (how to run things, conventions, gotchas); edit or remove anything here."
+			footer={
+				<>
+					{save.isError ? <span className="text-small text-(--bad)">{save.error.message}</span> : null}
+					<Btn size="sm" disabled={save.isPending || memory === project.memory} onClick={() => save.mutate()}>
+						{save.isPending ? 'Saving…' : 'Save notes'}
+					</Btn>
+				</>
+			}
+		>
+			<textarea
+				value={memory}
+				onChange={(event) => setMemory(event.target.value)}
+				rows={6}
+				placeholder="- Run the tests with npm test; they need Docker."
+				className={`${AREA} text-body leading-[19px]`}
+			/>
+		</Block>
+	);
+}
+
+/** Asks twice, since the repo's tasks go with it. */
+function RemoveRepo({ project }: { project: Project }) {
+	const queryClient = useQueryClient();
+	const navigate = useNavigate();
+	const [confirming, setConfirming] = useState(false);
+	const remove = useMutation({
+		mutationFn: () => api.removeProject(project.id),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ['projects'] });
+			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+			void navigate({ to: '/settings/$section', params: { section: 'repos' } });
+		},
+	});
+	return (
+		<div className="flex items-center justify-end gap-3">
+			<Btn
+				variant="danger"
+				size="sm"
+				disabled={remove.isPending}
+				onClick={() => (confirming ? remove.mutate() : setConfirming(true))}
+				onBlur={() => setConfirming(false)}
+			>
+				{remove.isPending ? 'Removing…' : confirming ? 'Click again to remove' : 'Remove repository'}
+			</Btn>
+			{remove.isError ? <span className="text-small text-(--bad)">{remove.error.message}</span> : null}
+		</div>
+	);
+}
+
+/** Tasks already running keep their settings until their sandbox restarts. */
+export function RepoSettingsPage() {
+	const { projectId } = useParams({ from: '/settings/repos/$projectId' });
+	const projects = useProjects();
+	const project = projects.data?.projects.find((item) => item.id === projectId);
+	if (projects.isPending) {
+		return (
+			<div className="flex items-center gap-2 text-small text-(--text-3)">
+				<Spinner size={12} />
+				Loading
+			</div>
+		);
+	}
+	if (!project) return <EmptyState title="Repository not found" body={projects.error?.message} />;
+	return (
+		<>
+			<PageHeading title={project.repoFullName} info="Tasks already running keep theirs until their sandbox restarts.">
+				What every new sandbox for this repository gets.
+			</PageHeading>
+			<SettingsForm key={project.id} project={project} />
+			<MemoryEditor key={project.id} project={project} />
+			<Block
+				title="Automations"
+				icon={Workflow}
+				help="Tasks that start on their own."
+				info="Checked every five minutes. Each labeled issue becomes one task that opens a pull request; up to three start per check. Nothing starts once today's spending cap is reached."
+			>
+				<Automations projectId={project.id} />
+			</Block>
+			<Block
+				title="Remove"
+				icon={Trash2}
+				className="border-(--bad-line)"
+				help="Deletes its tasks, automations and memory from Anton."
+				info="Its tasks' sandboxes and history go too. Branches and pull requests stay on GitHub."
+				footer={<RemoveRepo project={project} />}
+			/>
+		</>
+	);
+}

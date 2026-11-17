@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, Folder, KeyRound, LockKeyhole, Pencil, Plus, Trash2 } from '@/lib/icons';
 import { useState } from 'react';
-import { storedVariables, toEnv, VariablesEditor } from '@/components/repo-settings';
-import { Status } from '@/components/instrument';
-import { Btn, EmptyLine, Icon, IconBtn, Spinner } from '@/components/signal';
-import { api, type SealedSecret, type SecretsView } from '@/lib/api';
+import { storedVariables, toEnv, VariablesEditor } from '@/components/settings/repo-settings';
+import { Status } from '@/components/kit/instrument';
+import { Btn, EmptyLine, Icon, IconBtn, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { SealedSecret, SecretsView } from '@/lib/api/settings';
 import { age } from '@/lib/format';
 import { Block, FIELD, List, PageHeading, RowIcon, SaveState } from './parts';
 

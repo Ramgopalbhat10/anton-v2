@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Box, CircleStop } from '@/lib/icons';
 import { useState } from 'react';
-import { SandboxArt } from '@/components/illustrations';
-import { Card, CardFooter, CardSection, Facts, Figure, Status, StatusDot, Well } from '@/components/instrument';
-import { Btn, IconBtn, Spinner } from '@/components/signal';
-import { api, type ComputeView } from '@/lib/api';
+import { SandboxArt } from '@/components/marks/illustrations';
+import { Card, CardFooter, CardSection, Facts, Figure, Status, StatusDot, Well } from '@/components/kit/instrument';
+import { Btn, IconBtn, Spinner } from '@/components/kit/signal';
+import { api } from '@/lib/api';
+import type { ComputeView } from '@/lib/api/settings';
 import { age } from '@/lib/format';
 import { PageHeading } from './parts';
 

@@ -15,7 +15,7 @@ This file is an index. Read the doc for the area you change, not all of them.
 | Context window, cuts, pruning, compaction, reply traces | `src/services/context/`, `src/services/replies/compaction-pin.ts` | [context-and-traces](docs/architecture/context-and-traces.md) |
 | Coder, subagents, checks at a reply's end, background jobs, Reviewer, skills | `src/agents/coder/`, `src/agents/reviewer.ts`, `src/services/replies/`, `src/services/sandbox/background-jobs.ts`, `src/core/plugins.ts` | [agents](docs/architecture/agents.md) |
 | Browser and Computer panels | `src/services/browser/` | [browser-and-computer](docs/architecture/browser-and-computer.md) |
-| What replies draw, Artifacts page, attachments | `src/web/components/thread.tsx`, `src/web/components/artifacts-page.tsx`, `src/services/artifacts/` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
+| What replies draw, Artifacts page, attachments | `src/web/components/thread/thread.tsx`, `src/web/components/pages/artifacts-page.tsx`, `src/services/artifacts/` | [replies-and-artifacts](docs/architecture/replies-and-artifacts.md) |
 | Projects, coordinator, threads, project files | `src/services/projects/`, `src/agents/coordinator.ts` | [projects](docs/architecture/projects.md) |
 | Connectors | `src/services/connectors/`, `src/web/components/settings/connectors.tsx` | [connectors](docs/architecture/connectors.md) |
 | Web UI, panels, push notifications | `src/web/`, `src/services/notify/` | [web-ui](docs/architecture/web-ui.md) |

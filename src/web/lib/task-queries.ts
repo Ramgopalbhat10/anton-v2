@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
-import { api, refreshFor, type Source } from '@/lib/api';
+import { api, refreshFor } from '@/lib/api';
+import type { Source } from '@/lib/api/workspace';
 
 /**
  * Made here, not inline: the query cache keeps the last reader's `queryFn` for `gcTime`, and an inline arrow kept that

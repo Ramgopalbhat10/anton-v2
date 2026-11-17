@@ -1,6 +1,6 @@
 import { createContext, useSyncExternalStore } from 'react';
-import type { PanelName } from '@/components/vm-panel';
-import type { ChangesScope } from '@/lib/api';
+import type { PanelName } from '@/components/workspace/vm-panel';
+import type { ChangesScope } from '@/lib/api/workspace';
 
 /** Shows one of the task's workspace panels, opening the workspace if it is closed. */
 export const ShowPanel = createContext<(name: PanelName) => void>(() => undefined);

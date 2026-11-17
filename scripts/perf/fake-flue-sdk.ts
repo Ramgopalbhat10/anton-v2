@@ -123,7 +123,7 @@ function script(): Array<[number, (state: Conversation) => Conversation]> {
 		const from = PHASES.answer[0] + chunk * span;
 		stream(from + 300, from + span, 'text', answer.slice((chunk * answer.length) / chunks, ((chunk + 1) * answer.length) / chunks));
 		const call = `answer-tool-${chunk}`;
-		steps.push([from + 10, (state) => toolInput(state, id, call, chunk % 2 ? 'read' : 'bash', chunk % 2 ? { path: 'src/web/components/thread.tsx' } : { command: 'npm run check:types' })]);
+		steps.push([from + 10, (state) => toolInput(state, id, call, chunk % 2 ? 'read' : 'bash', chunk % 2 ? { path: 'src/web/components/thread/thread.tsx' } : { command: 'npm run check:types' })]);
 		steps.push([from + 250, (state) => toolOutput(state, id, call, { output: 'ok\n'.repeat(30) })]);
 	}
 	steps.push([

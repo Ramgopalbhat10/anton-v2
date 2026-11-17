@@ -62,7 +62,7 @@ import together from '@lobehub/icons-static-svg/icons/together-color.svg?raw';
 import vercel from '@lobehub/icons-static-svg/icons/vercel.svg?raw';
 import venice from '@lobehub/icons-static-svg/icons/venice-color.svg?raw';
 import vertex from '@lobehub/icons-static-svg/icons/vertexai-color.svg?raw';
-import type { ModelInfo } from './api';
+import type { ModelInfo } from './api/plans';
 
 /** By the vendor part of a model id, as OpenRouter and the plans name vendors; aliases where those differ. */
 const LOGOS: Record<string, string> = {

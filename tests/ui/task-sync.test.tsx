@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 import { appQueryClient } from '@/lib/task-sync';
 import { session } from './render';
 

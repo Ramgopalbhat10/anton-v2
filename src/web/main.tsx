@@ -9,16 +9,16 @@ import {
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ArtifactsSearch } from '@/components/artifacts-page';
+import type { ArtifactsSearch } from '@/components/pages/artifacts-page';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
 import { bootTheme } from '@/lib/theme';
-import { OutputViewerHost } from '@/components/output-viewer';
-import { AppShell, HomePage, SessionPage } from '@/components/shell';
-import { TitleTips } from '@/components/title-tips';
+import { OutputViewerHost } from '@/components/content/output-viewer';
+import { AppShell, HomePage, SessionPage } from '@/components/shell/shell';
+import { TitleTips } from '@/components/shell/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { type PanelName, panels } from '@/components/vm-panel';
+import { type PanelName, panels } from '@/components/workspace/vm-panel';
 import { CATEGORIES } from '@/lib/artifacts';
 import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
@@ -27,21 +27,21 @@ const queryClient = appQueryClient();
 bootTheme();
 
 /* Home and a task are in the first download; every other page loads its code on first visit. */
-const IncognitoPage = lazyRouteComponent(() => import('@/components/incognito'), 'IncognitoPage');
-const ProjectsPage = lazyRouteComponent(() => import('@/components/projects-page'), 'ProjectsPage');
-const ProjectPage = lazyRouteComponent(() => import('@/components/project-page'), 'ProjectPage');
-const ThreadPage = lazyRouteComponent(() => import('@/components/project-page'), 'ThreadPage');
-const TasksPage = lazyRouteComponent(() => import('@/components/tasks-page'), 'TasksPage');
-const ArtifactsPage = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactsPage');
-const ArtifactView = lazyRouteComponent(() => import('@/components/artifacts-page'), 'ArtifactView');
-const ReviewsPage = lazyRouteComponent(() => import('@/components/reviews-page'), 'ReviewsPage');
-const InboxPage = lazyRouteComponent(() => import('@/components/inbox-page'), 'InboxPage');
+const IncognitoPage = lazyRouteComponent(() => import('@/components/pages/incognito'), 'IncognitoPage');
+const ProjectsPage = lazyRouteComponent(() => import('@/components/projects/projects-page'), 'ProjectsPage');
+const ProjectPage = lazyRouteComponent(() => import('@/components/projects/project-page'), 'ProjectPage');
+const ThreadPage = lazyRouteComponent(() => import('@/components/projects/project-page'), 'ThreadPage');
+const TasksPage = lazyRouteComponent(() => import('@/components/pages/tasks-page'), 'TasksPage');
+const ArtifactsPage = lazyRouteComponent(() => import('@/components/pages/artifacts-page'), 'ArtifactsPage');
+const ArtifactView = lazyRouteComponent(() => import('@/components/pages/artifacts-page'), 'ArtifactView');
+const ReviewsPage = lazyRouteComponent(() => import('@/components/pages/reviews-page'), 'ReviewsPage');
+const InboxPage = lazyRouteComponent(() => import('@/components/pages/inbox-page'), 'InboxPage');
 const SettingsLayout = lazyRouteComponent(() => import('@/components/settings/layout'), 'SettingsLayout');
 const SectionPage = lazyRouteComponent(() => import('@/components/settings/layout'), 'SectionPage');
 const SettingsOverview = lazyRouteComponent(() => import('@/components/settings/overview'), 'SettingsOverview');
 const SkillDetailPage = lazyRouteComponent(() => import('@/components/settings/skill-detail'), 'SkillDetailPage');
 const ConnectorDetailPage = lazyRouteComponent(() => import('@/components/settings/connectors'), 'ConnectorDetailPage');
-const RepoSettingsPage = lazyRouteComponent(() => import('@/components/repo-settings'), 'RepoSettingsPage');
+const RepoSettingsPage = lazyRouteComponent(() => import('@/components/settings/repo-settings'), 'RepoSettingsPage');
 
 const rootRoute = createRootRoute({
 	component: () => (
