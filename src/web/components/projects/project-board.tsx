@@ -3,7 +3,7 @@ import { PrStatus } from '@/components/marks/pr-status';
 import { Btn, Icon, IconBtn } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
-import { repoShort, type Session } from '@/lib/api';
+import { repoShort, type Session } from '@/lib/api/sessions';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
 
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [

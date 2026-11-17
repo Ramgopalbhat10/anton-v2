@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setChangesScope } from '@/lib/workspace';
-import type { ChangesPayload, PullRequestDetail, PullRequestItem } from '@/lib/api';
+import type { ChangesPayload, PullRequestDetail, PullRequestItem } from '@/lib/api/workspace';
 import { renderWithQueries, session } from './render';
 
 const api = vi.hoisted(() => ({

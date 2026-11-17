@@ -1,6 +1,8 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { api, type Output, type Session } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Output } from '@/lib/api/outputs';
+import type { Session } from '@/lib/api/sessions';
 import type { ViewerItem } from '@/lib/viewer';
 import { outputLinkPath } from '../../core/outputs';
 

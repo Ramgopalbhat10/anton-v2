@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import type { TodoList } from '@/lib/api';
+import type { TodoList } from '@/lib/api/sessions';
 import { renderWithQueries } from './render';
 
 const { TodoPill } = await import('@/components/composer/todo-pill');

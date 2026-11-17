@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorMessage } from '@/lib/api';
+import { errorMessage } from '@/lib/api/http';
 
 const cloudflare524 = '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n<html><head><title>mrgb.in | 524: A timeout occurred</title></head><body>…</body></html>';
 

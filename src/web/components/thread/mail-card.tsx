@@ -4,7 +4,8 @@ import { memo, useContext } from 'react';
 import { GMAIL, MarkTile } from '@/components/marks/brand-marks';
 import { ReplyActions, type ReplyPlace } from '@/components/thread/reply-cards';
 import { Btn, Icon, Spinner } from '@/components/kit/signal';
-import { api, type MailApproval } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { MailApproval } from '@/lib/api/notify';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 

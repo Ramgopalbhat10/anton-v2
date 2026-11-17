@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { api, type ComposioAccount, type ConnectorAccount, type ConnectorMailbox, type ConnectorsView, type McpServer } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { ComposioAccount, ConnectorAccount, ConnectorMailbox, ConnectorsView, McpServer } from '@/lib/api/connectors';
 
 /** One on/off state per connector for every task; the agent loads a connector's tools only when it uses them, so a toggle never changes the cached prompt. */
 

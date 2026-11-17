@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { api, type ChangesScope, refreshFor } from '@/lib/api';
+import { api, refreshFor } from '@/lib/api';
+import type { ChangesScope } from '@/lib/api/workspace';
 import { parsePatch } from '@/lib/diff';
 
 /** One query per scope, so the tab count and the panel agree. The count is always the unpushed work, so it reads 0 once a pull request has it all. */

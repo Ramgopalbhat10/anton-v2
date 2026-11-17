@@ -17,7 +17,7 @@ import { PullRequestChip, TaskMenu, TaskTitle } from '@/components/shell/task-ac
 import { Thread } from '@/components/thread/thread';
 import { type PanelName, panels, VmPanel } from '@/components/workspace/vm-panel';
 import { PaneSlideContext, usePaneSlide } from '@/components/workspace/workspace-pane';
-import { isChat, type Session } from '@/lib/api';
+import { isChat, type Session } from '@/lib/api/sessions';
 import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useLiveUpdates } from '@/lib/live-updates';
 import { useOnePane } from '@/lib/one-pane';

@@ -1,4 +1,4 @@
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 
 /** The project's Library has a folder per thread under From threads; Anton's own folders (renders/, images/) are left out of the path there. */
 

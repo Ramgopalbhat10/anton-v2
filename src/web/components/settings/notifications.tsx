@@ -3,7 +3,8 @@ import { BellRing, Download, ListChecks, MonitorSmartphone, Send, Smartphone, Tr
 import { useEffect, useState } from 'react';
 import { Status } from '@/components/kit/instrument';
 import { Btn, EmptyLine, IconBtn, Spinner, Switch } from '@/components/kit/signal';
-import { api, type PushView } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { PushView } from '@/lib/api/notify';
 import { age } from '@/lib/format';
 import { canPromptInstall, currentSubscription, deviceIdOf, isInstalled, isIos, onInstallChange, promptInstall, pushSupport, turnOffPush, turnOnPush } from '@/lib/push';
 import { Block, List, PageHeading, RowIcon, SaveState, SettingRow } from './parts';

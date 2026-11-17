@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { SandboxArt } from '@/components/marks/illustrations';
 import { Card, CardFooter, CardSection, Facts, Figure, Status, StatusDot, Well } from '@/components/kit/instrument';
 import { Btn, IconBtn, Spinner } from '@/components/kit/signal';
-import { api, type ComputeView } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { ComputeView } from '@/lib/api/settings';
 import { age } from '@/lib/format';
 import { PageHeading } from './parts';
 

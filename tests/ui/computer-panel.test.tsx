@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ComputerView } from '@/lib/api';
+import type { ComputerView } from '@/lib/api/workspace';
 import { renderWithQueries } from './render';
 
 type FakeRfb = EventTarget & { url: string; options: unknown; viewOnly: boolean; scaleViewport: boolean; disconnect: () => void; focus: () => void };

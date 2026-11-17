@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TaskPanels } from '@/components/shell/shell';
-import type { ContextView, ModelInfo, PlanUsage, Session } from '@/lib/api';
+import type { ContextView, Session } from '@/lib/api/sessions';
+import type { ModelInfo } from '@/lib/api/plans';
+import type { PlanUsage } from '@/lib/api/settings';
 import { renderWithQueries, session } from './render';
 
 const api = vi.hoisted(() => ({

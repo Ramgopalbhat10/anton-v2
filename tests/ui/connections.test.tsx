@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { SetupField, SetupSlot } from '@/lib/api';
+import type { SetupField, SetupSlot } from '@/lib/api/settings';
 
 const field = (env: string, label: string, extra: Partial<SetupField> = {}): SetupField => ({ env, label, secret: false, optional: false, fallback: null, source: null, value: null, hint: null, ...extra });
 const slot = (id: string, name: string, required: boolean, provider: string | null, options: SetupSlot['options'], extra: Partial<SetupSlot> = {}): SetupSlot => ({

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 
 /** Renders with a fresh query cache, seeded with whatever the test passes. */
 export function renderWithQueries(ui: ReactNode, seed: Array<[unknown[], unknown]> = []) {

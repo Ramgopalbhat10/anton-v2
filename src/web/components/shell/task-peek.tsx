@@ -5,7 +5,7 @@ import { Pips } from '@/components/kit/instrument';
 import { Icon } from '@/components/kit/signal';
 import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
 import { TaskStatusIcon } from '@/components/marks/task-status';
-import { branchLabel, isChat, type Session } from '@/lib/api';
+import { branchLabel, isChat, type Session } from '@/lib/api/sessions';
 import { age, dollars, tokens } from '@/lib/format';
 import { useModelName } from '@/lib/models';
 import { activeAt, taskNote, type Tone } from '@/lib/task-view';

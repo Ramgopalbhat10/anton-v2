@@ -1,4 +1,4 @@
-import type { AgentNow } from '@/lib/api';
+import type { AgentNow } from '@/lib/api/sessions';
 
 /** Images an image model made: drawn in the reply where they were made, so they are not repeated among its files. */
 export const IMAGE_TOOL = 'generate_image';

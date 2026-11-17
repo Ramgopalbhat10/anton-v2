@@ -3,7 +3,8 @@ import { ChevronDown } from '@/lib/icons';
 import { Children, type ReactNode } from 'react';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { Icon, InfoTip, Menu, MenuContent, MenuItem, MenuTrigger, SectionLabel, Switch } from '@/components/kit/signal';
-import type { HelperAgent, Reasoning } from '@/lib/api';
+import type { HelperAgent } from '@/lib/api/settings';
+import type { Reasoning } from '@/lib/api/plans';
 import { cn } from '@/lib/utils';
 import { StatusDot } from '@/components/kit/instrument';
 

@@ -1,6 +1,6 @@
 import type { IconComponent } from '@/lib/icons';
 import { AppWindow, Bot, FlaskConical, Monitor, Telescope } from '@/lib/icons';
-import type { SubagentRun } from '@/lib/api';
+import type { SubagentRun } from '@/lib/api/sessions';
 
 type Look = { icon: IconComponent; tone: string; label: string };
 

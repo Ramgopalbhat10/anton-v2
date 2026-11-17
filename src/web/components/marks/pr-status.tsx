@@ -3,7 +3,8 @@ import { CircleCheck, CircleDashed, CircleX, GitBranch, GitMerge, GitPullRequest
 import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from '@/components/kit/signal';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { api, type Session } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 import { cn } from '@/lib/utils';
 
 type State = NonNullable<Session['pullRequest']>['state'];

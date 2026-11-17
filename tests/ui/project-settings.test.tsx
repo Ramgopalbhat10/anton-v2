@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { Space } from '@/lib/api';
+import type { Space } from '@/lib/api/spaces';
 
 const model = (id: string, name: string) => ({
 	id,

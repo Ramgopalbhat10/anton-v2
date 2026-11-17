@@ -7,7 +7,7 @@ import { EmptyState, Icon, IconBtn, Spinner } from '@/components/kit/signal';
 import { Caption, SplitBar, Status, type Tone } from '@/components/kit/instrument';
 import { AgentTile, runLine, StatusGlyph, stepBody, StopRunButton, stepTone, useNow, useSubagentRuns } from '@/components/thread/subagents';
 import { decisionsOf, lookOf, runElapsed, runEnd, spanOf, titleOf, WORK, type WorkKind, workKind } from '@/lib/subagents';
-import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api';
+import type { StepDetail, SubagentRun, SubagentStep } from '@/lib/api/sessions';
 import { age, elapsed, fineDollars, tokens } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useFollowLatest } from '@/lib/use-follow-latest';

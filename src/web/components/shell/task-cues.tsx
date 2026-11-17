@@ -4,7 +4,7 @@ import { HoverCard } from 'radix-ui';
 import type { ReactNode } from 'react';
 import { Icon } from '@/components/kit/signal';
 import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 import { planReady, prNumber } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 

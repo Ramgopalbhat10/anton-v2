@@ -5,7 +5,8 @@ import { type FormEvent, type Ref, useCallback, useEffect, useLayoutEffect, useR
 import { withAttachments } from '../../../core/attachments';
 import { newIncognitoId } from '../../../core/incognito';
 import { parseRouted } from '../../../core/model-route';
-import { api, type ModelChoice, type ModelRoute, type Reasoning } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { ModelChoice, ModelRoute, Reasoning } from '@/lib/api/plans';
 import { deliveredImages, MAX_IMAGES } from '@/lib/attachments';
 import { flyFrom } from '@/lib/flight';
 import { cn } from '@/lib/utils';

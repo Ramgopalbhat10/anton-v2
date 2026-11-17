@@ -5,7 +5,7 @@ import { useResume } from '@/components/workspace/source-bar';
 import { LinkArt, SandboxArt } from '@/components/marks/illustrations';
 import { Segmented, SegmentedItem, StatusDot } from '@/components/kit/instrument';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/kit/signal';
-import type { Preview } from '@/lib/api';
+import type { Preview } from '@/lib/api/workspace';
 import { taskQueries } from '@/lib/task-queries';
 
 function PortChip({ preview, active, onSelect }: { preview: Preview; active: boolean; onSelect: () => void }) {

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { ImageAttachment } from '@/lib/attachments';
-import type { PickedElement } from '@/lib/api';
+import type { PickedElement } from '@/lib/api/workspace';
 
 /** What other panels hand to a task's composer (a picked element, a drawing, text from a page), taken into its draft as it arrives. */
 export type InboxItem = { kind: 'element'; id: string; element: PickedElement } | { kind: 'image'; image: ImageAttachment } | { kind: 'text'; text: string };

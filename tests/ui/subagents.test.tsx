@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { SubagentRun } from '@/lib/api';
+import type { SubagentRun } from '@/lib/api/sessions';
 import { renderWithQueries } from './render';
 
 const { AgentsCard } = await import('@/components/thread/subagents');

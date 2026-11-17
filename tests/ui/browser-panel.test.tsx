@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BrowserView, PickedElement } from '@/lib/api';
+import type { BrowserView, PickedElement } from '@/lib/api/workspace';
 import { renderWithQueries, session } from './render';
 import { DESCRIBE_ELEMENT } from '../../src/services/browser/describe-element';
 

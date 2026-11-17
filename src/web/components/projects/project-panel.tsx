@@ -17,7 +17,12 @@ import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/componen
 import { NextSteps, ThreadStateIcon, useOpenThread } from '@/components/projects/thread-card';
 import { Library as LibraryView } from '@/components/workspace/library-tab';
 import { type LibrarySource, type Place, spacePlace, taskPlace } from '@/lib/library';
-import { api, type Automation, type ModelChoice, type Output, repoShort, type Session, type Space } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Automation } from '@/lib/api/projects';
+import type { ModelChoice } from '@/lib/api/plans';
+import type { Output } from '@/lib/api/outputs';
+import { repoShort, type Session } from '@/lib/api/sessions';
+import type { Space } from '@/lib/api/spaces';
 import { age, until } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
 import { stateOf } from '@/lib/spaces';

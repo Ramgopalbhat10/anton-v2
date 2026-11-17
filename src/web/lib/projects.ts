@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { api, type Project } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Project } from '@/lib/api/projects';
 
 const KEY = 'anton.project';
 

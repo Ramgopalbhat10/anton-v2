@@ -5,7 +5,8 @@ import { DATA_COLORS, dayKey, lastDays, shortDay, StackedDaysChart, type StackRo
 import { Card, CardFooter, CardSection, Figure, Segmented, SegmentedItem, ShareRow, SplitBar, StatRow, Status, TickGauge, usedTone } from '@/components/kit/instrument';
 import { useModels } from '@/lib/models';
 import { Btn, Icon, Spinner } from '@/components/kit/signal';
-import { api, type Budget, type Limits, type PlanUsage, type SpendRow, type UsageView } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Budget, Limits, PlanUsage, SpendRow, UsageView } from '@/lib/api/settings';
 import { age, dollars, tokens } from '@/lib/format';
 import { FIELD, Note, PageHeading, SaveState } from './parts';
 import { cn } from '@/lib/utils';

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { IconComponent, IconProps } from '@/lib/icons';
 import { forwardRef } from 'react';
-import { api, type McpServer } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { McpServer } from '@/lib/api/connectors';
 import type { Brand, BrandId } from '@/lib/brand-icons';
 import { cn } from '@/lib/utils';
 

@@ -4,7 +4,8 @@ import { CircleCheck, FolderKanban, GitPullRequest, type IconComponent, Plus, Se
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { SECTION_LIST } from '@/components/settings/section-list';
 import { Badge, Icon, Kbd, SectionLabel } from '@/components/kit/signal';
-import { api, repoShort } from '@/lib/api';
+import { api } from '@/lib/api';
+import { repoShort } from '@/lib/api/sessions';
 import { age } from '@/lib/format';
 import { useCreateChat } from '@/lib/create-chat';
 import { openSettings } from '@/lib/settings-modal';

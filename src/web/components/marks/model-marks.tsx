@@ -1,4 +1,4 @@
-import type { ModelInfo } from '@/lib/api';
+import type { ModelInfo } from '@/lib/api/plans';
 import { vendorHue } from '@/lib/model-catalog';
 import { logoFor, vendorSlug } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';

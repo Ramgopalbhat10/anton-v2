@@ -8,7 +8,8 @@ import { MenuButton } from '@/components/kit/nav';
 import { EmptyState, FilterMenu, Icon, Kbd, SearchField, Spinner } from '@/components/kit/signal';
 import { TaskRow } from '@/components/pages/task-row';
 import { glyphKind, type GlyphKind } from '@/components/marks/thread-glyph';
-import { api, isChat, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, SAFETY_NET_MS } from '@/lib/api';
+import { isChat, type Session } from '@/lib/api/sessions';
 import { threadActiveAt } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 

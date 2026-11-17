@@ -1,6 +1,6 @@
 import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { AgentNow } from '@/lib/api';
+import type { AgentNow } from '@/lib/api/sessions';
 
 type Change =
 	| { kind: 'sessions' }

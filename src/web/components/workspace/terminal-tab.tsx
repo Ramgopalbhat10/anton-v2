@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Facts, Status } from '@/components/kit/instrument';
 import { Btn, Icon } from '@/components/kit/signal';
 import { useRefreshTask } from '@/components/workspace/source-bar';
-import { api, isChat, repoShort } from '@/lib/api';
+import { api } from '@/lib/api';
+import { isChat, repoShort } from '@/lib/api/sessions';
 import { taskQueries } from '@/lib/task-queries';
 
 const theme = {

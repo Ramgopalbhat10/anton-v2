@@ -3,7 +3,7 @@ import { Github, MessageSquare } from '@/lib/icons';
 import { Icon } from '@/components/kit/signal';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { PrStatus } from '@/components/marks/pr-status';
-import { isChat, repoShort, type Session } from '@/lib/api';
+import { isChat, repoShort, type Session } from '@/lib/api/sessions';
 import { age, dollars } from '@/lib/format';
 import { cn } from '@/lib/utils';
 

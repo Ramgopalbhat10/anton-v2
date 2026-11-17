@@ -1,5 +1,5 @@
 import { Glyph, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 
 /** Whether a task's sandbox is up: starting, idle or busy with the agent. */
 export const isLive = (session: Session) => session.working || session.status === 'running' || session.status === 'starting';
