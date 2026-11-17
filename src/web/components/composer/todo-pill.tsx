@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check } from '@/lib/icons';
+import { Check, ChevronDown } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { memo, type PointerEvent, useEffect, useRef, useState } from 'react';
-import { Spinner } from '@/components/kit/signal';
+import { memo, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Icon, Spinner } from '@/components/kit/signal';
 import type { Todo } from '@/lib/api/sessions';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
@@ -50,6 +50,79 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
 				status === 'in_progress' ? 'border-(--accent)' : 'border-dashed border-(--text-4)',
 			)}
 		/>
+	);
+}
+
+function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boolean }) {
+	const details = useRef<HTMLParagraphElement>(null);
+	const [open, setOpen] = useState(false);
+	const [clamped, setClamped] = useState(false);
+	useLayoutEffect(() => {
+		const node = details.current;
+		if (node && !open) setClamped(node.scrollHeight > node.clientHeight + 1);
+	}, [todo.evidence, open]);
+	const current = todo.status === 'in_progress';
+	return (
+		<li
+			aria-current={current ? 'step' : undefined}
+			data-current={current || undefined}
+			className={cn('group/todo relative flex shrink-0 items-start gap-2.5 rounded-control px-1.5 py-1.5', current && 'bg-(--bg-hover)')}
+		>
+			{!last && (
+				<span
+					aria-hidden
+					className={cn('absolute top-[26px] -bottom-1 left-[12.5px] w-px', todo.status === 'completed' ? 'bg-(--ok)/45' : 'bg-(--line-strong)')}
+				/>
+			)}
+			<span className="flex h-[18px] shrink-0 items-center">
+				<Mark status={todo.status} working={working} />
+			</span>
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
+				{todo.evidence && (
+					// The chevron is the keyboard control; the text is a larger target for the pointer.
+					<p
+						ref={details}
+						onClick={clamped ? () => setOpen(!open) : undefined}
+						className={cn('m-0 text-small leading-[17px] text-pretty break-words text-(--text-3)', !open && 'line-clamp-2', clamped && 'cursor-pointer')}
+					>
+						{todo.evidence}
+					</p>
+				)}
+			</div>
+			{clamped && (
+				<button
+					type="button"
+					aria-expanded={open}
+					aria-label={open ? 'Hide details' : 'Show details'}
+					onClick={() => setOpen(!open)}
+					className="-my-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-inner text-(--text-4) outline-none group-hover/todo:text-(--text-2) hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
+				>
+					<Icon icon={ChevronDown} size={12} className={cn('transition-transform duration-(--t-fast)', open && 'rotate-180')} />
+				</button>
+			)}
+		</li>
+	);
+}
+
+function Items({ list, working }: { list: Todo[]; working: boolean }) {
+	const scroller = useRef<HTMLOListElement>(null);
+	const currentAt = list.findIndex((todo) => todo.status === 'in_progress');
+	// Opens on the step in hand, with the one before it in sight, however long the list.
+	useEffect(() => {
+		const node = scroller.current;
+		const item = node?.querySelector<HTMLElement>('[data-current]');
+		if (!node || !item) return;
+		if (item.offsetTop < node.scrollTop || item.offsetTop + item.offsetHeight > node.scrollTop + node.clientHeight) {
+			node.scrollTop = Math.max(0, item.offsetTop - 48);
+		}
+	}, [currentAt]);
+	return (
+		<ol ref={scroller} className="relative m-0 flex list-none flex-col overflow-y-auto overscroll-contain px-2 pb-2">
+			{list.map((todo, index) => (
+				<Item key={index} todo={todo} working={working} last={index === list.length - 1} />
+			))}
+		</ol>
 	);
 }
 
@@ -143,28 +216,7 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 							{done} of {list.length} done
 						</span>
 					</header>
-					<ol className="m-0 flex list-none flex-col overflow-y-auto px-2 pb-2">
-						{list.map((todo, index) => (
-							<li
-								key={index}
-								aria-current={todo.status === 'in_progress' ? 'step' : undefined}
-								className="flex min-h-7 items-start gap-2.5 rounded-control px-1.5 py-[5px] text-body leading-[18px]"
-							>
-								<span className="flex h-[18px] shrink-0 items-center">
-									<Mark status={todo.status} working={busy} />
-								</span>
-								<span
-									className={cn(
-										'min-w-0 flex-1 text-pretty',
-										todo.status === 'completed' ? 'text-(--text-3)' : todo.status === 'in_progress' ? 'text-(--text)' : 'text-(--text-2)',
-									)}
-								>
-									{todo.content}
-									{todo.evidence && <span className="block text-small text-(--text-3)">{todo.evidence}</span>}
-								</span>
-							</li>
-						))}
-					</ol>
+					<Items list={list} working={busy} />
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>
