@@ -219,7 +219,7 @@ const models = Array.from({ length: 300 }, (_, index) => ({
 	defaultReasoning: 'low',
 }));
 
-export function mockApi(): Plugin {
+export function mockApi({ working = true }: { working?: boolean } = {}): Plugin {
 	const tree = paths();
 	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread/thread.tsx src/web/components/thread/subagents.tsx src/web/components/workspace/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
 	const changed = [...patch.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => ({ path: match[1], status: 'M' }));
@@ -267,11 +267,11 @@ export function mockApi(): Plugin {
 		const task = `/api/sessions/${SESSION_ID}`;
 		// Any other task (an incognito chat's, one the UI fixture opens) is answered as the scripted one.
 		const other = path.match(/^\/api\/sessions\/([^/]+)(\/.*)?$/);
-		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, { ...session, id: other[1] });
+		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, { ...session, working, id: other[1] });
 		if (other && other[1] !== SESSION_ID) path = `${task}${other[2]}`;
 		if (path === '/api/health') return json(res, { ok: true, openRouter: true, providers: { sandbox: 'local', store: 'disk', git: 'github' } });
 		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...spaceThreads, ...others] });
-		if (path === task) return json(res, session);
+		if (path === task) return json(res, { ...session, working });
 		if (path === `${task}/files`) return json(res, { source: 'live', at: null, paths: tree, changes: changed });
 		if (path === `${task}/file`) {
 			const file = url.searchParams.get('path') ?? '';

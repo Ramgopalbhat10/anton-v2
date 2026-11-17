@@ -17,6 +17,7 @@ Linked from [AGENTS.md](../../AGENTS.md). Paths below are under `src/web/` unles
 - Icons: Hugeicons stroke-rounded, re-exported from `lib/icons.tsx` under app names (`Check`, `GitBranch`); components never import `@hugeicons/*`, so an icon is swapped in one line.
 - Task and thread state is one drawn mark everywhere (`Glyph` in `components/marks/thread-glyph.tsx`), told apart by shape as well as colour.
 - The logo (`Logo`, `.anton-logo` in `styles/instrument.css`) uses fixed hex values so the favicon and app icons match; run `node scripts/make-icons.ts` after changing it.
+- Chat uses `WorkingLogo` for the original expanding, spinning and hopping cube. `useReplyActivity` defers its finish with the conversation, so it stays active through the final render, independent of usage metadata and the steps card's live state. Reduced motion keeps the mark and working status static, with no turn timer.
 - Theme (`lib/theme.ts`): dark by default; the choice is in `localStorage` (`anton.theme`), else the system preference; `index.html` sets `data-theme` before paint, and artifact frames follow it.
 
 ## App structure

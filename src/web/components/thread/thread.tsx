@@ -1,7 +1,7 @@
 import type { FlueConversationMessage, UseFlueAgentResult } from '@flue/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from '@/lib/icons';
-import { memo, type ReactNode, useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { field } from '@/components/thread/tool-describe';
 import { Composer } from '@/components/composer/composer';
 import { ErrorBoundary } from '@/components/kit/error-boundary';
@@ -12,7 +12,9 @@ import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } 
 import { ShowCard } from '@/components/thread/show-card';
 import { approvalOf, MailSendCard } from '@/components/thread/mail-card';
 import { toolApprovalOf, ToolApprovalCard } from '@/components/thread/tool-approval-card';
-import { Logo, SandboxArt } from '@/components/marks/illustrations';
+import { SandboxArt } from '@/components/marks/illustrations';
+import { WorkingLogo } from '@/components/marks/working-logo';
+import { useReplyActivity } from '@/lib/reply-activity';
 import { Badge, EmptyState, Icon } from '@/components/kit/signal';
 import { TraceButton, TraceModal } from '@/components/thread/trace-modal';
 import { branchLabel, isChat, type Join, type WaitingMessage } from '@/lib/api/sessions';
@@ -49,6 +51,7 @@ const JOINED_HERE = 'Sent while Anton worked, read here';
 type AssistantMessageProps = {
 	message: FlueConversationMessage;
 	live: boolean;
+	working: boolean;
 	last: boolean;
 	answer: string | null;
 	/** The stretch shown, when a message sent while it worked cut the reply: the header goes on its first, the cards and usage on its last. */
@@ -67,7 +70,7 @@ const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageP
 	);
 });
 
-function Reply({ message, live, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
+function Reply({ message, live, working, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
 	const foot = !segment || segment.last;
@@ -103,13 +106,13 @@ function Reply({ message, live, last, answer, segment, showWorkspaceChanges, ent
 	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
 	const whole = useMemo(() => (segment ? toBlocks(message.parts) : blocks), [segment, message.parts, blocks]);
 	const copyText = whole.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
-	if (blocks.length === 0 && !(live && foot)) return null;
+	if (blocks.length === 0 && !(live && foot) && !(working && head)) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
 		<div className={cn('group/reply flex flex-col gap-3', enter && 'in-enter', !live && !last && 'thread-row-settled')}>
 			{head ? (
 				<div className="flex items-center gap-2">
-					<Logo size={16} />
+					<WorkingLogo active={working} />
 					<div className="text-small font-medium text-(--text-3)">Anton</div>
 					{live ? <Badge tone="accent">Live</Badge> : null}
 				</div>
@@ -230,8 +233,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const session = useQuery(taskQueries.session(sessionId));
 	const scroller = useRef<HTMLDivElement>(null);
 	const busy = agent.status === 'submitted' || agent.status === 'streaming';
-	// Chunks can land faster than a long conversation renders; deferred, React drops the ones it falls behind on rather than blocking typing and clicks.
-	const conversation = useDeferredValue(agent.messages);
+	const { conversation, working, reply: workingReply } = useReplyActivity(agent);
 	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
 	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
 	const unreadByServer = useQuery(taskQueries.waiting(sessionId)).data?.messages ?? NO_WAITING;
@@ -455,6 +457,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 									enter={fresh}
 									segment={row.segment}
 									live={row.message === liveReply && (!row.segment || row.segment.last)}
+									working={row.message === workingReply}
 									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
 									showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
 									answer={answers.get(rowKey(row)) ?? null}
@@ -462,6 +465,12 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 							),
 						)}
 						{pending ? <PendingMessage pending={pending} /> : null}
+						{working && !workingReply ? (
+							<div className="flex items-center gap-2">
+								<WorkingLogo active />
+								<div className="text-small font-medium text-(--text-3)">Anton</div>
+							</div>
+						) : null}
 						{busy ? <Waiting sessionId={sessionId} tail={tail} queued={rows[rows.length - 1]?.message.role === 'user' && !rows[rows.length - 1]?.joined} phase={liveReply ? 'replying' : rows[rows.length - 1]?.message.role === 'assistant' ? 'finishing' : 'starting'} /> : null}
 						{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 							<Notice>

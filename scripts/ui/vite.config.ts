@@ -16,7 +16,7 @@ const port = Number(process.env.UI_FIXTURE_PORT ?? process.env.ANTON_PREVIEW_POR
 export default defineConfig({
 	root: new URL('../../src/web', import.meta.url).pathname,
 	cacheDir: new URL('../../node_modules/.vite/ui-fixture', import.meta.url).pathname,
-	plugins: [react(), tailwindcss(), mockApi()],
+	plugins: [react(), tailwindcss(), mockApi({ working: false })],
 	resolve: {
 		alias: {
 			'@flue/sdk': new URL('./chat-sdk.ts', import.meta.url).pathname,
