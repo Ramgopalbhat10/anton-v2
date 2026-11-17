@@ -2,7 +2,8 @@ import { type QueryKey, useQuery } from '@tanstack/react-query';
 import { Blocks, FileText, SquareSlash } from '@/lib/icons';
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/kit/signal';
-import { api, type Command, type Plugin, type SkillSummary } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Command, Plugin, SkillSummary } from '@/lib/api/plugins';
 import { cn } from '@/lib/utils';
 import { ARGUMENTS, matchPaths, SHOWN, type Trigger, triggerAt } from '@/lib/completion';
 

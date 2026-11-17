@@ -5,7 +5,8 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Automations } from '@/components/settings/automations';
 import { Block, FIELD as WELL_FIELD, PageHeading, SaveState, SubBlock } from '@/components/settings/parts';
 import { Btn, EmptyState, IconBtn, Spinner, Switch } from '@/components/kit/signal';
-import { api, type Project, type SettingsChange } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Project, SettingsChange } from '@/lib/api/projects';
 import { useProjects } from '@/lib/projects';
 
 /** A variable row; a stored one keeps its value unless a new one is typed. */

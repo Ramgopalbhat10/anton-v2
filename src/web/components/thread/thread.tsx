@@ -23,7 +23,9 @@ import { Badge, Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/kit
 import { HoverPeek } from '@/components/kit/hover-peek';
 import { TraceButton, TraceModal } from '@/components/thread/trace-modal';
 import { Caption, Chip, Figure, SplitBar, StatusDot } from '@/components/kit/instrument';
-import { type AgentNow, api, branchLabel, isChat, type Join, outputUrl, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api';
+import { type AgentNow, branchLabel, isChat, type Join, type ScriptCall, type Session, type Usage, type UsagePart, type WaitingMessage } from '@/lib/api/sessions';
+import { api } from '@/lib/api';
+import { outputUrl } from '@/lib/api/outputs';
 import { deliveredImages, type ImageAttachment } from '@/lib/attachments';
 import { SentAttachments } from '@/components/composer/attachments';
 import { patchedFiles } from '../../../core/apply-patch';

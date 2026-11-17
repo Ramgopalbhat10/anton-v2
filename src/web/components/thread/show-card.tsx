@@ -37,7 +37,7 @@ import { type ReplyPlace, ReplyActions } from "@/components/thread/reply-cards";
 import { Badge, Btn, Icon, Switch } from "@/components/kit/signal";
 import { UiChart } from "@/components/thread/ui-chart";
 import { DeletedArtifact } from "@/components/content/output-viewer";
-import { outputUrl } from "@/lib/api";
+import { outputUrl } from "@/lib/api/outputs";
 import { useDeletedOutput } from "@/lib/deleted-outputs";
 import { cn } from "@/lib/utils";
 

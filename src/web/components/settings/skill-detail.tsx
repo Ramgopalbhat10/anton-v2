@@ -9,7 +9,9 @@ import { type FileImages } from '@/components/content/markdown';
 import { Card, Count, Status, Tab, Tabs } from '@/components/kit/instrument';
 import { useStoredState } from '@/components/kit/split-pane';
 import { Btn, EmptyState, Icon, IconBtn, Spinner, Switch } from '@/components/kit/signal';
-import { ADDED_FILES, api, type PluginPick, type PluginPreview } from '@/lib/api';
+import { ADDED_FILES } from '@/lib/api/outputs';
+import { api } from '@/lib/api';
+import type { PluginPick, PluginPreview } from '@/lib/api/plugins';
 import { Glyph, owner, usePluginMutation, type ViewSearch } from './skills';
 
 type DetailTab = 'overview' | 'skills' | 'files';

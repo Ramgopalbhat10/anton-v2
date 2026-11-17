@@ -1,4 +1,5 @@
-import type { Session, ThreadState } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
+import type { ThreadState } from '@/lib/api/spaces';
 import { failed, stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 

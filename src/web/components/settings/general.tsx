@@ -6,7 +6,9 @@ import { Segmented, SegmentedItem, StatusDot } from '@/components/kit/instrument
 import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { Btn, Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, PickerChip, Spinner, Switch } from '@/components/kit/signal';
-import { api, type BackgroundTask, type GeneralSettings, type ImageModelInfo, type ModelInfo, type Reasoning } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { BackgroundTask, GeneralSettings } from '@/lib/api/settings';
+import type { ImageModelInfo, ModelInfo, Reasoning } from '@/lib/api/plans';
 import { useGeneralSettings } from './general-settings';
 import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from './parts';
 

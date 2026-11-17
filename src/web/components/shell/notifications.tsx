@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from '@/lib/icons';
 import { memo, useEffect } from 'react';
 import { IconBtn } from '@/components/kit/signal';
-import { api, type NotificationCategory, type NotificationsView, SAFETY_NET_MS } from '@/lib/api';
+import { api, SAFETY_NET_MS } from '@/lib/api';
+import type { NotificationCategory, NotificationsView } from '@/lib/api/notify';
 import { cn } from '@/lib/utils';
 
 export const CATEGORIES: Array<{ id: NotificationCategory; label: string }> = [

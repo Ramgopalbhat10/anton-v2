@@ -4,7 +4,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Session, Space } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
+import type { Space } from '@/lib/api/spaces';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { session } from './render';
 

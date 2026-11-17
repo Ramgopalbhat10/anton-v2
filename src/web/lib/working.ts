@@ -1,7 +1,7 @@
 import type { UseFlueAgentResult } from '@flue/react';
 import type { QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 
 function working(session: Session): Session {
 	// A resolved thread stays resolved (src/core/thread-state.ts); any other is working.

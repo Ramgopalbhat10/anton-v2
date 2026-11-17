@@ -1,5 +1,5 @@
 import { hashKey, type Query, QueryCache, QueryClient } from '@tanstack/react-query';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 
 type List = { sessions: Session[] };
 

@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, CircleAlert, CircleCheck, CircleDot, CircleX, GitMerge, GitPullRequestClosed } from '@/lib/icons';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/kit/signal';
-import { api, type CheckRun, type PullRequestDetail } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { CheckRun, PullRequestDetail } from '@/lib/api/workspace';
 import { age } from '@/lib/format';
 import { prTone } from '@/components/marks/pr-status';
 

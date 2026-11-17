@@ -3,7 +3,8 @@ import { AppWindow, ArrowLeft, ArrowRight, Globe, Lock, Pause, PencilLine, Power
 import { type FormEvent, type PointerEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Sketch } from '@/components/content/sketch';
 import { Btn, EmptyState, Icon, IconBtn, Spinner } from '@/components/kit/signal';
-import { api, type BrowserView } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { BrowserView } from '@/lib/api/workspace';
 import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer, elementLabel } from '@/lib/composer-inbox';
 import { useElementSize } from '@/lib/use-element-size';

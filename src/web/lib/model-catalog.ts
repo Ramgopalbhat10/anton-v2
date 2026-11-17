@@ -1,4 +1,4 @@
-import type { ModelInfo, Reasoning } from './api';
+import type { ModelInfo, Reasoning } from './api/plans';
 
 export type Filter = 'reasoning' | 'vision' | 'free' | 'long';
 export type Sort = 'newest' | 'cheapest' | 'context';

@@ -8,7 +8,7 @@ import { PREVIEWS, Source, TextFile } from '@/components/content/file-previews';
 import { Markdown } from '@/components/content/markdown';
 import { Btn, Icon, IconBtn, Spinner } from '@/components/kit/signal';
 import { Sketch } from '@/components/content/sketch';
-import { outputUrl } from '@/lib/api';
+import { outputUrl } from '@/lib/api/outputs';
 import { categoryInfo, categoryOf, extensionOf, isMarkdown, isText, nameOf } from '@/lib/artifacts';
 import { imageFromDataUrl } from '@/lib/attachments';
 import { addToComposer } from '@/lib/composer-inbox';

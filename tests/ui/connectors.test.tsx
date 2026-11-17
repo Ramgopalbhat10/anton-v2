@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorsView, MailApproval, ToolApproval } from '@/lib/api';
+import type { ConnectorsView } from '@/lib/api/connectors';
+import type { MailApproval, ToolApproval } from '@/lib/api/notify';
 import { renderWithQueries } from './render';
 
 const { api } = vi.hoisted(() => ({

@@ -1,6 +1,6 @@
 import { CalendarDays, CircleDot, Cpu, FolderGit2, GitPullRequest, type IconComponent, Server, X } from '@/lib/icons';
 import { Icon, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger } from '@/components/kit/signal';
-import type { Session } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 import { FACET_KEYS, FACETS, type FacetKey, optionLabel, type TaskView } from '@/lib/task-view';
 
 type Filters = TaskView['filters'];

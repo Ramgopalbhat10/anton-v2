@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ModelChoice, ModelInfo, Subscription } from '@/lib/api';
+import type { ModelChoice, ModelInfo, Subscription } from '@/lib/api/plans';
 import { renderWithQueries } from './render';
 
 const planModel = (id: string, name: string, tokens = 0) => ({

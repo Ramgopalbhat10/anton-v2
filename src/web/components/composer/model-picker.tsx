@@ -4,7 +4,8 @@ import { Popover as PopoverPrimitive } from 'radix-ui';
 import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Count, StatusDot } from '@/components/kit/instrument';
 import { EmptyLine, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/kit/signal';
-import { api, type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api';
+import { api } from '@/lib/api';
+import { type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api/plans';
 import { RouteBadge, RouteControls } from '@/components/composer/route-menu';
 import { parseRouted, routable, routedId, routeForModel } from '../../../core/model-route';
 import {

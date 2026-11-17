@@ -1,6 +1,7 @@
 import { useRouter } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { api, type PushView } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { PushView } from '@/lib/api/notify';
 
 /** The service worker (public/sw.js) shows what the server pushes, so notifications arrive with no Anton tab open. */
 

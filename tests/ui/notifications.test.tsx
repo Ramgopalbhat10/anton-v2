@@ -3,7 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppNotification, NotificationsView } from '@/lib/api';
+import type { AppNotification, NotificationsView } from '@/lib/api/notify';
 import { session } from './render';
 
 const now = new Date();

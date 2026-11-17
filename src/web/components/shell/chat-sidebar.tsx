@@ -40,7 +40,8 @@ import { TaskCues } from '@/components/shell/task-cues';
 import { TaskPeek } from '@/components/shell/task-peek';
 import { FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { isLive, TaskStatusIcon } from '@/components/marks/task-status';
-import { api, SAFETY_NET_MS, type Session } from '@/lib/api';
+import { api, SAFETY_NET_MS } from '@/lib/api';
+import type { Session } from '@/lib/api/sessions';
 import { age, dollars } from '@/lib/format';
 import {
 	activeAt,

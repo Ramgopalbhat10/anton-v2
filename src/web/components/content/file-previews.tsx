@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { CodeBlock } from '@/components/content/code-block';
 import { HtmlFrame } from '@/components/content/html-frame';
 import { EmptyLine, Spinner } from '@/components/kit/signal';
-import { outputUrl } from '@/lib/api';
+import { outputUrl } from '@/lib/api/outputs';
 import { MAX_ROWS, parseCsv } from '@/lib/csv';
 import { type Kind, nameOf, type Place, taskPlace } from '@/lib/library';
 

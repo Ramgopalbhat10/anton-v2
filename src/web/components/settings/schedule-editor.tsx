@@ -17,7 +17,7 @@ import {
 	zoneOffset,
 } from '../../../core/schedule';
 import { EmptyLine, Icon } from '@/components/kit/signal';
-import type { Automation } from '@/lib/api';
+import type { Automation } from '@/lib/api/projects';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';

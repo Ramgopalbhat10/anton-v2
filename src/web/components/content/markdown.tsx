@@ -3,7 +3,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/content/code-block';
 import { MermaidDiagram } from '@/components/content/mermaid-diagram';
-import { outputUrl } from '@/lib/api';
+import { outputUrl } from '@/lib/api/outputs';
 import { documentPlugins } from '@/lib/document-markdown';
 import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
 import type { ViewerItem } from '@/lib/viewer';

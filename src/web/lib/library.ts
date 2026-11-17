@@ -1,5 +1,7 @@
 import type { QueryKey } from '@tanstack/react-query';
-import { api, type Output, outputUrl, spaceFileUrl } from '@/lib/api';
+import { api } from '@/lib/api';
+import { type Output, outputUrl } from '@/lib/api/outputs';
+import { spaceFileUrl } from '@/lib/api/spaces';
 
 export type Kind = 'page' | 'image' | 'pdf' | 'table' | 'text' | 'other';
 

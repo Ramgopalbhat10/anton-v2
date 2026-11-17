@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import type { Reasoning, RunOn, Session } from '@/lib/api';
+import type { Reasoning } from '@/lib/api/plans';
+import type { RunOn, Session } from '@/lib/api/sessions';
 
 /** A task being made: listed and opened at once by an id the page chose; its page shows a skeleton until the server has made it, or says why it could not. */
 export type Starting = {

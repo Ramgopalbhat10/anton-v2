@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SealedSecret } from '@/lib/api';
+import type { SealedSecret } from '@/lib/api/settings';
 import { renderWithQueries } from './render';
 
 const api = vi.hoisted(() => ({ secrets: vi.fn(), sealedSecrets: vi.fn(), saveSealedSecret: vi.fn(), deleteSealedSecret: vi.fn(), saveSharedEnv: vi.fn() }));

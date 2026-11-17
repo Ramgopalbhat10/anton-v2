@@ -2,7 +2,7 @@ import type { IconComponent } from '@/lib/icons';
 import { ArrowRight, Box, Brain, Cloud, GitBranch, HardDrive, Monitor, Settings } from '@/lib/icons';
 import { Status } from '@/components/kit/instrument';
 import { Btn, Icon } from '@/components/kit/signal';
-import type { SetupSlot, SetupView } from '@/lib/api';
+import type { SetupSlot, SetupView } from '@/lib/api/settings';
 import { SERVICE_LOGOS } from '@/lib/service-logos';
 import { openSettings } from '@/lib/settings-modal';
 

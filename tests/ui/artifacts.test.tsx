@@ -3,7 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Artifact } from '@/lib/api';
+import type { Artifact } from '@/lib/api/outputs';
 
 const api = vi.hoisted(() => ({
 	artifacts: vi.fn(),

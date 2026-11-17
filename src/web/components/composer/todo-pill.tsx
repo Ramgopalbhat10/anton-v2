@@ -3,7 +3,7 @@ import { Check } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { Spinner } from '@/components/kit/signal';
-import type { Todo } from '@/lib/api';
+import type { Todo } from '@/lib/api/sessions';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 

@@ -14,7 +14,8 @@ import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner } from '@/componen
 import { MenuButton } from '@/components/kit/nav';
 import { useNow } from '@/components/thread/subagents';
 import { ThreadStateIcon } from '@/components/projects/thread-card';
-import { api, type Space } from '@/lib/api';
+import { api } from '@/lib/api';
+import type { Space } from '@/lib/api/spaces';
 import { age } from '@/lib/format';
 import { useProjects } from '@/lib/projects';
 import { stateOf, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
