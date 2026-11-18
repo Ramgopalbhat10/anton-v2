@@ -1,7 +1,6 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { site } from './core/site.ts';
 import { routeUpgrades } from './core/upgrades.ts';
 
 const { loadFlueNodeApplication } = (await import(new URL('../dist/app.mjs', import.meta.url).href)) as {
@@ -11,15 +10,19 @@ const application = await loadFlueNodeApplication();
 const port = Number(process.env.PORT ?? 3000);
 /** Every interface unless set; `127.0.0.1` keeps Anton off the local network when a tunnel on this machine is its only way in. */
 const hostname = process.env.HOST?.trim() || undefined;
+/**
+ * Longer than the proxy in front keeps an idle connection (cloudflared 90 s, Cloudflare's edge 900 s), so the proxy
+ * always closes first. Node's 5 s default closes connections the proxy still means to reuse, and a request sent on
+ * one fails or waits on a fresh connection.
+ */
+const KEEP_ALIVE_MS = 910_000;
 
-const site = new Hono();
-site.all('/api/*', (c) => application.fetch(c.req.raw));
-site.use('/*', serveStatic({ root: './dist/client' }));
-site.get('/*', serveStatic({ path: './dist/client/index.html' }));
+const app = site((request) => application.fetch(request), './dist/client');
 
-const server = serve({ fetch: site.fetch, port, hostname, serverOptions: { requestTimeout: 0 } }, () =>
+const server = serve({ fetch: app.fetch, port, hostname, serverOptions: { requestTimeout: 0 } }, () =>
 	console.log(`[anton] listening on http://${hostname ?? 'localhost'}:${port}`),
 );
+(server as Server).keepAliveTimeout = KEEP_ALIVE_MS;
 routeUpgrades(server as Server, '/vm/');
 
 async function shutdown(code: number): Promise<void> {
