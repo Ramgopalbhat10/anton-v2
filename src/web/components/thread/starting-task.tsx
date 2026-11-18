@@ -38,9 +38,10 @@ export function HistorySkeleton() {
 	);
 }
 
-function WorkspaceSkeleton() {
+/** `narrow` when no panel is pinned: the task opens on the slim column of panels to pick from, so the skeleton takes that width, not the wide one. */
+function WorkspaceSkeleton({ narrow }: { narrow: boolean }) {
 	return (
-		<WorkspacePane expanded={false}>
+		<WorkspacePane expanded={false} narrow={narrow}>
 			<div aria-hidden className="flex h-11 shrink-0 items-center gap-1.5 px-3">
 				<div className="in-pulse h-6 w-[72px] rounded-control bg-(--bg-active)" />
 				<div className="in-pulse h-6 w-[64px] rounded-control bg-(--bg-active)" />
@@ -82,11 +83,14 @@ function ComposerSkeleton({ model }: { model: string }) {
 export function StartingTask({
 	starting,
 	workspace,
+	narrow = false,
 	leading,
 	onDiscard,
 }: {
 	starting: Starting;
 	workspace: boolean;
+	/** No panel will be shown when the task opens. */
+	narrow?: boolean;
 	leading?: ReactNode;
 	onDiscard: () => void;
 }) {
@@ -153,7 +157,7 @@ export function StartingTask({
 				</div>
 				<ComposerSkeleton model={session.model} />
 			</div>
-			{open ? <WorkspaceSkeleton /> : null}
+			{open ? <WorkspaceSkeleton narrow={narrow} /> : null}
 		</div>
 	);
 }

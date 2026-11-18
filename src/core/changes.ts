@@ -4,7 +4,7 @@ import type { AgentNow } from './agent-now.ts';
 /** What changed, so open pages refetch only that. What an agent is doing this moment comes whole, as it changes too often to fetch. */
 export type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
+	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' | 'settled' }
 	| { kind: 'subscriptions' }
 	| { kind: 'setup' }
 	| { kind: 'connectors' }

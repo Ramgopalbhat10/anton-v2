@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
-import { NewThreadForm, ProjectFeed } from '@/components/projects/project-feed';
+import { ProjectFeed } from '@/components/projects/project-feed';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
@@ -131,9 +131,15 @@ export function ProjectPage() {
 		void navigate({ to: '/projects/$spaceId', params: { spaceId }, search: {}, replace: true });
 	}, [search.ask, agent.historyReady]);
 
+	// The new thread's form opens in the coordinator's conversation, so the board or view beside it stays.
+	const startThread = useCallback(() => {
+		setStarting(true);
+		changeDock({ open: true });
+	}, [changeDock]);
+
 	useEffect(() => {
 		if (search.new) {
-			setStarting(true);
+			startThread();
 			void navigate({ to: '/projects/$spaceId', params: { spaceId }, search: {}, replace: true });
 		}
 	}, [search.new]);
@@ -196,18 +202,14 @@ export function ProjectPage() {
 						))}
 					</div>
 					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
-					<Btn size="sm" variant="primary" icon={Waypoints} onClick={() => setStarting(true)}>
+					<Btn size="sm" variant="primary" icon={Waypoints} onClick={startThread}>
 						<span className="hidden sm:inline">New thread</span>
 					</Btn>
 					{!dockOpen ? <IconBtn icon={PanelRight} size="sm" label="Show the coordinator" onClick={() => changeDock({ open: true })} /> : null}
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto">
-					{starting && centerVisible ? (
-						<div className="px-4 pt-[10vh]">
-							<NewThreadForm space={data} onDone={() => setStarting(false)} />
-						</div>
-					) : saved.view === 'board' ? (
-						<ProjectBoard threads={threads} onNewThread={() => setStarting(true)} />
+					{saved.view === 'board' ? (
+						<ProjectBoard threads={threads} onNewThread={startThread} />
 					) : (
 						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
@@ -287,13 +289,7 @@ export function ProjectPage() {
 					/>
 					<IconBtn icon={PanelRight} size="sm" label="Hide the coordinator" onClick={() => changeDock({ open: false })} />
 				</div>
-				{starting && !centerVisible ? (
-					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-[10vh]">
-						<NewThreadForm space={data} onDone={() => setStarting(false)} />
-					</div>
-				) : (
-					<ProjectFeed space={data} agent={agent} threads={threads} onStartingChange={setStarting} />
-				)}
+				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} />
 				</div>
 			</aside>
 			) : null}
@@ -344,7 +340,7 @@ export function ThreadPage() {
 			<Icon icon={ChevronRight} size={12} className="shrink-0 text-(--text-4)" />
 		</>
 	);
-	if (starting) return <StartingTask starting={starting} workspace={panels.open} leading={leading} onDiscard={() => void navigate({ to: '/projects/$spaceId', params: { spaceId } })} />;
+	if (starting) return <StartingTask starting={starting} workspace={panels.open} narrow={panels.active === null} leading={leading} onDiscard={() => void navigate({ to: '/projects/$spaceId', params: { spaceId } })} />;
 	return (
 		<TaskWorkspace
 			sessionId={threadId}

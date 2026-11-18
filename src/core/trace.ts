@@ -75,7 +75,11 @@ export type Trace = {
 	dropped: number;
 	/** A reply the runtime resumed after a restart: what came before is not in it. */
 	resumed?: boolean;
+	/** A reply that failed or was stopped: its finish hook never ran, so what it would have put on the reply's message is kept here, found by the submissions it settled. */
+	settled?: SettledReply;
 };
+
+export type SettledReply = { submissions: string[]; outcome: 'failed' | 'aborted'; metadata: Record<string, unknown> };
 
 export function cacheShare(usage: TraceUsage): { total: number; read: number; write: number; fresh: number; hit: number } {
 	const total = usage.input + usage.cacheRead + usage.cacheWrite;

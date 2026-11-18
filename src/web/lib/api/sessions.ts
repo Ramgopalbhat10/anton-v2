@@ -146,6 +146,8 @@ export const sessionsApi = {
 	context: (id: string) => json<ContextView>(`/api/sessions/${id}/context`),
 	subagents: (id: string) => json<{ runs: SubagentRun[] }>(`/api/sessions/${id}/subagents`),
 	trace: (id: string, traceId: string) => json<Trace>(`/api/sessions/${id}/traces/${encodeURIComponent(traceId)}`),
+	/** What a failed or stopped reply's message would have carried: its trace and usage. */
+	settledReply: (id: string, submissionId: string) => json<{ metadata: Record<string, unknown> | null }>(`/api/sessions/${id}/settled/${encodeURIComponent(submissionId)}`),
 	/** Stops one running subagent; the agent is told what it had done and carries on. */
 	stopSubagent: async (id: string, runId: string) => void (await post(`/api/sessions/${id}/subagents/${encodeURIComponent(runId)}/stop`)),
 	scripts: (id: string) => json<{ scripts: Record<string, ScriptCall[]> }>(`/api/sessions/${id}/scripts`),

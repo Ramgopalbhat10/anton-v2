@@ -476,7 +476,7 @@ export function SessionPage() {
 	useEffect(() => {
 		if (spaceId) void navigate({ to: '/projects/$spaceId/threads/$threadId', params: { spaceId, threadId: sessionId }, search: { panel: search.panel }, replace: true });
 	}, [spaceId]);
-	if (starting) return <StartingTask starting={starting} workspace={open} onDiscard={() => void navigate({ to: '/' })} />;
+	if (starting) return <StartingTask starting={starting} workspace={open} narrow={panels.active === null} onDiscard={() => void navigate({ to: '/' })} />;
 	return (
 		<TaskWorkspace
 			sessionId={sessionId}

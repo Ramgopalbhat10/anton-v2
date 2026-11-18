@@ -343,6 +343,17 @@ describe('threads', () => {
 		expect(await screen.findByRole('complementary', { name: 'Viewing diagram.png' })).toBeTruthy();
 	});
 
+	it('opens a new thread’s form inside the coordinator’s conversation, which stays in view', async () => {
+		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts: [{ type: 'text', text: 'The billing table is in.' }] }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		const onStartingChange = vi.fn();
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} starting onStartingChange={onStartingChange} />);
+		expect(await screen.findByText('New thread in Billing')).toBeTruthy();
+		expect(screen.getByText('The billing table is in.')).toBeTruthy();
+		expect(screen.getByRole('textbox', { name: /Tell the coordinator/ })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(onStartingChange).toHaveBeenCalledWith(false);
+	});
+
 	it('folds a message the coordinator sent a thread into one line that opens to the message', async () => {
 		const message = 'New follow-up: check the latest pull from main.\n\nCompare it with the current visual reply pipeline.';
 		const parts = [

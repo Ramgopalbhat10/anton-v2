@@ -25,6 +25,7 @@ export const taskQueries = {
 	computer: (id: string) => queryOptions({ queryKey: ['computer', id], queryFn: () => api.computer(id) }),
 	browser: (id: string) => queryOptions({ queryKey: ['browser', id], queryFn: () => api.browser(id) }),
 	toolApprovals: (id: string) => queryOptions({ queryKey: ['tool-approvals', id], queryFn: () => api.toolApprovals(id) }),
+	settled: (id: string, submissionId: string) => queryOptions({ queryKey: ['settled', id, submissionId], queryFn: () => api.settledReply(id, submissionId), staleTime: Infinity }),
 	mail: (id: string) => queryOptions({ queryKey: ['mail', id], queryFn: () => api.mailApprovals(id) }),
 };
 
