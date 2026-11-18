@@ -91,11 +91,17 @@ export async function listFiles(machine: Machine): Promise<string[]> {
 	return out.split('\n').filter(Boolean);
 }
 
-export async function commitAndPush(machine: Machine, host: GitHost, input: { repo: string; branch: string; baseSha: string; message: string }): Promise<string | null> {
+/** Commits whatever is uncommitted, in the sandbox only. Returns how many commits the branch has past `baseSha`. */
+export async function commitAll(machine: Machine, input: { baseSha: string; message: string }): Promise<number> {
 	const cwd = repoDir(machine);
 	// Unsigned, as a signature the host cannot reproduce would change the commit's hash.
 	await run(machine, `git add -A && (git diff --cached --quiet || git -c commit.gpgsign=false commit -q -m ${quote(input.message)})`, { cwd });
-	const ahead = Number((await run(machine, `git rev-list --count ${input.baseSha}..HEAD`, { cwd })).trim());
+	return Number((await run(machine, `git rev-list --count ${input.baseSha}..HEAD`, { cwd })).trim());
+}
+
+export async function commitAndPush(machine: Machine, host: GitHost, input: { repo: string; branch: string; baseSha: string; message: string }): Promise<string | null> {
+	const cwd = repoDir(machine);
+	const ahead = await commitAll(machine, input);
 	if (ahead === 0) return null;
 	const head = (await run(machine, 'git rev-parse HEAD', { cwd })).trim();
 	const commits = await unpushedCommits(machine, input.baseSha, await host.branchHead(input.repo, input.branch));

@@ -1,6 +1,6 @@
 import { defineTool, useTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { openPullRequest } from '../../../services/git/pull-requests.ts';
+import { queuePullRequest } from '../../../services/replies/push-gate.ts';
 import { noteWorkspace } from '../../../services/tasks/agent-runner.ts';
 import { mergeBaseBranch } from '../../../services/git/base-merge.ts';
 
@@ -8,13 +8,15 @@ export function useOpenPullRequest(id: string) {
 	useTool(
 		defineTool({
 			name: 'open_pull_request',
-			description: 'Commit all changes on this task branch, push it, and open a pull request. Returns the pull request URL.',
+			description:
+				'Commit all changes on this task branch and queue its pull request. Anton pushes the branch and opens the pull request, or updates the open one, once, when your reply ends and its checks pass. ' +
+				'Call it once the change works; later commits go with the same push. Call it again only to change the title or description.',
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.description('Pull request title, in the imperative mood')),
 				body: v.pipe(v.string(), v.description('What changed and why, in markdown')),
 			}),
 			async run({ data }) {
-				return { output: { url: await openPullRequest(id, data) } };
+				return { output: await queuePullRequest(id, data) };
 			},
 		}),
 	);

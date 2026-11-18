@@ -76,7 +76,7 @@ function Reply({ message, live, working, last, answer, segment, showWorkspaceCha
 	const foot = !segment || segment.last;
 	const place = useMemo<ReplyPlace>(() => ({ latest: last, answer }), [last, answer]);
 	const changed = useMemo(() => (live ? [] : changedPaths(message.parts)), [live, message.parts]);
-	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts)), [live, message.parts]);
+	const pull = useMemo(() => (live ? null : openedPullRequest(message.parts, message.metadata)), [live, message.parts, message.metadata]);
 	const sessionId = useContext(SessionId);
 	// The files it made show as cards once it is whole, so a half-written link never loads.
 	const library = useQuery({ ...taskQueries.outputs(sessionId), staleTime: 30_000, enabled: !live });

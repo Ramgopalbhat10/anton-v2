@@ -36,9 +36,14 @@ export type GateState = {
 	check: CheckState;
 	compacted?: boolean;
 	sendBacks?: SendBack[];
+	/** Queued by `open_pull_request`, pushed when the reply ends (`push-gate.ts`). */
+	pullRequest?: { title: string; body: string };
+	pushTries?: number;
+	/** The user was told a push failed; cleared with the error once one goes through. */
+	pushFailed?: boolean;
 };
 
-export type GateName = 'todo' | 'stall' | 'jobs' | 'check' | 'review' | 'completion';
+export type GateName = 'todo' | 'stall' | 'jobs' | 'check' | 'review' | 'completion' | 'push';
 
 /** `changed` and `worked` are set when the reply next comes to an end. */
 export type SendBack = { gate: GateName; calls: number; said: number; changed?: boolean; worked?: boolean; points?: string; before?: string };

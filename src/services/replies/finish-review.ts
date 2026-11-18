@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withoutContext } from '../../core/briefs.ts';
 import { FILE_CHANGE_TOOLS } from '../../core/tool-profile.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { getProviders } from '../../providers/index.ts';
@@ -38,8 +39,11 @@ const KEEP_FILES = 500;
 
 // Kept with the task's checks (`gate-state.ts`), so a reply resumed after a restart is reviewed as it would have been.
 
+/** A thread's brief holds the coordinator's background after the user's words; the request is only theirs (`src/core/briefs.ts`). */
+const requestText = (text: string) => withoutContext(text).slice(0, MAX_REQUEST);
+
 export function noteRequest(id: string, text: string): void {
-	const request = text.trim().slice(0, MAX_REQUEST);
+	const request = requestText(text);
 	if (request)
 		changeGate(id, (state) => {
 			state.request = request;
@@ -49,7 +53,7 @@ export function noteRequest(id: string, text: string): void {
 export const requestFor = (id: string): string | undefined => gate(id).request;
 
 /** The one that started the reply in hand, not one that joined it. */
-export const isRequest = (id: string, text: string): boolean => gate(id).request === text.trim().slice(0, MAX_REQUEST);
+export const isRequest = (id: string, text: string): boolean => gate(id).request === requestText(text);
 
 export function startFinishReview(id: string): void {
 	changeGate(id, ({ review }) => {

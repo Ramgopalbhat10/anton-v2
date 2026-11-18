@@ -74,7 +74,11 @@ export function changedPaths(parts: FlueConversationPart[]): string[] {
 	return paths;
 }
 
-export function openedPullRequest(parts: FlueConversationPart[]): { url: string; title: string } | null {
+/** Anton pushes a reply's pull request after its last word and records it in the reply's metadata; older replies have it in their tool call. */
+export function openedPullRequest(parts: FlueConversationPart[], metadata?: unknown): { url: string; title: string } | null {
+	const recorded = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).pullRequest : null;
+	const url = field(recorded, 'url');
+	if (url) return { url, title: field(recorded, 'title') };
 	for (const part of [...parts].reverse()) {
 		if (part.type !== 'dynamic-tool' || part.toolName !== 'open_pull_request' || part.state !== 'output-available') continue;
 		const record = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : {};
