@@ -49,6 +49,7 @@ import { recordLatestInput } from '../../services/tasks/latest-input.ts';
 import { noteDelivery } from '../../services/tasks/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../../services/replies/reply-check.ts';
 import { finishReview, isRequest, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
+import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
 import { takePinned } from '../../services/replies/compaction-pin.ts';
 import { type GateName, loadGate } from '../../services/replies/gate-state.ts';
 import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../../services/replies/send-backs.ts';
@@ -290,6 +291,12 @@ export function Coder({ id }: AgentProps) {
 				await sendBack('completion', undone);
 				return;
 			}
+			// Last, so the one push carries every fix the checks above asked for.
+			const unpushed = signal.aborted ? null : await pushGate(id);
+			if (unpushed) {
+				await sendBack('push', unpushed);
+				return;
+			}
 			// The checkpoint lists and diffs the whole sandbox, so the reply ends without waiting for it.
 			queueCheckpoint(id);
 			// What the reply leaves is judged by the decision model, which takes seconds, so the reply settles first.
@@ -326,6 +333,7 @@ export function Coder({ id }: AgentProps) {
 			startCompletionGate(id);
 			startJobsGate(id);
 			startCheckGate(id);
+			startPushGate(id);
 			startSendBacks(id);
 			startReplyClock(id);
 			if (!workspace && !hasWorkspace(id)) void prewarmFor(id, opening.kind === 'user' ? opening.body : null);
@@ -340,8 +348,11 @@ export function Coder({ id }: AgentProps) {
 			const reply = finishReply(id);
 			const trace = finishTrace(id);
 			if (trace) void saveTrace(trace).catch((error: unknown) => logProblem('warn', 'Trace not kept', error, id));
+			const pullRequest = openedThisReply(id);
 			return {
 				...(trace ? { traceId: trace.id } : {}),
+				// The reply's pull request card: it is pushed after the agent's last word, so no tool call carries its link.
+				...(pullRequest ? { pullRequest } : {}),
 				usage: reply ? replyTotal(reply) : toUsage(response.usage),
 				...(reply ? { usageParts: { main: reply.main, subagents: reply.subagents }, ...replyFacts(reply) } : { plan: planOf(model) }),
 				// Read by scripts/tool-mix.ts.

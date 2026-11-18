@@ -11,7 +11,8 @@ import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../s
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
-import { withAttachments } from '../core/attachments.ts';
+import { splitAttachments, withAttachments } from '../core/attachments.ts';
+import { quotedFrom, threadBrief } from '../core/briefs.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -26,8 +27,9 @@ const PROMPT = [
 	'New work becomes a thread with start_thread, one per independent task. Split a message into several threads only when its asks have separate results that need nothing from each other; when the answer combines its parts (how another project does something and how this one could, two codebases compared, research and the plan it informs), it is one thread with the whole question. Start several independent threads in the same step, one start_thread call each.',
 	'A follow-up about work a thread already has goes to that thread with message_thread, never a new thread. A follow-up that bears on several threads goes to the one best placed to answer, with what the others found (from read_thread) in the message, not to each of them.',
 	'A quick question about the project (what is running, what a thread is waiting on, which pull requests are open) you answer yourself from the project state, starting no thread.',
-	'A brief is the whole ask for the thread, which sees nothing of this conversation: say what to do and why, what "done" means, which repository, and any decision already made. Keep it short and specific; do not add work the user did not ask for.',
-	"Start a brief from the user's own words, and add only what the thread cannot see: the repository, the files, a decision made here. Never grow a short ask into a checklist of checks the user did not name (more viewports, devices, flows, regression sweeps, reports): the thread checks its own work as the change needs, and each check you list is one it must finish before it may end. A one-line bug report gets a brief of a few lines.",
+	"A thread sees nothing of this conversation. Its request is the user's own words, copied exactly from their message (only the part for that thread when the message holds several tasks); Anton checks the copy. When the user approved work you proposed, copy your proposal's words and set approved.",
+	"A thread opens one pull request at a time. When the user asks for several pull requests, or for a change too big for one, start a thread for each: each quotes the same ask as its request and names its share in part. When a part builds on another's change, start it once that one's pull request is merged, so its branch starts from it.",
+	"Put only what the thread cannot see in context: the repository's files or area, a decision made here, what an earlier thread found. Never add checks the user did not name (more viewports, devices, flows, error paths, regression sweeps, reports): the thread checks its own work as the change needs. A one-line bug report gets no context or a line of it.",
 	"Thread titles are a few plain words in the user's own vocabulary.",
 	'Thread reports arrive as <thread-reports> messages: one line per thread whose state changed. Answer a report in one short sentence, or with a question when a decision belongs to the user. Do not repeat what the thread rows already show. A line with started="routine" is a thread one of the project\'s routines started on its own, not you: note it in a few words; it reports again when its state changes. A line with started="you" is a thread the user started themselves, its text the brief they gave it: the feed already shows it as a live row, so end your turn with no text at all (no acknowledgement, no restating what it does) unless it bears on other work (it duplicates or overlaps another thread, say), and then say that in one sentence; it reports again when its state changes.',
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
@@ -64,13 +66,24 @@ function useCoordinatorTools(spaceId: string) {
 				'Start a thread: a coding agent on its own branch and sandbox that does one task and reports back. It starts at once, or waits as queued when the project already runs as many threads as it allows.',
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(80), v.description('A few plain words')),
-				brief: v.pipe(v.string(), v.minLength(1), v.description("The complete ask in the user's own words: what to do, why, and what done means, with no checks they did not ask for")),
+				request: v.pipe(v.string(), v.minLength(1), v.description("The user's words for this task, copied exactly from their message; join parts you leave out with …")),
+				context: v.optional(v.pipe(v.string(), v.description('Only what the thread cannot see: files, area, decisions made here, earlier findings. No checks or work the user did not ask for'))),
+				approved: v.optional(v.pipe(v.boolean(), v.description('true when the request copies your own proposal that the user approved, not their message'))),
+				part: v.optional(
+					v.pipe(v.string(), v.description('When one ask is split over several threads (several pull requests), the part this thread does, in a sentence: its share of the request, no checks')),
+				),
 				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories, or "none" for a thread with no repository; defaults to the first, or none when the project has no repositories'))),
 				files,
 			}),
 			async run({ data }) {
+				const said = splitAttachments(answering).text;
+				if (said.trim() && !data.approved && !quotedFrom(data.request, said))
+					throw new Error(
+						"request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",
+					);
+				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
-				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, data.brief, data.files, answering), repo: data.repo }, { wait: false });
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, data.files, answering), repo: data.repo }, { wait: false });
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},

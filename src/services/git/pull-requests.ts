@@ -5,7 +5,7 @@ import { getProviders } from '../../providers/index.ts';
 import { branchAfterMerge, conflictedFiles, settleFetchedBase, settleMergedBase } from './base-merge.ts';
 import { saveCheckpoint } from './checkpoints.ts';
 import { reviewAfterPush } from './code-review.ts';
-import { commitAndPush } from './git.ts';
+import { commitAll, commitAndPush } from './git.ts';
 import { savePullRequestStatus } from './pr-status.ts';
 import { watchPullRequest } from './pr-watch.ts';
 import { machineFor } from '../sandbox/workspace.ts';
@@ -14,6 +14,23 @@ import type { MergeMethod, PullRequestDetail, PullRequestState } from '../../cor
 import { announce } from '../../core/changes.ts';
 
 const numberOf = (url: string) => Number(/\/pull\/(\d+)/.exec(url)?.[1] ?? 0);
+
+/**
+ * What `open_pull_request` does while a reply runs: commits in the sandbox and checks a push could go, without pushing.
+ * The push happens once, when the reply ends (`src/services/replies/push-gate.ts`): each push starts the host's checks and
+ * Anton's Reviewer over again, and an agent that pushed early pushed again after every later fix.
+ */
+export async function preparePullRequest(id: string, input: { title: string }): Promise<void> {
+	const session = await getSessionRecord(id);
+	if (session && !session.projectId) throw new InvalidInputError('A chat has no repository to open a pull request on.');
+	if (!session) throw new NotFoundError('Session not found');
+	if (session.review) throw new InvalidInputError("This task reviews someone else's pull request; Anton does not push to it. Describe fixes in the review instead.");
+	const machine = await machineFor(id);
+	const conflicted = await conflictedFiles(machine);
+	if (conflicted.length) throw new InvalidInputError(`Resolve the merge conflicts first, then git add the files: ${conflicted.join(', ')}`);
+	const ahead = await commitAll(machine, { baseSha: session.baseSha, message: input.title });
+	if (ahead === 0) throw new InvalidInputError('There are no changes to open a pull request with.');
+}
 
 /** Pushes through the host's API with Anton's own credentials, so they never enter the agent's machine. */
 export async function openPullRequest(id: string, input: { title: string; body: string }): Promise<string> {

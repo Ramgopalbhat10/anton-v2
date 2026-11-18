@@ -151,12 +151,14 @@ const SCRATCH_HINT =
 
 const READ_HINT =
 	'Read progressively: search (rg, grep, glob) before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, and never put several whole files into one command, since a long result is cut and everything you read is sent again with every later step. ' +
-	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
+	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc. " +
+	'Every step sends the whole conversation again, so a step of one small search costs as much as a step of five: make the reads, searches and commands you already know you need as calls in the same step, not one per step.';
 
 /** In a benchmark the agent read with `sed -n` and `rg` in bash 487 times against 31 calls of the file tools. */
 const TASK_READ_HINT =
 	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a long result is cut and everything you read is sent again with every later step. ' +
-	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc.";
+	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc. " +
+	'Every step sends the whole conversation again, so a step of one small search costs as much as a step of five: make the reads, searches and commands you already know you need as calls in the same step, not one per step.';
 
 const taskStartHint = (change: string) =>
 	'read, grep and glob need no sandbox: until your first command or file change they show the repository as this task started, and after it the sandbox. ' +
@@ -231,8 +233,8 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	edit,
 	FINISH_HINT,
 	BUDGET_HINT,
-	'You do not have git push credentials: open_pull_request commits and pushes for you.',
-	'When the request is a change to the repository, open its pull request yourself in the same reply as soon as the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then run the full suites while its checks run, and call open_pull_request again to push any fix. Do not wait to be asked for it.',
+	'You do not have git push credentials: open_pull_request commits, and Anton pushes the branch and opens the pull request once, when your reply ends.',
+	'When the request is a change to the repository, call open_pull_request yourself in the same reply once the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then finish the full suites and any fixes, which go with the same push. Call it once: again only to change the title or description. Do not wait to be asked for it, and do not write its link: the thread shows it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
