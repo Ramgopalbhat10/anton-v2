@@ -9,9 +9,12 @@ const OPEN = '<project-context>';
 const CLOSE = '</project-context>';
 const CONTEXT = new RegExp(`\\n*${OPEN}[\\s\\S]*?${CLOSE}\\n*`, 'g');
 
-export function threadBrief(request: string, context?: string): string {
+/** `part`: this thread's share when one ask is split over several threads; it narrows the request, so the checks read it. */
+export function threadBrief(request: string, context?: string, part?: string): string {
+	const share = part?.trim();
 	const extra = context?.trim();
-	return extra ? `${request.trim()}\n\n${OPEN}\nBackground from the project, for finding your way; it adds no work to the request above.\n${extra}\n${CLOSE}` : request.trim();
+	const asked = share ? `${request.trim()}\n\nThis thread does only this part of it, in its own pull request; other threads do the rest: ${share}` : request.trim();
+	return extra ? `${asked}\n\n${OPEN}\nBackground from the project, for finding your way; it adds no work to the request above.\n${extra}\n${CLOSE}` : asked;
 }
 
 /** The request without the coordinator's background. */

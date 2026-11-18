@@ -32,8 +32,16 @@ test("the coordinator's background goes after the request, and the reply checks 
 	assert.equal(withoutContext(attached), 'Fix the export button on Safari.\n\n<attachment name="a.png" path="a.png" kind="PNG image" size="1" library="project">\nAn image\n</attachment>');
 });
 
+test('a thread that does one part of a split ask is held to its part, which the checks read', () => {
+	const ask = 'Move the settings pages to the new design system, one pull request per page.';
+	assert.ok(quotedFrom(ask, ask));
+	const brief = threadBrief(ask, 'The pages are under src/web/components/settings/.', 'the connectors page');
+	assert.equal(withoutContext(brief), `${ask}\n\nThis thread does only this part of it, in its own pull request; other threads do the rest: the connectors page`);
+	assert.equal(threadBrief(ask, undefined, ' '), ask);
+});
+
 test("start_thread checks the request against the user's message", () => {
 	const source = readFileSync(new URL('../src/agents/coordinator.ts', import.meta.url), 'utf8');
 	assert.match(source, /if \(said\.trim\(\) && !data\.approved && !quotedFrom\(data\.request, said\)\)/);
-	assert.match(source, /threadBrief\(data\.request, data\.context\)/);
+	assert.match(source, /threadBrief\(data\.request, data\.context, data\.part\)/);
 });
