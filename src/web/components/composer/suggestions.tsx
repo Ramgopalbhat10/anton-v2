@@ -82,9 +82,12 @@ export function useSuggestions({
 	const [caret, setCaret] = useState(0);
 	const tracked = useRef({ caret: 0, text });
 	const selectedCaret = useRef<number | null>(null);
+	// The caller passes a fresh `box` each render; the caret is placed only after a pick changes the text.
+	const boxRef = useRef(box);
+	boxRef.current = box;
 	useLayoutEffect(() => {
 		if (selectedCaret.current === null) return;
-		const element = box();
+		const element = boxRef.current();
 		element?.focus();
 		element?.setSelectionRange(selectedCaret.current, selectedCaret.current);
 		selectedCaret.current = null;
