@@ -4,7 +4,7 @@ import type { AgentNow } from '@/lib/api/sessions';
 
 type Change =
 	| { kind: 'sessions' }
-	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' }
+	| { kind: 'task'; id: string; what: 'state' | 'usage' | 'files' | 'browser' | 'computer' | 'subagents' | 'todos' | 'scripts' | 'joins' | 'mail' | 'approvals' | 'pr-metadata' | 'settled' }
 	| { kind: 'subscriptions' }
 	| { kind: 'setup' }
 	| { kind: 'connectors' }
@@ -52,6 +52,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'mail') return [['mail', change.id]];
 	if (change.kind === 'task' && change.what === 'approvals') return [['tool-approvals', change.id]];
 	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
+	if (change.kind === 'task' && change.what === 'settled') return [['settled', change.id]];
 	// A model turn ended: the context meter, and what the task and the day have spent, moved. Its tool calls send their own `files`.
 	if (change.kind === 'task' && change.what === 'usage') return [['context', change.id], ['session', change.id], ['sessions'], ['budget'], ['usage'], ['space-usage']];
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];

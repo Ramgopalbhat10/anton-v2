@@ -59,6 +59,8 @@ type AssistantMessageProps = {
 	showWorkspaceChanges: boolean;
 	/** A conversation born on this page: each reply fades in as it arrives, history does not replay it. */
 	enter?: boolean;
+	/** Its reply failed or was stopped, so its finish hook never put its trace and usage on it: they are fetched. */
+	unfinished?: boolean;
 };
 
 /** One that fails to draw says so in its place, and the rest of the conversation stays. */
@@ -70,7 +72,7 @@ const AssistantMessage = memo(function AssistantMessage(props: AssistantMessageP
 	);
 });
 
-function Reply({ message, live, working, last, answer, segment, showWorkspaceChanges, enter }: AssistantMessageProps) {
+function Reply({ message, live, working, last, answer, segment, showWorkspaceChanges, enter, unfinished }: AssistantMessageProps) {
 	const blocks = useMemo(() => toBlocks(segment?.parts ?? message.parts), [segment?.parts, message.parts]);
 	const head = !segment || segment.first;
 	const foot = !segment || segment.last;
@@ -96,13 +98,18 @@ function Reply({ message, live, working, last, answer, segment, showWorkspaceCha
 		}),
 		[made, sessionId],
 	);
-	const usage = usageOf(message);
-	const traceId = typeof message.metadata?.traceId === 'string' ? message.metadata.traceId : null;
+	const settled = useQuery({
+		...taskQueries.settled(sessionId, message.submissionId ?? ''),
+		enabled: Boolean(unfinished && foot && !live && message.submissionId && !message.metadata?.traceId),
+	}).data?.metadata;
+	const metadata = useMemo(() => (settled ? { ...settled, ...message.metadata } : message.metadata), [settled, message.metadata]);
+	const usage = usageOf({ ...message, metadata });
+	const traceId = typeof metadata?.traceId === 'string' ? metadata.traceId : null;
 	const [tracing, setTracing] = useState(false);
 	const openTrace = useCallback(() => setTracing(true), []);
 	const compactions = foot ? compactionsOf(message) : [];
 	// This is the whole response's wall time, including model thinking, not tool execution time.
-	const duration = typeof message.metadata?.durationMs === 'number' ? message.metadata.durationMs : undefined;
+	const duration = typeof metadata?.durationMs === 'number' ? metadata.durationMs : undefined;
 	const firstTrace = blocks.findIndex((block) => block.kind === 'steps');
 	const whole = useMemo(() => (segment ? toBlocks(message.parts) : blocks), [segment, message.parts, blocks]);
 	const copyText = whole.flatMap((block) => (block.kind === 'text' ? [block.text] : block.kind === 'plan' ? [field(block.part.input, 'plan')] : copiedText(block))).join('\n\n');
@@ -258,6 +265,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const settlements = agent.settlements;
 	const joins = useQuery(taskQueries.joins(sessionId)).data?.joins ?? NO_JOINS;
 	const answeredBy = useMemo(() => new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId])), [settlements]);
+	const unfinished = useMemo(() => new Set(settlements.flatMap((settlement) => (settlement.outcome === 'completed' ? [] : [settlement.submissionId]))), [settlements]);
 	const rows = useMemo(() => placeJoined(messages, joins, answeredBy, workingReply), [messages, joins, answeredBy, workingReply]);
 	const notes = useMemo(() => {
 		const live = liveReply ? messages.indexOf(liveReply) : -1;
@@ -461,6 +469,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 									last={row.message === lastAssistant && (!row.segment || row.segment.last)}
 									showWorkspaceChanges={Boolean(repo && row.message === lastAssistant && (!row.segment || row.segment.last))}
 									answer={answers.get(rowKey(row)) ?? null}
+									unfinished={Boolean(row.message.submissionId && unfinished.has(row.message.submissionId))}
 								/>
 							),
 						)}

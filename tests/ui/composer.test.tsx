@@ -217,6 +217,25 @@ describe('Composer', () => {
 		expect(screen.queryByRole('listbox')).toBeNull();
 	});
 
+	it('moves through the suggestions with the arrow keys, and Enter takes the one chosen', async () => {
+		const { box } = setup();
+		await userEvent.type(box, 'Look at @src/');
+		await screen.findAllByRole('option');
+		const chosen = () => screen.getAllByRole('option').findIndex((option) => option.getAttribute('aria-selected') === 'true');
+		const names = screen.getAllByRole('option').map((option) => option.textContent ?? '');
+		expect(names).toHaveLength(2);
+		expect(chosen()).toBe(0);
+		await userEvent.keyboard('{ArrowDown}');
+		expect(chosen()).toBe(1);
+		await userEvent.keyboard('{ArrowDown}');
+		expect(chosen()).toBe(0);
+		await userEvent.keyboard('{ArrowUp}');
+		expect(chosen()).toBe(1);
+		await userEvent.keyboard('{Enter}');
+		const picked = names[1].includes('server.ts') ? 'server.ts' : 'app.ts';
+		expect(box.textContent).toBe(`Look at @${picked} `);
+	});
+
 	it('fills in a saved command typed with / at the start', async () => {
 		const { box, onSend } = setup();
 		await userEvent.type(box, '/rev');

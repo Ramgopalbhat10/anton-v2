@@ -693,11 +693,14 @@ export function ProjectFeed({
 	space,
 	agent,
 	threads,
+	starting = false,
 	onStartingChange: setStarting,
 }: {
 	space: Space;
 	agent: UseFlueAgentResult;
 	threads: Session[];
+	/** The new thread's form shows at the end of the conversation, in view. */
+	starting?: boolean;
 	onStartingChange: (starting: boolean) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
@@ -725,6 +728,9 @@ export function ProjectFeed({
 		},
 		[onPending, follow],
 	);
+	useEffect(() => {
+		if (starting) follow();
+	}, [starting, follow]);
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-2">
@@ -760,6 +766,7 @@ export function ProjectFeed({
 							{agent.error?.message ? `The coordinator failed: ${agent.error.message}` : 'The coordinator failed. Send the message again.'}
 						</ActionRow>
 					) : null}
+					{starting ? <NewThreadForm space={space} onDone={() => setStarting(false)} /> : null}
 				</div>
 				<JumpToLatest show={!following} live={busy} onJump={follow} />
 			</div>

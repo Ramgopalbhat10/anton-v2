@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
 	fallbackModel: vi.fn(async (): Promise<{ fallback: { model: string; name: string } | null }> => ({ fallback: null })),
 	switchToFallbackModel: vi.fn(async () => ({})),
 	files: vi.fn(async () => ({ source: 'live', at: null, paths: ['src/app.ts'], changes: [] })),
+	settledReply: vi.fn(async (): Promise<{ metadata: Record<string, unknown> | null }> => ({ metadata: null })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 // The thread is shown without a router here; a page's link to Artifacts is a plain link to where it goes.
@@ -569,6 +570,26 @@ describe('response details', () => {
 		expect(within(peek).getByText('Run on your plan: no charge per token.')).toBeTruthy();
 		// A reply from before the breakdown keeps its plain count and spend.
 		expect(screen.getByText('30 tokens · $0.010')).toBeTruthy();
+	});
+
+	it('gives a reply that failed partway its trace and count, kept by the server as its finish never ran', async () => {
+		api.settledReply.mockResolvedValue({ metadata: { traceId: 'tr-1', usage: { inputTokens: 900, outputTokens: 100, cost: 0.02 }, billing: 'api', durationMs: 4000 } });
+		const failed = { id: 'f1', role: 'system', purpose: 'advisory', display: 'visible', parts: [{ type: 'text', text: 'Usage limit reached.' }], settlement: { outcome: 'failed' } };
+		show(
+			agent(
+				[
+					{ ...user('u1', 'Go'), submissionId: 'sub-1' },
+					{ ...assistant('a1', [{ type: 'text', text: 'Halfway there.' }]), submissionId: 'sub-1' },
+					{ ...assistant('a0', [{ type: 'text', text: 'An older reply.' }]), submissionId: 'sub-0' },
+					failed,
+				],
+				{ settlements: [{ submissionId: 'sub-0', outcome: 'completed' }, { submissionId: 'sub-1', outcome: 'failed' }] },
+			),
+		);
+		expect(await screen.findByText('1K tokens · $0.020')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /trace/i })).toBeTruthy();
+		expect(api.settledReply).toHaveBeenCalledTimes(1);
+		expect(api.settledReply).toHaveBeenCalledWith('s1', 'sub-1');
 	});
 
 	it('breaks down a per-token reply with what it was charged, leaving out a side that made no calls', async () => {

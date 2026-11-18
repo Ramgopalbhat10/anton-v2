@@ -35,3 +35,15 @@ export async function getTrace(sessionId: string, id: string): Promise<Trace | n
 	const row = result.rows[0];
 	return row ? (JSON.parse(String(row.trace_json)) as Trace) : null;
 }
+
+/** The trace of a reply that failed or was stopped, by any submission it settled (`src/services/replies/settled-reply.ts`). */
+export async function getSettledTrace(sessionId: string, submissionId: string): Promise<Trace | null> {
+	for (const trace of [...recent.values()].reverse()) if (trace.sessionId === sessionId && trace.settled?.submissions.includes(submissionId)) return trace;
+	const db = await appDb();
+	const result = await db.execute({
+		sql: "SELECT trace_json FROM response_traces WHERE session_id = ? AND json_valid(trace_json) AND EXISTS (SELECT 1 FROM json_each(trace_json, '$.settled.submissions') WHERE value = ?) ORDER BY created_at DESC LIMIT 1",
+		args: [sessionId, submissionId],
+	});
+	const row = result.rows[0];
+	return row ? (JSON.parse(String(row.trace_json)) as Trace) : null;
+}

@@ -80,6 +80,7 @@ export function useSuggestions({
 	keepCommands?: boolean;
 }) {
 	const [caret, setCaret] = useState(0);
+	const tracked = useRef({ caret: 0, text });
 	const selectedCaret = useRef<number | null>(null);
 	useLayoutEffect(() => {
 		if (selectedCaret.current === null) return;
@@ -127,7 +128,11 @@ export function useSuggestions({
 
 	/** Keep in step with the caret: call from the box's onChange and onSelect. */
 	const track = (element: { selectionStart: number } | number) => {
-		setCaret(typeof element === 'number' ? element : element.selectionStart);
+		const next = typeof element === 'number' ? element : element.selectionStart;
+		// The box tracks on every key up, arrows included: the highlight goes back to the top only when the caret or text moved.
+		if (next === tracked.current.caret && text === tracked.current.text) return;
+		tracked.current = { caret: next, text };
+		setCaret(next);
 		setActive(0);
 	};
 

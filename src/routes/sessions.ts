@@ -13,7 +13,7 @@ import { previewsView } from '../services/browser/previews.ts';
 import { computerScreenshot, computerView, connectBrowser, connectComputer, setComputerControl, startComputer, stopComputer } from '../services/browser/computer.ts';
 import { browserScreenshot, browserView, clearHighlight, closeBrowser, inspectAt, navigate, openBrowser, watchBrowser } from '../services/browser/live-browser.ts';
 import { restoreCheckpoint, revertFile } from '../services/git/restore.ts';
-import { getTrace } from '../db/traces.ts';
+import { getSettledTrace, getTrace } from '../db/traces.ts';
 import { stopSubagent, subagentRuns } from '../services/tasks/subagent-runs.ts';
 import { scriptCalls } from '../services/tasks/script-runs.ts';
 import { todosFor } from '../services/replies/todos.ts';
@@ -161,6 +161,12 @@ app.post('/api/sessions/:id/computer/control', async (c) => {
 	return c.json(await setComputerControl(c.req.param('id'), driver));
 });
 app.post('/api/sessions/:id/computer/screenshot', async (c) => c.json(await computerScreenshot(c.req.param('id'))));
+// What a failed or stopped reply's finish hook would have put on its message.
+app.get('/api/sessions/:id/settled/:submission', async (c) => {
+	const { id } = await getSession(c.req.param('id'));
+	const trace = await getSettledTrace(id, c.req.param('submission'));
+	return c.json({ metadata: trace?.settled?.metadata ?? null });
+});
 app.get('/api/sessions/:id/traces/:trace', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	const trace = await getTrace(id, c.req.param('trace'));
