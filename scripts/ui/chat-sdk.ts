@@ -113,8 +113,8 @@ export function createFlueClient({ url }: { url: string }) {
 		});
 	}
 
-	function send(body: string, reply?: ReplyOptions, submissionId = `sent-${++sent}`): { submissionId: string; done: Promise<void> } {
-		publish({ ...conversation, messages: [...conversation.messages, { id: `user-${submissionId}`, role: 'user', purpose: 'user', display: 'visible', submissionId, parts: [text(body)] }] });
+	function send(body: string, reply?: ReplyOptions, submissionId = `sent-${++sent}`, pictures: object[] = []): { submissionId: string; done: Promise<void> } {
+		publish({ ...conversation, messages: [...conversation.messages, { id: `user-${submissionId}`, role: 'user', purpose: 'user', display: 'visible', submissionId, parts: [text(body), ...pictures] }] });
 		return { submissionId, done: stream(submissionId, reply) };
 	}
 
@@ -137,10 +137,19 @@ export function createFlueClient({ url }: { url: string }) {
 			refresh: () => undefined,
 			close: () => listeners.clear(),
 		}),
-		send: async ({ message }: { message: { body?: string } }) => {
+		send: async ({ message }: { message: { body?: string; attachments?: Array<{ data: string; mimeType: string; filename?: string }> } }) => {
 			// The reply starts a beat later, as the runtime's would.
 			const submissionId = `sent-${++sent}`;
-			setTimeout(() => void send(message.body ?? '', undefined, submissionId), 150);
+			// Pictures come back as the runtime stores them: at a URL of their own, which takes a moment to load.
+			const pictures = await Promise.all(
+				(message.attachments ?? []).map(async (image, index) => {
+					const name = `${submissionId}-${index}-${image.filename ?? 'image.png'}`;
+					const url = `/api/fixture/attachments/${encodeURIComponent(name)}`;
+					await fetch(url, { method: 'POST', body: Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0)), headers: { 'content-type': image.mimeType } });
+					return { type: 'file', mediaType: image.mimeType, url, filename: image.filename };
+				}),
+			);
+			setTimeout(() => void send(message.body ?? '', undefined, submissionId, pictures), 150);
 			return { submissionId };
 		},
 	};
