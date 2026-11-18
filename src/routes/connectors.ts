@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { config } from '../config.ts';
 import { InvalidInputError, NotFoundError } from '../core/errors.ts';
 import { beginConnect, connectorsView, disconnectAccount, finishConnect, setAccountClient, setMailboxOptions } from '../services/connectors/connectors.ts';
-import { addComposioToolkit, beginComposioConnect, composioToolkit, composioTools, composioView, disconnectComposioAccount, refreshComposioAccount, removeComposioAccount, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from '../services/connectors/composio.ts';
+import { addComposioToolkit, beginComposioConnect, composioAuthSetup, composioToolkit, composioTools, composioView, disconnectComposioAccount, refreshComposioAccount, removeComposioAccount, saveComposioCredentials, searchComposioToolkits, setComposioAccountEnabled, setComposioKey } from '../services/connectors/composio.ts';
 import { addMcpServer, mcpServersView, mcpServerTools, removeMcpServer, toggleMcpServer, updateMcpServer } from '../services/connectors/mcp-servers.ts';
 import { beginMcpSignIn, finishMcpSignIn, signOutOfMcpServer } from '../services/connectors/mcp-sign-in.ts';
 import { gitHubDelivery, signedByGitHub } from '../services/git/pr-watch.ts';
@@ -131,6 +131,18 @@ app.patch('/api/composio/accounts/:toolkit', async (c) => {
 app.post('/api/composio/accounts/:toolkit/connect', async (c) => {
 	const { callbackUrl } = await body(c, v.object({ callbackUrl: v.optional(v.pipe(v.string(), v.maxLength(500))) }));
 	return c.json(await beginComposioConnect(c.req.param('toolkit'), callbackUrl));
+});
+app.get('/api/composio/accounts/:toolkit/auth', async (c) => c.json(await composioAuthSetup(c.req.param('toolkit'))));
+app.post('/api/composio/accounts/:toolkit/auth', async (c) => {
+	const { scheme, credentials, callbackUrl } = await body(
+		c,
+		v.object({
+			scheme: v.pipe(v.string(), v.regex(/^[A-Z0-9_]{1,40}$/, 'That is not a sign-in method')),
+			credentials: v.pipe(v.record(v.pipe(v.string(), v.maxLength(100)), v.pipe(v.string(), v.maxLength(8000))), v.check((record) => Object.keys(record).length <= 30, 'Too many fields')),
+			callbackUrl: v.optional(v.pipe(v.string(), v.maxLength(500))),
+		}),
+	);
+	return c.json(await saveComposioCredentials(c.req.param('toolkit'), { scheme, credentials }, callbackUrl));
 });
 app.post('/api/composio/accounts/:toolkit/refresh', async (c) => c.json(await refreshComposioAccount(c.req.param('toolkit'))));
 app.post('/api/composio/accounts/:toolkit/disconnect', async (c) => c.json(await disconnectComposioAccount(c.req.param('toolkit'))));

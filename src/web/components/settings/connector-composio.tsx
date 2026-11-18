@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useComposioMark } from '@/components/marks/brand-marks';
 import { Btn, Spinner } from '@/components/kit/signal';
 import { api } from '@/lib/api';
-import type { ComposioAccount, ComposioToolkitHit } from '@/lib/api/connectors';
+import type { ComposioAccount, ComposioAuthMethod, ComposioAuthSetup, ComposioToolkitHit } from '@/lib/api/connectors';
 import { type CatalogEntry, composioEntryFor } from '@/lib/connector-catalog';
 import { connectorItems, connectorKey } from '@/lib/connectors';
 import { cn } from '@/lib/utils';
@@ -69,6 +69,69 @@ function ComposioTools({ toolkit }: { toolkit: string }) {
 	return <ToolChips tools={tools.data.tools.map((tool) => ({ name: tool.name, about: tool.description }))} />;
 }
 
+/** For apps Composio has no shared sign-in for: the fields Composio asks for its auth config, sent on to Composio and not kept by Anton. */
+function ComposioCredentials({ account, setup, onCancel }: { account: ComposioAccount; setup: ComposioAuthSetup; onCancel?: () => void }) {
+	const [scheme, setScheme] = useState(setup.methods[0]?.scheme ?? '');
+	const [values, setValues] = useState<Record<string, string>>({});
+	const method: ComposioAuthMethod | undefined = setup.methods.find((each) => each.scheme === scheme) ?? setup.methods[0];
+	const save = useMutation({
+		mutationFn: () => api.saveComposioCredentials(account.toolkit, method?.scheme ?? '', values),
+		onSuccess: ({ url }) => window.location.assign(url),
+	});
+	if (!method) return null;
+	const missing = method.configFields.some((field) => field.required && !values[field.name]?.trim());
+	return (
+		<form
+			className="flex flex-col gap-2.5 rounded-control border border-(--line) p-3"
+			onSubmit={(event) => {
+				event.preventDefault();
+				save.mutate();
+			}}
+		>
+			{setup.methods.length > 1 ? (
+				<div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Sign-in method">
+					{setup.methods.map((each) => (
+						<Btn key={each.scheme} size="sm" variant={each.scheme === method.scheme ? 'primary' : 'ghost'} role="radio" aria-checked={each.scheme === method.scheme} onClick={() => setScheme(each.scheme)}>
+							{each.name}
+						</Btn>
+					))}
+				</div>
+			) : null}
+			{method.configFields.map((field) => (
+				<label key={field.name} className="flex flex-col gap-1">
+					<span className="text-small text-(--text-2)">
+						{field.label}
+						{field.required ? null : <span className="text-(--text-3)"> (optional)</span>}
+					</span>
+					<input
+						type={field.secret ? 'password' : 'text'}
+						autoComplete="off"
+						value={values[field.name] ?? ''}
+						onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}
+						placeholder={field.default ?? undefined}
+						aria-label={field.label}
+						className={cn(FIELD, 'font-mono')}
+					/>
+					{field.description ? <span className="text-small text-(--text-3)">{field.description}</span> : null}
+				</label>
+			))}
+			<div className="flex flex-wrap items-center gap-3">
+				{method.hintUrl || setup.guideUrl ? <ConsoleLink href={method.hintUrl ?? setup.guideUrl ?? ''}>Where to find these</ConsoleLink> : null}
+				<span className="flex-1" />
+				<ErrorLine error={save.error} />
+				{onCancel ? (
+					<Btn size="sm" variant="ghost" onClick={onCancel}>
+						Cancel
+					</Btn>
+				) : null}
+				<Btn type="submit" size="sm" variant="primary" icon={ExternalLink} disabled={save.isPending || missing}>
+					{save.isPending ? 'Opening…' : `Save and connect ${account.name}`}
+				</Btn>
+			</div>
+		</form>
+	);
+}
+
 const composioStatus = (account: ComposioAccount) =>
 	account.status === 'active' ? 'Connected' : account.status === 'pending' ? 'Waiting for you to finish signing in' : account.status === 'failed' ? 'The connection failed' : 'Not connected yet';
 
@@ -88,6 +151,9 @@ export function ComposioDetail({ account, search }: { account: ComposioAccount; 
 	const remove = useConnectorMutation(async () => ({ composio: await api.removeComposio(account.toolkit) }));
 	const active = account.status === 'active';
 	const pending = account.status === 'pending';
+	const setup = useQuery({ queryKey: ['composio-auth', account.toolkit], queryFn: () => api.composioAuth(account.toolkit), enabled: !active, retry: false, staleTime: 60_000 });
+	const needsCredentials = setup.data?.state === 'credentials';
+	const [replacing, setReplacing] = useState(false);
 	const facts: Fact[] = [
 		{ label: 'Made by', value: entry?.by ?? 'Composio' },
 		{ label: 'Category', value: entry?.category ?? account.category },
@@ -105,8 +171,8 @@ export function ComposioDetail({ account, search }: { account: ComposioAccount; 
 			facts={facts}
 			actions={
 				<>
-					{!active ? (
-						<Btn size="sm" variant="primary" icon={ExternalLink} disabled={connect.isPending} onClick={() => connect.mutate()}>
+					{!active && !needsCredentials ? (
+						<Btn size="sm" variant="primary" icon={ExternalLink} disabled={connect.isPending || setup.isPending} onClick={() => connect.mutate()}>
 							{connect.isPending ? 'Opening…' : pending ? 'Open sign-in again' : `Connect ${account.name}`}
 						</Btn>
 					) : null}
@@ -132,6 +198,29 @@ export function ComposioDetail({ account, search }: { account: ComposioAccount; 
 				</Note>
 			) : null}
 			<ErrorLine error={connect.error} />
+			{!active && setup.data && setup.data.methods.length > 0 && setup.data.state !== 'managed' ? (
+				<Section title="Your credentials">
+					{needsCredentials || replacing ? (
+						<>
+							<Note info="Anton passes these to Composio, which keeps them in an auth config for this app; Anton does not store them.">
+								{needsCredentials
+									? `Composio has no shared sign-in for ${account.name}, so it runs on your own. You can also make an auth config for “${account.toolkit}” in Composio’s dashboard instead; Anton uses it when you connect.`
+									: `This makes a new auth config at Composio with these credentials and connects with it.`}
+							</Note>
+							<ComposioCredentials account={account} setup={setup.data} onCancel={needsCredentials ? undefined : () => setReplacing(false)} />
+						</>
+					) : (
+						<div className="flex flex-wrap items-center gap-3">
+							<span className="min-w-0 flex-1 text-small text-(--text-3)">
+								{setup.data.state === 'custom' ? 'Connects with the auth config you made at Composio.' : 'Composio asks for the account’s details on its sign-in page.'}
+							</span>
+							<Btn size="sm" variant="ghost" onClick={() => setReplacing(true)}>
+								Use other credentials
+							</Btn>
+						</div>
+					)}
+				</Section>
+			) : null}
 			{active ? (
 				<>
 					<Section title="Tools">
@@ -194,6 +283,8 @@ export function OfferedComposio({ entry }: { entry: CatalogEntry }) {
 	const add = useMutation({
 		mutationFn: async () => {
 			await api.addComposioAccount(entry.id);
+			// An app with no shared sign-in opens on its page, which asks for your credentials first.
+			if ((await api.composioAuth(entry.id)).state === 'credentials') return { url: '' };
 			return api.connectComposio(entry.id);
 		},
 		onSuccess: async ({ url }) => {

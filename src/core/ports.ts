@@ -608,6 +608,12 @@ export type AppsAccount = {
 	createdAt: string;
 };
 
+export type AppsAuthField = { name: string; label: string; description: string; required: boolean; secret: boolean; default: string | null };
+/** One way a toolkit signs in: `configFields` go into the auth config (an OAuth app's client, say), `connectFields` are asked when an account connects. */
+export type AppsAuthMethod = { scheme: string; name: string; configFields: AppsAuthField[]; connectFields: AppsAuthField[]; hintUrl: string | null };
+export type AppsToolkitAuth = { managedSchemes: string[]; methods: AppsAuthMethod[]; guideUrl: string | null };
+export type AppsAuthConfig = { id: string; name: string; scheme: string | null; managed: boolean; enabled: boolean; createdAt: string };
+
 export type AppsConnectLink = { redirectUrl: string; accountId: string; expiresAt: string };
 
 export type AppsExecution = { data: unknown; error: string | null; successful: boolean; logId: string | null };
@@ -618,7 +624,10 @@ export type AppsConnector = {
 	checkKey(key: string): Promise<void>;
 	toolkits(options?: { search?: string; slug?: string; limit?: number }): Promise<AppsToolkit[]>;
 	tools(toolkit: string): Promise<AppsTool[]>;
-	managedAuthConfig(toolkit: string): Promise<string>;
+	toolkitAuth(toolkit: string): Promise<AppsToolkitAuth>;
+	authConfigs(toolkit: string): Promise<AppsAuthConfig[]>;
+	/** The credentials go to the platform and are not kept by Anton. */
+	createAuthConfig(toolkit: string, input: { managed: true; name: string } | { managed: false; name: string; scheme: string; credentials: Record<string, string> }): Promise<string>;
 	connectLink(input: { authConfigId: string; userId: string; callbackUrl?: string }): Promise<AppsConnectLink>;
 	connectedAccount(id: string): Promise<AppsAccount | null>;
 	connectedAccounts(input: { userId: string; toolkits?: string[] }): Promise<AppsAccount[]>;

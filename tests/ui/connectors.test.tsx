@@ -31,6 +31,8 @@ const { api } = vi.hoisted(() => ({
 		composioTools: vi.fn(),
 		setComposioEnabled: vi.fn(),
 		connectComposio: vi.fn(),
+		composioAuth: vi.fn(),
+		saveComposioCredentials: vi.fn(),
 		refreshComposio: vi.fn(),
 		disconnectComposio: vi.fn(),
 		removeComposio: vi.fn(),
@@ -352,6 +354,7 @@ describe('Apps connected through Composio', () => {
 	it('adds an app and opens its Composio sign-in with one press', async () => {
 		api.addComposioAccount.mockResolvedValue(composioView([slackAccount({ status: 'pending', account: null })], true));
 		api.connectComposio.mockResolvedValue({ url: 'https://connect.composio.dev/link/abc' });
+		api.composioAuth.mockResolvedValue({ state: 'managed', methods: [], guideUrl: null });
 		const assign = vi.fn();
 		vi.stubGlobal('location', { ...window.location, assign, origin: window.location.origin });
 		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([], true) }, '/settings/connectors/view?add=composio:slack');
@@ -373,6 +376,40 @@ describe('Apps connected through Composio', () => {
 		expect(await screen.findByText('CRM records and pipelines')).toBeTruthy();
 		await waitFor(() => expect(api.composioToolkit).toHaveBeenCalledWith('salesforce'));
 		expect(await screen.findByRole('button', { name: 'Add and connect' })).toBeTruthy();
+	});
+
+	it('an app Composio has no shared sign-in for asks for your credentials, and sends them on to connect', async () => {
+		const mongo = slackAccount({ toolkit: 'mongodb', name: 'MongoDB', status: 'none', account: null, connectedAt: null });
+		api.composioAuth.mockResolvedValue({
+			state: 'credentials',
+			guideUrl: null,
+			methods: [
+				{
+					scheme: 'S2S_OAUTH2',
+					name: 'Atlas service account',
+					hintUrl: 'https://www.mongodb.com/docs/atlas/api/service-accounts-overview/',
+					connectFields: [],
+					configFields: [
+						{ name: 'client_id', label: 'Client ID', description: '', required: true, secret: false, default: null },
+						{ name: 'client_secret', label: 'Client secret', description: '', required: true, secret: true, default: null },
+					],
+				},
+			],
+		});
+		api.saveComposioCredentials.mockResolvedValue({ url: 'https://connect.composio.dev/link/m' });
+		const assign = vi.fn();
+		vi.stubGlobal('location', { ...window.location, assign, origin: window.location.origin });
+		open({ accounts: [], mailboxes: [], mcpServers: [], composio: composioView([mongo], true) }, '/settings/connectors/view?c=composio:mongodb');
+		const save = await screen.findByRole('button', { name: 'Save and connect MongoDB' });
+		expect(screen.queryByRole('button', { name: 'Connect MongoDB' })).toBeNull();
+		expect((save as HTMLButtonElement).disabled).toBe(true);
+		expect((screen.getByLabelText('Client secret') as HTMLInputElement).type).toBe('password');
+		fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'mdb_sa_id' } });
+		fireEvent.change(screen.getByLabelText('Client secret'), { target: { value: 'mdb_sa_secret' } });
+		fireEvent.click(save);
+		await waitFor(() => expect(api.saveComposioCredentials).toHaveBeenCalledWith('mongodb', 'S2S_OAUTH2', { client_id: 'mdb_sa_id', client_secret: 'mdb_sa_secret' }));
+		await waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.composio.dev/link/m'));
+		vi.unstubAllGlobals();
 	});
 
 	it("shows an app's page: its tools, its switch, and Run-before-change copy", async () => {

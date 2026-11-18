@@ -34,7 +34,7 @@ export type ComposioLink = { redirectUrl: string; accountId: string; expiresAt: 
 
 export type ComposioPage<T> = { items: T[]; nextCursor: string | null };
 
-class ComposioError extends Error {
+export class ComposioError extends Error {
 	readonly status: number;
 	constructor(message: string, status: number) {
 		super(message);
@@ -133,13 +133,69 @@ export async function listToolkitTools(apiKey: string, toolkit: string, max = 3)
 	return tools;
 }
 
-export async function managedAuthConfig(apiKey: string, toolkit: string): Promise<string> {
-	const found = await call<{ items: Array<Record<string, unknown>> }>(apiKey, 'GET', `/auth_configs${query({ toolkit_slug: toolkit, is_composio_managed: 'true', limit: 50 })}`);
-	const enabled = (found.items ?? []).find((item) => item.status === 'ENABLED' && item.is_composio_managed === true);
-	if (enabled) return String(enabled.id);
+export type ComposioAuthField = { name: string; label: string; description: string; required: boolean; secret: boolean; default: string | null };
+export type ComposioAuthMethod = { scheme: string; name: string; configFields: ComposioAuthField[]; connectFields: ComposioAuthField[]; hintUrl: string | null };
+export type ComposioToolkitAuth = { managedSchemes: string[]; methods: ComposioAuthMethod[]; guideUrl: string | null };
+export type ComposioAuthConfig = { id: string; name: string; scheme: string | null; managed: boolean; enabled: boolean; createdAt: string };
+
+const rawFields = (group: unknown): ComposioAuthField[] => {
+	const { required = [], optional = [] } = (group ?? {}) as { required?: Array<Record<string, unknown>>; optional?: Array<Record<string, unknown>> };
+	return [...required.map((field) => ({ field, required: true })), ...optional.map((field) => ({ field, required: false }))].map(({ field, required }) => ({
+		name: String(field.name ?? ''),
+		label: String(field.displayName ?? field.display_name ?? field.name ?? ''),
+		description: String(field.description ?? ''),
+		required: required && field.required !== false,
+		secret: field.is_secret === true,
+		default: field.default == null ? null : String(field.default),
+	}));
+};
+
+/** Which sign-ins a toolkit takes, and the fields each asks for when making its auth config and when connecting an account. */
+export async function toolkitAuth(apiKey: string, toolkit: string): Promise<ComposioToolkitAuth> {
+	const item = await call<Record<string, unknown>>(apiKey, 'GET', `/toolkits/${encodeURIComponent(toolkit)}`);
+	const details = (item.auth_config_details ?? []) as Array<Record<string, unknown>>;
+	return {
+		managedSchemes: ((item.composio_managed_auth_schemes ?? []) as unknown[]).map(String),
+		methods: details.map((detail) => {
+			const fields = (detail.fields ?? {}) as Record<string, unknown>;
+			return {
+				scheme: String(detail.mode ?? ''),
+				name: String(detail.name ?? detail.mode ?? ''),
+				configFields: rawFields(fields.auth_config_creation),
+				connectFields: rawFields(fields.connected_account_initiation),
+				hintUrl: detail.auth_hint_url == null ? null : String(detail.auth_hint_url),
+			};
+		}),
+		guideUrl: item.auth_guide_url == null ? null : String(item.auth_guide_url),
+	};
+}
+
+/** Composio-managed and custom ones alike, including those made in Composio's dashboard. */
+export async function listAuthConfigs(apiKey: string, toolkit: string): Promise<ComposioAuthConfig[]> {
+	const found = await call<{ items: Array<Record<string, unknown>> }>(apiKey, 'GET', `/auth_configs${query({ toolkit_slug: toolkit, limit: 200 })}`);
+	return (found.items ?? [])
+		.filter((item) => String((item.toolkit as { slug?: unknown } | undefined)?.slug ?? toolkit).toLowerCase() === toolkit.toLowerCase())
+		.map((item) => ({
+			id: String(item.id ?? ''),
+			name: String(item.name ?? ''),
+			scheme: item.auth_scheme == null ? null : String(item.auth_scheme),
+			managed: item.is_composio_managed === true,
+			enabled: item.status === 'ENABLED',
+			createdAt: String(item.created_at ?? ''),
+		}));
+}
+
+/** Composio answers 404 when it has no managed app for the toolkit. */
+export async function createAuthConfig(
+	apiKey: string,
+	toolkit: string,
+	input: { managed: true; name: string } | { managed: false; name: string; scheme: string; credentials: Record<string, string> },
+): Promise<string> {
 	const created = await call<{ auth_config: { id: string } }>(apiKey, 'POST', '/auth_configs', {
 		toolkit: { slug: toolkit },
-		auth_config: { type: 'use_composio_managed_auth' },
+		auth_config: input.managed
+			? { type: 'use_composio_managed_auth', name: input.name }
+			: { type: 'use_custom_auth', name: input.name, authScheme: input.scheme, credentials: input.credentials },
 	});
 	return created.auth_config.id;
 }
