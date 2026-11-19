@@ -329,6 +329,21 @@ export function runtimeProvider(
 			for (const result of next.results) bridged.deliver(result.toolCallId, { content: asContent(result.content), isError: result.isError });
 			if (next.user.length) bridged.conversation.send(next.user);
 		} else {
+			if (bridged) {
+				// Why the last conversation could not take this one; a respawn costs a fresh agent session.
+				const reason = !fits
+					? bridged.closed
+						? 'closed'
+						: bridged.busy
+							? 'busy'
+							: !sameSettings(bridged.settings, settings)
+								? `settings ${(['model', 'instructions', 'tools', 'effort'] as const).filter((f) => bridged!.settings[f] !== settings[f]).join('+') || '?'}`
+								: bridged.seen.length >= prints.length
+									? 'history-not-longer'
+									: 'history-diverged'
+					: 'messages-do-not-continue';
+				console.error(`[flue:${plan.gateway}] conversation respawns for new messages: ${reason}`);
+			}
 			if (bridged && !bridged.busy) bridged.close();
 			open.delete(key);
 			makeRoom(open, maxOpen);

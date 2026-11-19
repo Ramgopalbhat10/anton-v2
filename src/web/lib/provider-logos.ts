@@ -9,6 +9,7 @@ import bytedance from '@lobehub/icons-static-svg/icons/bytedance-color.svg?raw';
 import cursor from '@lobehub/icons-static-svg/icons/cursor.svg?raw';
 import cohere from '@lobehub/icons-static-svg/icons/cohere-color.svg?raw';
 import deepseek from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
+import devin from '@lobehub/icons-static-svg/icons/devin.svg?raw';
 import dotsstudio from '@lobehub/icons-static-svg/icons/dotsstudio.svg?raw';
 import fireworks from '@lobehub/icons-static-svg/icons/fireworks-color.svg?raw';
 import google from '@lobehub/icons-static-svg/icons/google-color.svg?raw';
@@ -77,6 +78,7 @@ const LOGOS: Record<string, string> = {
 	cohere,
 	cursor,
 	deepseek,
+	devin,
 	'dots-studio': dotsstudio,
 	fireworks,
 	google,

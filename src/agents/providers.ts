@@ -1,5 +1,5 @@
 import { setProvider } from '@flue/runtime';
-import { claudeCodeProvider, cursorProvider } from '../flue/claude-code-models.ts';
+import { claudeCodeProvider, cursorProvider, runtimeProvider } from '../flue/claude-code-models.ts';
 import { liveOpenRouterProvider, liveVercelProvider } from '../flue/live-models.ts';
 import { openCodeGoProvider } from '../flue/opencode-go-models.ts';
 import { withPruning } from '../flue/pruned-models.ts';
@@ -17,3 +17,11 @@ setProvider(withPruning(chatGptPlanProvider(loadedModels, () => gatewayToken('op
 setProvider(claudeCodeProvider(loadedModels, () => runtimeFor('claude-code'), runtimeHooks('claude-code')));
 setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode-go'))));
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
+setProvider(
+	runtimeProvider(
+		{ gateway: 'devin', name: 'Devin (Devin CLI)', program: 'Devin CLI', plan: 'Devin' },
+		loadedModels,
+		() => planRuntime('devin'),
+		runtimeHooks('devin'),
+	),
+);
