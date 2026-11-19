@@ -1,6 +1,6 @@
 import { announce } from '../../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
-import type { AppsConnector, AppsToolkit, AppsTool } from '../../core/ports.ts';
+import type { AppsAuthConfig, AppsAuthMethod, AppsConnector, AppsToolkit, AppsTool } from '../../core/ports.ts';
 import { deleteComposioAccount, getComposioAccount, type ComposioAccountRow, listComposioAccounts, markComposioPending, markComposioStatus, resetComposioConnection, saveComposioAccount, setComposioEnabled } from '../../db/composio.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 import { getProviders } from '../../providers/index.ts';
@@ -131,11 +131,79 @@ export async function setComposioAccountEnabled(toolkit: string, enabled: boolea
 	return composioView();
 }
 
+/** A config the owner made (in Composio's dashboard, or here with their credentials) wins over Composio's managed one; the newest first. */
+function pickAuthConfig(configs: AppsAuthConfig[]): AppsAuthConfig | null {
+	const enabled = configs.filter((config) => config.enabled && config.id);
+	const custom = enabled.filter((config) => !config.managed).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+	return custom[0] ?? enabled.find((config) => config.managed) ?? null;
+}
+
+const needsOwnCredentials = (method: AppsAuthMethod) => method.configFields.some((field) => field.required);
+
+const ownCredentialsProblem = (name: string, toolkit: string) =>
+	new ConflictError(`Composio has no shared sign-in for ${name}, so it needs your own credentials. Enter them under “Your credentials” on this page, or make an auth config for “${toolkit}” in Composio’s dashboard (Auth Configs) and connect again.`);
+
+/** The auth config a sign-in runs on; when there is none, Composio's managed one, else one Anton can make without credentials. */
+async function authConfigFor(platform: AppsConnector, row: ComposioAccountRow): Promise<string> {
+	const chosen = pickAuthConfig(await platform.authConfigs(row.toolkit));
+	if (chosen) return chosen.id;
+	const auth = await platform.toolkitAuth(row.toolkit);
+	if (auth.managedSchemes.length) {
+		try {
+			return await platform.createAuthConfig(row.toolkit, { managed: true, name: `Anton · ${row.name}` });
+		} catch (error) {
+			// Composio lists a managed scheme it then has no app for (404 "Default auth config not found"); a custom one may still do.
+			if ((error as { status?: number }).status !== 404) throw error;
+		}
+	}
+	const open = auth.methods.find((method) => !needsOwnCredentials(method));
+	if (open) return platform.createAuthConfig(row.toolkit, { managed: false, name: `Anton · ${row.name}`, scheme: open.scheme, credentials: {} });
+	throw ownCredentialsProblem(row.name, row.toolkit);
+}
+
+export type ComposioAuthSetup = {
+	/** `managed`: Composio's shared app; `custom`: a config with your credentials; `automatic`: one Anton makes on Connect; `credentials`: yours are needed first. */
+	state: 'managed' | 'custom' | 'automatic' | 'credentials';
+	/** Ways to sign in that take credentials, for the form. */
+	methods: AppsAuthMethod[];
+	guideUrl: string | null;
+};
+
+export async function composioAuthSetup(toolkit: string): Promise<ComposioAuthSetup> {
+	const platform = await needApps();
+	if (!(await getComposioAccount(toolkit))) throw new NotFoundError(`No app is named ${toolkit}`);
+	const [configs, auth] = await Promise.all([platform.authConfigs(toolkit), platform.toolkitAuth(toolkit)]);
+	const chosen = pickAuthConfig(configs);
+	const methods = auth.methods.filter((method) => method.configFields.length > 0);
+	const state = chosen ? (chosen.managed ? 'managed' : 'custom') : auth.managedSchemes.length ? 'managed' : auth.methods.some((method) => !needsOwnCredentials(method)) ? 'automatic' : 'credentials';
+	return { state, methods, guideUrl: auth.guideUrl };
+}
+
+/** Makes an auth config at Composio from the owner's credentials and starts its sign-in; Anton passes the credentials on and keeps none of them. */
+export async function saveComposioCredentials(toolkit: string, input: { scheme: string; credentials: Record<string, string> }, callbackUrl?: string): Promise<{ url: string }> {
+	const platform = await needApps();
+	const row = await getComposioAccount(toolkit);
+	if (!row) throw new NotFoundError(`No app is named ${toolkit}`);
+	const method = (await platform.toolkitAuth(toolkit)).methods.find((each) => each.scheme === input.scheme);
+	if (!method) throw new InvalidInputError(`${row.name} does not sign in with ${input.scheme}.`);
+	const known = new Set(method.configFields.map((field) => field.name));
+	const credentials: Record<string, string> = {};
+	for (const [name, value] of Object.entries(input.credentials)) if (known.has(name) && value.trim()) credentials[name] = value.trim();
+	const missing = method.configFields.filter((field) => field.required && !credentials[field.name]);
+	if (missing.length) throw new InvalidInputError(`Fill in ${missing.map((field) => field.label).join(', ')}.`);
+	const authConfigId = await platform.createAuthConfig(toolkit, { managed: false, name: `Anton · ${row.name}`, scheme: method.scheme, credentials });
+	return connectWith(platform, row, authConfigId, callbackUrl);
+}
+
 export async function beginComposioConnect(toolkit: string, callbackUrl?: string): Promise<{ url: string }> {
 	const platform = await needApps();
 	const row = await getComposioAccount(toolkit);
 	if (!row) throw new NotFoundError(`No app is named ${toolkit}`);
-	const authConfigId = await platform.managedAuthConfig(toolkit);
+	return connectWith(platform, row, await authConfigFor(platform, row), callbackUrl);
+}
+
+async function connectWith(platform: AppsConnector, row: ComposioAccountRow, authConfigId: string, callbackUrl?: string): Promise<{ url: string }> {
+	const toolkit = row.toolkit;
 	// Unfinished accounts from earlier attempts would pile up; only a live one is kept.
 	const existing = await platform.connectedAccounts({ userId: USER_ID, toolkits: [toolkit] });
 	for (const account of existing) {

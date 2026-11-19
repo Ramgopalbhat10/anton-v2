@@ -56,6 +56,11 @@ export type ComposioToolkitHit = {
 	noAuth: boolean;
 };
 
+export type ComposioAuthField = { name: string; label: string; description: string; required: boolean; secret: boolean; default: string | null };
+export type ComposioAuthMethod = { scheme: string; name: string; configFields: ComposioAuthField[]; connectFields: ComposioAuthField[]; hintUrl: string | null };
+/** How the app's sign-in will run: Composio's shared app, your own auth config, one Anton makes on Connect, or your credentials are needed first. */
+export type ComposioAuthSetup = { state: 'managed' | 'custom' | 'automatic' | 'credentials'; methods: ComposioAuthMethod[]; guideUrl: string | null };
+
 export const connectorsApi = {
 	connectors: () => json<ConnectorsView>('/api/connectors'),
 	setConnectorClient: (account: string, client: { clientId: string; clientSecret: string | null }) =>
@@ -85,6 +90,10 @@ export const connectorsApi = {
 		),
 	setComposioEnabled: (toolkit: string, enabled: boolean) => json<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
 	connectComposio: (toolkit: string) => post<{ url: string }>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/connect`, { callbackUrl: `${window.location.origin}/settings/connectors` }),
+	composioAuth: (toolkit: string) => json<ComposioAuthSetup>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/auth`),
+	/** The credentials go to Composio; Anton keeps none of them. */
+	saveComposioCredentials: (toolkit: string, scheme: string, credentials: Record<string, string>) =>
+		post<{ url: string }>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/auth`, { scheme, credentials, callbackUrl: `${window.location.origin}/settings/connectors` }),
 	refreshComposio: (toolkit: string) => post<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/refresh`, {}),
 	disconnectComposio: (toolkit: string) => post<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}/disconnect`, {}),
 	removeComposio: (toolkit: string) => json<ComposioView>(`/api/composio/accounts/${encodeURIComponent(toolkit)}`, { method: 'DELETE' }),
