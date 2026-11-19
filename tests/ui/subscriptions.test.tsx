@@ -125,6 +125,20 @@ describe('Subscriptions', () => {
 		open.mockRestore();
 	});
 
+	it('signs another runtime in under its own name, not Claude’s', async () => {
+		const devin = plan({ id: 'devin', name: 'Devin', kind: 'runtime', gateway: 'devin', signIn: 'devin auth login' });
+		const devinPending = { url: 'https://app.devin.ai/auth/cli/continue?x=1', redirectUri: '', listening: false, startedAt: new Date().toISOString() };
+		api.subscriptions.mockResolvedValue({ subscriptions: [devin] });
+		api.beginSubscriptionLogin.mockResolvedValue({ ...devin, login: devinPending });
+		const open = vi.spyOn(window, 'open').mockReturnValue(null);
+		page();
+		expect(await screen.findByRole('img', { name: 'Anton, with your Devin plan not connected yet' })).toBeTruthy();
+		fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Devin' }));
+		expect(await screen.findByLabelText('Code from Devin')).toBeTruthy();
+		expect(screen.queryByText(/Claude/)).toBeNull();
+		open.mockRestore();
+	});
+
 	it('keeps a refused code’s message after the sign-in ends', async () => {
 		const claudePending = { url: 'https://claude.com/cai/oauth/authorize?code=true', redirectUri: '', listening: false, startedAt: new Date().toISOString() };
 		api.subscriptions.mockResolvedValue({ subscriptions: [{ ...claude, login: claudePending }] });

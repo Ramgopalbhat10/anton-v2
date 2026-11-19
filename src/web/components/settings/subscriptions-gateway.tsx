@@ -1,22 +1,20 @@
 import { unrouted } from '../../../core/model-route';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, KeyRound, RotateCw } from '@/lib/icons';
+import { KeyRound, RotateCw } from '@/lib/icons';
 import { useState } from 'react';
 import { PlanLinkArt } from '@/components/marks/illustrations';
 import { Card, CardFooter, CardSection, SpecGrid, Status, Well } from '@/components/kit/instrument';
 import { EffortRange } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
-import { Btn, EmptyLine, Icon, InlineCode, SearchField } from '@/components/kit/signal';
+import { Btn, EmptyLine, InlineCode, SearchField } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import type { Subscription } from '@/lib/api/plans';
 import { age, dollars, tokens } from '@/lib/format';
 import { logoFor } from '@/lib/provider-logos';
 import { useGeneralSettings } from './general';
 import { Note, SaveState } from './parts';
-import { day, Lead, Named, PlanSettings, STATUS, useSaved, Windows } from './subscriptions-parts';
+import { day, Lead, MODEL_PAGE_SIZE, ModelPager, Named, PlanSettings, rankedModels, STATUS, useSaved, Windows } from './subscriptions-parts';
 import { KeyForm } from './subscriptions-key';
-
-export const GATEWAY_PAGE_SIZE = 20;
 
 function GatewayModels({ subscription }: { subscription: Subscription }) {
 	const queryClient = useQueryClient();
@@ -32,16 +30,10 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 		},
 	});
 	const current = unrouted(settings.data?.model ?? models.data?.default ?? '');
-	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-	// Used ones first, by tokens; the rest keep the gateway's order, newest first.
-	const ranked = subscription.models
-		.map((model, index) => ({ model, index }))
-		.filter(({ model }) => words.every((word) => `${model.vendor ?? ''} ${model.name} ${model.id}`.toLowerCase().includes(word)))
-		.sort((a, b) => b.model.tokens - a.model.tokens || a.index - b.index)
-		.map(({ model }) => model);
-	const pages = Math.max(1, Math.ceil(ranked.length / GATEWAY_PAGE_SIZE));
+	const ranked = rankedModels(subscription.models, query);
+	const pages = Math.max(1, Math.ceil(ranked.length / MODEL_PAGE_SIZE));
 	const at = Math.min(page, pages - 1);
-	const shown = ranked.slice(at * GATEWAY_PAGE_SIZE, (at + 1) * GATEWAY_PAGE_SIZE);
+	const shown = ranked.slice(at * MODEL_PAGE_SIZE, (at + 1) * MODEL_PAGE_SIZE);
 	if (!subscription.models.length) {
 		return (
 			<CardSection label="Models">
@@ -102,25 +94,7 @@ function GatewayModels({ subscription }: { subscription: Subscription }) {
 			) : (
 				<EmptyLine className="p-0">No models match “{query}”.</EmptyLine>
 			)}
-			{ranked.length > GATEWAY_PAGE_SIZE ? (
-				<nav aria-label="Model pages" className="flex items-center justify-between gap-3">
-					<span className="in-num text-micro text-(--text-3)">
-						{at * GATEWAY_PAGE_SIZE + 1}–{at * GATEWAY_PAGE_SIZE + shown.length} of {ranked.length}
-					</span>
-					<span className="flex items-center gap-2">
-						<Btn size="xs" variant="ghost" icon={ChevronLeft} disabled={at === 0} onClick={() => setPage(at - 1)}>
-							Previous
-						</Btn>
-						<span className="in-num text-micro text-(--text-2)">
-							Page {at + 1} of {pages}
-						</span>
-						<Btn size="xs" variant="ghost" disabled={at >= pages - 1} onClick={() => setPage(at + 1)}>
-							Next
-							<Icon icon={ChevronRight} size={12} />
-						</Btn>
-					</span>
-				</nav>
-			) : null}
+			<ModelPager total={ranked.length} at={at} pages={pages} shown={shown.length} onPage={setPage} />
 			<SaveState pending={makeDefault.isPending} success={false} error={makeDefault.error} />
 		</CardSection>
 	);

@@ -19,6 +19,9 @@ import type {
 	TextModel,
 	VisionModel,
 } from '../core/ports.ts';
+import { acpRuntime } from './acp/runtime.ts';
+import { devinAgent } from './acp/devin.ts';
+import { modalAcpHost } from './acp/modal.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { composioApps } from './composio/index.ts';
@@ -127,7 +130,11 @@ function production(): Providers {
 			return openRouterKey() ? decisionModel : null;
 		},
 		subscriptions: [chatGptSubscription()],
-		runtimes: [claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined })],
+		runtimes: [
+			claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined }),
+			// ACP agents need Modal for their jailed sidecars; without its token there is nowhere to run them.
+			...(process.env.MODAL_TOKEN_ID ? [acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app))] : []),
+		],
 		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,
 		get vision() {

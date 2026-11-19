@@ -129,7 +129,7 @@ function providerById(id: string): SubscriptionProvider {
 	const provider = subscriptionProviders().find((candidate) => candidate.id === id);
 	if (!provider) {
 		const runtime = agentRuntimes().find((candidate) => candidate.id === id);
-		if (runtime) throw new ConflictError(`${runtime.name} signs in through Claude Code on the server: ${runtime.signInCommand}`);
+		if (runtime) throw new ConflictError(`${runtime.name} signs in on the server through its own agent: ${runtime.signInCommand}`);
 		const keyed = keyPlanById(id) ?? isGateway(id)?.account;
 		if (keyed) throw new ConflictError(`${keyed.name} takes a key from ${keyed.keyPage} rather than a sign-in.`);
 		throw new NotFoundError(`No subscription named "${id}"`);
@@ -365,7 +365,7 @@ async function beginRuntimeLogin(runtime: AgentRuntime): Promise<SubscriptionVie
 	if (!runtime.signIn) throw new ConflictError(`${runtime.name} signs in on the server: ${runtime.signInCommand}`);
 	endRuntimeAttempt(runtime.id);
 	const signIn = await runtime.signIn().catch((error: unknown) => {
-		throw new ConflictError(`Claude Code could not start signing in: ${error instanceof Error ? error.message : String(error)}`);
+		throw new ConflictError(`${runtime.name} could not start signing in: ${error instanceof Error ? error.message : String(error)}`);
 	});
 	const timer = setTimeout(() => {
 		if (runtimeAttempts.get(runtime.id)?.signIn !== signIn) return;
@@ -530,10 +530,10 @@ export async function importLogin(id: string, input: string): Promise<Subscripti
 export async function disconnect(id: string): Promise<SubscriptionView> {
 	const runtime = runtimeById(id);
 	if (runtime) {
-		if (!runtime.signOut) throw new ConflictError(`Claude Code keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
+		if (!runtime.signOut) throw new ConflictError(`${runtime.name} keeps its own sign-in. Sign out on the server with: ${runtime.signInCommand.replace(/ login$/, ' logout')}`);
 		endRuntimeAttempt(id);
 		await runtime.signOut().catch((error: unknown) => {
-			throw new ConflictError(`Claude Code could not sign out: ${error instanceof Error ? error.message : String(error)}`);
+			throw new ConflictError(`${runtime.name} could not sign out: ${error instanceof Error ? error.message : String(error)}`);
 		});
 		await save(id, { models: [], modelsAt: null });
 		announce({ kind: 'models' });
@@ -581,7 +581,7 @@ export async function setSubscriptionOptions(id: string, options: SubscriptionOp
 	return subscriptionView(provider);
 }
 
-/** For Claude Code its sign-in is read again first, so a sign-in on the server shows at once. */
+/** For a runtime its sign-in is read again first, so a sign-in on the server shows at once. */
 export async function refreshSubscriptionModels(id: string): Promise<SubscriptionView> {
 	const runtime = runtimeById(id);
 	if (runtime) {
@@ -619,9 +619,10 @@ export async function notePlanLimit(id: string): Promise<void> {
 
 export async function noteExtraUsage(id: string): Promise<void> {
 	const current = await stored(id);
-	// Claude Code says so on each call while it lasts; one note an hour is enough.
+	// A runtime says so on each call while it lasts; one note an hour is enough.
 	if (current.extraUsageAt && Date.now() - new Date(current.extraUsageAt).getTime() < 60 * 60_000) return;
-	logProblem('warn', 'Claude Code says the Claude plan is now using paid extra usage', null);
+	const name = [...agentRuntimes(), ...keyPlans()].find((plan) => plan.id === id)?.name ?? 'The plan';
+	logProblem('warn', `${name} says the plan is now using paid extra usage`, null);
 	await save(id, { extraUsageAt: new Date().toISOString() });
 }
 

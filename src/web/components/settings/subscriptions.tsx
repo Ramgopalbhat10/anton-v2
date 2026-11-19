@@ -12,7 +12,7 @@ import { logoFor } from '@/lib/provider-logos';
 import { cn } from '@/lib/utils';
 import { FIELD, Note, PageHeading, SaveState } from './parts';
 import { day, Lead, Models, Named, PlanSettings, STATUS, useSaved, useSignIn } from './subscriptions-parts';
-import { ClaudePlan } from './subscriptions-claude';
+import { RuntimePlan } from './subscriptions-runtime';
 import { KeyPlan } from './subscriptions-key';
 import { GatewayPlan } from './subscriptions-gateway';
 
@@ -277,7 +277,7 @@ export function SubscriptionsPage() {
 					</Tabs>
 					<div role="tabpanel" id={`plan-panel-${current.id}`} aria-labelledby={`plan-tab-${current.id}`}>
 						{current.kind === 'runtime' ? (
-								<ClaudePlan key={current.id} subscription={current} />
+								<RuntimePlan key={current.id} subscription={current} />
 							) : current.kind === 'key' ? (
 								<KeyPlan key={current.id} subscription={current} />
 							) : current.kind === 'gateway' ? (

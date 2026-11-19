@@ -87,6 +87,10 @@ export const config = {
 		path: read('ANTON_CLAUDE_CODE_PATH'),
 		maxOpen: Number(read('ANTON_CLAUDE_CODE_MAX_OPEN', '3')),
 	},
+	/** ACP agent runtimes (Devin, Antigravity) run jailed in Modal sidecars of this app. */
+	acp: {
+		app: read('ANTON_ACP_APP', 'anton-acp'),
+	},
 	defaultRepo: read('ANTON_DEFAULT_REPO'),
 	/** The VAPID subject: a `mailto:` or `https:` address. */
 	pushContact: read('ANTON_PUSH_CONTACT', 'mailto:anton@example.com'),

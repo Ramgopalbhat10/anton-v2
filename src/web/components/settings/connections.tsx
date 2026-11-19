@@ -82,8 +82,8 @@ function Mark({ slot, option, size = 16 }: { slot: string; option: string | null
 	return <Icon icon={look?.icon ?? ICONS[slot] ?? Link} size={size} className="text-(--text-2)" />;
 }
 
-const planNames = ['ChatGPT', 'Claude Code', 'OpenCode Go', 'Cursor'];
-const PLAN_LOGOS: Record<string, string> = { ChatGPT: 'openai', 'Claude Code': 'claude-code', 'OpenCode Go': 'opencode-go', Cursor: 'cursor' };
+const planNames = ['ChatGPT', 'Claude Code', 'OpenCode Go', 'Cursor', 'Devin'];
+const PLAN_LOGOS: Record<string, string> = { ChatGPT: 'openai', 'Claude Code': 'claude-code', 'OpenCode Go': 'opencode-go', Cursor: 'cursor', Devin: 'devin' };
 
 /** How a slot stands: a value saved for the next start wins, then the live check, then whether it is needed. */
 function stateOf(slot: SetupSlot, check: Connection | undefined, plans: string[], checking: boolean): State {
