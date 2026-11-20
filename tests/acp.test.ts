@@ -80,7 +80,7 @@ function fakeHost(process: AcpProcess): AcpHost {
 	};
 }
 
-function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-high') {
+function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-high', agent = devinAgent, effort: string | null = null) {
 	const acp = fakeChannel();
 	const mcp = fakeChannel();
 	const process: AcpProcess = {
@@ -90,8 +90,8 @@ function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-hi
 		close: async () => undefined,
 		stderrTail: () => '',
 	};
-	const runtime = acpRuntime(devinAgent, fakeHost(process));
-	const conv = runtime.open({ model, instructions: 'Be brief.', tools: [BASH], effort: null, callTool });
+	const runtime = acpRuntime(agent, fakeHost(process));
+	const conv = runtime.open({ model, instructions: 'Be brief.', tools: [BASH], effort, callTool });
 	const seen: RuntimeEvent[] = [];
 	const collecting = (async () => {
 		for await (const event of conv.events) seen.push(event);
@@ -219,8 +219,10 @@ test('a namespaced MCP tool name still reaches Anton under its own name', async 
 	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
 	const promptId = parse(acp.sent).find((m) => m.method === 'session/prompt')!.id;
 	await mcpCall(mcp, 'mcp__anton__bash', { command: 'pwd' });
-	await until(() => calls.length === 1, 'callTool');
-	assert.deepEqual(calls, ['bash']);
+	// agy namespaces the same call mcp_anton_bash.
+	await mcpCall(mcp, 'mcp_anton_bash', { command: 'pwd' }, 2);
+	await until(() => calls.length === 2, 'callTool');
+	assert.deepEqual(calls, ['bash', 'bash']);
 	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn' } }));
 	conv.close();
 });
@@ -288,12 +290,32 @@ test('permission requests allow Anton tools and refuse the agent\'s own', async 
 				},
 			}),
 		);
+	// agy's shape: the call names itself mcp_anton_<tool> under "Run ...", with no permissionRule meta.
+	const askAgy = (id: number, name: string, title: string) =>
+		acp.incoming.push(
+			JSON.stringify({
+				jsonrpc: '2.0',
+				id,
+				method: 'session/request_permission',
+				params: {
+					toolCall: { name, title },
+					options: [
+						{ optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+						{ optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+					],
+				},
+			}),
+		);
 	ask(7, 'mcp__anton__bash');
 	ask(8, 'exec rm -rf /');
-	await until(() => parse(acp.sent).filter((m) => m.id === 7 || m.id === 8).length === 2, 'permission answers');
-	const answers = parse(acp.sent).filter((m) => m.id === 7 || m.id === 8);
+	askAgy(9, 'mcp_anton_render_html', 'Run mcp_anton_render_html');
+	askAgy(10, 'run_command', 'Run a terminal command');
+	await until(() => parse(acp.sent).filter((m) => [7, 8, 9, 10].includes(Number(m.id))).length === 4, 'permission answers');
+	const answers = parse(acp.sent).filter((m) => [7, 8, 9, 10].includes(Number(m.id)));
 	assert.deepEqual(answers.find((m) => m.id === 7)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
 	assert.deepEqual(answers.find((m) => m.id === 8)?.result, { outcome: { outcome: 'selected', optionId: 'reject' } });
+	assert.deepEqual(answers.find((m) => m.id === 9)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
+	assert.deepEqual(answers.find((m) => m.id === 10)?.result, { outcome: { outcome: 'selected', optionId: 'deny' } });
 	conv.close();
 });
 
@@ -320,4 +342,229 @@ test('devin catalog parse reads context and list price per variant', () => {
 	assert.deepEqual(catalog.get('swe-2-medium-lightning')?.listPrice, { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 0 });
 	assert.equal(catalog.get('gpt-6-sol-low-priority')?.contextLength, 1_000_000);
 	assert.equal(catalog.get('glm-5-2-1m')?.contextLength, 1_000_000);
+});
+
+test('effort and session config options are applied after session/new, only when they differ', async () => {
+	const agent = { ...devinAgent, effortConfigId: 'thought_level', effortMap: { off: 'low' }, sessionConfig: { mode: 'auto' } };
+	const { acp, conv } = rig(async () => ({ content: [], isError: false }), 'swe-2-high', agent, 'high');
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', {
+		sessionId: 's',
+		configOptions: [
+			{ id: 'model', currentValue: 'swe-2-high', options: [{ value: 'swe-2-high' }] },
+			{ id: 'thought_level', currentValue: 'medium', options: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }] },
+			{ id: 'mode', currentValue: 'default', options: [{ value: 'default' }, { value: 'auto' }] },
+			{ id: 'unrelated', currentValue: 'x', options: [{ value: 'x' }, { value: 'y' }] },
+		],
+	});
+	// set_config_option calls are sequential: answer each before the next is sent.
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/set_config_option').length === 1, 'first config write');
+	await answer(acp, 'session/set_config_option', {});
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/set_config_option').length === 2, 'second config write');
+	await answer(acp, 'session/set_config_option', {});
+	const writes = parse(acp.sent).filter((m) => m.method === 'session/set_config_option').map((m) => m.params as Record<string, unknown>);
+	assert.deepEqual(writes, [
+		{ sessionId: 's', configId: 'thought_level', value: 'high' },
+		{ sessionId: 's', configId: 'mode', value: 'auto' },
+	]);
+	conv.close();
+});
+
+test('an effort the option does not accept, and one already current, send nothing', async () => {
+	const agent = { ...devinAgent, effortConfigId: 'thought_level' };
+	const { acp, conv } = rig(async () => ({ content: [], isError: false }), 'swe-2-high', agent, 'max');
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', {
+		sessionId: 's',
+		configOptions: [
+			{ id: 'model', currentValue: 'swe-2-high', options: [{ value: 'swe-2-high' }] },
+			{ id: 'thought_level', currentValue: 'high', options: [{ value: 'low' }, { value: 'high' }] },
+		],
+	});
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	assert.equal(parse(acp.sent).filter((m) => m.method === 'session/set_config_option').length, 0);
+	conv.close();
+});
+
+test('ensureCli fetches a missing CLI, puts it on PATH, and caches the probe', async () => {
+	const { mkdtemp, rm, writeFile } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { ensureCli } = await import('../src/providers/acp/local-cli.ts');
+	const { release: _release, ...base } = devinAgent;
+	const dir = await mkdtemp(join(tmpdir(), 'anton-cli-'));
+	const pathBefore = process.env.PATH;
+	let fetches = 0;
+	const agent = {
+		...base,
+		id: 'fakecli',
+		command: ['fakecli-acp-test', 'acp'],
+		install: {
+			fallback: { version: '0', url: 'http://unused.invalid/x.tgz' },
+			fetch: async (_release: unknown, target: string) => {
+				fetches++;
+				await writeFile(join(target, 'fakecli-acp-test'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+			},
+		},
+	};
+	try {
+		assert.equal(await ensureCli(agent, dir), true);
+		assert.equal(fetches, 1);
+		// The cached localCli probe answers the second call — no reinstall.
+		assert.equal(await ensureCli(agent, dir), true);
+		assert.equal(fetches, 1);
+	} finally {
+		process.env.PATH = pathBefore;
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('a failed CLI install surfaces its reason through sign-in', async () => {
+	const { mkdtemp, rm } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { ensureCli, localSignIn } = await import('../src/providers/acp/local-cli.ts');
+	const { release: _release, ...base } = devinAgent;
+	const dir = await mkdtemp(join(tmpdir(), 'anton-cli-'));
+	const agent = {
+		...base,
+		id: 'badcli',
+		command: ['badcli-acp-test', 'acp'],
+		install: {
+			fallback: { version: '0', url: 'http://unused.invalid/x.tgz' },
+			fetch: async () => {
+				throw new Error('boom');
+			},
+		},
+	};
+	try {
+		assert.equal(await ensureCli(agent, dir), false);
+		await assert.rejects(localSignIn(agent), /CLI is not installed.*boom/);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('devin plan status maps only populated quota fields to windows', async () => {
+	const { statusWindows } = await import('../src/providers/acp/devin-usage.ts');
+	// A Pro/quota account: daily percent + reset times, unlimited prompt credits,
+	// no weekly percent, no ACU — only the daily window may appear.
+	assert.deepEqual(
+		statusWindows({
+			dailyQuotaRemainingPercent: 100,
+			dailyQuotaResetAtUnix: '1795248000',
+			weeklyQuotaResetAtUnix: '1795334400',
+			availablePromptCredits: -1,
+			overageBalanceMicros: '-973954',
+		}),
+		[{ label: 'Devin · Daily', usedPercent: 0, resetsAt: '2026-11-21T08:00:00.000Z', limited: false }],
+	);
+	// Credit and ACU tiers populate their own fields instead.
+	const credit = statusWindows({
+		weeklyQuotaRemainingPercent: 25,
+		weeklyQuotaResetAtUnix: 1795334400,
+		usedPromptCredits: 30,
+		availablePromptCredits: 100,
+		usedFlowCredits: 5,
+		availableFlowCredits: 10,
+		acuConsumed: 40,
+		acuLimit: 200,
+	});
+	assert.deepEqual(
+		credit.map((w) => [w.label, w.usedPercent, w.limited]),
+		[
+			['Devin · Weekly', 75, false],
+			['Devin · Prompt credits', 30, false],
+			['Devin · Flow credits', 50, false],
+			['Devin · ACU', 20, false],
+		],
+	);
+	// Exhausted quota marks limited; an empty status reports nothing.
+	assert.equal(statusWindows({ dailyQuotaRemainingPercent: 0 })?.[0]?.limited, true);
+	assert.deepEqual(statusWindows({}), []);
+	assert.deepEqual(statusWindows(undefined), []);
+});
+
+test('devinUsage posts the CLI credential in metadata and returns plan windows', async () => {
+	const { mkdtemp, rm, writeFile } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { devinUsage } = await import('../src/providers/acp/devin-usage.ts');
+	const dir = await mkdtemp(join(tmpdir(), 'anton-devin-'));
+	const credentialFile = join(dir, 'credentials.toml');
+	await writeFile(credentialFile, 'windsurf_api_key = "test-key"\n');
+	const agent = { ...devinAgent, auth: { ...devinAgent.auth, credentialFile } };
+	const realFetch = globalThis.fetch;
+	const seen: Request[] = [];
+	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+		const request = new Request(input, init);
+		seen.push(request.clone());
+		return new Response(
+			JSON.stringify({ userStatus: { planStatus: { dailyQuotaRemainingPercent: 40, dailyQuotaResetAtUnix: '1795248000' } } }),
+			{ headers: { 'content-type': 'application/json' } },
+		);
+	}) as typeof fetch;
+	try {
+		const windows = await devinUsage(agent, 'test-version');
+		assert.equal(windows?.[0]?.label, 'Devin · Daily');
+		assert.equal(windows?.[0]?.usedPercent, 60);
+		assert.equal(seen.length, 1);
+		const body = (await seen[0].json()) as { metadata?: { apiKey?: string } };
+		assert.equal(body.metadata?.apiKey, 'test-key');
+	} finally {
+		globalThis.fetch = realFetch;
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('the MCP server serves the live tool list and announces changes', async () => {
+	const { mcpServer } = await import('../src/providers/acp/mcp.ts');
+	const pending: string[] = [];
+	const out: string[] = [];
+	let wake: (() => void) | null = null;
+	const transport = {
+		write: (data: string) => out.push(data),
+		lines: async function* () {
+			for (;;) {
+				while (pending.length) yield pending.shift()!;
+				await new Promise<void>((resolve) => (wake = resolve));
+				wake = null;
+			}
+		},
+		closeStdin: async () => {},
+		kill: async () => {},
+	};
+	const feed = (msg: unknown) => {
+		pending.push(`${JSON.stringify(msg)}\n`);
+		wake?.();
+	};
+	const waitFor = async (pred: () => boolean) => {
+		for (let i = 0; i < 200; i++) {
+			if (pred()) return;
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+		throw new Error('timed out waiting for the MCP server');
+	};
+	let nextId = 0;
+	const listed = async () => {
+		const id = ++nextId;
+		feed({ jsonrpc: '2.0', id, method: 'tools/list' });
+		await waitFor(() => out.some((line) => line.includes(`"id":${id}`)));
+		const reply = JSON.parse(out.find((line) => line.includes(`"id":${id}`))!) as { result: { tools: { name: string }[] } };
+		return reply.result.tools.map((tool) => tool.name);
+	};
+
+	let tools = [{ name: 'read', description: 'Reads.', inputSchema: { type: 'object' } }];
+	const server = mcpServer(transport, () => tools, async () => ({ content: [], isError: false }));
+	assert.deepEqual(await listed(), ['read']);
+
+	tools = [...tools, { name: 'write', description: 'Writes.', inputSchema: { type: 'object' } }];
+	server.toolsChanged();
+	await waitFor(() => out.some((line) => line.includes('list_changed')));
+	assert.deepEqual(await listed(), ['read', 'write']);
+	server.close();
 });

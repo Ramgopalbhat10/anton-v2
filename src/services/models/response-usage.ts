@@ -57,7 +57,10 @@ type TurnEvent = {
 const ESTIMATED = new Set(['cursor']);
 
 const empty = (): UsagePart => ({ inputTokens: 0, outputTokens: 0, cost: 0, cachedTokens: 0, calls: 0 });
-const open = new Map<string, ReplyUsage>();
+// On globalThis so a vite reload mid-reply cannot split start from finish across module generations.
+const openKey = Symbol.for('anton.response-usage-open');
+const openState = globalThis as typeof globalThis & { [openKey]?: Map<string, ReplyUsage> };
+const open = (openState[openKey] ??= new Map<string, ReplyUsage>());
 
 export function startReply(id: string): void {
 	open.set(id, { main: empty(), subagents: empty(), billing: 'plan', peak: 0, last: 0, model: null, compactions: [], compacting: null, estimated: false, tools: {} });

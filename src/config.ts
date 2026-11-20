@@ -73,6 +73,11 @@ export const config = {
 		clientId: read('GOOGLE_CLIENT_ID'),
 		clientSecret: read('GOOGLE_CLIENT_SECRET'),
 	},
+	/** agy's public installed-app OAuth client — Anton's sign-in replays agy's own flow, so these must be its values (they ship inside the agy binary), not a user's GCP client. */
+	antigravity: {
+		oauthClientId: read('ANTIGRAVITY_CLIENT_ID'),
+		oauthClientSecret: read('ANTIGRAVITY_CLIENT_SECRET'),
+	},
 	composio: {
 		apiUrl: read('ANTON_COMPOSIO_API_URL', 'https://backend.composio.dev/api/v3.1'),
 		apiKey: read('COMPOSIO_API_KEY'),

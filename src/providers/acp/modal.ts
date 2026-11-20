@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { type App, type ContainerProcess, type Image, ModalClient, type Sandbox, type SidecarContainer } from 'modal';
 import type { RuntimeSignIn } from '../../core/ports.ts';
 import type { AcpTransport } from './client.ts';
-import { localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
+import { canInstallCli, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
 import type { AcpAgent, AcpHost, AcpIsolation, AcpProcess, AcpRelease } from './runtime.ts';
 import { LINKD_SCRIPT, LINK_SCRIPT } from './sidecar-scripts.ts';
 
@@ -304,8 +304,16 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 			const result = (async () => {
 				// Status checks must not create warm infrastructure; only spawn/prepare refill the pool.
 				// Auth lives on this host now, so a status check never touches Modal at all.
-				if (!(await localCredential(agent))) return { signedIn: false, problem: null };
-				return { signedIn: true, problem: null };
+				const [cred, cli] = await Promise.all([localCredential(agent), localCli(agent)]);
+				// Status stays cheap: the CLI fetches itself lazily inside sign-in/model
+				// listing; warming it here keeps that wait short. ensureCli never throws.
+				if (!cli && canInstallCli(agent)) void ensureCli(agent).catch(() => undefined);
+				const problem = cli
+					? null
+					: canInstallCli(agent)
+						? `${agent.name} CLI is not installed on this server — it will be fetched on first use`
+						: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
+				return cred ? { signedIn: true, problem } : { signedIn: false, problem };
 			})().catch((error) => ({
 				signedIn: false,
 				problem: `Could not check ${agent.name} sign-in: ${error instanceof Error ? error.message : String(error)}`,
@@ -356,6 +364,8 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 			lastActivity = Date.now();
 			return localListModels(agent);
 		},
+
+		...(agent.windows ? { windows: () => agent.windows!() } : {}),
 
 		spawn: async (model?: string): Promise<AcpProcess> => {
 			lastActivity = Date.now();

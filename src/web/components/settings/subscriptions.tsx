@@ -69,9 +69,24 @@ function Pending({ subscription }: { subscription: Subscription }) {
 	);
 }
 
+/** What differs between sign-in plans; ChatGPT's copy is the original. */
+const SIGN_IN: Record<string, { tier: string; approve: string; command: string | null; placeholder: string; note: string; footer: string }> = {
+	chatgpt: {
+		tier: 'Plus or Pro',
+		approve: 'Approve Anton for your Plus or Pro plan in a new tab.',
+		command: 'npx @earendil-works/pi-ai@latest login openai',
+		placeholder: '{ "openai": { "type": "oauth", "refresh": "…", "clientId": "oaiapp_…" } }',
+		note: 'Run this on a computer with a browser, approve it in {name}, then paste the auth.json it writes.',
+		footer: 'Plus or Pro · through Sign in with ChatGPT',
+	},
+};
+const signInCopy = (id: string) =>
+	SIGN_IN[id] ?? { tier: '', approve: 'Approve Anton for your plan in a new tab.', command: null, placeholder: '', note: 'Paste a sign-in as JSON.', footer: '' };
+
 function Connect({ subscription }: { subscription: Subscription }) {
 	const saved = useSaved();
 	const signIn = useSignIn(subscription);
+	const copy = signInCopy(subscription.id);
 	const [credential, setCredential] = useState('');
 	const importing = useMutation({
 		mutationFn: () => api.importSubscriptionLogin(subscription.id, credential),
@@ -83,10 +98,8 @@ function Connect({ subscription }: { subscription: Subscription }) {
 	return (
 		<>
 			<CardSection label={subscription.state === 'expired' ? 'Sign in again' : `Option 1 · Sign in with ${subscription.name}`} hint="Recommended">
-				<Note
-					info={`${subscription.name} only sends you back to an address on your own computer, so when Anton is hosted elsewhere you paste that address here.`}
-				>
-					Approve Anton for your Plus or Pro plan in a new tab.
+				<Note info={`${subscription.name} only sends you back to an address on your own computer, so when Anton is hosted elsewhere you paste that address here.`}>
+					{copy.approve}
 				</Note>
 				<div className="flex flex-wrap items-center gap-3">
 					<Btn size="sm" variant="primary" disabled={signIn.isPending} onClick={() => signIn.mutate(window.open('', '_blank'))}>
@@ -97,9 +110,9 @@ function Connect({ subscription }: { subscription: Subscription }) {
 			</CardSection>
 			<CardSection label="Option 2 · Bring a sign-in from your computer">
 				<Note info="Anton renews it at once and keeps it renewed from then on, so the copy on that computer stops working; delete it there.">
-					Run this on a computer with a browser, approve it in {subscription.name}, then paste the <InlineCode>auth.json</InlineCode> it writes.
+					{copy.note.replace('{name}', subscription.name)}
 				</Note>
-				<Command text="npx @earendil-works/pi-ai@latest login openai" label="Command that signs in to ChatGPT on your computer" />
+				{copy.command ? <Command text={copy.command} label={`Command that signs in to ${subscription.name} on your computer`} /> : null}
 				<form
 					className="flex flex-col gap-2"
 					onSubmit={(event) => {
@@ -112,7 +125,7 @@ function Connect({ subscription }: { subscription: Subscription }) {
 						onChange={(event) => setCredential(event.target.value)}
 						rows={3}
 						spellCheck={false}
-						placeholder={'{ "openai": { "type": "oauth", "refresh": "…", "clientId": "oaiapp_…" } }'}
+						placeholder={copy.placeholder || 'Paste the sign-in as JSON'}
 						aria-label="Sign-in to import"
 						className={`${AREA} font-mono text-small leading-[18px]`}
 					/>
@@ -124,7 +137,7 @@ function Connect({ subscription }: { subscription: Subscription }) {
 					</div>
 				</form>
 			</CardSection>
-			<CardFooter caption="Plus or Pro · through Sign in with ChatGPT" />
+			<CardFooter caption={copy.footer} />
 		</>
 	);
 }
@@ -173,7 +186,7 @@ function Plan({ subscription }: { subscription: Subscription }) {
 	return (
 		<Card
 			title={`${subscription.name} plan`}
-			sub={subscription.email ?? (subscription.login ? 'waiting for approval' : 'Plus or Pro')}
+			sub={subscription.email ?? (subscription.login ? 'waiting for approval' : signInCopy(subscription.id).tier || undefined)}
 			label={`${subscription.name} plan`}
 			status={
 				<Status tone={status.tone} pulse={connected || Boolean(subscription.login)}>
@@ -208,7 +221,7 @@ function Plan({ subscription }: { subscription: Subscription }) {
 					title={`Run tasks on your ${subscription.name} plan`}
 					info="Their models join the model picker, and their calls count toward the plan's limits instead of costing money per token."
 				>
-					Plus and Pro plans, through Sign in with ChatGPT.
+					{signInCopy(subscription.id).footer}
 				</Lead>
 			)}
 			{connected ? <Connected subscription={subscription} /> : subscription.login ? <Pending subscription={subscription} /> : <Connect subscription={subscription} />}

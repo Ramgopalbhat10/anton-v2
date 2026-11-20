@@ -14,7 +14,11 @@ import {
 	type SimpleStreamOptions,
 	type ToolCall,
 } from '@earendil-works/pi-ai';
-import { type AgentRuntime, type ModelInfo, REASONING_LEVELS, type RuntimeContent, type RuntimeConversation, type RuntimeEvent, type RuntimeToolOutput } from '../core/ports.ts';
+import { type AgentRuntime, type ModelInfo, REASONING_LEVELS, type RuntimeContent, type RuntimeConversation, type RuntimeEvent, type RuntimeTool, type RuntimeToolOutput } from '../core/ports.ts';
+
+/** Flue's tool shape to the runtime's; schemas are deep-copied so a later mutation cannot leak in. */
+const runtimeTools = (tools: Context['tools']): RuntimeTool[] =>
+	(tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: JSON.parse(JSON.stringify(tool.parameters)) }));
 
 /**
  * Flue calls the model once per step and runs the tools itself; the vendor's agent runs a whole loop. The bridge meets
@@ -35,6 +39,8 @@ export type RuntimePlan = {
 	plan: string;
 	/** A level left out is passed as it is. */
 	efforts?: Record<string, string>;
+	/** The runtime reports usage once when its turn ends (ACP's `session/prompt`), so a step without usage is unmeasured, not zero: estimating it would count the whole context as fresh uncached input on every step. */
+	turnUsage?: boolean;
 };
 
 export type RuntimeOpener = Pick<AgentRuntime, 'open'>;
@@ -173,7 +179,7 @@ class Bridged {
 			model: settings.model,
 			instructions: settings.instructions,
 			effort: settings.effort,
-			tools: (tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: JSON.parse(JSON.stringify(tool.parameters)) })),
+			tools: runtimeTools(tools),
 			callTool: (toolUseId) => {
 				const ready = this.results.get(toolUseId);
 				if (ready) {
@@ -317,13 +323,23 @@ export function runtimeProvider(
 		};
 		const prints = context.messages.map(fingerprint);
 		let bridged = open.get(key);
-		const fits =
+		let fits =
 			bridged &&
 			!bridged.closed &&
 			!bridged.busy &&
-			sameSettings(bridged.settings, settings) &&
+			bridged.settings.model === settings.model &&
+			bridged.settings.instructions === settings.instructions &&
+			bridged.settings.effort === settings.effort &&
 			bridged.seen.length < prints.length &&
 			bridged.seen.every((print, index) => prints[index] === print);
+		// A changed tool list does not cost a session when the runtime can swap it live;
+		// model, instructions and effort still do.
+		if (fits && bridged!.settings.tools !== settings.tools) {
+			if (typeof bridged!.conversation.setTools === 'function') {
+				bridged!.conversation.setTools(runtimeTools(context.tools));
+				bridged!.settings.tools = settings.tools;
+			} else fits = false;
+		}
 		const next = fits ? continuation(context.messages.slice(bridged!.seen.length), bridged!.awaiting) : null;
 		if (bridged && next) {
 			for (const result of next.results) bridged.deliver(result.toolCallId, { content: asContent(result.content), isError: result.isError });
@@ -436,7 +452,7 @@ export function runtimeProvider(
 						if (!started) break;
 						const calls = output.content.filter((block): block is ToolCall => block.type === 'toolCall');
 						const { input, output: written, cacheRead, cacheWrite } = output.usage;
-						if (!input && !written && !cacheRead && !cacheWrite) Object.assign(output.usage, estimatedUsage(context, output.content));
+						if (!input && !written && !cacheRead && !cacheWrite && !plan.turnUsage) Object.assign(output.usage, estimatedUsage(context, output.content));
 						output.usage.totalTokens = output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 						calculateCost(model, output.usage);
 						if (calls.length) {

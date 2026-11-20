@@ -14,7 +14,7 @@ Every outside service sits behind an interface in `src/core/ports.ts`; implement
 | `ModelCatalog` | `openrouter` (`/models/user` with a key, else `/models`, cached an hour) | |
 | `GatewayAccount` | `openrouter` (`GET /key`, `/credits`), `vercel` (`GET /v1/credits`) | Settings › Subscriptions key, else `OPENROUTER_API_KEY` / `AI_GATEWAY_API_KEY` |
 | `SubscriptionProvider` | `chatgpt` | Settings › Subscriptions |
-| `AgentRuntime` | `claude-code` (Claude Agent SDK) | Settings › Subscriptions |
+| `AgentRuntime` | `claude-code` (Claude Agent SDK), `devin` + `antigravity` (ACP agents in Modal, when `MODAL_TOKEN_ID` is set) | Settings › Subscriptions |
 | `KeyPlan` | `opencode-go`, `cursor` (Cursor SDK) | Settings › Subscriptions |
 | `DecisionModel`, `VisionModel`, `TextModel`, `ImageModel` | `openrouter` | |
 | `Mailbox`, `AccountSignIn` | `google` | |
@@ -23,7 +23,7 @@ Every outside service sits behind an interface in `src/core/ports.ts`; implement
 | `PushSender` | `webpush` (VAPID, no library) | |
 
 - Only `src/providers/claude-code/runtime.ts` imports the Claude Agent SDK, and only `src/providers/cursor/plan.ts` imports `@cursor/sdk`.
-- `src/flue/` adapts these into Flue: the machine sandbox driver, `live-models.ts` (any catalog model resolves) and the plan bridges (`subscription-models.ts`, `opencode-go-models.ts`, `claude-code-models.ts`). `src/agents/providers.ts` registers them with `setProvider` once; each agent imports it for that side effect.
+- `src/flue/` adapts these into Flue: the machine sandbox driver, `live-models.ts` (any catalog model resolves) and the plan bridges (`subscription-models.ts`, `opencode-go-models.ts`, `claude-code-models.ts`, whose `runtimeProvider` also drives ACP runtimes). `src/agents/providers.ts` registers them with `setProvider` once; each agent imports it for that side effect.
 
 ## Server
 

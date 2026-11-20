@@ -9,7 +9,10 @@ type SettledEvent = { type: string; instanceId?: string; agentName?: string; sub
 
 /** Deliveries that joined a reply settle with it, each with its own event, moments apart. */
 const JOINED_MS = 30_000;
-const lastSettled = new Map<string, { trace: Trace; at: number }>();
+// On globalThis so a vite reload mid-reply cannot split the settle salvage across module generations.
+const lastSettledKey = Symbol.for('anton.settled-reply-last');
+const lastSettledState = globalThis as typeof globalThis & { [lastSettledKey]?: Map<string, { trace: Trace; at: number }> };
+const lastSettled = (lastSettledState[lastSettledKey] ??= new Map<string, { trace: Trace; at: number }>());
 
 /**
  * A Coder reply that fails (a plan's limit, a provider error) or is stopped never runs its finish hook, so its message
