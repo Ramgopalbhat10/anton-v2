@@ -102,9 +102,11 @@ export const devinAgent: AcpAgent = {
 		// The one method devin acp advertises; the token rides in _meta.api_key.
 		methodId: 'devin-browser',
 		params: (token) => ({ _meta: { api_key: token } }),
-		credentialFile: '/root/.local/share/devin/credentials.toml',
+		// Local CLI auth: `devin auth login` writes this file on the host; sidecars never see it.
+		credentialFile: '~/.local/share/devin/credentials.toml',
 		credentialKey: 'windsurf_api_key',
 		loginCommand: ['devin', 'auth', 'login', '--force-manual-token-flow'],
+		logoutCommand: ['devin', 'auth', 'logout'],
 		loginUrl: /https:\/\/\S+/,
 	},
 };

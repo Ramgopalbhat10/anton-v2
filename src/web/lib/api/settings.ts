@@ -56,6 +56,8 @@ export type SandboxSettings = {
 	warmImageDays: number;
 };
 export type SandboxView = { settings: SandboxSettings; defaultBaseImage: string; provider: string };
+/** Where an ACP agent's jailed container runs: shared sidecars of one anchor sandbox, or a dedicated Modal sandbox each. */
+export type AcpIsolation = 'sidecar' | 'sandbox';
 /** How a new task starts when the launcher does not say; null model is the server's default. */
 export type GeneralSettings = {
 	model: string | null;
@@ -105,6 +107,9 @@ export const settingsApi = {
 	sandboxSettings: () => json<SandboxView>('/api/settings/sandbox'),
 	saveSandboxSettings: (settings: SandboxSettings) =>
 		json<SandboxView>('/api/settings/sandbox', { method: 'PUT', body: JSON.stringify(settings) }),
+	acpIsolation: (agent: string) => json<{ isolation: AcpIsolation }>(`/api/settings/acp/${encodeURIComponent(agent)}`),
+	setAcpIsolation: (agent: string, isolation: AcpIsolation) =>
+		json<{ isolation: AcpIsolation }>(`/api/settings/acp/${encodeURIComponent(agent)}`, { method: 'PUT', body: JSON.stringify({ isolation }) }),
 	generalSettings: () => json<GeneralSettings>('/api/settings/general'),
 	backgroundModelDefaults: () => json<{ defaults: Record<BackgroundTask, string | null> }>('/api/settings/background-models'),
 	saveGeneralSettings: (settings: GeneralSettings) =>

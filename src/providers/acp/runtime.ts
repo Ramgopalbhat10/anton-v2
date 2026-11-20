@@ -22,6 +22,16 @@ import { mcpServer } from './mcp.ts';
 /** A downloadable agent build: version plus where its image install fetches it. */
 export type AcpRelease = { version: string; url: string; sha256?: string };
 
+/**
+ * Where an agent's jailed process runs: `sidecar` shares one anchor sandbox per host
+ * (cheap, experimental API); `sandbox` gives each conversation its own Modal sandbox
+ * (standard API, billed per sandbox).
+ */
+export type AcpIsolation = 'sidecar' | 'sandbox';
+
+/** The settings-table key holding an agent's isolation choice; the host and the settings API share it. */
+export const acpIsolationKey = (agentId: string) => `acp.isolation.${agentId}`;
+
 /** Everything vendor-specific about one ACP agent. The engine never branches on it. */
 export type AcpAgent = {
 	id: string;
@@ -63,10 +73,11 @@ export type AcpAgent = {
 		methodId: string;
 		/** authenticate params for a token; secrets ride here, never env. */
 		params: (token: string) => Record<string, unknown>;
-		/** Where the agent's own login flow stores its token inside the container. */
+		/** The agent CLI's credential file on this host (`~` expands to home); Anton reads the key for per-session auth. */
 		credentialFile: string;
 		credentialKey: string;
 		loginCommand: string[];
+		logoutCommand?: string[];
 		/** First URL the login command prints; complete() feeds it the user's code. */
 		loginUrl: RegExp;
 	};
@@ -90,7 +101,7 @@ type SessionUpdate = {
 };
 
 /** A `session/new` configOptions entry; `currentValue` is the option's value as the agent reports it. */
-type ConfigOption = {
+export type ConfigOption = {
 	id?: string;
 	configId?: string;
 	currentValue?: unknown;
@@ -127,6 +138,8 @@ export interface AcpHost {
 	listModels(): Promise<SubscriptionModel[]>;
 	/** Warm-up after sign-in: build the agent image and resolve its release in the background. */
 	prepare?(): Promise<void>;
+	/** The isolation mode new spawns use; present only on hosts that offer a choice. */
+	isolation?(): Promise<AcpIsolation>;
 	/** Spawn one container for one conversation; `model` lets the host preset it where the agent allows. */
 	spawn(model?: string): Promise<AcpProcess>;
 }
@@ -535,6 +548,7 @@ export function acpRuntime(agent: AcpAgent, host: AcpHost): AgentRuntime {
 			};
 		},
 		signOut: () => host.signOut(),
+		...(host.isolation ? { isolation: () => host.isolation!() } : {}),
 		status: async (fresh): Promise<AgentRuntimeStatus> => {
 			const s = await host.signedIn();
 			return { signedIn: s.signedIn, email: null, plan: agent.plan, version: null, problem: s.problem };

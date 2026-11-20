@@ -84,6 +84,8 @@ export type Subscription = {
 	/** Where the gateway's key comes from: pasted here, or the server's own (`envVar`). */
 	keySource?: 'settings' | 'environment' | null;
 	envVar?: string | null;
+	/** Runtimes whose agent container placement is configurable: 'sidecar' shares one anchor sandbox, 'sandbox' is dedicated per conversation. */
+	isolation?: 'sidecar' | 'sandbox' | null;
 };
 export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
 

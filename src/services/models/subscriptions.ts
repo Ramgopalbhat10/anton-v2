@@ -75,6 +75,8 @@ export type SubscriptionView = {
 	windows: PlanWindow[] | null;
 	keySource?: 'settings' | 'environment' | null;
 	envVar?: string | null;
+	/** Set on runtimes whose agent container placement is configurable (ACP on Modal). */
+	isolation?: 'sidecar' | 'sandbox' | null;
 };
 
 type GatewayFields = { vendor?: string; price?: Pick<ModelInfo['price'], 'input' | 'output'> };
@@ -724,6 +726,7 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		keyPage: null,
 		keyHint: null,
 		windows,
+		isolation: runtime.isolation ? await runtime.isolation().catch(() => null) : null,
 	};
 }
 
