@@ -404,7 +404,7 @@ test('ensureCli fetches a missing CLI, puts it on PATH, and caches the probe', a
 		id: 'fakecli',
 		command: ['fakecli-acp-test', 'acp'],
 		install: {
-			fallback: { version: '0', url: 'http://unused.invalid/x.tgz' },
+			fallback: () => ({ version: '0', url: 'http://unused.invalid/x.tgz' }),
 			fetch: async (_release: unknown, target: string) => {
 				fetches++;
 				await writeFile(join(target, 'fakecli-acp-test'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -423,6 +423,56 @@ test('ensureCli fetches a missing CLI, puts it on PATH, and caches the probe', a
 	}
 });
 
+test('ensureCli passes the host platform to release resolution and skips unsupported hosts', async () => {
+	const { mkdtemp, rm } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { ensureCli } = await import('../src/providers/acp/local-cli.ts');
+	const { release: _release, ...base } = devinAgent;
+	const dir = await mkdtemp(join(tmpdir(), 'anton-cli-'));
+	const seen: string[] = [];
+	let fetches = 0;
+	const agent = {
+		...base,
+		id: 'fakecli-platform',
+		command: ['fakecli-platform-test', 'acp'],
+		release: {
+			floor: '0',
+			latest: async (platform: string) => {
+				seen.push(`latest:${platform}`);
+				return null;
+			},
+		},
+		install: {
+			fallback: (platform: string) => {
+				seen.push(`fallback:${platform}`);
+				return platform === 'linux/arm64' ? { version: '0', url: 'http://unused.invalid/x.tgz' } : null;
+			},
+			fetch: async () => {
+				fetches++;
+			},
+		},
+	};
+	// installAttempts throttles per agent id, so each scenario gets its own.
+	const variant = (id: string) => ({ ...agent, id });
+	try {
+		// No host platform (unsupported OS/arch) never reaches the vendor.
+		assert.equal(await ensureCli(variant('fakecli-p1'), dir, null), false);
+		assert.deepEqual(seen, []);
+		assert.equal(fetches, 0);
+		// A platform the vendor has no build for fails before fetch.
+		assert.equal(await ensureCli(variant('fakecli-p2'), dir, 'plan9/x64'), false);
+		assert.deepEqual(seen, ['latest:plan9/x64', 'fallback:plan9/x64']);
+		assert.equal(fetches, 0);
+		// A supported platform flows through to latest() then fallback(); the probe then fails (no real binary).
+		assert.equal(await ensureCli(variant('fakecli-p3'), dir, 'linux/arm64'), false);
+		assert.deepEqual(seen, ['latest:plan9/x64', 'fallback:plan9/x64', 'latest:linux/arm64', 'fallback:linux/arm64']);
+		assert.equal(fetches, 1);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test('a failed CLI install surfaces its reason through sign-in', async () => {
 	const { mkdtemp, rm } = await import('node:fs/promises');
 	const { tmpdir } = await import('node:os');
@@ -435,7 +485,7 @@ test('a failed CLI install surfaces its reason through sign-in', async () => {
 		id: 'badcli',
 		command: ['badcli-acp-test', 'acp'],
 		install: {
-			fallback: { version: '0', url: 'http://unused.invalid/x.tgz' },
+			fallback: () => ({ version: '0', url: 'http://unused.invalid/x.tgz' }),
 			fetch: async () => {
 				throw new Error('boom');
 			},

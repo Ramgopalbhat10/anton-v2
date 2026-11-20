@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { type App, type ContainerProcess, type Image, ModalClient, type Sandbox, type SidecarContainer } from 'modal';
 import type { RuntimeSignIn } from '../../core/ports.ts';
 import type { AcpTransport } from './client.ts';
-import { canInstallCli, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
+import { canInstallCli, cliInstallGap, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
 import type { AcpAgent, AcpHost, AcpIsolation, AcpProcess, AcpRelease } from './runtime.ts';
 import { LINKD_SCRIPT, LINK_SCRIPT } from './sidecar-scripts.ts';
 
@@ -36,6 +36,21 @@ const POOL_SIZE = 2;
 const WARM_CHECK_MS = 400;
 /** Pre-started agent execs are trusted only this long; older ones may be wedged and go stale. */
 const WARM_MAX_AGE_MS = 10 * 60_000;
+/** When this module loaded — approximately process start; the orphan sweep only kills sandboxes older than this. */
+const PROCESS_STARTED = Date.now();
+/** Modal sandbox ids are ULIDs: the first 10 Crockford-base32 chars encode the creation time in ms. */
+const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+function sandboxCreatedAtMs(id: string): number | null {
+	const ulid = id.startsWith('sb-') ? id.slice(3) : id;
+	if (ulid.length < 10) return null;
+	let ms = 0;
+	for (const c of ulid.slice(0, 10)) {
+		const v = ULID_ALPHABET.indexOf(c.toUpperCase());
+		if (v < 0) return null;
+		ms = ms * 32 + v;
+	}
+	return ms;
+}
 
 function stderrTail(proc: ContainerProcess<Uint8Array>): () => string {
 	let tail = '';
@@ -101,11 +116,39 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 	const appRef = () => (app ??= client.apps.fromName(appName, { createIfMissing: true }));
 	const unique = (prefix: string) => `${prefix}-${++sidecarSeq}-${randomUUID().slice(0, 8)}`;
 
-	/** The agent's newest release, re-asked every RELEASE_TTL_MS; null keeps the descriptor's pinned build. */
+	/**
+	 * ACP sandboxes bill while they run and nothing outside their process can stop
+	 * them: a restart loses every handle, while the agent process inside keeps the
+	 * sandbox "active" so Modal's idle timeout never fires. The first host built in
+	 * a process sweeps the leftovers of dead ones — once per process, since a vite
+	 * reload rebuilds hosts while live conversations still use their sidecars.
+	 * One Anton backend owns an ACP app.
+	 */
+	const bootKey = Symbol.for('anton.acp.orphan-sweep');
+	const bootState = globalThis as typeof globalThis & { [bootKey]?: true };
+	if (!bootState[bootKey]) {
+		bootState[bootKey] = true;
+		void (async () => {
+			try {
+				for await (const sb of client.sandboxes.list({ appId: (await appRef()).appId })) {
+					const tags = await sb.getTags().catch(() => ({} as Record<string, string>));
+					if (!tags['anton-acp']) continue;
+					// Only predating sandboxes are orphans; anything newer could be a fresh spawn of this process.
+					const created = sandboxCreatedAtMs(sb.sandboxId);
+					if (created !== null && created > PROCESS_STARTED - 10_000) continue;
+					await client.sandboxes.fromId(sb.sandboxId).then((s) => s.terminate()).catch(() => undefined);
+				}
+			} catch {
+				// Best-effort: leftovers also die at the sandbox's own timeout.
+			}
+		})();
+	}
+
+	/** The agent's newest release, re-asked every RELEASE_TTL_MS; null keeps the descriptor's pinned build. Sidecar images are always linux/x64. */
 	async function release(): Promise<AcpRelease | null> {
 		if (!agent.release) return null;
 		if (!releaseCache || Date.now() - releaseCache.at > RELEASE_TTL_MS) {
-			releaseCache = { at: Date.now(), value: agent.release.latest().catch(() => null) };
+			releaseCache = { at: Date.now(), value: agent.release.latest('linux/x64').catch(() => null) };
 		}
 		return releaseCache.value;
 	}
@@ -308,11 +351,14 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 				// Status stays cheap: the CLI fetches itself lazily inside sign-in/model
 				// listing; warming it here keeps that wait short. ensureCli never throws.
 				if (!cli && canInstallCli(agent)) void ensureCli(agent).catch(() => undefined);
+				const gap = cliInstallGap(agent);
 				const problem = cli
 					? null
 					: canInstallCli(agent)
 						? `${agent.name} CLI is not installed on this server — it will be fetched on first use`
-						: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
+						: gap
+							? `${agent.name} CLI is not installed on this server (${gap})`
+							: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
 				return cred ? { signedIn: true, problem } : { signedIn: false, problem };
 			})().catch((error) => ({
 				signedIn: false,

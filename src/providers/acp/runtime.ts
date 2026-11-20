@@ -44,15 +44,16 @@ export type AcpAgent = {
 	signInCommand: string;
 	/** Container image: base ref plus dockerfileCommands run after it; `release` is the resolved agent build, null for static installs. */
 	image: { base: string; commands: (release: AcpRelease | null) => string[] };
-	/** When set, the host resolves the newest agent build before each image build; `floor` is never gone below. */
-	release?: { floor: string; latest(): Promise<AcpRelease | null> };
+	/** When set, the host resolves the newest agent build before each image build; `floor` is never gone below. `platform` is 'linux/x64'-style — image builds always pass the container's, host installs pass the host's. */
+	release?: { floor: string; latest(platform: string): Promise<AcpRelease | null> };
 	/**
 	 * Host-side CLI bootstrap: when `command[0]` is not on PATH, `fetch` downloads
 	 * the release and leaves the runnable CLI at `join(dir, command[0])`. `fallback`
-	 * is used when `release.latest()` is unavailable. Absent means a missing CLI
-	 * is a hard error (manual install required).
+	 * is used when `release.latest()` is unavailable, and returns null on platforms
+	 * the vendor ships no build for. Absent means a missing CLI is a hard error
+	 * (manual install required).
 	 */
-	install?: { fallback: AcpRelease; fetch(release: AcpRelease, dir: string): Promise<void> };
+	install?: { fallback(platform: string): AcpRelease | null; fetch(release: AcpRelease, dir: string): Promise<void> };
 	/** Domains the jailed agent may reach; its API and nothing else. */
 	egress: string[];
 	/** Inside the container: where the agent works and where link scripts live. */

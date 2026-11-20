@@ -14,6 +14,14 @@ const DEVIN_VERSION = '3000.14.30821';
 const DEVIN_TGZ = `https://static.devin.ai/cli/${DEVIN_VERSION}/devin-${DEVIN_VERSION}-x86_64-unknown-linux.tar.gz`;
 const MANIFEST = 'https://static.devin.ai/cli/current/manifest.json';
 
+/** Host platform ('linux/arm64'…) → the manifest's Rust target triple; Modal images are always 'linux/x64'. */
+const DEVIN_TRIPLES: Record<string, string> = {
+	'linux/x64': 'x86_64-unknown-linux',
+	'linux/arm64': 'aarch64-unknown-linux',
+	'darwin/x64': 'x86_64-apple-darwin',
+	'darwin/arm64': 'aarch64-apple-darwin',
+};
+
 const versionParts = (v: string) => v.split('.').map((n) => Number(n) || 0);
 const olderThan = (a: string, b: string) => {
 	const [x, y] = [versionParts(a), versionParts(b)];
@@ -23,15 +31,17 @@ const olderThan = (a: string, b: string) => {
 	return false;
 };
 
-async function devinLatest(): Promise<AcpRelease | null> {
+async function devinLatest(platform: string): Promise<AcpRelease | null> {
+	const triple = DEVIN_TRIPLES[platform];
+	if (!triple) return null;
 	try {
 		const res = await fetch(MANIFEST, { signal: AbortSignal.timeout(10_000) });
 		const manifest = (await res.json()) as { version?: string; platforms?: Record<string, { url?: string; sha256?: string }> };
-		const platform = manifest.platforms?.['x86_64-unknown-linux'];
-		if (!manifest.version || !platform?.url) return null;
+		const p = manifest.platforms?.[triple];
+		if (!manifest.version || !p?.url) return null;
 		// Never downgrade below the floor the image recipe was verified against.
 		if (olderThan(manifest.version, DEVIN_VERSION)) return null;
-		return { version: manifest.version, url: platform.url, sha256: platform.sha256 };
+		return { version: manifest.version, url: p.url, sha256: p.sha256 };
 	} catch {
 		return null;
 	}
@@ -83,7 +93,10 @@ export const devinAgent: AcpAgent = {
 	// Same tarball the image installs; the floor URL carries no pinned checksum,
 	// matching the image recipe's trust level when the manifest is unreachable.
 	install: {
-		fallback: { version: DEVIN_VERSION, url: DEVIN_TGZ },
+		fallback: (platform) => {
+			const triple = DEVIN_TRIPLES[platform];
+			return triple ? { version: DEVIN_VERSION, url: `https://static.devin.ai/cli/${DEVIN_VERSION}/devin-${DEVIN_VERSION}-${triple}.tar.gz` } : null;
+		},
 		fetch: async (release, dir) => {
 			const stage = await mkdtemp(join(dir, '.stage-'));
 			try {
