@@ -1,7 +1,11 @@
 // Devin's ACP agent (`devin acp`) as an AcpAgent descriptor. Everything
 // Devin-specific lives here; the runtime in runtime.ts stays generic.
 
+import { chmod, mkdtemp, rename, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { AcpAgent, AcpRelease } from './runtime.ts';
+import { downloadArchive, untar } from './install.ts';
+import { devinUsage } from './devin-usage.ts';
 import type { SubscriptionModel } from '../../core/ports.ts';
 
 // Floor and fallback: the last version verified end to end. `release.latest`
@@ -76,6 +80,25 @@ export const devinAgent: AcpAgent = {
 		},
 	},
 	release: { floor: DEVIN_VERSION, latest: devinLatest },
+	// Same tarball the image installs; the floor URL carries no pinned checksum,
+	// matching the image recipe's trust level when the manifest is unreachable.
+	install: {
+		fallback: { version: DEVIN_VERSION, url: DEVIN_TGZ },
+		fetch: async (release, dir) => {
+			const stage = await mkdtemp(join(dir, '.stage-'));
+			try {
+				const archive = join(stage, 'devin.tgz');
+				await downloadArchive(release, archive);
+				await untar(archive, stage);
+				// The tarball carries bin/devin, which the image puts under /usr/local.
+				const bin = join(dir, 'devin');
+				await rename(join(stage, 'bin', 'devin'), bin);
+				await chmod(bin, 0o755);
+			} finally {
+				await rm(stage, { recursive: true, force: true });
+			}
+		},
+	},
 	// Only what the CLI needs to reach Devin; verified by the sidecar spike.
 	egress: ['*.devin.ai', '*.codeium.com', '*.windsurf.com'],
 	workdir: '/work',
@@ -98,6 +121,9 @@ export const devinAgent: AcpAgent = {
 		);
 	},
 	catalog: { command: ['devin', 'models', 'list'], parse: parseModelCatalog },
+	// Plan quota via the CLI's own SeatManagement status call; the public
+	// consumption API is Enterprise-only.
+	windows: () => devinUsage(devinAgent, DEVIN_VERSION),
 	auth: {
 		// The one method devin acp advertises; the token rides in _meta.api_key.
 		methodId: 'devin-browser',

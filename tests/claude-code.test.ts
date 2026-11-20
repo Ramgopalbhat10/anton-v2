@@ -14,7 +14,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-claude-code-'));
 process.env.ANTON_DATA_DIR = dir;
 
 const { childEnv, isExtraUsageNotice, startSignIn, statusFrom, toModels, toRuntimeEvents, toWindows, windowOf } = await import('../src/providers/claude-code/runtime.ts');
-const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, IDLE_MS, sweepIdle, transcript } = await import('../src/flue/claude-code-models.ts');
+const { claudeCodeProvider, closeClaudeCodeConversations, continuation, fingerprint, IDLE_MS, runtimeProvider, sweepIdle, transcript } = await import('../src/flue/claude-code-models.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const subscriptions = await import('../src/services/models/subscriptions.ts');
 const { listModels } = await import('../src/services/models/models.ts');
@@ -57,12 +57,13 @@ type FakeConversation = {
 	sent: RuntimeContent[][];
 	events: ReturnType<typeof queue<RuntimeEvent>>;
 	closed: boolean;
+	toolUpdates: RuntimeConversationOptions['tools'][];
 	/** What Claude Code does after a tool_use block: call the tool on Anton's MCP server. */
 	callTool(id: string, name: string): Promise<RuntimeToolOutput>;
 };
 
 /** Claude Code as Anton's bridge sees it, with each conversation it opens kept for the test to drive. */
-function fakeRuntime(status: Partial<AgentRuntimeStatus> = {}, models: SubscriptionModel[] = []) {
+function fakeRuntime(status: Partial<AgentRuntimeStatus> = {}, models: SubscriptionModel[] = [], liveTools = true) {
 	const opened: FakeConversation[] = [];
 	const calls = { status: 0, list: 0 };
 	const runtime: AgentRuntime = {
@@ -85,6 +86,7 @@ function fakeRuntime(status: Partial<AgentRuntimeStatus> = {}, models: Subscript
 				sent: [],
 				events,
 				closed: false,
+				toolUpdates: [],
 				callTool: (id, name) => options.callTool(id, name),
 			};
 			opened.push(conversation);
@@ -95,6 +97,14 @@ function fakeRuntime(status: Partial<AgentRuntimeStatus> = {}, models: Subscript
 					conversation.closed = true;
 					events.close();
 				},
+				...(liveTools
+					? {
+							setTools: (tools: RuntimeConversationOptions['tools']) => {
+								conversation.toolUpdates.push(tools);
+								conversation.options.tools = tools;
+							},
+						}
+					: {}),
 			};
 		},
 	};
@@ -216,6 +226,44 @@ test('tool calls end the step; the next step hands Claude Code their results and
 	assert.deepEqual(conversation.sent[1], [{ type: 'text', text: 'Hi.' }]);
 });
 
+test('a runtime that reports usage only at turn end leaves unmeasured steps at zero instead of estimating them', async () => {
+	const zeroToolCall = (): RuntimeEvent[] => [
+		{ type: 'message_start', id: 'msg_z', usage: { ...usage } },
+		{ type: 'block_start', index: 0, block: { type: 'tool_use', id: 'tu_z', name: 'read' } },
+		{ type: 'block_delta', index: 0, json: '{"path":"a.ts"}' },
+		{ type: 'block_stop', index: 0 },
+		{ type: 'message_delta', stopReason: 'tool_use', usage: {} },
+		{ type: 'message_stop' },
+	];
+	const providerFor = (turnUsage?: boolean) => {
+		const fake = fakeRuntime();
+		const models = createModels();
+		models.setProvider(
+			runtimeProvider({ gateway: 'test-agent', name: 'Test', program: 'Test CLI', plan: 'Test', turnUsage }, () => [{ ...opus, id: 'test-agent/test-model' }], () => fake.runtime),
+		);
+		return { fake, models, model: models.getModel('test-agent', 'test-model')! };
+	};
+	const context = { systemPrompt: 'Be Anton.', messages: [user('Read a.ts.')], tools: [readTool] };
+
+	// Without the flag the bridge estimates the whole context as fresh input, as it does for Cursor.
+	const estimated = providerFor();
+	const estep = estimated.models.completeSimple(estimated.model, context, { sessionId: 'est' });
+	await new Promise((resolve) => setImmediate(resolve));
+	estimated.fake.opened[0].events.push(...zeroToolCall());
+	const estimateStep = await estep;
+	assert.ok(estimateStep.usage.input > 0, 'the estimate fills an unmeasured step');
+
+	// With it the step stays zero; the turn's real usage lands on the step that ends the turn.
+	const measured = providerFor(true);
+	const mstep = measured.models.completeSimple(measured.model, context, { sessionId: 'meas' });
+	await new Promise((resolve) => setImmediate(resolve));
+	measured.fake.opened[0].events.push(...zeroToolCall());
+	const measuredStep = await mstep;
+	assert.equal(measuredStep.stopReason, 'toolUse', measuredStep.errorMessage);
+	assert.equal(measuredStep.usage.input, 0);
+	assert.equal(measuredStep.usage.output, 0);
+});
+
 test('a context that does not extend the last one starts a new conversation with the conversation so far', async () => {
 	const fake = fakeRuntime();
 	const { models, model } = bridge(fake.runtime);
@@ -234,6 +282,56 @@ test('a context that does not extend the last one starts a new conversation with
 	assert.ok(intro.type === 'text' && intro.text.includes('<conversation_so_far>') && intro.text.includes('[assistant]\nFirst.'));
 	assert.deepEqual(latest, { type: 'text', text: 'Two.' });
 	assert.equal(fake.opened[1].options.effort, 'max');
+	fake.opened[1].events.push(...say('Second.'));
+	assert.equal((await second).stopReason, 'stop');
+});
+
+test('a changed tool list is swapped into the open conversation instead of respawning', async () => {
+	const fake = fakeRuntime();
+	const { models, model } = bridge(fake.runtime);
+	const context = { systemPrompt: 'Be Anton.', messages: [user('Read.')], tools: [readTool] };
+	const first = models.completeSimple(model, context, { sessionId: 't1' });
+	await new Promise((resolve) => setImmediate(resolve));
+	fake.opened[0].events.push(...say('Done.'));
+	const step1 = await first;
+	assert.equal(step1.stopReason, 'stop');
+
+	// An MCP server came online between replies: same history plus a user message, new tools.
+	const writeTool = { name: 'write', description: 'Writes a file.', parameters: { type: 'object', properties: { path: { type: 'string' } } } } as never;
+	const second = models.completeSimple(
+		model,
+		{ ...context, tools: [readTool, writeTool], messages: [...context.messages, step1, user('Now write.')] },
+		{ sessionId: 't1' },
+	);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(fake.opened.length, 1, 'no new conversation for a tool-only change');
+	assert.deepEqual(
+		fake.opened[0].toolUpdates.map((tools) => tools.map((tool) => tool.name)),
+		[['read', 'write']],
+	);
+	fake.opened[0].events.push(...say('Written.'));
+	const step2 = await second;
+	assert.equal(step2.stopReason, 'stop', step2.errorMessage);
+	assert.deepEqual(step2.content, [{ type: 'text', text: 'Written.' }]);
+});
+
+test('a changed tool list still respawns a runtime that cannot swap tools live', async () => {
+	const fake = fakeRuntime({}, [], false);
+	const { models, model } = bridge(fake.runtime);
+	const context = { messages: [user('One.')], tools: [readTool] };
+	const first = models.completeSimple(model, context, { sessionId: 't2' });
+	await new Promise((resolve) => setImmediate(resolve));
+	fake.opened[0].events.push(...say('First.'));
+	const step1 = await first;
+
+	const writeTool = { name: 'write', description: 'Writes a file.', parameters: { type: 'object', properties: {} } } as never;
+	const second = models.completeSimple(
+		model,
+		{ ...context, tools: [readTool, writeTool], messages: [...context.messages, step1, user('Two.')] },
+		{ sessionId: 't2' },
+	);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(fake.opened.length, 2, 'no setTools means a fresh session');
 	fake.opened[1].events.push(...say('Second.'));
 	assert.equal((await second).stopReason, 'stop');
 });

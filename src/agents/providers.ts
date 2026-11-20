@@ -19,9 +19,17 @@ setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 setProvider(
 	runtimeProvider(
-		{ gateway: 'devin', name: 'Devin (Devin CLI)', program: 'Devin CLI', plan: 'Devin' },
+		{ gateway: 'devin', name: 'Devin (Devin CLI)', program: 'Devin CLI', plan: 'Devin', turnUsage: true },
 		loadedModels,
 		() => planRuntime('devin'),
 		runtimeHooks('devin'),
+	),
+);
+setProvider(
+	runtimeProvider(
+		{ gateway: 'antigravity', name: 'Antigravity (Antigravity CLI)', program: 'Antigravity CLI', plan: 'Google Antigravity', turnUsage: true },
+		loadedModels,
+		() => planRuntime('antigravity'),
+		runtimeHooks('antigravity'),
 	),
 );

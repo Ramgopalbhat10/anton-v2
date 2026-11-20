@@ -27,22 +27,27 @@ Flue ── RuntimeEvent stream ──► AcpRuntime (host)
                                         host MCP handler → callTool() rendezvous
 ```
 
-`open()` returns immediately; handshake, auth and `session/new` complete lazily on first use. `session/update` notifications map to `RuntimeEvent`s: `agent_message_chunk`→text, `agent_thought_chunk`→thinking, `usage_update`→usage. Anton MCP `tools/call` synthesizes a `tool_use` block + `message_stop`; the parked `callTool` resolves when Flue delivers results — the same rendezvous the Claude Code bridge uses. `session/prompt`'s return closes the turn (`turn_end`). Native-tool `session/update`s are ignored: they run inside the jail and never touch Anton state.
+`open()` returns immediately; handshake, auth and `session/new` complete lazily on first use. `session/update` notifications map to `RuntimeEvent`s: `agent_message_chunk`→text, `agent_thought_chunk`→thinking, `usage_update`→context occupancy only (`used`/`size`, no token counts). Token accounting comes once per turn from `session/prompt`'s result usage (`inputTokens`/`cachedReadTokens`/…), so ACP plans set `turnUsage` on the bridge: steps inside a turn stay unmeasured rather than taking `estimatedUsage`'s whole-context guess, which would count every step's context as fresh uncached input and drown the real cache reads. Anton MCP `tools/call` synthesizes a `tool_use` block + `message_stop`; the parked `callTool` resolves when Flue delivers results — the same rendezvous the Claude Code bridge uses. `session/prompt`'s return closes the turn (`turn_end`). Native-tool `session/update`s are ignored: they run inside the jail and never touch Anton state.
+
+`session/request_permission` allows calls that read as Anton's MCP tools and refuses the rest (the jail contains native tools, but they still must not spend turns). Vendors namespace our tools differently — Devin marks `cognition.ai/permissionRule`/titles `mcp__anton__tool`, agy names calls `mcp_anton_tool` titled "Run mcp_anton_tool" — so one predicate (`isAntonToolRef`) decides for both the thinking filter and the permission answer; a mismatch once made agy refuse every Anton tool and end turns thinking-only. agy also speaks MCP `2025-11-25`, opening with `server/discover` (answered -32601, which it tolerates) and calling `tools/call` with the bare listed name.
 
 ## Per-agent descriptor
 
 Everything agent-specific is a small descriptor; the engine is shared:
 
-| Field | Devin | Antigravity (later) |
+| Field | Devin | Antigravity |
 |---|---|---|
 | `command` | `["devin","acp"]` | `["agy","acp"]` |
-| `image` | node:22 + devin tarball + link scripts | node:22 + agy install + link scripts |
-| `release` | `static.devin.ai/cli/current/manifest.json` → version+url+sha256 | TBD |
-| `egress` | `*.devin.ai`, `*.codeium.com`, `*.windsurf.com` | Google's endpoints |
-| `auth` | `authenticate{methodId:"devin-browser",_meta:{api_key}}`, key from local `credentials.toml` | TBD |
-| `modelConfigId` | `"model"` (from `session/new` configOptions) | TBD |
+| `image` | node:22 + devin tarball + link scripts | node:22 + agy tarball (`antigravity` binary, `agy` symlink) + link scripts |
+| `release` | `static.devin.ai/cli/current/manifest.json` → version+url+sha256 | `antigravity-cli-auto-updater-*.run.app/manifests/linux_amd64.json` → version+url+sha512 |
+| `install` | same tarball → `<dataDir>/bin/devin` | same tarball → `<dataDir>/bin/antigravity` + `agy` symlink |
+| `egress` | `*.devin.ai`, `*.codeium.com`, `*.windsurf.com` | `*.googleapis.com`, `*.google.com`, `antigravity.google`, `*.gstatic.com`, the update manifest host |
+| `auth` | `authenticate{methodId:"devin-browser",_meta:{api_key}}`, key from local `credentials.toml` | `authenticate{methodId:"oauth-personal"}` with no params; agy reads `~/.gemini/antigravity-cli/antigravity-oauth-token` itself — Anton's OAuth writes that JSON on the host (`auth.customLogin`), `auth.provision` copies it into the container before authenticate |
+| `modelConfigId` | `"model"` (from `session/new` configOptions) | `"model"` (base ids like `gemini-4-neon`; `session/new.models.availableModels` carries the richer per-tier variants) |
+| `effortConfigId`/`effortMap`/`sessionConfig`/`modelInfo` | — | `"thought_level"` (low/medium/high/xhigh, Anton's off/minimal/max clamp to its ends), `mode: "auto"`, variants → reasoning levels |
+| `windows` | `SeatManagementService/GetUserStatus` on `server.codeium.com` with `windsurf_api_key` in the request metadata (the public consumption API is Enterprise-only) | `retrieveUserQuotaSummary` on daily/prod cloudcode-pa with the token file (consumer→daily first); per-model `fetchAvailableModels` quotas as fallback |
 
-`session/new` returns `configOptions` with the account's real model list — `listModels()` reads it live, no hardcoded catalog. `session/load` (`loadSession` capability) resumes after a sandbox restart.
+`session/new` returns `configOptions` with the account's real model list — `listModels()` reads it live, no hardcoded catalog. One `AcpConversation` is one `session/new`; there is no `session/load` resume wired (agy advertises `loadSession`/`resume`/`list` capabilities, Devin's support is unverified), so a bridge respawn (compaction, settings change, interruption) pays a fresh sidecar spawn plus a `<conversation_so_far>` transcript replay. After `session/new` the runtime applies the model, then the conversation's `effort` through `effortConfigId` and any `sessionConfig` defaults — each only when the option exists, accepts the value and differs from `currentValue`. `modelInfo` lets a descriptor enrich listed models from the session's own metadata (Antigravity derives each base model's reasoning levels from its `models.availableModels` id suffixes).
 
 ## Agent releases
 
@@ -63,10 +68,23 @@ Cost note that motivated the reaper: Modal's `idleTimeoutMs` only watches a sand
 
 ## Auth and sign-in
 
-The vendor credential stays on this host: `devin auth login --force-manual-token-flow` runs locally under `script(1)`'s PTY (the prompt refuses piped stdin), writing `~/.local/share/devin/credentials.toml`. ACP ignores stored CLI credentials by design — verified with an empty `XDG_DATA_HOME`, `authenticate _meta.api_key` alone opens `session/new` — so the runtime reads the key from that file and passes it per-session; the file is the only store and no sidecar ever holds credentials. Browser PKCE inside a container was impossible anyway (`xdg-open`); the manual-token flow is the headless path either way. `signOut` runs the CLI's own `auth logout` then removes the file; warm slots drain since their sessions would fail auth.
+The vendor credential stays on this host. Two shapes exist, both in `src/providers/acp/local-cli.ts`:
+
+- **Token-in-params** (Devin): `devin auth login --force-manual-token-flow` runs locally under `script(1)`'s PTY (the prompt refuses piped stdin), writing `~/.local/share/devin/credentials.toml`; the runtime reads the key and passes it per-session as `_meta.api_key`. ACP ignores stored CLI credentials by design — verified with an empty `XDG_DATA_HOME`, `authenticate` alone opens `session/new` — so the file is the only store and no sidecar ever holds credentials.
+- **Token-file** (Antigravity): agy's `authenticate` ignores params and reads its own store — `~/.gemini/antigravity-cli/antigravity-oauth-token`, a JSON `{token:{access_token,refresh_token,expiry,…},auth_method:"consumer",id_token_email}` it refreshes in place, falling back to it when no OS keyring exists (verified with a dead D-Bus). Anton runs the same Google OAuth `agy acp --login` does — Antigravity's public installed-app client, agy's scopes, `antigravity.google/oauth-callback` as the paste-back redirect (`src/providers/antigravity/oauth.ts`; the client id/secret come from `ANTIGRAVITY_CLIENT_ID`/`ANTIGRAVITY_CLIENT_SECRET`, since the repo carries no vendor credential) — and keeps that JSON at `<dataDir>/antigravity/oauth-token.json`. `auth.provision` writes it into the container between spawn and `authenticate` (agy reads it lazily — verified post-spawn), so the refresh token lives only on this host and in the ephemeral container.
+
+`signOut` removes the credential and runs `customLogout` when present (Antigravity best-effort revokes the refresh token at `oauth2.googleapis.com/revoke`); warm slots drain since their sessions would fail auth.
+
+The vendor CLI on this host is needed only for sign-in (Devin's PTY login) and `listModels` probing — execution runs the image-baked binary in Modal, so a missing CLI never blocks tasks with cached models. When `command[0]` is not on PATH, `ensureCli` (`local-cli.ts`) fetches it lazily: `agent.release.latest()` (or `install.fallback` when the manifest is unreachable) → `install.fetch` downloads and checksum-verifies the vendor tarball (`src/providers/acp/install.ts`) into `<dataDir>/bin`, which is prepended to `PATH` so every spawn site — the login PTY's shell string, the ACP probe, `models list`, sign-out — resolves it. Installs are single-flight per agent, retried at most every 5 minutes, linux/x64 only (the release URLs are linux binaries). `status()` stays cheap: it reports "not installed — it will be fetched on first use" and warms `ensureCli` in the background; sign-in and model listing await it and surface the failure reason.
+
+For `listModels`, agents whose data dir is not the default can override the probe (`probeCommand`/`probeEnv`/`probeSeed`): Antigravity's runs `agy acp` under a throwaway `HOME` holding only the token file with `DBUS_SESSION_BUS_ADDRESS` dead, so the host keyring can never leak in.
+
+`windows` (the Settings usage bars) is descriptor-driven too: ACP reports the tier but no quota. Antigravity's `quota.ts` reads Google's `retrieveUserQuotaSummary` — the same private read T3 Code makes — with the token file's OAuth token, refreshing in memory only (agy owns the file and may rotate the refresh token). Consumer accounts hit `daily-cloudcode-pa` first, business `cloudcode-pa`; the first host's reading of a bucket wins. Devin's `devin-usage.ts` calls `SeatManagementService/GetUserStatus` on `server.codeium.com` — the status call the CLI's own billing view uses — with the `windsurf_api_key` in the Connect request's `metadata` (no bearer header); the documented consumption APIs under `api.devin.ai/v3` are Enterprise-only and 403 on Pro/Teams. `planStatus` is plan-dependent and proto3-omitted-at-zero, so only populated fields become windows: quota tiers get `Devin · Daily`/`Weekly` from the remaining percents, credit tiers get prompt/flow-credit windows, ACU tiers get an ACU window — an absent weekly percent means Devin doesn't report one, not that it's zero. Both readers cache for a minute and a failed read serves the last good answer.
 
 ## Status
 
 Spike-verified end to end on Modal (Oct 2025): ACP handshake over `sidecar.exec`, `authenticate` with a browser-login token, MCP round-trip through the in-image link, native `write` provably contained to the sidecar fs, egress allowlist blocking `example.com` while allowing `api.devin.ai`.
 
-Not yet verified: `session/load` resume, `session/cancel`, permission-request policy under load, Antigravity descriptor.
+Antigravity verified locally against `agy` 1.5.13: `initialize`/`authenticate oauth-personal`/`session/new` succeed from a bare token file with no keyring, `configOptions` exposes the `model` select, and the auth methods are `oauth-personal`, `oauth-business`, `gemini-api-key` and `agent-platform` (only `oauth-personal` is wired).
+
+Not yet verified: `session/load` resume end-to-end, `session/cancel`, permission-request policy under load, a live Antigravity turn inside Modal (the ACP flow itself is verified against agy 1.5.13 on the host: MCP tools, permission allow/deny, thinking+text turns).

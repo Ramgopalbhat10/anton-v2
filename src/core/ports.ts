@@ -394,6 +394,8 @@ export type RuntimeConversation = {
 	send(content: RuntimeContent[]): void;
 	readonly events: AsyncIterable<RuntimeEvent>;
 	close(): void;
+	/** Swap the served tool list under a live conversation. Runtimes that cannot do it omit this and the bridge opens a fresh session instead. */
+	setTools?(tools: RuntimeTool[]): void;
 };
 
 /** Anton relays only the code the vendor's page shows; the program trades it for its token and keeps that. */

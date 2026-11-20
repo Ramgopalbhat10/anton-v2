@@ -457,7 +457,15 @@ function toolServer(options: RuntimeConversationOptions) {
 		const output = await options.callTool(toolUseId, name);
 		return { content: output.content, isError: output.isError };
 	});
-	return { type: 'sdk' as const, name: SERVER, instance: server };
+	return {
+		mcp: { type: 'sdk' as const, name: SERVER, instance: server },
+		setTools: (tools: RuntimeConversationOptions['tools']) => {
+			options.tools = tools;
+			names.clear();
+			for (const tool of tools) names.add(tool.name);
+			server.sendToolListChanged();
+		},
+	};
 }
 
 const userMessage = (content: RuntimeContent[]): SDKUserMessage => ({
@@ -595,6 +603,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 			// Claude Code takes a 1M model by its `[1m]` name; fast mode is a setting of its own.
 			const { base, context, fast } = parseVariant(conversation.model);
 			const defaults = baseOptions();
+			const tools = toolServer(conversation);
 			const session = query({
 				prompt: input,
 				options: {
@@ -603,7 +612,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 					...(fast ? { settings: { ...(defaults.settings as object), fastMode: true } } : {}),
 					// Claude Code's own prompt stays; Anton's instructions follow it.
 					systemPrompt: { type: 'preset', preset: 'claude_code', append: conversation.instructions },
-					mcpServers: { [SERVER]: toolServer(conversation) },
+					mcpServers: { [SERVER]: tools.mcp },
 					allowedTools: [`mcp__${SERVER}`],
 					// Anything else Claude Code might ask to run is refused without asking.
 					permissionMode: 'dontAsk',
@@ -630,6 +639,7 @@ export function claudeCodeRuntime(options: ClaudeCodeOptions): AgentRuntime {
 					input.close();
 					session.close();
 				},
+				setTools: tools.setTools,
 			};
 		},
 	};

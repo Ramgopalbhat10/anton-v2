@@ -4,12 +4,14 @@
 // verified: authenticate alone opens session/new with an empty data dir).
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { config } from '../../config.ts';
 import type { RuntimeSignIn, SubscriptionModel } from '../../core/ports.ts';
 import { AcpClient, type AcpTransport } from './client.ts';
-import type { AcpAgent, ConfigOption } from './runtime.ts';
+import type { AcpAgent, ConfigOption, SessionInfo } from './runtime.ts';
 
 const tomlValue = (text: string, key: string): string | null => {
 	const match = new RegExp(`${key}\\s*=\\s*["']([^"']+)["']`).exec(text);
@@ -21,6 +23,91 @@ const credentialPath = (agent: AcpAgent) => {
 	return file.startsWith('~/') ? join(homedir(), file.slice(2)) : file;
 };
 
+const cliProbes = new Map<string, Promise<boolean>>();
+/** Whether the agent's CLI answers `--version` on this host; a miss is retried next call since the CLI may have been installed since. */
+export function localCli(agent: AcpAgent): Promise<boolean> {
+	const bin = agent.command[0];
+	let probe = cliProbes.get(bin);
+	if (!probe) {
+		probe = new Promise<boolean>((resolve) => {
+			const proc = spawn(bin, ['--version'], { stdio: 'ignore' });
+			const timer = setTimeout(() => {
+				proc.kill();
+				resolve(false);
+			}, 10_000);
+			proc.on('error', () => {
+				clearTimeout(timer);
+				resolve(false);
+			});
+			proc.on('exit', (code) => {
+				clearTimeout(timer);
+				resolve(code === 0);
+			});
+		});
+		cliProbes.set(bin, probe);
+	}
+	return probe.then((ok) => {
+		if (!ok) cliProbes.delete(bin);
+		return ok;
+	});
+}
+
+const INSTALL_RETRY_MS = 5 * 60_000;
+const installs = new Map<string, Promise<boolean>>();
+const installAttempts = new Map<string, { at: number; ok: boolean; error?: string }>();
+
+/** Whether this host can fetch the agent's CLI itself — the release URLs are linux/x64 binaries. */
+export const canInstallCli = (agent: AcpAgent) => Boolean(agent.install) && process.platform === 'linux' && process.arch === 'x64';
+
+const installError = (agent: AcpAgent) => installAttempts.get(agent.id)?.error;
+
+/**
+ * Make the agent's CLI runnable here: already on PATH, installed under the data
+ * dir by a previous run, or fetched now from the vendor's own release. Never
+ * throws; the failure reason lands in installError() for the caller's message.
+ */
+export async function ensureCli(agent: AcpAgent, dir = join(config.dataDir, 'bin')): Promise<boolean> {
+	const [bin] = agent.command;
+	if (bin.includes('/')) return localCli(agent);
+	if (await localCli(agent)) return true;
+	const install = agent.install;
+	if (!install || !canInstallCli(agent)) return false;
+	const last = installAttempts.get(agent.id);
+	if (last && Date.now() - last.at < INSTALL_RETRY_MS) return last.ok;
+	let pending = installs.get(agent.id);
+	if (!pending) {
+		pending = (async () => {
+			let error: string | undefined;
+			try {
+				await mkdir(dir, { recursive: true });
+				const have = await access(join(dir, bin), constants.X_OK).then(
+					() => true,
+					() => false,
+				);
+				if (!have) {
+					const release = (await agent.release?.latest().catch(() => null)) ?? install.fallback;
+					await install.fetch(release, dir);
+				}
+				// Every spawn site resolves the bare command name through PATH: the login
+				// PTY's shell string, the ACP probe, `models list`, sign-out.
+				if (!process.env.PATH?.split(':').includes(dir)) process.env.PATH = `${dir}:${process.env.PATH ?? ''}`;
+			} catch (e) {
+				error = e instanceof Error ? e.message : String(e);
+			}
+			const ok = error ? false : await localCli(agent);
+			installAttempts.set(agent.id, { at: Date.now(), ok, error: error ?? (ok ? undefined : 'the installed binary does not run') });
+			return ok;
+		})().finally(() => installs.delete(agent.id));
+		installs.set(agent.id, pending);
+	}
+	return pending;
+}
+
+const cliMissing = (agent: AcpAgent) => {
+	const why = installError(agent);
+	return new Error(`${agent.name} CLI is not installed on this server${why ? ` (${why})` : ''}`);
+};
+
 /** The API key authenticate() takes; null when signed out. Missing file is signed out, other read errors throw. */
 export async function localCredential(agent: AcpAgent): Promise<string | null> {
 	let text: string;
@@ -30,6 +117,8 @@ export async function localCredential(agent: AcpAgent): Promise<string | null> {
 		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
 		throw error;
 	}
+	// credentialKey '' means the file itself is the credential (JSON token stores like agy's).
+	if (agent.auth.credentialKey === '') return text.trim() || null;
 	return tomlValue(text, agent.auth.credentialKey);
 }
 
@@ -65,6 +154,8 @@ function loginSpawn(agent: AcpAgent): ReturnType<typeof spawn> {
 }
 
 export async function localSignIn(agent: AcpAgent): Promise<RuntimeSignIn> {
+	if (agent.auth.customLogin) return agent.auth.customLogin();
+	if (!(await ensureCli(agent))) throw cliMissing(agent);
 	const proc = loginSpawn(agent);
 	const tail = childTail(proc);
 	const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => resolve(code)));
@@ -127,6 +218,7 @@ export async function localSignOut(agent: AcpAgent): Promise<void> {
 			});
 		});
 	}
+	await agent.auth.customLogout?.();
 	await rm(credentialPath(agent), { force: true }).catch(() => undefined);
 }
 
@@ -151,13 +243,15 @@ function localTransport(proc: ChildProcess): { transport: AcpTransport; tail: ()
 }
 
 /** configOptions from a throwaway local `devin acp`; an isolated XDG dir keeps user MCP servers and creds out of the probe. */
-async function probeConfigOptions(agent: AcpAgent, token: string): Promise<{ configOptions?: ConfigOption[] }> {
+async function probeConfigOptions(agent: AcpAgent, token: string): Promise<SessionInfo> {
 	const dir = await mkdtemp(join(tmpdir(), 'anton-acp-'));
-	const proc = spawn(agent.command[0], agent.command.slice(1), {
+	const argv = agent.probeCommand ? agent.probeCommand(dir) : agent.command;
+	const proc = spawn(argv[0], argv.slice(1), {
 		stdio: 'pipe',
-		env: { ...process.env, XDG_DATA_HOME: dir },
+		env: { ...process.env, XDG_DATA_HOME: dir, ...agent.probeEnv?.(dir) },
 	});
 	try {
+		await agent.probeSeed?.(token, dir);
 		const { transport, tail } = localTransport(proc);
 		const acp = new AcpClient(transport, {});
 		proc.on('error', (error) => {
@@ -176,7 +270,7 @@ async function probeConfigOptions(agent: AcpAgent, token: string): Promise<{ con
 				90_000,
 			);
 			await acp.request('authenticate', { methodId: agent.auth.methodId, ...agent.auth.params(token) }, 90_000);
-			return (await acp.request('session/new', { cwd: dir, mcpServers: [] }, 90_000)) as { configOptions?: ConfigOption[] };
+			return (await acp.request('session/new', { cwd: dir, mcpServers: [] }, 90_000)) as SessionInfo;
 		} finally {
 			await acp.close();
 			if (tail()) console.error(`[acp:${agent.id}] probe stderr: ${tail().slice(-300)}`);
@@ -206,16 +300,19 @@ async function runCatalog(agent: AcpAgent): Promise<Map<string, { contextLength:
 export async function localListModels(agent: AcpAgent): Promise<SubscriptionModel[]> {
 	const token = await localCredential(agent);
 	if (!token) return [];
+	if (!(await ensureCli(agent))) throw cliMissing(agent);
 	const session = await probeConfigOptions(agent, token);
 	const option = session.configOptions?.find((o) => (o.id ?? o.configId) === agent.modelConfigId);
 	const choices = (option?.options ?? []).filter((o) => typeof o.value === 'string' && o.value);
 	const catalog = await runCatalog(agent);
 	return choices.map(
 		(o): SubscriptionModel => {
-			const entry = catalog.get(String(o.value));
+			const value = String(o.value);
+			const entry = catalog.get(value);
+			const extra = agent.modelInfo?.(value, session) ?? {};
 			return {
 				id: `${agent.gateway}/${o.value}`,
-				name: o.name ?? String(o.value),
+				name: o.name ?? value,
 				vendor: agent.name,
 				description: o.description ?? '',
 				createdAt: 0,
@@ -224,6 +321,7 @@ export async function localListModels(agent: AcpAgent): Promise<SubscriptionMode
 				vision: agent.modelMetaImages ? o._meta?.[agent.modelMetaImages] === true : true,
 				reasoning: [],
 				defaultReasoning: 'off',
+				...extra,
 				listPrice: entry?.listPrice ?? null,
 			};
 		},

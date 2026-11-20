@@ -1,6 +1,7 @@
 /* Model vendors' logos from LobeHub's MIT set (@lobehub/icons-static-svg), inlined as SVG text so one-colour logos take the text colour; only the files listed are bundled. */
 import ai21 from '@lobehub/icons-static-svg/icons/ai21.svg?raw';
 import alibaba from '@lobehub/icons-static-svg/icons/alibaba-color.svg?raw';
+import antigravity from '@lobehub/icons-static-svg/icons/antigravity.svg?raw';
 import anthropic from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
 import arcee from '@lobehub/icons-static-svg/icons/arcee-color.svg?raw';
 import aws from '@lobehub/icons-static-svg/icons/aws-color.svg?raw';
@@ -70,6 +71,7 @@ const LOGOS: Record<string, string> = {
 	ai21,
 	alibaba,
 	amazon: aws,
+	antigravity,
 	anthropic,
 	'arcee-ai': arcee,
 	baidu,

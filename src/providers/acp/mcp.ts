@@ -9,9 +9,9 @@ type Rpc = { id?: number | string; method?: string; params?: { name?: string; ar
 
 export function mcpServer(
 	transport: AcpTransport,
-	tools: RuntimeTool[],
+	tools: RuntimeTool[] | (() => RuntimeTool[]),
 	call: (name: string, args: unknown) => Promise<RuntimeToolOutput>,
-): { close(): void } {
+): { close(): void; toolsChanged(): void } {
 	let buffer = '';
 	let closed = false;
 
@@ -32,7 +32,7 @@ export function mcpServer(
 				return respond(msg.id, {});
 			case 'tools/list':
 				return respond(msg.id, {
-					tools: tools.map((tool) => ({
+					tools: (typeof tools === 'function' ? tools() : tools).map((tool) => ({
 						name: tool.name,
 						description: tool.description,
 						inputSchema: { ...tool.inputSchema, type: 'object' as const },
@@ -82,6 +82,10 @@ export function mcpServer(
 			if (closed) return;
 			closed = true;
 			void transport.closeStdin().catch(() => {});
+		},
+		// Best effort: agents that re-list on the notification pick up added/removed tools mid-session.
+		toolsChanged() {
+			if (!closed) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
 		},
 	};
 }

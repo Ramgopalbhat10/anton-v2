@@ -15,12 +15,13 @@ import type {
 	RuntimeToolOutput,
 	RuntimeUsage,
 	SubscriptionModel,
+	PlanWindow,
 } from '../../core/ports.ts';
 import { AcpClient, type AcpTransport } from './client.ts';
 import { mcpServer } from './mcp.ts';
 
 /** A downloadable agent build: version plus where its image install fetches it. */
-export type AcpRelease = { version: string; url: string; sha256?: string };
+export type AcpRelease = { version: string; url: string; sha256?: string; sha512?: string };
 
 /**
  * Where an agent's jailed process runs: `sidecar` shares one anchor sandbox per host
@@ -45,6 +46,13 @@ export type AcpAgent = {
 	image: { base: string; commands: (release: AcpRelease | null) => string[] };
 	/** When set, the host resolves the newest agent build before each image build; `floor` is never gone below. */
 	release?: { floor: string; latest(): Promise<AcpRelease | null> };
+	/**
+	 * Host-side CLI bootstrap: when `command[0]` is not on PATH, `fetch` downloads
+	 * the release and leaves the runnable CLI at `join(dir, command[0])`. `fallback`
+	 * is used when `release.latest()` is unavailable. Absent means a missing CLI
+	 * is a hard error (manual install required).
+	 */
+	install?: { fallback: AcpRelease; fetch(release: AcpRelease, dir: string): Promise<void> };
 	/** Domains the jailed agent may reach; its API and nothing else. */
 	egress: string[];
 	/** Inside the container: where the agent works and where link scripts live. */
@@ -61,11 +69,25 @@ export type AcpAgent = {
 	modelConfigId: string;
 	/** _meta key on model options that marks image support; absent means assume every model has it. */
 	modelMetaImages?: string;
+	/** configOptions id carrying reasoning effort (e.g. agy's thought_level); `effort` from the conversation maps through `effortMap` first, then passes through when the option accepts it. */
+	effortConfigId?: string;
+	effortMap?: Record<string, string>;
+	/** configOptions set once per session after session/new when they differ (e.g. agy's mode: 'auto', so native tools don't stall on permission prompts inside the jail). */
+	sessionConfig?: Record<string, string>;
+	/** Enrich a listed model from the session's own metadata (e.g. agy's models.availableModels variants → reasoning levels). */
+	modelInfo?(value: string, session: SessionInfo): Partial<Pick<SubscriptionModel, 'reasoning' | 'defaultReasoning' | 'contextLength' | 'vision'>>;
+	/** The plan's usage windows (5-hour/weekly quota) when the vendor exposes them outside ACP. */
+	windows?(): Promise<PlanWindow[] | null>;
 	/** Optional vendor command (e.g. `devin models list`) whose text output enriches model ids with context and list price. */
 	catalog?: {
 		command: string[];
 		parse(text: string): Map<string, { contextLength: number; listPrice: SubscriptionModel['listPrice'] }>;
 	};
+	/** Host-side probe overrides for agents whose data dir is not the default (e.g. agy --gemini-dir). `command` is the fallback. */
+	probeCommand?: (workDir: string) => string[];
+	probeEnv?: (workDir: string) => Record<string, string>;
+	/** Write the credential into the probe's data dir before authenticate (agents that read a token file, not _meta). */
+	probeSeed?(token: string, workDir: string): Promise<void>;
 	/** Vendor-specific notifications (e.g. Devin's `_cognition.ai/*` turn stats); the engine ignores what it doesn't handle. */
 	notification?: (method: string, params: unknown) => void;
 	auth: {
@@ -75,11 +97,18 @@ export type AcpAgent = {
 		params: (token: string) => Record<string, unknown>;
 		/** The agent CLI's credential file on this host (`~` expands to home); Anton reads the key for per-session auth. */
 		credentialFile: string;
+		/** TOML key inside credentialFile; empty means the whole file is the credential (JSON token stores like agy's). */
 		credentialKey: string;
 		loginCommand: string[];
 		logoutCommand?: string[];
 		/** First URL the login command prints; complete() feeds it the user's code. */
 		loginUrl: RegExp;
+		/** Replaces the PTY login flow for agents whose sign-in is not a CLI prompt (e.g. Anton-run OAuth). */
+		customLogin?: () => Promise<RuntimeSignIn>;
+		/** Extra sign-out steps beyond deleting credentialFile (e.g. token revocation). */
+		customLogout?: () => Promise<void>;
+		/** Files the agent needs inside its container before authenticate — agy's token file lives in its app-data dir. */
+		provision?(proc: AcpProcess, token: string): Promise<void>;
 	};
 };
 
@@ -108,9 +137,16 @@ export type ConfigOption = {
 	options?: { value?: string; name?: string; description?: string; _meta?: Record<string, unknown> }[];
 };
 
+/** The parts of a `session/new` result listModels reads: configOptions plus whatever model metadata the agent adds (agy's models.availableModels). */
+export type SessionInfo = {
+	sessionId?: string;
+	configOptions?: ConfigOption[];
+	models?: { availableModels?: { modelId?: string; name?: string }[] };
+};
+
 /** `session/request_permission` params. */
 type PermissionParams = {
-	toolCall?: { title?: string };
+	toolCall?: { title?: string; name?: string; _meta?: Record<string, unknown> };
 	_meta?: Record<string, unknown>;
 	options?: { optionId?: string; kind?: string; name?: string }[];
 };
@@ -136,6 +172,8 @@ export interface AcpHost {
 	signIn(): Promise<RuntimeSignIn>;
 	signOut(): Promise<void>;
 	listModels(): Promise<SubscriptionModel[]>;
+	/** The plan's usage windows when the vendor reports them; absent means the plan shows none. */
+	windows?(): Promise<PlanWindow[] | null>;
 	/** Warm-up after sign-in: build the agent image and resolve its release in the background. */
 	prepare?(): Promise<void>;
 	/** The isolation mode new spawns use; present only on hosts that offer a choice. */
@@ -199,7 +237,9 @@ class AcpConversation implements RuntimeConversation {
 	private readonly host: AcpHost;
 	private proc: AcpProcess | null = null;
 	private acp: AcpClient | null = null;
-	private mcp: { close(): void } | null = null;
+	private mcp: { close(): void; toolsChanged(): void } | null = null;
+	/** The live tool list the MCP server and callTool validation read; setTools swaps it mid-session. */
+	private tools: RuntimeTool[];
 	private sessionId: string | null = null;
 	private ready: Promise<void> | null = null;
 	private queue: Promise<void> = Promise.resolve();
@@ -223,6 +263,7 @@ class AcpConversation implements RuntimeConversation {
 		this.agent = agent;
 		this.host = host;
 		this.options = options;
+		this.tools = options.tools;
 	}
 
 	readonly events = this.eventsOut[Symbol.asyncIterator]();
@@ -240,6 +281,11 @@ class AcpConversation implements RuntimeConversation {
 		this.mcp?.close();
 		void this.proc?.close();
 		this.eventsOut.close();
+	}
+
+	setTools(tools: RuntimeTool[]): void {
+		this.tools = tools;
+		this.mcp?.toolsChanged();
 	}
 
 	// ---- event emission -------------------------------------------------
@@ -320,12 +366,33 @@ class AcpConversation implements RuntimeConversation {
 		}
 	}
 
+	/**
+	 * Vendors namespace Anton's MCP tools their own way — Devin marks permission rules
+	 * `mcp__anton__tool`, agy names calls `mcp_anton_tool` and titles them "Run mcp_anton_tool".
+	 * The thinking filter and the permission gate must agree on this or a vendor's own
+	 * tools get shown as Anton's, or Anton's get refused (agy did exactly that).
+	 */
+	private isAntonToolRef(
+		ref: { name?: unknown; title?: unknown; _meta?: Record<string, unknown> } | undefined,
+		meta?: Record<string, unknown>,
+	): boolean {
+		const srv = this.agent.mcpServerName;
+		const rule = String(meta?.['cognition.ai/permissionRule'] ?? ref?._meta?.['cognition.ai/permissionRule'] ?? '');
+		const name = String(ref?.name ?? '');
+		const title = String(ref?.title ?? '');
+		const mcp = `mcp__${srv}`;
+		return (
+			rule.startsWith(mcp) ||
+			name.startsWith(`${mcp}__`) ||
+			name.startsWith(`mcp_${srv}_`) ||
+			title.includes(`${mcp}__`) ||
+			title.includes(`mcp_${srv}_`) ||
+			title.includes(`${srv}_`)
+		);
+	}
+
 	private isAntonTool(update: SessionUpdate): boolean {
-		const meta = update._meta ?? {};
-		const rule = String(meta['cognition.ai/permissionRule'] ?? '');
-		const title = String(update.title ?? '');
-		const mcp = `mcp__${this.agent.mcpServerName}`;
-		return rule.startsWith(mcp) || title.includes(mcp) || title.includes(`${this.agent.mcpServerName}_`);
+		return this.isAntonToolRef(update);
 	}
 
 	private pushUsage(update: SessionUpdate): void {
@@ -352,9 +419,8 @@ class AcpConversation implements RuntimeConversation {
 		this.lastActivity = Date.now();
 		if (method === 'session/request_permission') {
 			const p = params as PermissionParams;
-			const rule = String(p?._meta?.['cognition.ai/permissionRule'] ?? '');
 			const options = p?.options ?? [];
-			const antonTool = rule.startsWith(`mcp__${this.agent.mcpServerName}__`) || String(p?.toolCall?.title ?? '').includes(`mcp__${this.agent.mcpServerName}__`);
+			const antonTool = this.isAntonToolRef(p?.toolCall, p?._meta);
 			const pick = (match: RegExp) => options.find((o) => match.test(`${o.kind ?? ''} ${o.name ?? ''}`))?.optionId;
 			const optionId = antonTool ? pick(/allow/) : pick(/reject|deny/);
 			return optionId ? { outcome: { outcome: 'selected', optionId } } : { outcome: { outcome: 'cancelled' } };
@@ -365,11 +431,14 @@ class AcpConversation implements RuntimeConversation {
 	// ---- MCP side -------------------------------------------------------
 
 	private async handleToolCall(rawName: string, args: unknown): Promise<RuntimeToolOutput> {
-		// Some agents namespace MCP tools (mcp__anton__bash, anton_bash); Anton's name is the suffix.
-		const name = this.options.tools.some((tool) => tool.name === rawName)
+		// Some agents namespace MCP tools (mcp__anton__bash, mcp_anton_bash, anton_bash); Anton's name is the suffix.
+		const name = this.tools.some((tool) => tool.name === rawName)
 			? rawName
-			: rawName.replace(/^mcp__[^_]+__/, '').replace(new RegExp(`^${this.agent.mcpServerName}_`), '');
-		if (!this.options.tools.some((tool) => tool.name === name)) {
+			: rawName
+					.replace(/^mcp__[^_]+__/, '')
+					.replace(new RegExp(`^mcp_${this.agent.mcpServerName}_`), '')
+					.replace(new RegExp(`^${this.agent.mcpServerName}_`), '');
+		if (!this.tools.some((tool) => tool.name === name)) {
 			return { content: [{ type: 'text', text: `Unknown tool: ${rawName}` }], isError: true };
 		}
 		const toolUseId = `acp-call-${++this.toolSeq}`;
@@ -402,7 +471,7 @@ class AcpConversation implements RuntimeConversation {
 		const proc = await this.host.spawn(this.options.model);
 		this.spawnMs = Date.now() - t0;
 		this.proc = proc;
-		this.mcp = mcpServer(proc.mcp, this.options.tools, (name, args) => this.handleToolCall(name, args));
+		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.handleToolCall(name, args));
 		this.acp = new AcpClient(proc.acp, {
 			onNotification: (method, params) => {
 				this.agent.notification?.(method, params);
@@ -422,6 +491,8 @@ class AcpConversation implements RuntimeConversation {
 		);
 		const token = await this.host.credential();
 		if (!token) throw new Error(`${this.agent.name} is not signed in`);
+		// Some agents read credentials from files in their own data dir, not from authenticate params.
+		await this.agent.auth.provision?.(proc, token);
 		await this.acp.request('authenticate', { methodId: this.agent.auth.methodId, ...this.agent.auth.params(token) }, HANDSHAKE_MS);
 		// The agent reads project instructions itself; Anton's system prompt rides along as AGENTS.md.
 		if (this.options.instructions.trim()) {
@@ -437,10 +508,11 @@ class AcpConversation implements RuntimeConversation {
 					env: [],
 				},
 			],
-		}, HANDSHAKE_MS)) as { sessionId?: string; configOptions?: ConfigOption[] };
+		}, HANDSHAKE_MS)) as SessionInfo;
 		if (!session.sessionId) throw new Error(`${this.agent.name} opened no session`);
 		this.sessionId = session.sessionId;
 		await this.applyModel(session.configOptions);
+		await this.applySessionConfig(session.configOptions);
 		this.setupMs = Date.now() - t0 - this.spawnMs;
 		this.chunk('thinking', `\n[${this.agent.name}] session ready in ${((this.spawnMs + this.setupMs) / 1000).toFixed(1)}s\n`);
 	}
@@ -448,19 +520,33 @@ class AcpConversation implements RuntimeConversation {
 	private async applyModel(configOptions: ConfigOption[] | undefined): Promise<void> {
 		const model = this.options.model;
 		if (!model || !Array.isArray(configOptions)) return;
-		const option = configOptions.find((o) => (o.id ?? o.configId) === this.agent.modelConfigId);
+		await this.setOption(configOptions, this.agent.modelConfigId, model);
+	}
+
+	/** effort (mapped through the descriptor's effortMap) and sessionConfig entries, each only when the option exists, accepts the value and differs. */
+	private async applySessionConfig(configOptions: ConfigOption[] | undefined): Promise<void> {
+		if (!Array.isArray(configOptions)) return;
+		const wanted: [string, string | undefined][] = [];
+		const effort = this.options.effort;
+		if (effort && this.agent.effortConfigId) wanted.push([this.agent.effortConfigId, this.agent.effortMap?.[effort] ?? effort]);
+		for (const [id, value] of Object.entries(this.agent.sessionConfig ?? {})) wanted.push([id, value]);
+		for (const [id, value] of wanted) if (value) await this.setOption(configOptions, id, value);
+	}
+
+	private async setOption(configOptions: ConfigOption[], id: string, value: string): Promise<void> {
+		const option = configOptions.find((o) => (o.id ?? o.configId) === id);
 		if (!option) return;
 		const values = option.options ?? [];
-		if (values.length && !values.some((v) => v.value === model)) return;
+		if (values.length && !values.some((v) => v.value === value)) return;
 		// The option already reports the value in use; setting it again makes the agent
 		// reconfigure the session (seconds on Devin), so only send the RPC when it differs.
-		if (option.currentValue === model) return;
+		if (option.currentValue === value) return;
 		await this.acp!.request(
 			'session/set_config_option',
 			{
 				sessionId: this.sessionId,
 				configId: option.id ?? option.configId,
-				value: model,
+				value,
 			},
 			HANDSHAKE_MS,
 		);
@@ -554,6 +640,7 @@ export function acpRuntime(agent: AcpAgent, host: AcpHost): AgentRuntime {
 			return { signedIn: s.signedIn, email: null, plan: agent.plan, version: null, problem: s.problem };
 		},
 		listModels: () => host.listModels(),
+		...(host.windows ? { windows: () => host.windows!() } : {}),
 		open: (options) => new AcpConversation(agent, host, options),
 	};
 }
