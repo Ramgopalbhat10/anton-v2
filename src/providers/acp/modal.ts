@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { type App, type ContainerProcess, type Image, ModalClient, type Sandbox, type SidecarContainer } from 'modal';
 import type { RuntimeSignIn } from '../../core/ports.ts';
 import type { AcpTransport } from './client.ts';
-import { canInstallCli, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
+import { canInstallCli, cliInstallGap, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
 import type { AcpAgent, AcpHost, AcpIsolation, AcpProcess, AcpRelease } from './runtime.ts';
 import { LINKD_SCRIPT, LINK_SCRIPT } from './sidecar-scripts.ts';
 
@@ -101,11 +101,11 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 	const appRef = () => (app ??= client.apps.fromName(appName, { createIfMissing: true }));
 	const unique = (prefix: string) => `${prefix}-${++sidecarSeq}-${randomUUID().slice(0, 8)}`;
 
-	/** The agent's newest release, re-asked every RELEASE_TTL_MS; null keeps the descriptor's pinned build. */
+	/** The agent's newest release, re-asked every RELEASE_TTL_MS; null keeps the descriptor's pinned build. Sidecar images are always linux/x64. */
 	async function release(): Promise<AcpRelease | null> {
 		if (!agent.release) return null;
 		if (!releaseCache || Date.now() - releaseCache.at > RELEASE_TTL_MS) {
-			releaseCache = { at: Date.now(), value: agent.release.latest().catch(() => null) };
+			releaseCache = { at: Date.now(), value: agent.release.latest('linux/x64').catch(() => null) };
 		}
 		return releaseCache.value;
 	}
@@ -308,11 +308,14 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: { isolatio
 				// Status stays cheap: the CLI fetches itself lazily inside sign-in/model
 				// listing; warming it here keeps that wait short. ensureCli never throws.
 				if (!cli && canInstallCli(agent)) void ensureCli(agent).catch(() => undefined);
+				const gap = cliInstallGap(agent);
 				const problem = cli
 					? null
 					: canInstallCli(agent)
 						? `${agent.name} CLI is not installed on this server — it will be fetched on first use`
-						: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
+						: gap
+							? `${agent.name} CLI is not installed on this server (${gap})`
+							: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
 				return cred ? { signedIn: true, problem } : { signedIn: false, problem };
 			})().catch((error) => ({
 				signedIn: false,

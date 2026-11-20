@@ -14,10 +14,21 @@ import type { AcpAgent, AcpRelease, SessionInfo } from './runtime.ts';
 // Floor and fallback: the last version verified end to end. `release.latest`
 // asks Antigravity's own update manifest for the newest build when the image is made.
 const AGY_VERSION = '1.5.13';
-const MANIFEST = 'https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json';
-// The floor build's own URL and digest, for hosts that cannot reach the manifest.
-const AGY_URL = 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-5999302598852608/linux-x64/cli_linux_x64.tar.gz';
-const AGY_SHA512 = '014b37387703acab1f47cd532c8bb60167a6a3537b0f9891de03f1b1ffa9614307bc83c4b2f7551273b0877d722716b0cd9e26782f6b2a50705db4f05e18c68f';
+const MANIFEST_BASE = 'https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/';
+/** Host platform ('linux/arm64'…) → the updater's manifest name; Modal images are always 'linux/x64'. */
+const AGY_MANIFESTS: Record<string, string> = {
+	'linux/x64': 'linux_amd64',
+	'linux/arm64': 'linux_arm64',
+	'darwin/x64': 'darwin_amd64',
+	'darwin/arm64': 'darwin_arm64',
+};
+// The floor build's own URLs and digests per platform, for hosts that cannot reach the manifest.
+const AGY_FALLBACKS: Record<string, AcpRelease> = {
+	'linux/x64': { version: AGY_VERSION, url: 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-5999302598852608/linux-x64/cli_linux_x64.tar.gz', sha512: '014b37387703acab1f47cd532c8bb60167a6a3537b0f9891de03f1b1ffa9614307bc83c4b2f7551273b0877d722716b0cd9e26782f6b2a50705db4f05e18c68f' },
+	'linux/arm64': { version: AGY_VERSION, url: 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-5999302598852608/linux-arm/cli_linux_arm64.tar.gz', sha512: 'dccea2eb455099f5175f0c87cc47b38fcefe4cb0cb44dea3927469bb4bbf68ac3c0b30fc04affb24c17e90959386a93c3785e8e4b8b1a3338ca4e4d57b80057b' },
+	'darwin/arm64': { version: AGY_VERSION, url: 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-5999302598852608/darwin-arm/cli_mac_arm64.tar.gz', sha512: 'd9825ebce6954df6b7841970fd7ef3d37acdfe628993f14c396ec73b20ed06bbe95e7b7be047e7c0b0baaf009f75fe95ce051b9f4af5e84b002da15bda4a1f45' },
+	'darwin/x64': { version: AGY_VERSION, url: 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-5999302598852608/darwin-x64/cli_mac_x64.tar.gz', sha512: '6a7087eb847029bead89d496a6c4a5d3ec8552f351a486b3917948fee2a9a72ec6e2be7eae866b975b8ed3fc2a1827cf176b5bd45d6eb9970424fec4352d3930' },
+};
 
 const versionParts = (v: string) => v.split('.').map((n) => Number(n) || 0);
 const olderThan = (a: string, b: string) => {
@@ -28,9 +39,11 @@ const olderThan = (a: string, b: string) => {
 	return false;
 };
 
-async function agyLatest(): Promise<AcpRelease | null> {
+async function agyLatest(platform: string): Promise<AcpRelease | null> {
+	const manifestName = AGY_MANIFESTS[platform];
+	if (!manifestName) return null;
 	try {
-		const res = await fetch(MANIFEST, { signal: AbortSignal.timeout(10_000) });
+		const res = await fetch(`${MANIFEST_BASE}${manifestName}.json`, { signal: AbortSignal.timeout(10_000) });
 		const manifest = (await res.json()) as { version?: string; url?: string; sha512?: string };
 		if (!manifest.version || !manifest.url) return null;
 		// Never downgrade below the floor the image recipe was verified against.
@@ -72,7 +85,7 @@ export function antigravityAgent(opts: { credentialFile: string }): AcpAgent {
 		release: { floor: AGY_VERSION, latest: agyLatest },
 		// The tarball carries `antigravity` at its root; `agy` is the name everything uses.
 		install: {
-			fallback: { version: AGY_VERSION, url: AGY_URL, sha512: AGY_SHA512 },
+			fallback: (platform) => AGY_FALLBACKS[platform] ?? null,
 			fetch: async (release, dir) => {
 				const stage = await mkdtemp(join(dir, '.stage-'));
 				try {

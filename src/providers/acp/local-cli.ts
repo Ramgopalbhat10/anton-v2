@@ -56,8 +56,30 @@ const INSTALL_RETRY_MS = 5 * 60_000;
 const installs = new Map<string, Promise<boolean>>();
 const installAttempts = new Map<string, { at: number; ok: boolean; error?: string }>();
 
-/** Whether this host can fetch the agent's CLI itself — the release URLs are linux/x64 binaries. */
-export const canInstallCli = (agent: AcpAgent) => Boolean(agent.install) && process.platform === 'linux' && process.arch === 'x64';
+/** This host in vendor platform terms ('linux/arm64', 'darwin/x64'…), or null where no CLI build exists. */
+export function hostPlatform(): string | null {
+	return (hostPlatformCache ??= computeHostPlatform());
+}
+let hostPlatformCache: string | null | undefined;
+function computeHostPlatform(): string | null {
+	const platform = `${process.platform}/${process.arch}`;
+	if (!['linux/x64', 'linux/arm64', 'darwin/x64', 'darwin/arm64'].includes(platform)) return null;
+	// The vendors' linux builds are gnu-linked; musl hosts (Alpine) cannot run them.
+	if (process.platform === 'linux') {
+		const glibc = (process.report.getReport() as { header?: { glibcVersionRuntime?: string } }).header?.glibcVersionRuntime;
+		if (!glibc) return null;
+	}
+	return platform;
+}
+
+/** Why a missing CLI cannot be auto-installed on this host, for status and error messages. */
+export function cliInstallGap(agent: AcpAgent): string | null {
+	if (hostPlatform() || !agent.install) return null;
+	return 'auto-install covers linux/x64, linux/arm64 and macOS; install the CLI manually on this host';
+}
+
+/** Whether this host can fetch the agent's CLI itself — the vendors publish builds for the POSIX desktop/server arches. */
+export const canInstallCli = (agent: AcpAgent) => Boolean(agent.install) && hostPlatform() !== null;
 
 const installError = (agent: AcpAgent) => installAttempts.get(agent.id)?.error;
 
@@ -66,12 +88,12 @@ const installError = (agent: AcpAgent) => installAttempts.get(agent.id)?.error;
  * dir by a previous run, or fetched now from the vendor's own release. Never
  * throws; the failure reason lands in installError() for the caller's message.
  */
-export async function ensureCli(agent: AcpAgent, dir = join(config.dataDir, 'bin')): Promise<boolean> {
+export async function ensureCli(agent: AcpAgent, dir = join(config.dataDir, 'bin'), platform = hostPlatform()): Promise<boolean> {
 	const [bin] = agent.command;
 	if (bin.includes('/')) return localCli(agent);
 	if (await localCli(agent)) return true;
 	const install = agent.install;
-	if (!install || !canInstallCli(agent)) return false;
+	if (!install || !platform) return false;
 	const last = installAttempts.get(agent.id);
 	if (last && Date.now() - last.at < INSTALL_RETRY_MS) return last.ok;
 	let pending = installs.get(agent.id);
@@ -85,7 +107,8 @@ export async function ensureCli(agent: AcpAgent, dir = join(config.dataDir, 'bin
 					() => false,
 				);
 				if (!have) {
-					const release = (await agent.release?.latest().catch(() => null)) ?? install.fallback;
+					const release = (await agent.release?.latest(platform).catch(() => null)) ?? install.fallback(platform);
+					if (!release) throw new Error(`the vendor ships no ${agent.name} build for ${platform}`);
 					await install.fetch(release, dir);
 				}
 				// Every spawn site resolves the bare command name through PATH: the login
@@ -104,7 +127,7 @@ export async function ensureCli(agent: AcpAgent, dir = join(config.dataDir, 'bin
 }
 
 const cliMissing = (agent: AcpAgent) => {
-	const why = installError(agent);
+	const why = installError(agent) ?? cliInstallGap(agent) ?? undefined;
 	return new Error(`${agent.name} CLI is not installed on this server${why ? ` (${why})` : ''}`);
 };
 
