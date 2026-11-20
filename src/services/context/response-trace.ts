@@ -56,7 +56,10 @@ type Open = {
 	delegating: Map<string, { call: string; lane: string; description: string | null }>;
 };
 
-const open = new Map<string, Open>();
+// On globalThis so a vite reload mid-reply cannot split start from finish across module generations.
+const openKey = Symbol.for('anton.response-trace-open');
+const openState = globalThis as typeof globalThis & { [openKey]?: Map<string, Open> };
+const open = (openState[openKey] ??= new Map<string, Open>());
 
 /** `resumed` marks one begun mid-reply, after a restart. */
 export function startTrace(id: string, resumed = false): void {
