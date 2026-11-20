@@ -415,6 +415,8 @@ export type AgentRuntime = {
 	status(fresh?: boolean): Promise<AgentRuntimeStatus>;
 	listModels(): Promise<SubscriptionModel[]>;
 	windows?(): Promise<PlanWindow[] | null>;
+	/** Where the vendor agent's jailed process runs when the runtime offers a choice (ACP agents on Modal). */
+	isolation?(): Promise<'sidecar' | 'sandbox'>;
 	open(options: RuntimeConversationOptions): RuntimeConversation;
 };
 

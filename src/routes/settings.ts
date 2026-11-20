@@ -11,6 +11,7 @@ import { commands, setCommands } from '../services/settings/commands.ts';
 import { usageView } from '../services/models/usage.ts';
 import { budget, setLimits } from '../services/models/budget.ts';
 import { cleanUpStorage, storageView } from '../services/settings/storage.ts';
+import { setAcpIsolation } from '../services/settings/acp.ts';
 import { computeView, stopAllSandboxes } from '../services/tasks/compute.ts';
 import { connections } from '../services/settings/connections.ts';
 import { clearSlot, saveSlot, setupView, testSlot } from '../services/settings/setup.ts';
@@ -58,6 +59,20 @@ app.put('/api/settings/sandbox', async (c) => {
 	);
 	await setSandboxSettings(next);
 	return c.json(await sandboxView());
+});
+// ACP runtimes (Devin today): where the jailed agent container runs. Only runtimes that offer a choice answer.
+const acpAgent = (id: string) => getProviders().runtimes?.find((runtime) => runtime.id === id && runtime.isolation);
+app.get('/api/settings/acp/:agent', async (c) => {
+	const runtime = acpAgent(c.req.param('agent'));
+	if (!runtime?.isolation) return c.json({ error: 'Not found' }, 404);
+	return c.json({ isolation: await runtime.isolation() });
+});
+app.put('/api/settings/acp/:agent', async (c) => {
+	const runtime = acpAgent(c.req.param('agent'));
+	if (!runtime?.isolation) return c.json({ error: 'Not found' }, 404);
+	const next = await body(c, v.object({ isolation: v.picklist(['sidecar', 'sandbox']) }));
+	await setAcpIsolation(runtime.id, next.isolation);
+	return c.json({ isolation: next.isolation });
 });
 const generalView = async (settings: GeneralSettings) => ({ ...settings, titleModelDefault: config.titleModel });
 app.get('/api/settings/general', async (c) => c.json(await generalView(await generalSettings())));

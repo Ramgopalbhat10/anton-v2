@@ -87,7 +87,7 @@ export const config = {
 		path: read('ANTON_CLAUDE_CODE_PATH'),
 		maxOpen: Number(read('ANTON_CLAUDE_CODE_MAX_OPEN', '3')),
 	},
-	/** ACP agent runtimes (Devin, Antigravity) run jailed in Modal sidecars of this app. */
+	/** ACP agent runtimes (Devin, Antigravity) run jailed in Modal containers of this app. */
 	acp: {
 		app: read('ANTON_ACP_APP', 'anton-acp'),
 	},

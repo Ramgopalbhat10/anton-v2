@@ -19,7 +19,8 @@ import type {
 	TextModel,
 	VisionModel,
 } from '../core/ports.ts';
-import { acpRuntime } from './acp/runtime.ts';
+import { getSetting } from '../db/settings.ts';
+import { acpIsolationKey, acpRuntime, type AcpIsolation } from './acp/runtime.ts';
 import { devinAgent } from './acp/devin.ts';
 import { modalAcpHost } from './acp/modal.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
@@ -132,8 +133,12 @@ function production(): Providers {
 		subscriptions: [chatGptSubscription()],
 		runtimes: [
 			claudeCodeRuntime({ configDir: config.claudeCode.configDir, executable: config.claudeCode.path || undefined }),
-			// ACP agents need Modal for their jailed sidecars; without its token there is nowhere to run them.
-			...(process.env.MODAL_TOKEN_ID ? [acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app))] : []),
+			// ACP agents need Modal for their jailed containers; without its token there is nowhere to run them.
+			...(process.env.MODAL_TOKEN_ID
+				? [
+						acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(devinAgent.id), 'sidecar') })),
+					]
+				: []),
 		],
 		keyPlans: [openCodeGoPlan(), cursorPlan({ dir: path.join(config.dataDir, 'cursor') })],
 		browsers: config.kernel.apiKey ? kernelBrowsers(config.kernel) : null,

@@ -200,9 +200,14 @@ export function Models({ subscription }: { subscription: Subscription }) {
 /** `pricedAs` names whose prices a call is counted at; null when the plan has none to count at. */
 export function PlanSettings({ subscription, error, pricedAs }: { subscription: Subscription; error?: Error | null; pricedAs?: string | null }) {
 	const saved = useSaved();
+	const queryClient = useQueryClient();
 	const options = useMutation({
 		mutationFn: (patch: Partial<SubscriptionOptions>) => api.setSubscriptionOptions(subscription.id, { ...subscription.options, ...patch }),
 		onSuccess: saved,
+	});
+	const isolation = useMutation({
+		mutationFn: (mode: 'sidecar' | 'sandbox') => api.setAcpIsolation(subscription.id, mode),
+		onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
 	});
 	const { enabled, countAtApiPrices } = subscription.options;
 	const vendorApi = pricedAs === undefined ? (subscription.kind === 'runtime' ? 'the Anthropic API' : 'the OpenAI API') : pricedAs;
@@ -235,8 +240,22 @@ export function PlanSettings({ subscription, error, pricedAs }: { subscription: 
 						/>
 					</SettingRow>
 				) : null}
+				{subscription.isolation ? (
+					<SettingRow
+						title="Dedicated sandbox"
+						help="Off runs the agent inside a sidecar of one shared sandbox; on gives each conversation its own Modal sandbox — stronger isolation, billed per sandbox."
+						info="Both keep the agent jailed with only its vendor's domains reachable. Sidecars share one sandbox's billing; dedicated sandboxes bill separately but survive the shared anchor's lifecycle and use Modal's standard API."
+					>
+						<Switch
+							checked={subscription.isolation === 'sandbox'}
+							disabled={isolation.isPending}
+							onChange={(next) => isolation.mutate(next ? 'sandbox' : 'sidecar')}
+							label={<span className="sr-only">Dedicated sandbox</span>}
+						/>
+					</SettingRow>
+				) : null}
 			</div>
-			<SaveState pending={options.isPending} success={false} error={options.error ?? error ?? null} />
+			<SaveState pending={options.isPending || isolation.isPending} success={false} error={options.error ?? isolation.error ?? error ?? null} />
 		</CardSection>
 	);
 }
