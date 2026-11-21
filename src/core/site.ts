@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { compress } from 'hono/compress';
+import { conditionalJson } from './conditional.ts';
 
 /** Vite names every built file under `/assets/` by its content hash, so a name never comes back with different bytes. */
 const IMMUTABLE = 'public, max-age=31536000, immutable';
@@ -16,6 +17,8 @@ const REVALIDATE = 'no-cache';
 export function site(api: (request: Request) => Response | Promise<Response>, clientRoot: string): Hono {
 	const app = new Hono();
 	app.use('*', compress());
+	// Inside compression, so the tag is the JSON's own and a 304 is not compressed.
+	app.use('/api/*', conditionalJson());
 	app.all('/api/*', (c) => api(c.req.raw));
 	app.use('/assets/*', cached(serveStatic({ root: clientRoot }), IMMUTABLE));
 	// A tab still on an earlier build asks for assets this build lacks: a plain 404, not the page answering as a script.

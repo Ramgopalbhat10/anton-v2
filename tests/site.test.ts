@@ -67,3 +67,21 @@ test('server events are never compressed, so each one reaches the page as it is 
 	assert.equal(new TextDecoder().decode(value), 'data: {}\n\n');
 	await reader.cancel();
 });
+
+test('an API read the browser already holds comes back as an empty, uncompressed 304; a changed one is sent gzipped', async () => {
+	const app = site(api, built());
+	const first = await app.request('/api/sessions', gzip);
+	const tag = first.headers.get('ETag')!;
+	assert.ok(tag);
+	assert.equal(first.headers.get('Content-Encoding'), 'gzip');
+	assert.deepEqual(JSON.parse(gunzipSync(Buffer.from(await first.arrayBuffer())).toString()), big);
+
+	const again = await app.request('/api/sessions', { headers: { 'Accept-Encoding': 'gzip', 'If-None-Match': tag } });
+	assert.equal(again.status, 304);
+	assert.equal(again.headers.get('Content-Encoding'), null);
+	assert.equal((await again.arrayBuffer()).byteLength, 0);
+
+	const other = await app.request('/api/sessions', { headers: { 'Accept-Encoding': 'gzip', 'If-None-Match': 'W/"older"' } });
+	assert.equal(other.status, 200);
+	assert.equal(other.headers.get('ETag'), tag);
+});
