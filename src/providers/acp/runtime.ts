@@ -20,6 +20,7 @@ import type {
 } from '../../core/ports.ts';
 import { AcpClient, INITIALIZE, type AcpTransport } from './client.ts';
 import { mcpServer } from './mcp.ts';
+import { SERVED_CAPABILITIES, WorkspaceBridge } from './workspace-bridge.ts';
 import { channel } from '../../core/channel.ts';
 
 /** A downloadable agent build: version plus where its image install fetches it. */
@@ -258,10 +259,16 @@ class AcpConversation implements RuntimeConversation {
 	private lastActivity = 0;
 	/** Anton tool calls in flight; the agent legitimately waits silently while they run. */
 	private parkedTools = 0;
+	/** Of those, the calls the agent made through MCP: only their results can carry the user's words back. */
+	private parkedMcp = 0;
 	/** The agent reported a model call's usage during this turn, so its summed total must not be booked again. */
 	private turnMeasured = false;
 	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
 	private steering: string[] = [];
+	/** The agent's native file and shell requests, run as Anton's own tools on the task's sandbox. */
+	private readonly workspace: WorkspaceBridge;
+	/** Anton's instructions lead the session's first prompt. */
+	private instructionsSent = false;
 
 	constructor(agent: AcpAgent, account: AcpAccount, compute: AcpCompute, options: RuntimeConversationOptions) {
 		this.agent = agent;
@@ -269,6 +276,11 @@ class AcpConversation implements RuntimeConversation {
 		this.compute = compute;
 		this.options = options;
 		this.tools = options.tools;
+		this.workspace = new WorkspaceBridge(
+			(name, args) => this.handleToolCall(name, args, false),
+			(name) => this.tools.some((tool) => tool.name === name),
+			agent.workdir,
+		);
 	}
 
 	readonly events: AsyncIterable<RuntimeEvent> = this.eventsOut;
@@ -277,7 +289,7 @@ class AcpConversation implements RuntimeConversation {
 		if (this.closed) return;
 		// ACP has no way into a running turn, and a new prompt waits for the whole turn to end, so a message sent
 		// while the agent waits on a tool goes back with that tool's result, where the agent reads it at once.
-		if (this.parkedTools > 0 && content.every((part) => part.type === 'text')) {
+		if (this.parkedMcp > 0 && content.every((part) => part.type === 'text')) {
 			this.steering.push(...content.map((part) => (part.type === 'text' ? part.text : '')).filter(Boolean));
 			return;
 		}
@@ -422,19 +434,21 @@ class AcpConversation implements RuntimeConversation {
 	private async onRequest(method: string, params: unknown, id: number | string): Promise<unknown> {
 		this.lastActivity = Date.now();
 		if (method === 'session/request_permission') {
-			const p = params as PermissionParams;
-			const options = p?.options ?? [];
-			const antonTool = this.isAntonToolRef(p?.toolCall, p?._meta);
-			const pick = (match: RegExp) => options.find((o) => match.test(`${o.kind ?? ''} ${o.name ?? ''}`))?.optionId;
-			const optionId = antonTool ? pick(/allow/) : pick(/reject|deny/);
+			// Allowed: Anton's own tools, and the agent's native ones, whose files and commands come back to Anton as
+			// fs/ and terminal/ requests and run as Anton's tools. Whatever does not stays inside the jail.
+			const options = (params as PermissionParams)?.options ?? [];
+			const optionId = options.find((o) => /allow/.test(`${o.kind ?? ''} ${o.name ?? ''}`))?.optionId;
 			return optionId ? { outcome: { outcome: 'selected', optionId } } : { outcome: { outcome: 'cancelled' } };
 		}
+		const served = this.workspace.handle(method, params);
+		if (served) return served;
 		throw new Error(`unsupported agent request: ${method}`);
 	}
 
 	// ---- MCP side -------------------------------------------------------
 
-	private async handleToolCall(rawName: string, args: unknown): Promise<RuntimeToolOutput> {
+	/** `steer`: a result the agent reads as a tool result, which can carry the user's words; a file's content cannot. */
+	private async handleToolCall(rawName: string, args: unknown, steer = true): Promise<RuntimeToolOutput> {
 		// Some agents namespace MCP tools (mcp__anton__bash, mcp_anton_bash, anton_bash); Anton's name is the suffix.
 		const name = this.tools.some((tool) => tool.name === rawName)
 			? rawName
@@ -457,8 +471,10 @@ class AcpConversation implements RuntimeConversation {
 		this.push({ type: 'message_stop' });
 		this.seg.open = false;
 		this.parkedTools += 1;
+		if (steer) this.parkedMcp += 1;
 		try {
 			const output = await this.options.callTool(toolUseId, name);
+			if (!steer) return output;
 			// The bridge delivers results before the user's words, so wait a tick for them.
 			await Promise.resolve();
 			const said = this.steering.splice(0);
@@ -467,6 +483,7 @@ class AcpConversation implements RuntimeConversation {
 			return { ...output, content: [...output.content, { type: 'text', text: note }] };
 		} finally {
 			this.parkedTools -= 1;
+			if (steer) this.parkedMcp -= 1;
 			// The agent gets a fresh quiet window to answer once the result lands.
 			this.lastActivity = Date.now();
 		}
@@ -495,16 +512,12 @@ class AcpConversation implements RuntimeConversation {
 			onRequest: (method, params, id) => this.onRequest(method, params, id),
 		});
 		this.acp.start();
-		await this.acp.request('initialize', INITIALIZE, HANDSHAKE_MS);
+		await this.acp.request('initialize', { ...INITIALIZE, clientCapabilities: SERVED_CAPABILITIES }, HANDSHAKE_MS);
 		const token = await this.account.credential();
 		if (!token) throw new Error(`${this.agent.name} is not signed in`);
 		// Some agents read credentials from files in their own data dir, not from authenticate params.
 		await this.agent.auth.provision?.(proc, token);
 		await this.acp.request('authenticate', authParams(this.agent.auth, token), HANDSHAKE_MS);
-		// The agent reads project instructions itself; Anton's system prompt rides along as AGENTS.md.
-		if (this.options.instructions.trim()) {
-			await proc.writeFile(`${this.agent.workdir}/AGENTS.md`, `${this.options.instructions}\n`);
-		}
 		const session = (await this.acp.request('session/new', {
 			cwd: this.agent.workdir,
 			mcpServers: [
@@ -559,6 +572,14 @@ class AcpConversation implements RuntimeConversation {
 		);
 	}
 
+	/** The repo's own AGENTS.md now reads through to the task's sandbox, so Anton's instructions open the first prompt instead. */
+	private withInstructions(content: RuntimeContent[]): RuntimeContent[] {
+		const instructions = this.options.instructions.trim();
+		if (this.instructionsSent || !instructions) return content;
+		this.instructionsSent = true;
+		return [{ type: 'text', text: `<instructions>\n${instructions}\n</instructions>` }, ...content];
+	}
+
 	private async prompt(content: RuntimeContent[]): Promise<void> {
 		this.ready ??= this.setup();
 		try {
@@ -590,7 +611,7 @@ class AcpConversation implements RuntimeConversation {
 			const result = (await Promise.race([
 				this.acp!.request('session/prompt', {
 					sessionId: this.sessionId,
-					prompt: toAcpPrompt(content),
+					prompt: toAcpPrompt(this.withInstructions(content)),
 				}),
 				stall,
 			])) as { stopReason?: string; usage?: Record<string, unknown> };
