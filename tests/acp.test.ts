@@ -765,7 +765,7 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
 	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
 	const prompt = parse(acp.sent).find((m) => m.method === 'session/prompt')!.params as { prompt: { text?: string }[] };
-	assert.match(prompt.prompt[0]?.text ?? '', /<instructions>\nBe brief\.\n<\/instructions>/);
+	assert.match(prompt.prompt[0]?.text ?? '', /<instructions>\nBe brief\.\n\n.*cannot see the repository.*\n<\/instructions>/);
 	assert.equal(prompt.prompt[1]?.text, 'hi');
 
 	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 900, method: 'fs/read_text_file', params: { sessionId: 's', path: '/work/src/a.ts' } }));

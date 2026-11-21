@@ -10,7 +10,7 @@ import { getProviders } from '../../providers/index.ts';
 import { repoDir } from '../git/git.ts';
 import { logProblem } from '../../core/log.ts';
 import { machineRequest, previewEnv, readMarker, readyFile, setUpMachine } from './machine-setup.ts';
-import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';
+import { dropLostImage, preparedImageFor, renewPreparedImage } from './prepared-images.ts';
 import { sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from '../secrets/secrets.ts';
 
@@ -77,6 +77,7 @@ async function startSpare(project: Project, taskId: string, branch: string | und
 	if (!image) renewPreparedImage(project.id);
 	const request = { ...machineRequest(taskId, project, settings, image), state: null };
 	let acquired = await sandbox().acquire(request);
+	await dropLostImage(project, image, acquired.origin);
 	if (acquired.origin === 'live' || acquired.origin === 'resumed') {
 		// Running already under this id: a spare Anton set up before it restarted, which is kept, or a setup cut short.
 		const marker = await readMarker(acquired.machine);

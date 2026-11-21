@@ -1,6 +1,7 @@
+import type { MachineOrigin } from '../../core/ports.ts';
 import type { Project } from '../../core/types.ts';
 import { config } from '../../config.ts';
-import { getProject, setWarmImage } from '../../db/projects.ts';
+import { clearWarmImage, getProject, setWarmImage } from '../../db/projects.ts';
 import { getProviders } from '../../providers/index.ts';
 import { withEnv } from '../../core/machine-env.ts';
 import { logProblem } from '../../core/log.ts';
@@ -52,6 +53,17 @@ export function buildPreparedImage(projectId: string, force = false): Promise<st
 	})().finally(() => building.delete(projectId));
 	building.set(projectId, build);
 	return build;
+}
+
+/**
+ * A prepared image asked for but started from the base image could not be loaded (another Modal workspace's, or
+ * deleted). It is forgotten so the next build replaces it, instead of every task and build asking for it again.
+ */
+export async function dropLostImage(project: Project, requested: string | null, origin: MachineOrigin): Promise<void> {
+	if (!requested || origin !== 'base' || project.warmImage !== requested) return;
+	logProblem('warn', 'The prepared image could not be loaded; building a new one', requested);
+	await clearWarmImage(project.id);
+	renewPreparedImage(project.id);
 }
 
 export function renewPreparedImage(projectId: string, force = false): void {

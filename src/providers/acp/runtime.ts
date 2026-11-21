@@ -577,7 +577,9 @@ class AcpConversation implements RuntimeConversation {
 		const instructions = this.options.instructions.trim();
 		if (this.instructionsSent || !instructions) return content;
 		this.instructionsSent = true;
-		return [{ type: 'text', text: `<instructions>\n${instructions}\n</instructions>` }, ...content];
+		// Reads, writes and commands reach the repo; the agent's own file search runs in its empty container and finds nothing.
+		const searching = 'Your file search and listing tools cannot see the repository; search with shell commands such as rg, find and ls, or with the grep and glob tools.';
+		return [{ type: 'text', text: `<instructions>\n${instructions}\n\n${searching}\n</instructions>` }, ...content];
 	}
 
 	private async prompt(content: RuntimeContent[]): Promise<void> {

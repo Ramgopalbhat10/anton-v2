@@ -77,7 +77,15 @@ export function modalSandboxProvider(options: ModalOptions): SandboxProvider {
 	async function startingImage(state: State | null, request: AcquireRequest): Promise<[Image, MachineOrigin]> {
 		const resumed = await exitImage(state);
 		if (resumed) return [resumed, 'resumed'];
-		if (request.image) return [await client.images.fromId(request.image), 'image'];
+		if (request.image) {
+			// Images belong to one Modal workspace: after a token for another workspace, or the image's deletion, the
+			// prepared image is gone for good. Starting from the base still works; the caller sees 'base' and drops it.
+			const prepared = await client.images.fromId(request.image).catch((error: unknown) => {
+				console.error(`[modal] prepared image ${request.image} is unusable, starting from the base image: ${error instanceof Error ? error.message : String(error)}`);
+				return null;
+			});
+			if (prepared) return [prepared, 'image'];
+		}
 		const base = client.images.fromRegistry(request.baseImage ?? options.baseImage);
 		return [base.dockerfileCommands(toolchain(options.browserPackage)), 'base'];
 	}

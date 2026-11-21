@@ -32,7 +32,8 @@ export function localSandboxProvider(dataDir: string): SandboxProvider {
 		if (await exists(path.join(root, RUNNING_MARKER))) return 'live';
 		if (state && (await exists(root))) return 'resumed';
 		await rm(root, { recursive: true, force: true });
-		if (image) {
+		// An image that is gone starts from the base, as on Modal; the caller sees 'base' and forgets it.
+		if (image && (await exists(path.join(imagesDir, image)))) {
 			await cp(path.join(imagesDir, image), root, { recursive: true, verbatimSymlinks: true });
 			return 'image';
 		}

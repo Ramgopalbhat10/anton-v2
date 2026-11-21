@@ -10,7 +10,7 @@ import { isWorking } from '../tasks/activity.ts';
 import { logProblem } from '../../core/log.ts';
 import { notifySandboxFailed, notifySandboxReady } from '../notify/notifications.ts';
 import { machineRequest, previewEnv, readMarker, setUpMachine } from './machine-setup.ts';
-import { preparedImageFor, renewPreparedImage } from './prepared-images.ts';
+import { dropLostImage, preparedImageFor, renewPreparedImage } from './prepared-images.ts';
 import { copySpaceFiles } from '../projects/space-files.ts';
 import { sandboxSettings } from './sandbox-settings.ts';
 import { envFor } from '../secrets/secrets.ts';
@@ -70,6 +70,7 @@ async function acquireReady(session: SessionRecord, project: Project | null): Pr
 	const settings = await sandboxSettings();
 	const request = machineRequest(session.id, project, settings, project && session.runOn !== 'host' ? preparedImageFor(project, settings) : null);
 	const acquired = await sandbox.acquire({ ...request, state: session.machineState });
+	if (project) await dropLostImage(project, request.image, acquired.origin);
 	const readiness = await readinessOf(acquired.machine, session, acquired.origin);
 	if (readiness.state !== 'unready' || !isUsed(acquired.origin)) return { acquired, readiness };
 	await sandbox.stop(acquired.state);
