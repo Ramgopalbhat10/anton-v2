@@ -23,12 +23,13 @@ export function fileError(operation: 'read' | 'write', path: string, reason: str
 /**
  * Through `exec`, the file's size goes to stderr before its bytes, and a short read is read again: a provider can stop
  * collecting output it is still sending (Modal keeps a second of quiet after exit), and a cut file would pass for whole.
+ * No login shell: `wc` and `cat` need no profile, and a profile's start-up is paid on every file read.
  */
 export async function readMachineFile(machine: Machine, path: string): Promise<Uint8Array> {
 	const direct = await machine.readFile?.(path);
 	if (direct) return direct;
 	for (let attempt = 1; ; attempt++) {
-		const result = await machine.exec(`wc -c < ${quote(path)} >&2 && cat -- ${quote(path)}`);
+		const result = await machine.exec(`wc -c < ${quote(path)} >&2 && cat -- ${quote(path)}`, { plain: true });
 		if (result.exitCode !== 0) throw new CommandError(`read ${path}`, result);
 		const size = Number.parseInt(result.stderr.trim().split('\n').pop() ?? '', 10);
 		// No size (a provider without stderr) or the size it said: as before.

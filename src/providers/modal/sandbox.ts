@@ -220,7 +220,7 @@ export function modalMachine(sandbox: Sandbox, files = false): Machine {
 		async exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 			// Every process the command starts inherits the tag, so Stop can find and end them all.
 			const tag = randomUUID();
-			const process = await sandbox.exec(['bash', '-lc', command], {
+			const process = await sandbox.exec(['bash', options.plain ? '-c' : '-lc', command], {
 				mode: 'binary',
 				stdout: 'pipe',
 				stderr: 'pipe',
