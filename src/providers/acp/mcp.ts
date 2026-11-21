@@ -65,11 +65,14 @@ export function mcpServer(
 					const line = buffer.slice(0, nl).trim();
 					buffer = buffer.slice(nl + 1);
 					if (!line) continue;
+					let msg: Rpc;
 					try {
-						await handle(JSON.parse(line) as Rpc);
+						msg = JSON.parse(line) as Rpc;
 					} catch {
-						// A malformed frame must not kill the channel.
+						continue; // A malformed frame must not kill the channel.
 					}
+					// Not awaited: a tools/call parks until Flue runs the tool, and ping, tools/list and other calls must still answer meanwhile.
+					void handle(msg).catch(() => undefined);
 				}
 			}
 		} finally {

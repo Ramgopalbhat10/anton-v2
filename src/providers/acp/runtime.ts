@@ -261,6 +261,8 @@ class AcpConversation implements RuntimeConversation {
 	private parkedTools = 0;
 	/** The agent reported a model call's usage during this turn, so its summed total must not be booked again. */
 	private turnMeasured = false;
+	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
+	private steering: string[] = [];
 
 	constructor(agent: AcpAgent, host: AcpHost, options: RuntimeConversationOptions) {
 		this.agent = agent;
@@ -273,6 +275,12 @@ class AcpConversation implements RuntimeConversation {
 
 	send(content: RuntimeContent[]): void {
 		if (this.closed) return;
+		// ACP has no way into a running turn, and a new prompt waits for the whole turn to end, so a message sent
+		// while the agent waits on a tool goes back with that tool's result, where the agent reads it at once.
+		if (this.parkedTools > 0 && content.every((part) => part.type === 'text')) {
+			this.steering.push(...content.map((part) => (part.type === 'text' ? part.text : '')).filter(Boolean));
+			return;
+		}
 		this.queue = this.queue.then(() => this.prompt(content)).catch((error) => this.push({ type: 'error', message: error instanceof Error ? error.message : String(error), limit: false }));
 	}
 
@@ -384,13 +392,17 @@ class AcpConversation implements RuntimeConversation {
 		const name = String(ref?.name ?? '');
 		const title = String(ref?.title ?? '');
 		const mcp = `mcp__${srv}`;
+		// A bare `anton_<tool>` counts only as a whole word naming one of Anton's tools: a file such as anton_config.ts is not one.
+		const bare = new Set(this.tools.map((tool) => `${srv}_${tool.name}`));
+		const words = title.split(/[^A-Za-z0-9_.-]+/);
 		return (
 			rule.startsWith(mcp) ||
 			name.startsWith(`${mcp}__`) ||
 			name.startsWith(`mcp_${srv}_`) ||
+			bare.has(name) ||
 			title.includes(`${mcp}__`) ||
 			title.includes(`mcp_${srv}_`) ||
-			title.includes(`${srv}_`)
+			words.some((word) => bare.has(word))
 		);
 	}
 
@@ -445,7 +457,13 @@ class AcpConversation implements RuntimeConversation {
 		this.seg.open = false;
 		this.parkedTools += 1;
 		try {
-			return await this.options.callTool(toolUseId, name);
+			const output = await this.options.callTool(toolUseId, name);
+			// The bridge delivers results before the user's words, so wait a tick for them.
+			await Promise.resolve();
+			const said = this.steering.splice(0);
+			if (!said.length) return output;
+			const note = `<user_message>\nThe user wrote this while you were working. Read it now and follow it:\n${said.join('\n\n')}\n</user_message>`;
+			return { ...output, content: [...output.content, { type: 'text', text: note }] };
 		} finally {
 			this.parkedTools -= 1;
 			// The agent gets a fresh quiet window to answer once the result lands.
