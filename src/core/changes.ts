@@ -13,6 +13,10 @@ export type Change =
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
 	| { kind: 'notifications' }
+	/** The added repos (`/api/projects`): settings, memory, prepared image. */
+	| { kind: 'projects' }
+	/** General settings (`/api/settings/general`). */
+	| { kind: 'general' }
 	/** `from` is the copy that saved, so it skips its own echo. */
 	| { kind: 'page'; id: string; path: string; version: number; from: string }
 	| { kind: 'now'; id: string; now: AgentNow | null };

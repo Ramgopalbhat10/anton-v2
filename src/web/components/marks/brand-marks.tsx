@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import type { McpServer } from '@/lib/api/connectors';
 import type { Brand, BrandId } from '@/lib/brand-icons';
 import { cn } from '@/lib/utils';
+import { liveStaleTime } from '@/lib/live-updates';
 
 /** Connectors drawn as their products; `MarkTile` puts a mark on the light tile apps use, the same in both themes. */
 
@@ -144,7 +145,7 @@ export function useComposioMark(logo: string | null | undefined, url: string, ti
 }
 
 export function useMcpServers(enabled = true): McpServer[] | undefined {
-	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors, enabled, staleTime: 60_000 }).data?.mcpServers;
+	return useQuery({ queryKey: ['connectors'], queryFn: api.connectors, enabled, staleTime: (query) => liveStaleTime(query, 60_000) }).data?.mcpServers;
 }
 
 /** A soft grey tile, not white, so a page of them does not glare on the dark canvas. With `label` it is named to a screen reader; without, it is decoration. */

@@ -13,6 +13,7 @@ import { catalogEntryFor, composioEntryFor } from '@/lib/connector-catalog';
 import { type ConnectorItem, connectorItems, setConnectorOn } from '@/lib/connectors';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { liveStaleTime } from '@/lib/live-updates';
 
 function RowSwitch({ on }: { on: boolean }) {
 	return (
@@ -132,7 +133,7 @@ function ArtifactsMenu({ attachments }: { attachments: Attachments }) {
 	const [query, setQuery] = useState('');
 	const [problem, setProblem] = useState<string | null>(null);
 	const [added, setAdded] = useState<Set<string>>(new Set());
-	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, enabled: open, staleTime: 30_000 });
+	const artifacts = useQuery({ queryKey: ['artifacts'], queryFn: api.artifacts, enabled: open, staleTime: (query) => liveStaleTime(query, 30_000) });
 	const all = artifacts.data?.artifacts ?? [];
 	const groups = forContext(all, query);
 	const keyOf = (artifact: Artifact) => `${artifact.sessionId}\n${artifact.path}`;
@@ -211,7 +212,7 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 	const picker = useRef<HTMLInputElement>(null);
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const connectors = useQuery({ queryKey: ['connectors'], queryFn: api.connectors, staleTime: 30_000 });
+	const connectors = useQuery({ queryKey: ['connectors'], queryFn: api.connectors, staleTime: (query) => liveStaleTime(query, 30_000) });
 	const items = connectorItems(connectors.data);
 	const [problem, setProblem] = useState<string | null>(null);
 	const waiting = items.filter((item) => item.state === 'needs-sign-in').length;

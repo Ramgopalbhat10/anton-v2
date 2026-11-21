@@ -1,5 +1,6 @@
 import { hashKey, type Query, QueryCache, QueryClient } from '@tanstack/react-query';
 import type { Session } from '@/lib/api/sessions';
+import { liveStaleTime } from '@/lib/live-updates';
 
 type List = { sessions: Session[] };
 
@@ -47,8 +48,8 @@ export const MOUNT_FRESH_MS = 5_000;
 export function appQueryClient(): QueryClient {
 	const queryClient: QueryClient = new QueryClient({
 		queryCache: new QueryCache({ onSuccess: (data, query) => keepTasksInStep(queryClient, data, query) }),
-		// Server events mark what changed stale whatever this says; it only stops readers that mount together on a page from each reading again.
-		defaultOptions: { queries: { staleTime: MOUNT_FRESH_MS } },
+		// Server events mark what changed stale whatever this says. Reads the event stream keeps current stay fresh while it is up (`liveStaleTime`); the rest only stop readers that mount together on a page from each reading again.
+		defaultOptions: { queries: { staleTime: (query) => liveStaleTime(query, MOUNT_FRESH_MS) } },
 	});
 	return queryClient;
 }
