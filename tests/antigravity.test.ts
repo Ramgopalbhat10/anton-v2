@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import type { AcpProcess } from '../src/providers/acp/runtime.ts';
+import { authParams, type AcpProcess } from '../src/providers/acp/runtime.ts';
 
 // config reads env at module load; the OAuth client must exist before oauth.ts is imported.
 process.env.ANTIGRAVITY_CLIENT_ID = 'test-client-id';
@@ -47,8 +47,8 @@ test('descriptor exposes the agy ACP contract', async () => {
 	assert.equal(agent.modelConfigId, 'model');
 	assert.equal(agent.auth.methodId, 'oauth-personal');
 	// The whole file is the credential; authenticate takes no params — agy reads its own token store.
-	assert.equal(agent.auth.credentialKey, '');
-	assert.deepEqual(agent.auth.params('ignored'), {});
+	assert.equal(agent.auth.kind, 'token-file');
+	assert.deepEqual(authParams(agent.auth, 'ignored'), { methodId: 'oauth-personal' });
 	assert.equal(agent.auth.credentialFile, file);
 	assert.equal(agent.linkPort, 47910);
 	assert.equal(agent.effortConfigId, 'thought_level');

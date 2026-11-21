@@ -1,7 +1,8 @@
 // Generic ACP agent runtime. One implementation drives any vendor agent that
-// speaks Agent Client Protocol over stdio (`devin acp`, `agy acp`, …); what
-// differs per vendor is the AcpAgent descriptor and the AcpHost that runs the
-// process — Modal sidecars in production, a fake in tests.
+// speaks Agent Client Protocol over stdio (`devin acp`, `agy acp`, …). Three
+// pieces meet here: the AcpAgent descriptor (what differs per vendor), the
+// AcpAccount (sign-in, models, quota: Settings only, never a container) and the
+// AcpCompute that runs the process (Modal in production, a fake in tests).
 
 import type {
 	AgentRuntime,
@@ -17,8 +18,9 @@ import type {
 	SubscriptionModel,
 	PlanWindow,
 } from '../../core/ports.ts';
-import { AcpClient, type AcpTransport } from './client.ts';
+import { AcpClient, INITIALIZE, type AcpTransport } from './client.ts';
 import { mcpServer } from './mcp.ts';
+import { channel } from '../../core/channel.ts';
 
 /** A downloadable agent build: version plus where its image install fetches it. */
 export type AcpRelease = { version: string; url: string; sha256?: string; sha512?: string };
@@ -91,27 +93,50 @@ export type AcpAgent = {
 	probeSeed?(token: string, workDir: string): Promise<void>;
 	/** Vendor-specific notifications (e.g. Devin's `_cognition.ai/*` turn stats); the engine ignores what it doesn't handle. */
 	notification?: (method: string, params: unknown) => void;
-	auth: {
-		/** ACP authenticate methodId advertised by the agent. */
-		methodId: string;
-		/** authenticate params for a token; secrets ride here, never env. */
-		params: (token: string) => Record<string, unknown>;
-		/** The agent CLI's credential file on this host (`~` expands to home); Anton reads the key for per-session auth. */
-		credentialFile: string;
-		/** TOML key inside credentialFile; empty means the whole file is the credential (JSON token stores like agy's). */
-		credentialKey: string;
-		loginCommand: string[];
-		logoutCommand?: string[];
-		/** First URL the login command prints; complete() feeds it the user's code. */
-		loginUrl: RegExp;
-		/** Replaces the PTY login flow for agents whose sign-in is not a CLI prompt (e.g. Anton-run OAuth). */
-		customLogin?: () => Promise<RuntimeSignIn>;
-		/** Extra sign-out steps beyond deleting credentialFile (e.g. token revocation). */
-		customLogout?: () => Promise<void>;
-		/** Files the agent needs inside its container before authenticate — agy's token file lives in its app-data dir. */
-		provision?(proc: AcpProcess, token: string): Promise<void>;
-	};
+	/** The vendor's `_meta` namespace (Devin's `cognition.ai`): its usage counters and permission rules are read from `<namespace>/<key>` first. */
+	metaNamespace?: string;
+	auth: AcpAuth;
 };
+
+/**
+ * How an agent signs in. `cli`: the vendor CLI's own login writes a credential file on this host, and the key rides
+ * in authenticate's params (Devin). `token-file`: Anton runs the sign-in and keeps the vendor's token file, which the
+ * agent reads from its data dir, so authenticate takes no params (Antigravity).
+ */
+export type AcpAuth =
+	| {
+			kind: 'cli';
+			/** ACP authenticate methodId advertised by the agent. */
+			methodId: string;
+			/** authenticate params for the key; secrets ride here, never env. */
+			params(token: string): Record<string, unknown>;
+			/** The CLI's credential file on this host (`~` expands to home). */
+			credentialFile: string;
+			/** TOML key inside credentialFile holding the key. */
+			credentialKey: string;
+			loginCommand: string[];
+			logoutCommand?: string[];
+			/** First URL the login command prints; complete() feeds it the user's code. */
+			loginUrl: RegExp;
+			provision?(proc: AcpProcess, token: string): Promise<void>;
+	  }
+	| {
+			kind: 'token-file';
+			methodId: string;
+			/** The whole file is the credential. */
+			credentialFile: string;
+			login(): Promise<RuntimeSignIn>;
+			/** Steps beyond deleting credentialFile, such as revoking the token. */
+			logout(): Promise<void>;
+			/** Writes the token where the agent reads it inside its container, before authenticate. */
+			provision(proc: AcpProcess, token: string): Promise<void>;
+	  };
+
+/** What authenticate takes for this agent and credential. */
+export const authParams = (auth: AcpAuth, token: string): Record<string, unknown> => ({
+	methodId: auth.methodId,
+	...(auth.kind === 'cli' ? auth.params(token) : {}),
+});
 
 /**
  * One `session/update` payload: a flat object where each variant sets only its own
@@ -165,55 +190,28 @@ export type AcpProcess = {
 	stderrTail(): string;
 };
 
-/** Where agent processes run and how credentials are kept. Modal in production. */
-export interface AcpHost {
+/** One vendor account: sign-in, models and quota. What Settings reads; it never starts a container. */
+export interface AcpAccount {
 	signedIn(): Promise<{ signedIn: boolean; problem: string | null }>;
-	/** The token authenticate() takes; null when signed out. Read per use, not cached. */
+	/** The token authenticate() takes; null when signed out. */
 	credential(): Promise<string | null>;
 	signIn(): Promise<RuntimeSignIn>;
 	signOut(): Promise<void>;
 	listModels(): Promise<SubscriptionModel[]>;
 	/** The plan's usage windows when the vendor reports them; absent means the plan shows none. */
 	windows?(): Promise<PlanWindow[] | null>;
-	/** Warm-up after sign-in: build the agent image and resolve its release in the background. */
-	prepare?(): Promise<void>;
-	/** The isolation mode new spawns use; present only on hosts that offer a choice. */
-	isolation?(): Promise<AcpIsolation>;
-	/** Spawn one container for one conversation; `model` lets the host preset it where the agent allows. */
-	spawn(model?: string): Promise<AcpProcess>;
 }
 
-function channel<T>() {
-	const queue: T[] = [];
-	const waiters: ((value: IteratorResult<T>) => void)[] = [];
-	let done = false;
-	return {
-		push(value: T) {
-			const waiter = waiters.shift();
-			if (waiter) waiter({ value, done: false });
-			else queue.push(value);
-		},
-		close() {
-			done = true;
-			for (const waiter of waiters.splice(0)) waiter({ value: undefined as T, done: true });
-		},
-		get closed() {
-			return done;
-		},
-		async *[Symbol.asyncIterator](): AsyncGenerator<T> {
-			for (;;) {
-				const value = queue.shift();
-				if (value !== undefined) {
-					yield value;
-					continue;
-				}
-				if (done) return;
-				const next = await new Promise<IteratorResult<T>>((resolve) => waiters.push(resolve));
-				if (next.done) return;
-				yield next.value;
-			}
-		},
-	};
+/** Where agent processes run. Every container it starts belongs to one conversation, or is its warm slot. Modal in production. */
+export interface AcpCompute {
+	/** Start one container for one conversation; `model` lets compute preset it where the agent allows. Closing the process ends the container. */
+	spawn(model?: string): Promise<AcpProcess>;
+	/** Warm-up after sign-in: build the agent image and resolve its release in the background. */
+	prepare?(): Promise<void>;
+	/** The isolation mode new spawns use; present only where there is a choice. */
+	isolation?(): Promise<AcpIsolation>;
+	/** Ends containers kept for later (a warm slot); signed out, they could not authenticate. */
+	drain?(): void;
 }
 
 const ZERO_USAGE: RuntimeUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -235,7 +233,8 @@ class AcpConversation implements RuntimeConversation {
 	private readonly eventsOut = channel<RuntimeEvent>();
 	private readonly options: RuntimeConversationOptions;
 	private readonly agent: AcpAgent;
-	private readonly host: AcpHost;
+	private readonly account: AcpAccount;
+	private readonly compute: AcpCompute;
 	private proc: AcpProcess | null = null;
 	private acp: AcpClient | null = null;
 	private mcp: { close(): void; toolsChanged(): void } | null = null;
@@ -264,14 +263,15 @@ class AcpConversation implements RuntimeConversation {
 	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
 	private steering: string[] = [];
 
-	constructor(agent: AcpAgent, host: AcpHost, options: RuntimeConversationOptions) {
+	constructor(agent: AcpAgent, account: AcpAccount, compute: AcpCompute, options: RuntimeConversationOptions) {
 		this.agent = agent;
-		this.host = host;
+		this.account = account;
+		this.compute = compute;
 		this.options = options;
 		this.tools = options.tools;
 	}
 
-	readonly events = this.eventsOut[Symbol.asyncIterator]();
+	readonly events: AsyncIterable<RuntimeEvent> = this.eventsOut;
 
 	send(content: RuntimeContent[]): void {
 		if (this.closed) return;
@@ -388,7 +388,8 @@ class AcpConversation implements RuntimeConversation {
 		meta?: Record<string, unknown>,
 	): boolean {
 		const srv = this.agent.mcpServerName;
-		const rule = String(meta?.['cognition.ai/permissionRule'] ?? ref?._meta?.['cognition.ai/permissionRule'] ?? '');
+		const ruleKey = this.agent.metaNamespace ? `${this.agent.metaNamespace}/permissionRule` : 'permissionRule';
+		const rule = String(meta?.[ruleKey] ?? ref?._meta?.[ruleKey] ?? '');
 		const name = String(ref?.name ?? '');
 		const title = String(ref?.title ?? '');
 		const mcp = `mcp__${srv}`;
@@ -412,7 +413,7 @@ class AcpConversation implements RuntimeConversation {
 
 	/** One model call's usage, which is the step's context as Flue measures it. */
 	private pushUsage(update: SessionUpdate): void {
-		const usage = readUsage({ ...update, ...update._meta });
+		const usage = readUsage({ ...update, ...update._meta }, this.agent.metaNamespace);
 		if (!usage) return;
 		this.turnMeasured = true;
 		this.push({ type: 'message_delta', stopReason: null, usage });
@@ -477,7 +478,7 @@ class AcpConversation implements RuntimeConversation {
 		const t0 = Date.now();
 		// The spawn+handshake window emits nothing else; one honest line keeps the UI from sitting blank.
 		this.chunk('thinking', `\n[${this.agent.name}] starting session…\n`);
-		const proc = await this.host.spawn(this.options.model);
+		const proc = await this.compute.spawn(this.options.model);
 		this.spawnMs = Date.now() - t0;
 		// close() during the spawn could not reach this container; nothing else will end it.
 		if (this.closed) {
@@ -494,20 +495,12 @@ class AcpConversation implements RuntimeConversation {
 			onRequest: (method, params, id) => this.onRequest(method, params, id),
 		});
 		this.acp.start();
-		await this.acp.request(
-			'initialize',
-			{
-				protocolVersion: 1,
-				clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-				clientInfo: { name: 'anton', version: '1.0.0' },
-			},
-			HANDSHAKE_MS,
-		);
-		const token = await this.host.credential();
+		await this.acp.request('initialize', INITIALIZE, HANDSHAKE_MS);
+		const token = await this.account.credential();
 		if (!token) throw new Error(`${this.agent.name} is not signed in`);
 		// Some agents read credentials from files in their own data dir, not from authenticate params.
 		await this.agent.auth.provision?.(proc, token);
-		await this.acp.request('authenticate', { methodId: this.agent.auth.methodId, ...this.agent.auth.params(token) }, HANDSHAKE_MS);
+		await this.acp.request('authenticate', authParams(this.agent.auth, token), HANDSHAKE_MS);
 		// The agent reads project instructions itself; Anton's system prompt rides along as AGENTS.md.
 		if (this.options.instructions.trim()) {
 			await proc.writeFile(`${this.agent.workdir}/AGENTS.md`, `${this.options.instructions}\n`);
@@ -603,7 +596,7 @@ class AcpConversation implements RuntimeConversation {
 			])) as { stopReason?: string; usage?: Record<string, unknown> };
 			// The turn's total sums every model call in it; booked onto one step it reads as that step's context.
 			// Only an agent that reported no call on its own gets it, as the best measure there is.
-			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {});
+			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {}, this.agent.metaNamespace);
 			// A turn that ends right after a tool result still answers that step, if only with nothing.
 			this.ensureSegment();
 			this.closeSegment(result?.stopReason ?? 'end_turn', total ?? {});
@@ -631,15 +624,15 @@ const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 's
  * 262K window when the call held 171K), so they are taken out of it. An agent that reports only the spec's `used`
  * occupancy gets that as input. Null when nothing was measured.
  */
-export function readUsage(fields: Record<string, unknown>): RuntimeUsage | null {
-	const first = (...keys: string[]) => {
-		for (const key of keys) if (fields[key] !== undefined) return num(fields[key]);
+export function readUsage(fields: Record<string, unknown>, namespace?: string): RuntimeUsage | null {
+	const first = (key: string, short: string) => {
+		for (const name of [namespace ? `${namespace}/${key}` : '', key, short]) if (name && fields[name] !== undefined) return num(fields[name]);
 		return 0;
 	};
-	const total = first('cognition.ai/inputTokens', 'inputTokens', 'input');
-	const output = first('cognition.ai/outputTokens', 'outputTokens', 'output');
-	const cacheRead = first('cognition.ai/cachedReadTokens', 'cachedReadTokens', 'cacheRead');
-	const cacheWrite = first('cognition.ai/cachedWriteTokens', 'cachedWriteTokens', 'cacheWrite');
+	const total = first('inputTokens', 'input');
+	const output = first('outputTokens', 'output');
+	const cacheRead = first('cachedReadTokens', 'cacheRead');
+	const cacheWrite = first('cachedWriteTokens', 'cacheWrite');
 	if (total || output || cacheRead || cacheWrite) {
 		const input = total >= cacheRead + cacheWrite ? total - cacheRead - cacheWrite : total;
 		return { input, output, cacheRead, cacheWrite };
@@ -654,31 +647,34 @@ const textOf = (update: SessionUpdate): string => {
 	return typeof text === 'string' ? text : typeof update.text === 'string' ? update.text : '';
 };
 
-export function acpRuntime(agent: AcpAgent, host: AcpHost): AgentRuntime {
+export function acpRuntime(agent: AcpAgent, account: AcpAccount, compute: AcpCompute): AgentRuntime {
 	return {
 		id: agent.id,
 		name: agent.name,
 		gateway: agent.gateway,
 		signInCommand: agent.signInCommand,
 		signIn: async () => {
-			const started = await host.signIn();
+			const started = await account.signIn();
 			return {
 				...started,
 				complete: async (code) => {
 					await started.complete(code);
 					// Connection setup is the warm-up point: build the image and check the agent's latest release off the reply path.
-					void host.prepare?.().catch(() => undefined);
+					void compute.prepare?.().catch(() => undefined);
 				},
 			};
 		},
-		signOut: () => host.signOut(),
-		...(host.isolation ? { isolation: () => host.isolation!() } : {}),
-		status: async (fresh): Promise<AgentRuntimeStatus> => {
-			const s = await host.signedIn();
+		signOut: async () => {
+			await account.signOut();
+			compute.drain?.();
+		},
+		...(compute.isolation ? { isolation: () => compute.isolation!() } : {}),
+		status: async (): Promise<AgentRuntimeStatus> => {
+			const s = await account.signedIn();
 			return { signedIn: s.signedIn, email: null, plan: agent.plan, version: null, problem: s.problem };
 		},
-		listModels: () => host.listModels(),
-		...(host.windows ? { windows: () => host.windows!() } : {}),
-		open: (options) => new AcpConversation(agent, host, options),
+		listModels: () => account.listModels(),
+		...(account.windows ? { windows: () => account.windows!() } : {}),
+		open: (options) => new AcpConversation(agent, account, compute, options),
 	};
 }

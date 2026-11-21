@@ -1,16 +1,14 @@
-// Modal side of an AcpHost: at most one warm conversation container (linkd +
+// Modal compute for ACP agents: at most one warm conversation container (linkd +
 // agent execs pre-started, sidecar mode only) and one container per live conversation. Two isolation
 // modes: 'sidecar' shares one anchor sandbox (cheap, experimental API); 'sandbox'
 // gives each conversation its own Modal sandbox (standard API, billed per sandbox).
-// Auth lives on this host — the vendor CLI's credentials.toml stays local and each
-// session gets the key via _meta.api_key, so no container ever holds credentials.
+// Sign-in is the AcpAccount's (local-cli.ts); a container gets the key only per
+// session, through authenticate, and never keeps it.
 
 import { randomUUID } from 'node:crypto';
 import { type App, type ContainerProcess, type Image, ModalClient, type Sandbox, type SidecarContainer } from 'modal';
-import type { RuntimeSignIn } from '../../core/ports.ts';
 import type { AcpTransport } from './client.ts';
-import { canInstallCli, cliInstallGap, ensureCli, localCli, localCredential, localListModels, localSignIn, localSignOut } from './local-cli.ts';
-import type { AcpAgent, AcpHost, AcpIsolation, AcpProcess, AcpRelease } from './runtime.ts';
+import type { AcpAgent, AcpCompute, AcpIsolation, AcpProcess, AcpRelease } from './runtime.ts';
 import { LINKD_SCRIPT, LINK_SCRIPT } from './sidecar-scripts.ts';
 
 const b64 = (text: string) => Buffer.from(text, 'utf8').toString('base64');
@@ -29,7 +27,6 @@ const SANDBOX_IDLE_MS = 20 * 60_000;
 const ANCHOR_GRACE_MS = 5 * 60_000;
 /** How often the host expires its warm slot, drops exited containers and reaps the anchor. */
 const REAP_EVERY_MS = 60_000;
-const STATUS_TTL_MS = 30_000;
 /** How often a running server re-asks the vendor for a newer agent build. */
 const RELEASE_TTL_MS = 6 * 3_600_000;
 /** A failed release lookup is retried this soon, not cached for RELEASE_TTL_MS. */
@@ -115,7 +112,7 @@ function retrying<T>(make: () => Promise<T>): () => Promise<T> {
 	};
 }
 
-export type ModalAcpHostOptions = {
+export type ModalComputeOptions = {
 	isolation?: () => Promise<AcpIsolation>;
 	/** This server's stable id (it outlives restarts); the orphan sweep never touches another server's containers. */
 	owner?: () => Promise<string>;
@@ -123,7 +120,7 @@ export type ModalAcpHostOptions = {
 	client?: ModalClient;
 };
 
-export function modalAcpHost(agent: AcpAgent, appName: string, opts?: ModalAcpHostOptions): AcpHost {
+export function modalCompute(agent: AcpAgent, appName: string, opts?: ModalComputeOptions): AcpCompute {
 	const client = opts?.client ?? new ModalClient();
 	let sandbox: Promise<Sandbox> | null = null;
 	let imageFor: { key: string; promise: Promise<Image> } | null = null;
@@ -131,7 +128,6 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: ModalAcpHo
 	let sidecarSeq = 0;
 	// Sandbox names must be unique per app; a reload or second server would collide with a live one.
 	const sandboxName = `acp-${agent.id}-${randomUUID().slice(0, 8)}`;
-	let statusCache: { at: number; result: Promise<{ signedIn: boolean; problem: string | null }> } | null = null;
 	/** Containers serving open conversations; the anchor is never torn down while one is alive. */
 	const liveConvs = new Set<ConvBox>();
 	/** When compute was last used (a spawn, a close); the anchor outlives its last container by ANCHOR_GRACE_MS. */
@@ -346,13 +342,6 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: ModalAcpHo
 		return null;
 	}
 
-	// The file only changes through our own sign-in/out, so one read serves a while.
-	let credCache: string | null | undefined;
-	const credential = async () => {
-		if (credCache === undefined) credCache = await localCredential(agent);
-		return credCache;
-	};
-
 	async function execOn(box: ConvBox, command: string[], params: Record<string, unknown> = {}) {
 		return box.exec(command, { mode: 'binary', stdout: 'pipe', stderr: 'pipe', workdir: agent.workdir, ...params });
 	}
@@ -387,34 +376,6 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: ModalAcpHo
 	reaper.unref();
 
 	return {
-		signedIn: () => {
-			if (statusCache && Date.now() - statusCache.at < STATUS_TTL_MS) return statusCache.result;
-			const result = (async () => {
-				// Status checks must not create warm infrastructure; only spawn/prepare refill the pool.
-				// Auth lives on this host now, so a status check never touches Modal at all.
-				const [cred, cli] = await Promise.all([localCredential(agent), localCli(agent)]);
-				// Status stays cheap: the CLI fetches itself lazily inside sign-in/model
-				// listing; warming it here keeps that wait short. ensureCli never throws.
-				if (!cli && canInstallCli(agent)) void ensureCli(agent).catch(() => undefined);
-				const gap = cliInstallGap(agent);
-				const problem = cli
-					? null
-					: canInstallCli(agent)
-						? `${agent.name} CLI is not installed on this server — it will be fetched on first use`
-						: gap
-							? `${agent.name} CLI is not installed on this server (${gap})`
-							: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
-				return cred ? { signedIn: true, problem } : { signedIn: false, problem };
-			})().catch((error) => ({
-				signedIn: false,
-				problem: `Could not check ${agent.name} sign-in: ${error instanceof Error ? error.message : String(error)}`,
-			}));
-			statusCache = { at: Date.now(), result };
-			return result;
-		},
-
-		credential,
-
 		// Builds the image off the reply path; no container starts until a conversation does.
 		prepare: async () => {
 			await mode();
@@ -423,30 +384,7 @@ export function modalAcpHost(agent: AcpAgent, appName: string, opts?: ModalAcpHo
 
 		isolation: () => mode(),
 
-		signIn: async (): Promise<RuntimeSignIn> => {
-			const signIn = await localSignIn(agent);
-			return {
-				url: signIn.url,
-				complete: async (code) => {
-					await signIn.complete(code);
-					statusCache = null;
-					credCache = undefined;
-				},
-				cancel: () => signIn.cancel(),
-			};
-		},
-
-		signOut: async () => {
-			await localSignOut(agent);
-			statusCache = null;
-			credCache = undefined;
-			// Warm slots are useless without credentials; don't leave them billing.
-			drainWarm();
-		},
-
-		listModels: () => localListModels(agent),
-
-		...(agent.windows ? { windows: () => agent.windows!() } : {}),
+		drain: () => drainWarm(),
 
 		spawn: async (model?: string): Promise<AcpProcess> => {
 			const t0 = Date.now();

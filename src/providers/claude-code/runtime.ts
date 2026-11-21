@@ -21,6 +21,7 @@ import {
 	type RuntimeUsage,
 	type SubscriptionModel,
 } from '../../core/ports.ts';
+import { channel } from '../../core/channel.ts';
 
 /**
  * Claude Code runs with its built-in tools off: it can only call Anton's tools, over an in-process MCP server. It signs
@@ -157,36 +158,6 @@ export function startSignIn(
 			reject(new Error(lastLine(output)));
 		});
 	});
-}
-
-function channel<T>() {
-	const items: T[] = [];
-	let waiting: ((result: IteratorResult<T>) => void) | null = null;
-	let closed = false;
-	return {
-		push(item: T) {
-			if (closed) return;
-			if (waiting) {
-				const wake = waiting;
-				waiting = null;
-				wake({ value: item, done: false });
-			} else items.push(item);
-		},
-		close() {
-			closed = true;
-			waiting?.({ value: undefined, done: true });
-			waiting = null;
-		},
-		[Symbol.asyncIterator](): AsyncIterator<T> {
-			return {
-				next: () => {
-					if (items.length) return Promise.resolve({ value: items.shift()!, done: false });
-					if (closed) return Promise.resolve({ value: undefined, done: true });
-					return new Promise((resolve) => (waiting = resolve));
-				},
-			};
-		},
-	};
 }
 
 const usageOf = (usage: Record<string, unknown> | undefined): RuntimeUsage => ({
