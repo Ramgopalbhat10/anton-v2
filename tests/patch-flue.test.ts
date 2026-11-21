@@ -64,7 +64,16 @@ function assertCompaction(definition, label) {
 }`;
 
 const FLUSH = `const CANONICAL_FLUSH_DELAY_MS = 1e3;
-var ConversationRecordWriter = class ConversationRecordWriter {};`;
+var ConversationRecordWriter = class ConversationRecordWriter {
+	batchesSinceFoldCheckpoint = 0;
+	record(records, writeFoldCheckpoint) {
+		this.batchesSinceFoldCheckpoint += 1;
+		if (this.batchesSinceFoldCheckpoint >= 64) {
+			this.batchesSinceFoldCheckpoint = 0;
+			writeFoldCheckpoint();
+		}
+	}
+};`;
 
 /** A runtime laid out as Flue's is: the providers at the top, the Node adapter under node/. */
 function runtime(name: string, providers: string, open = OPEN): URL {
@@ -257,13 +266,30 @@ test('a write that reads first waits for another connection\'s lock once patched
 	db.close();
 });
 
-test('streamed deltas flush at 50ms instead of 1000ms', async () => {
+test('streamed deltas flush at 100ms while keeping fold checkpoint cadence independent of live flush rate', async () => {
 	const dist = runtime('flush', `${BROKEN}\n${TASK}`);
 	assert.equal((await patchFlueEach(dist))['smoother live streaming'], 'patched');
 	const patched = readFileSync(new URL('sql-agent-execution-store-x.mjs', dist), 'utf8');
-	assert.match(patched, /const CANONICAL_FLUSH_DELAY_MS = 50;/);
+	assert.match(patched, /const CANONICAL_FLUSH_DELAY_MS = 100;/);
 	assert.doesNotMatch(patched, /const CANONICAL_FLUSH_DELAY_MS = 1e3;/);
 	assert.equal((await patchFlueEach(dist))['smoother live streaming'], 'already');
+
+	// Evaluate the patched ConversationRecordWriter checkpoint weight behavior directly.
+	const Writer = new Function(`${patched}\nreturn ConversationRecordWriter;`)() as new () => {
+		batchesSinceFoldCheckpoint: number;
+		record: (records: Array<{ type: string }>, writeFoldCheckpoint: () => void) => void;
+	};
+	const writer = new Writer();
+	let checkpoints = 0;
+	for (let i = 0; i < 64; i++) writer.record([{ type: 'assistant_text_delta' }], () => checkpoints++);
+	assert.equal(checkpoints, 0, '64 delta-only batches must not trigger a full fold checkpoint');
+	for (let i = 0; i < 576; i++) writer.record([{ type: 'assistant_text_delta' }], () => checkpoints++);
+	assert.equal(checkpoints, 1, '640 delta-only batches (~64s at 100ms) trigger one fold checkpoint');
+
+	const nonDeltaWriter = new Writer();
+	let nonDeltaCheckpoints = 0;
+	for (let i = 0; i < 64; i++) nonDeltaWriter.record([{ type: 'tool_result' }], () => nonDeltaCheckpoints++);
+	assert.equal(nonDeltaCheckpoints, 1, '64 non-delta batches keep the original checkpoint threshold');
 });
 
 test('the installed runtime is patched', () => {
@@ -275,7 +301,8 @@ test('the installed runtime is patched', () => {
 	assert.doesNotMatch(swap, /compaction: this\.config\.compaction\n/);
 	assert.ok(sources.some((source) => source.includes('compactionConfig?.reasoning ? { ...sessionModel, summaryReasoning: compactionConfig.reasoning }')));
 	assert.ok(sources.some((source) => source.includes('completionOptions.reasoning = model.summaryReasoning ?? "high"')));
-	assert.ok(sources.some((source) => source.includes('const CANONICAL_FLUSH_DELAY_MS = 50;')));
+	assert.ok(sources.some((source) => source.includes('const CANONICAL_FLUSH_DELAY_MS = 100;')));
+	assert.ok(sources.some((source) => source.includes('records.every((r) => r.type === "assistant_text_delta" || r.type === "assistant_reasoning_delta") ? 0.1 : 1')));
 	const node = readFileSync(new URL('node/index.mjs', dist), 'utf8');
 	assert.match(node, /busy_timeout=5000/);
 	assert.match(node, /db\.exec\("BEGIN IMMEDIATE"\);/);

@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Target time (ms) for the catch-up cursor to absorb an incoming burst. */
-const CATCH_UP_MS = 120;
+/** Target time (ms) for the catch-up cursor to absorb an incoming burst while streaming. */
+const CATCH_UP_MS = 65;
+/** Faster catch-up time (ms) to smoothly finish draining the trailing tail once streaming ends. */
+const FINISH_CATCH_UP_MS = 45;
+/** Firm upper bound (ms) to finish draining any remaining tail after streaming ends. */
+const MAX_FINISH_MS = 250;
 /** Minimum characters revealed per second so short tails finish crisply. */
 const MIN_CHARS_PER_SEC = 80;
+/** Minimum characters revealed per second when draining the final tail after streaming ends. */
+const FINISH_MIN_CHARS_PER_SEC = 180;
 /** Cap per-frame delta so returning from a backgrounded tab advances cleanly. */
 const MAX_DT_MS = 50;
 
@@ -19,31 +25,50 @@ function reducedMotion(): boolean {
 	return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 
+export type IntervalForCursor = number | ((target: string, shownLength: number) => number);
+
 /**
- * Smoothly paces newly arrived text over animation frames while a block is streaming, so bursts from the
- * server or provider glide in instead of jumping in chunks. Non-streaming text, reduced motion, and text
- * already present on mount return immediately without replay.
+ * Smoothly paces newly arrived text over animation frames while a block is streaming, and smoothly drains
+ * any remaining tail when streaming finishes so responses never jump at the end. When `minIntervalMs` (or
+ * a cursor-aware callback) returns > 0 (e.g. while the reveal cursor is inside a large growing Markdown block
+ * such as a long GFM table), emissions are throttled to at least that spacing so expensive reparses stay
+ * within the frame budget. Non-streaming text, reduced motion, and text already present on mount return
+ * immediately without replay.
  */
-export function useSmoothText(text: string, streaming: boolean): string {
-	const immediate = !streaming || reducedMotion();
+export function useSmoothText(text: string, streaming: boolean, minIntervalMs: IntervalForCursor = 0): string {
+	const reduced = reducedMotion();
 	const [shown, setShown] = useState(() => ({ text, length: text.length }));
 	const targetRef = useRef(text);
+	const streamingRef = useRef(streaming);
+	const hadStreamingRef = useRef(streaming);
+	const minIntervalRef = useRef<IntervalForCursor>(minIntervalMs);
 	const shownTextRef = useRef(text);
 	const shownLengthRef = useRef(text.length);
 	const frameRef = useRef<number | null>(null);
 	const lastTimeRef = useRef(0);
+	const finishAtRef = useRef<number | null>(null);
 
-	const isExtension = !immediate && text.startsWith(shown.text.slice(0, shown.length));
-	const displayLength = immediate ? text.length : isExtension ? Math.min(shown.length, text.length) : text.length;
+	if (streaming) {
+		hadStreamingRef.current = true;
+		finishAtRef.current = null;
+	}
+	streamingRef.current = streaming;
+	minIntervalRef.current = minIntervalMs;
+
+	const pacing = !reduced && (streaming || (hadStreamingRef.current && shown.length < text.length));
+	const isExtension = pacing && text.startsWith(shown.text.slice(0, shown.length));
+	const displayLength = !pacing ? text.length : isExtension ? Math.min(shown.length, text.length) : text.length;
 
 	useEffect(() => {
 		targetRef.current = text;
-		if (immediate) {
+		const shouldPace = !reduced && (streaming || (hadStreamingRef.current && shownLengthRef.current < text.length));
+		if (!shouldPace) {
 			if (frameRef.current !== null) {
 				cancelAnimationFrame(frameRef.current);
 				frameRef.current = null;
 			}
 			lastTimeRef.current = 0;
+			finishAtRef.current = null;
 			shownTextRef.current = text;
 			shownLengthRef.current = text.length;
 			setShown((current) => (current.text === text && current.length === text.length ? current : { text, length: text.length }));
@@ -56,6 +81,7 @@ export function useSmoothText(text: string, streaming: boolean): string {
 				frameRef.current = null;
 			}
 			lastTimeRef.current = 0;
+			finishAtRef.current = null;
 			shownTextRef.current = text;
 			shownLengthRef.current = text.length;
 			setShown({ text, length: text.length });
@@ -68,17 +94,36 @@ export function useSmoothText(text: string, streaming: boolean): string {
 		lastTimeRef.current = 0;
 		const tick = (now: number) => {
 			const target = targetRef.current;
-			const dt = lastTimeRef.current ? Math.min(MAX_DT_MS, Math.max(1, now - lastTimeRef.current)) : 16;
-			lastTimeRef.current = now;
 			const remaining = target.length - shownLengthRef.current;
 			if (remaining <= 0) {
 				frameRef.current = null;
 				lastTimeRef.current = 0;
+				finishAtRef.current = null;
 				return;
 			}
-			const minStep = Math.ceil((MIN_CHARS_PER_SEC * dt) / 1000);
-			const proportionalStep = Math.ceil((remaining * dt) / CATCH_UP_MS);
-			const nextLength = safeSliceEnd(target, Math.min(target.length, shownLengthRef.current + Math.max(minStep, proportionalStep)));
+			const finishing = !streamingRef.current;
+			if (finishing && finishAtRef.current === null) finishAtRef.current = now;
+			const intervalOption = minIntervalRef.current;
+			const minInterval = typeof intervalOption === 'function' ? intervalOption(target, shownLengthRef.current) : intervalOption;
+			const finishElapsed = finishing && finishAtRef.current !== null ? now - finishAtRef.current : 0;
+			if (minInterval > 0 && lastTimeRef.current > 0 && now - lastTimeRef.current < minInterval && finishElapsed < MAX_FINISH_MS) {
+				frameRef.current = requestAnimationFrame(tick);
+				return;
+			}
+			const maxDt = Math.max(MAX_DT_MS, minInterval);
+			const dt = lastTimeRef.current ? Math.min(maxDt, Math.max(1, now - lastTimeRef.current)) : 16;
+			lastTimeRef.current = now;
+			let nextLength: number;
+			// Once streaming has completed, commit the full tail on the next allowed large-block parse or at the firm deadline so completed replies never linger hidden.
+			if (finishing && (minInterval > 0 || finishElapsed >= MAX_FINISH_MS)) {
+				nextLength = target.length;
+			} else {
+				const catchUpMs = finishing ? FINISH_CATCH_UP_MS : Math.max(CATCH_UP_MS, minInterval * 1.5);
+				const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
+				const minStep = Math.ceil((minRate * dt) / 1000);
+				const proportionalStep = Math.ceil((remaining * dt) / catchUpMs);
+				nextLength = safeSliceEnd(target, Math.min(target.length, shownLengthRef.current + Math.max(minStep, proportionalStep)));
+			}
 			shownTextRef.current = target;
 			shownLengthRef.current = nextLength;
 			setShown({ text: target, length: nextLength });
@@ -87,10 +132,11 @@ export function useSmoothText(text: string, streaming: boolean): string {
 			} else {
 				frameRef.current = null;
 				lastTimeRef.current = 0;
+				finishAtRef.current = null;
 			}
 		};
 		frameRef.current = requestAnimationFrame(tick);
-	}, [text, immediate]);
+	}, [text, streaming, reduced]);
 
 	useEffect(() => {
 		return () => {
