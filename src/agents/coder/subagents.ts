@@ -1,7 +1,7 @@
 import { defineSubagent, useSubagent } from '@flue/runtime';
 import { agentSettingsNow, helperModelFor } from '../../services/tasks/agent-runner.ts';
 import { repoInstructionsFor } from '../../services/settings/plugins.ts';
-import { COMPACTION_SUMMARY_EFFORT, compactionFor } from '../../services/context/context-usage.ts';
+import { agentKeepsContext, COMPACTION_SUMMARY_EFFORT, compactionFor } from '../../services/context/context-usage.ts';
 import { OUTPUTS, repoInstructionsPrompt } from './prompts.ts';
 import { useRepoSnapshot } from './tools/snapshot.ts';
 import { useRunScript } from './tools/run-script.ts';
@@ -66,7 +66,7 @@ export const tester = defineSubagent({
 export function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
 	const choice = helperModelFor(id, name);
 	if (!choice) return subagent;
-	const compaction = choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : { reasoning: COMPACTION_SUMMARY_EFFORT };
+	const compaction = agentKeepsContext(choice.model) ? false : choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : { reasoning: COMPACTION_SUMMARY_EFFORT };
 	return { ...subagent, model: choice.model, thinkingLevel: choice.reasoning, compaction } as typeof explorer;
 }
 

@@ -121,6 +121,12 @@ export function keptAfterCompaction(compactsAt: number): number {
 /** Flue writes at `high`; the summary shares no cache prefix and the reply waits for it, so a frontier model over 200K tokens stalled tasks for minutes. */
 export const COMPACTION_SUMMARY_EFFORT: Reasoning = 'low';
 
+/**
+ * An ACP agent (Devin, Antigravity) keeps and compacts its own context; Anton's copy only mirrors it. Compacting
+ * the mirror rewrites history the agent never sees, which forces a fresh agent session and a replay.
+ */
+export const agentKeepsContext = (model: string) => /^(devin|antigravity)\//.test(unrouted(model));
+
 /** For a model of unknown window the point is left to the runtime. Read while the agent renders, from the model list last fetched. */
 export function compactionFor(
 	model: string,
@@ -138,6 +144,9 @@ export function compactionFor(
 	const keepRecentTokens = keptAfterCompaction(info.contextLength - reserve);
 	return reserve === compactionReserve(info.contextLength, info.maxOutput) ? { keepRecentTokens, ...summary } : { reserveTokens: reserve, keepRecentTokens, ...summary };
 }
+
+/** What an agent's `useModel` takes: no threshold compaction for an agent that keeps its own context. */
+export const agentCompaction = (model: string): false | ReturnType<typeof compactionFor> => (agentKeepsContext(model) ? false : compactionFor(model));
 
 export function scaleParts(estimates: Record<ContextPart, number>, total: number): Array<{ key: ContextPart; tokens: number }> {
 	const order: ContextPart[] = ['messages', 'tools', 'systemPrompt', 'skills', 'mcpTools'];
