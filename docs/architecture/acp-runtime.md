@@ -91,6 +91,16 @@ A failed app lookup or image build is retried by the next spawn, never cached. A
 
 Cost note that motivated the reaper: Modal's `idleTimeoutMs` only watches a sandbox's *main* container execs — sidecar execs (and any long-lived exec in sandbox mode) keep it "active" forever, so idle timeouts alone never fire (this once billed ~$20/day of idle anchors). The host therefore reaps itself (above). That still leaves process-level orphans — a restart or crash loses every handle while the agent inside keeps the sandbox active — so the first ACP host built in a process also sweeps the app's `anton-acp`-tagged sandboxes, killing only ones created before the process started (once per process via `globalThis`, so vite reloads never touch live conversations). Every container carries an `anton-acp-owner` tag with this server's id (the `acp.owner` setting, so it survives restarts and differs per database); the sweep skips other owners, so a dev server sharing the app never kills prod's conversations. Untagged ones predate owner tags and are still swept.
 
+## Where the agent's workspace is
+
+The agent works in an empty jail, not the task's checkout: its native tools edit `/work` inside its own container, and only Anton's MCP tools reach the task sandbox. A spike on Modal (21 Nov 2026) checked whether a sidecar could share a live workspace with its sandbox's main container, and it cannot:
+
+- A sidecar does not see the main container's filesystem.
+- A Modal Volume mounted in both is not live: a file written on one side was not visible on the other without a commit and reload.
+- A sidecar does reach the main container over the network, by the hostname `main`.
+
+So moving the agent next to the repo means one of two things. Either serve ACP's client capabilities (`fs/read_text_file`, `fs/write_text_file`, `terminal/*`) from the task sandbox and set the session `cwd` to the repo path, which keeps the jail but depends on each vendor routing its native tools through them (untested for Devin and agy). Or run the agent inside the task sandbox itself, which gives it the real repo but lets code in the repo reach the vendor credential.
+
 ## Auth and sign-in
 
 The vendor credential stays on this host. Two shapes exist, both in `src/providers/acp/local-cli.ts`:
