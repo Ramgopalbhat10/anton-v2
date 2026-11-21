@@ -26,6 +26,8 @@ import type { ModelChoice } from '@/lib/api/plans';
 import type { Session } from '@/lib/api/sessions';
 import type { Space } from '@/lib/api/spaces';
 import { expandCommand } from '@/lib/completion';
+import type { WindowedAgent } from '@/lib/conversation-window';
+import { OlderTurnsRow } from '@/components/thread/older-turns';
 import { askToNotify } from '@/lib/notifications';
 import { takeFromInbox, useInbox } from '@/lib/composer-inbox';
 import { useThreadFileResolver } from '@/lib/thread-outputs';
@@ -697,7 +699,7 @@ export function ProjectFeed({
 	onStartingChange: setStarting,
 }: {
 	space: Space;
-	agent: UseFlueAgentResult;
+	agent: WindowedAgent;
 	threads: Session[];
 	/** The new thread's form shows at the end of the conversation, in view. */
 	starting?: boolean;
@@ -736,6 +738,7 @@ export function ProjectFeed({
 			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-2">
 				<div className="mx-auto flex max-w-[720px] flex-col gap-5">
 					{messages.length === 0 && !busy && agent.historyReady ? <Welcome space={space} onPick={setDraft} /> : null}
+					<OlderTurnsRow older={agent.older} scroller={scroller} following={following} first={messages[0]?.id ?? null} />
 					{messages.map((message) => {
 						if (message.settlement) {
 							return (

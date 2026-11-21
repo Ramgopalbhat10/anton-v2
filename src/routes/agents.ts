@@ -21,8 +21,12 @@ import { primeCoordinator } from '../services/projects/coordinator.ts';
 import { incognitoAttachment } from '../services/artifacts/attachments.ts';
 import { assertWithinBudget } from '../services/models/budget.ts';
 import { REASONING, ROUTE, body } from './shared.ts';
+import { conversationWindow } from './conversation-window.ts';
 
 const app = new Hono();
+
+// Registered ahead of the agent routers, which they read in-process; `agents` and `coordinators` exist by the first request.
+app.route('/', conversationWindow((kind) => (kind === 'coordinator' ? coordinators : agents) as never));
 
 // The task counts as working from the moment the message arrives; a refused message undoes that.
 app.post('/api/agents/coder/:id', async (c, next) => {

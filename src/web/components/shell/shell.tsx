@@ -33,6 +33,7 @@ import { SettingsModal } from '@/components/settings/modal';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 import { useViewer } from '@/lib/viewer';
+import { useOlderTurns, useWindowedClient, type WindowedAgent } from '@/lib/conversation-window';
 
 function readCollapsed() {
 	try {
@@ -328,9 +329,11 @@ export function usePanelChange(
 	}, []);
 }
 
-function useTaskAgent(sessionId: string): UseFlueAgentResult {
+function useTaskAgent(sessionId: string): WindowedAgent {
 	const queryClient = useQueryClient();
-	const agent = useFlueAgent({ url: `/api/agents/coder/${sessionId}` });
+	const path = `/api/agents/coder/${sessionId}`;
+	const client = useWindowedClient(path);
+	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
 	const session = useQuery(taskQueries.session(sessionId));
 	const working = session.data?.working ?? false;
 	useFollowOnceStarted(agent, session.dataUpdatedAt);

@@ -1,4 +1,6 @@
 import type { FlueConversationMessage, UseFlueAgentResult } from '@flue/react';
+import type { WindowedAgent } from '@/lib/conversation-window';
+import { OlderTurnsRow } from '@/components/thread/older-turns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from '@/lib/icons';
 import { memo, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -235,7 +237,7 @@ function useThreadFileLinks(sessionId: string, busy: boolean): FileLinks {
 	);
 }
 
-export function Thread({ sessionId, agent, composer, fresh }: { sessionId: string; agent: UseFlueAgentResult; composer?: ReactNode; fresh?: boolean }) {
+export function Thread({ sessionId, agent, composer, fresh }: { sessionId: string; agent: WindowedAgent; composer?: ReactNode; fresh?: boolean }) {
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery(taskQueries.session(sessionId));
 	const scroller = useRef<HTMLDivElement>(null);
@@ -451,6 +453,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 								className="mt-[10vh]"
 							/>
 						) : null}
+						<OlderTurnsRow older={agent.older} scroller={scroller} following={following} first={rows[0] ? rowKey(rows[0]) : null} />
 						{rows.map((row) =>
 							row.message.settlement ? (
 								<SettlementNotice key={row.message.id} message={row.message} retry={!busy && row === rows[rows.length - 1] ? actions.send : undefined} />

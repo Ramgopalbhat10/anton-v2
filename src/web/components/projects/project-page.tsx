@@ -12,6 +12,7 @@ import { useModelName, useModels } from '@/lib/models';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell/shell';
 import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/kit/signal';
 import { useOnePane } from '@/lib/one-pane';
+import { useOlderTurns, useWindowedClient } from '@/lib/conversation-window';
 import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/thread/starting-task';
@@ -75,7 +76,9 @@ export function ProjectPage() {
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
-	const agent = useFlueAgent({ url: `/api/agents/coordinator/${spaceId}` });
+	const path = `/api/agents/coordinator/${spaceId}`;
+	const client = useWindowedClient(path);
+	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
 	const [saved, setDock] = useState(() => readDock(spaceId));
 	// On a phone the dock covers the board, so it shows only once you open it here; the saved choice is the wide screen's.
 	const onePane = useOnePane();
