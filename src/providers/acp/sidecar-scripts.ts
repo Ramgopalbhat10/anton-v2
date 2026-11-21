@@ -12,20 +12,26 @@ process.stdin.pipe(socket);
 socket.pipe(process.stdout);
 `;
 
-export const LINKD_SCRIPT = `// Listens for the agent's MCP link on a TCP port and bridges it 1:1 to this
-// process's stdio, the exec channel back to the host. One link per conversation.
+export const LINKD_SCRIPT = `// Listens for the agent's MCP link on a TCP port and bridges it to this
+// process's stdio, the exec channel back to the host. The newest link wins, so
+// an agent that restarts its MCP client reconnects instead of losing Anton's
+// tools. Exits only when the host closes the channel.
 // Usage: node linkd.mjs <port>
 import net from 'node:net';
 import readline from 'node:readline';
 const port = Number(process.argv[2] ?? 47900);
+let current = null;
+const fromHost = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+fromHost.on('line', (line) => current?.write(line + '\\n'));
+fromHost.on('close', () => process.exit(0));
 net.createServer((socket) => {
   socket.setNoDelay(true);
+  current?.destroy();
+  current = socket;
   const fromAgent = readline.createInterface({ input: socket, crlfDelay: Infinity });
   fromAgent.on('line', (line) => process.stdout.write(line + '\\n'));
-  const fromHost = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-  fromHost.on('line', (line) => socket.write(line + '\\n'));
-  fromHost.on('close', () => process.exit(0));
-  socket.on('close', () => process.exit(0));
-  socket.on('error', () => process.exit(1));
+  const drop = () => { if (current === socket) current = null; };
+  socket.on('close', drop);
+  socket.on('error', drop);
 }).listen(port, '127.0.0.1', () => console.error('acp linkd listening on ' + port));
 `;

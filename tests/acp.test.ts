@@ -310,8 +310,13 @@ test('permission requests allow Anton tools and refuse the agent\'s own', async 
 	ask(8, 'exec rm -rf /');
 	askAgy(9, 'mcp_anton_render_html', 'Run mcp_anton_render_html');
 	askAgy(10, 'run_command', 'Run a terminal command');
-	await until(() => parse(acp.sent).filter((m) => [7, 8, 9, 10].includes(Number(m.id))).length === 4, 'permission answers');
-	const answers = parse(acp.sent).filter((m) => [7, 8, 9, 10].includes(Number(m.id)));
+	// A bare anton_<tool> is Anton's only when it names one of Anton's tools as a whole word.
+	askAgy(11, 'anton_bash', 'Run anton_bash');
+	askAgy(12, 'edit_file', 'Edit anton_config.ts');
+	await until(() => parse(acp.sent).filter((m) => [7, 8, 9, 10, 11, 12].includes(Number(m.id))).length === 6, 'permission answers');
+	const answers = parse(acp.sent).filter((m) => [7, 8, 9, 10, 11, 12].includes(Number(m.id)));
+	assert.deepEqual(answers.find((m) => m.id === 11)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
+	assert.deepEqual(answers.find((m) => m.id === 12)?.result, { outcome: { outcome: 'selected', optionId: 'deny' } });
 	assert.deepEqual(answers.find((m) => m.id === 7)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
 	assert.deepEqual(answers.find((m) => m.id === 8)?.result, { outcome: { outcome: 'selected', optionId: 'reject' } });
 	assert.deepEqual(answers.find((m) => m.id === 9)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
@@ -672,5 +677,45 @@ test('an agent that reports only its turn total still gets it, and a turn ending
 	assert.equal(seen.filter((e) => e.type === 'message_stop').length, stopsBefore + 1, 'the last step gets its own closing message');
 	const last = [...seen].reverse().find((e): e is Extract<RuntimeEvent, { type: 'message_delta' }> => e.type === 'message_delta');
 	assert.deepEqual(last?.usage, { input: 500, output: 20, cacheRead: 0, cacheWrite: 0 });
+	conv.close();
+});
+
+test('ping and tools/list still answer while a tools/call is parked', async () => {
+	let release: (output: RuntimeToolOutput) => void = () => undefined;
+	const { acp, mcp, conv } = rig(() => new Promise((resolve) => (release = resolve)));
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const parked = mcpCall(mcp, 'bash', { command: 'sleep 600' });
+	await until(() => parse(mcp.sent).some((m) => m.id === 101), 'tools/list before the call');
+	await sleep(20);
+	mcp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 200, method: 'ping' }));
+	mcp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 201, method: 'tools/list', params: {} }));
+	await until(() => parse(mcp.sent).some((m) => m.id === 200) && parse(mcp.sent).some((m) => m.id === 201), 'ping and tools/list during the call');
+	release({ content: [{ type: 'text', text: 'done' }], isError: false });
+	await parked;
+	conv.close();
+});
+
+test('a message sent while the agent waits on a tool goes back with that tool\'s result', async () => {
+	let release: (output: RuntimeToolOutput) => void = () => undefined;
+	const { acp, mcp, conv } = rig(() => new Promise((resolve) => (release = resolve)));
+	conv.send([{ type: 'text', text: 'push the fix' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const parked = mcpCall(mcp, 'bash', { command: 'git status' });
+	await sleep(30);
+	// The bridge's order: the result first, then the user's words, in one go.
+	release({ content: [{ type: 'text', text: 'clean' }], isError: false });
+	conv.send([{ type: 'text', text: "Don't use GitHub directly" }]);
+	const reply = (await parked).result as { content: { type: string; text: string }[] };
+	assert.equal(reply.content[0]?.text, 'clean');
+	assert.match(reply.content[1]?.text ?? '', /Don't use GitHub directly/);
+	await sleep(20);
+	assert.equal(parse(acp.sent).filter((m) => m.method === 'session/prompt').length, 1, 'no second prompt waits behind the turn');
 	conv.close();
 });
