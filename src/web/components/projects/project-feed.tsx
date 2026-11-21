@@ -343,13 +343,13 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 	}
 }
 
-type Block = { kind: 'text'; text: string; key: string } | { kind: 'tool'; part: ToolPart } | { kind: 'dispatch'; parts: ToolPart[] };
+type Block = { kind: 'text'; text: string; streaming?: boolean; key: string } | { kind: 'tool'; part: ToolPart } | { kind: 'dispatch'; parts: ToolPart[] };
 
 /** The message's parts as blocks: threads started in a row become one dispatch. */
 function blocks(parts: FlueConversationPart[]): Block[] {
 	const out: Block[] = [];
 	parts.forEach((part, index) => {
-		if (part.type === 'text') return void out.push({ kind: 'text', text: part.text, key: String(index) });
+		if (part.type === 'text') return void out.push({ kind: 'text', text: part.text, streaming: part.state === 'streaming', key: String(index) });
 		if (part.type !== 'dynamic-tool') return;
 		const last = out[out.length - 1];
 		if (part.toolName === 'start_thread' && last?.kind === 'dispatch') last.parts.push(part);
@@ -408,7 +408,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 				block.kind === 'text' ? (
 					<div key={block.key} className="text-body-lg leading-[21px]">
 						<InlineLinks.Provider value={chips}>
-							<Markdown text={block.text} />
+							<Markdown text={block.text} streaming={live && Boolean(block.streaming)} />
 						</InlineLinks.Provider>
 					</div>
 				) : block.kind === 'dispatch' ? (
@@ -486,22 +486,25 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	const [repoId, setRepoId] = useState<string | null>(space.repos[0]?.id ?? null);
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [planMode, setPlanMode] = useState(false);
-	// A brief carries no pictures, so images go to the project Library as files, like any other.
-	const attachments = useAttachments({ imagesAsFiles: true });
+	// Images preview like the coordinator composer; both images and files go to the project Library and the server hands images on as pictures.
+	const attachments = useAttachments();
 	const repo = repoId === null ? undefined : (space.repos.find((item) => item.id === repoId) ?? space.repos[0]);
 	const model = choice.model ?? space.threadModel ?? models.data?.default ?? '';
+	const ready = Boolean((brief.trim() || attachments.count) && !attachments.limitError && attachments.reading === 0);
 	// The thread opens at once, as a skeleton while the server makes it and gives it its slot.
 	function start() {
 		const id = newTaskId();
-		const files = attachments.files;
+		const uploads = [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)];
+		const names = uniqueUploadNames(uploads.map((file) => file.name));
+		const named = uploads.map((file, index) => (file.name === names[index] ? file : new File([file], names[index]!, { type: file.type, lastModified: file.lastModified })));
 		const input = { id, projectId: repo?.id ?? null, model: choice.model ?? undefined, reasoning: choice.reasoning ?? undefined, planMode: repo ? planMode : false };
-		const draft = draftSession({ id, title: titleFrom(brief.trim() || files[0]?.name || 'New thread'), prompt: brief, projectId: repo?.id, repo: repo?.repoFullName, model, reasoning: choice.reasoning, planMode, spaceId: space.id });
+		const draft = draftSession({ id, title: titleFrom(brief.trim() || named[0]?.name || 'New thread'), prompt: brief, projectId: repo?.id, repo: repo?.repoFullName, model, reasoning: choice.reasoning, planMode, spaceId: space.id });
 		startInBackground(queryClient, draft, brief, async () =>
 			api
 				.startThread(space.id, {
 					...input,
-					// Files go to the project's Library, where the thread reads them, and the brief carries what they say.
-					brief: withAttachments(brief, await Promise.all(files.map((file) => api.attachToProject(space.id, file.file))), 'project'),
+					// Files and images go to the project's Library, where the thread reads them and receives images as pictures.
+					brief: withAttachments(brief, await Promise.all(named.map((file) => api.attachToProject(space.id, file))), 'project'),
 				})
 				.catch((error: unknown) => madeAlready(id, error, api.session)),
 		);
@@ -513,7 +516,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 			className="composer relative mx-auto flex w-full max-w-[720px] flex-col"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (brief.trim() || attachments.count) start();
+				if (ready) start();
 			}}
 			{...attachments.dropZone}
 		>
@@ -523,6 +526,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 					Cancel
 				</button>
 			</div>
+			<AttachmentTray attachments={attachments} className="px-3.5 pt-2" />
 			<ComposerInput
 				autoFocus
 				value={brief}
@@ -537,8 +541,11 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				}
 				className="min-h-[72px] px-3.5 pt-2 text-body-lg leading-[20px]"
 			/>
-			<AttachmentTray attachments={attachments} className="px-3.5 pt-2" />
-			{attachments.notice ? <div className="px-3.5 pt-2 text-small text-(--warn)">{attachments.notice}</div> : null}
+			{attachments.limitError ? (
+				<div className="px-3.5 pt-2 text-small text-(--bad)">{attachments.limitError}</div>
+			) : attachments.notice ? (
+				<div className="px-3.5 pt-2 text-small text-(--warn)">{attachments.notice}</div>
+			) : null}
 			<div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-(--line) px-3 py-2">
 				<ComposerPlus attachments={attachments} label="Attach files to the brief" side="bottom" />
 				<Menu>
@@ -560,7 +567,7 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 				{/* Plan mode plans changes to code; a thread with no repository has none to plan. */}
 				{repo ? <PlanToggle on={planMode} onChange={setPlanMode} /> : null}
 				<div className="min-w-0 flex-1" />
-				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!brief.trim() && !attachments.count}>
+				<Btn type="submit" size="sm" variant="primary" icon={Waypoints} disabled={!ready}>
 					Start thread
 				</Btn>
 			</div>

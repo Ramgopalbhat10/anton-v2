@@ -14,7 +14,7 @@ export type ReasoningPart = Extract<FlueConversationPart, { type: 'reasoning' }>
 export type Step = ToolPart | ReasoningPart;
 
 export type Block =
-	| { kind: 'text'; text: string }
+	| { kind: 'text'; text: string; streaming?: boolean }
 	| { kind: 'steps'; steps: Step[] }
 	| { kind: 'plan'; part: ToolPart }
 	| { kind: 'agents'; calls: ToolPart[] }
@@ -134,7 +134,7 @@ export function toBlocks(parts: FlueConversationPart[]): Block[] {
 		const part = each.type === 'dynamic-tool' ? asConnectorTool(each) : each;
 		if (part.type === 'dynamic-tool' && part.toolName === TODO_TOOL) continue;
 		if (part.type === 'text') {
-			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text });
+			if (part.text.trim()) blocks.push({ kind: 'text', text: part.text, streaming: part.state === 'streaming' });
 		} else if (part.type === 'dynamic-tool' && part.toolName === PLAN_TOOL) {
 			blocks.push({ kind: 'plan', part });
 		} else if (part.type === 'dynamic-tool' && MAIL_SEND_TOOLS.has(part.toolName) && part.state !== 'output-error') {

@@ -82,6 +82,43 @@ function page() {
 }
 
 describe('Subscriptions', () => {
+	it('scrolls and drag-scrolls the plan tabs without an explicit scrollbar, suppressing clicks after a drag', async () => {
+		const plans = [
+			plan({ id: 'chatgpt', name: 'ChatGPT', gateway: 'openai' }),
+			plan({ id: 'claude', name: 'Claude', gateway: 'claude-code' }),
+			plan({ id: 'devin', name: 'Devin', gateway: 'devin' }),
+			plan({ id: 'antigravity', name: 'Antigravity', gateway: 'antigravity' }),
+			plan({ id: 'opencode', name: 'OpenCode Go', gateway: 'opencode-go' }),
+			plan({ id: 'cursor', name: 'Cursor', gateway: 'cursor' }),
+			plan({ id: 'openrouter', name: 'OpenRouter', kind: 'key', gateway: 'openrouter' }),
+			plan({ id: 'vercel', name: 'Vercel AI Gateway', kind: 'gateway', gateway: 'vercel' }),
+		];
+		api.subscriptions.mockResolvedValue({ subscriptions: plans });
+		page();
+		const tablist = await screen.findByRole('tablist', { name: 'Plans' });
+		expect(tablist.hasAttribute('data-noscrollbar')).toBe(true);
+		Object.defineProperty(tablist, 'clientWidth', { configurable: true, value: 400 });
+		Object.defineProperty(tablist, 'scrollWidth', { configurable: true, value: 900 });
+		tablist.scrollLeft = 0;
+
+		// Vertical wheel scrolls horizontally, matching PanelTabs in the projects view.
+		fireEvent.wheel(tablist, { deltaY: 120, deltaX: 0 });
+		expect(tablist.scrollLeft).toBe(120);
+
+		// Drag-scrolling moves scrollLeft and cancels the trailing click on a tab.
+		const claudeTab = screen.getByRole('tab', { name: 'Claude' });
+		fireEvent.pointerDown(claudeTab, { button: 0, pointerId: 1, pointerType: 'mouse', clientX: 200 });
+		fireEvent(window, new PointerEvent('pointermove', { pointerId: 1, clientX: 110 }));
+		fireEvent(window, new PointerEvent('pointerup', { pointerId: 1, clientX: 110 }));
+		expect(tablist.scrollLeft).toBe(210);
+		fireEvent.click(claudeTab, { detail: 1 });
+		expect(screen.getByRole('tab', { name: 'ChatGPT' }).getAttribute('aria-selected')).toBe('true');
+
+		// A plain click still selects the tab.
+		fireEvent.click(claudeTab, { detail: 1 });
+		expect(claudeTab.getAttribute('aria-selected')).toBe('true');
+	});
+
 	it('offers both ways to connect a plan', async () => {
 		api.subscriptions.mockResolvedValue({ subscriptions: [plan()] });
 		page();

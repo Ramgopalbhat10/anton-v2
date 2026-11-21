@@ -50,6 +50,12 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * seconds. Its transactions now open with BEGIN IMMEDIATE, which takes the
  * lock first, where the timeout applies. Flue has one connection a process,
  * so a transaction that only reads loses nothing by it.
+ *
+ * Smoother live streaming. Flue's ConversationRecordWriter coalesces streamed
+ * text and thinking deltas for 1000 ms (`CANONICAL_FLUSH_DELAY_MS = 1e3`)
+ * before appending to the durable stream and notifying SSE observers, causing
+ * replies to jump a paragraph at a time. Lowering the delay to 50 ms delivers
+ * deltas continuously while still coalescing per-token SQLite writes.
  */
 
 type Patch = { name: string; dir: string; marker: string; fixes: Array<[string, string]> };
@@ -111,6 +117,12 @@ const PATCHES: Patch[] = [
 		dir: 'node/',
 		marker: 'function createNodeTransactionSync(',
 		fixes: [['db.exec("BEGIN");', 'db.exec("BEGIN IMMEDIATE");']],
+	},
+	{
+		name: 'smoother live streaming',
+		dir: '',
+		marker: 'const CANONICAL_FLUSH_DELAY_MS =',
+		fixes: [['const CANONICAL_FLUSH_DELAY_MS = 1e3;', 'const CANONICAL_FLUSH_DELAY_MS = 50;']],
 	},
 ];
 

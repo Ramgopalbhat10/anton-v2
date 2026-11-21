@@ -503,17 +503,31 @@ describe('threads', () => {
 		for (const file of files) expect(message).toContain(`path="${file.name}"`);
 	});
 
-	it('saves a new thread’s attached files, images too, to the project Library and puts them in its brief', async () => {
+	it('previews attached images in the new thread composer, saves images and files to the project Library, and puts them in its brief', async () => {
 		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
-		fireEvent.paste(box, { clipboardData: { files: [new File(['png'], 'mock.png', { type: 'image/png' })], getData: () => '' } });
-		expect(await screen.findByText('mock.png')).toBeTruthy();
-		api.attachToProject.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null });
+		fireEvent.paste(box, {
+			clipboardData: {
+				files: [
+					new File(['png'], 'mock.png', { type: 'image/png' }),
+					new File(['spec'], 'spec.txt', { type: 'text/plain' }),
+				],
+				getData: () => '',
+			},
+		});
+		const preview = await screen.findByRole('img', { name: 'mock.png' });
+		expect(preview.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+		expect(screen.queryByText('mock.png')).toBeNull();
+		expect(screen.getByText('spec.txt')).toBeTruthy();
+		api.attachToProject
+			.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null })
+			.mockResolvedValueOnce({ name: 'spec.txt', path: 'spec.txt', size: 4, kind: 'text', text: 'spec', cut: null });
 		await userEvent.type(box, 'Build this screen');
 		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
 		await waitFor(() => expect(api.startThread).toHaveBeenCalled());
 		const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
 		expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
+		expect(brief).toContain('<attachment name="spec.txt" path="spec.txt" kind="text" size="4" library="project">');
 	});
 
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {
