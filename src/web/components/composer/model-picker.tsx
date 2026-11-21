@@ -31,6 +31,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ModelMark, ReasoningMeter } from '@/components/marks/model-marks';
 import { useModels } from '@/lib/models';
+import { liveStaleTime } from '@/lib/live-updates';
 
 /** Rendering every match would be slow; search narrows the rest. */
 const LIMIT = 60;
@@ -481,7 +482,7 @@ export const ModelPicker = memo(function ModelPicker({
 	const models = useModels();
 	const [open, setOpen] = useState(false);
 	// A plan you could connect is listed in the menu, and named above the list, before it has models.
-	const plans = useQuery({ queryKey: ['subscriptions'], queryFn: () => api.subscriptions(), enabled: open, staleTime: 60_000 });
+	const plans = useQuery({ queryKey: ['subscriptions'], queryFn: () => api.subscriptions(), enabled: open, staleTime: (query) => liveStaleTime(query, 60_000) });
 	const [query, setQuery] = useState('');
 	const [filters, setFilters] = useState<Set<Filter>>(() => new Set());
 	const [sort, setSort] = useState<Sort>('newest');

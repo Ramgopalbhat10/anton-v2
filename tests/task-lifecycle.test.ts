@@ -2063,9 +2063,10 @@ test('plan mode: the agent cannot write until the plan is approved, and plan-fir
 
 test('open pages hear about task changes as they happen', async () => {
 	const { onChange } = await import('../src/core/changes.ts');
-	const heard: string[] = [];
-	const stop = onChange((change) => heard.push(change.kind === 'task' ? `${change.what} ${change.id}` : change.kind));
 	const project = await addProject('acme/live');
+	const heard: string[] = [];
+	// The project's prepared image is built in the background and announces `projects` when it lands; that is not the task's.
+	const stop = onChange((change) => change.kind !== 'projects' && heard.push(change.kind === 'task' ? `${change.what} ${change.id}` : change.kind));
 	const session = await sessions.createSession({ projectId: project.id, title: 'Live' });
 	await sessions.editSession(session.id, { title: 'Live, renamed' });
 	recordAgentEvent({ type: 'submission_running', instanceId: session.id, submissionId: 'live' });

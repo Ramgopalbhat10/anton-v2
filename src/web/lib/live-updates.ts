@@ -1,4 +1,4 @@
-import { focusManager, type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
+import { focusManager, type Query, type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { AgentNow, Session } from '@/lib/api/sessions';
 import { taskQueries } from '@/lib/task-queries';
@@ -14,6 +14,8 @@ type Change =
 	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
 	| { kind: 'automations' }
 	| { kind: 'notifications' }
+	| { kind: 'projects' }
+	| { kind: 'general' }
 	| PageChange
 	/** What a task's agent is doing this moment, sent whole as it changes too often to refetch. */
 	| { kind: 'now'; id: string; now: AgentNow | null };
@@ -36,6 +38,8 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'setup') return [['setup'], ['connections'], ['subscriptions'], ['models'], ['health'], ['compute']];
 	if (change.kind === 'models') return [['models']];
 	if (change.kind === 'notifications') return [['notifications']];
+	if (change.kind === 'projects') return [['projects']];
+	if (change.kind === 'general') return [['general-settings']];
 	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
@@ -113,7 +117,63 @@ export function refetcher(queryClient: QueryClient) {
 /** Back from this long away, a page reads again what it shows: a phone may have frozen the page and its stream meanwhile. */
 export const AWAY_REFETCH_MS = 60_000;
 
-const stream = { open: false, hiddenAt: 0 };
+/** `openedAt`: when the event stream last connected, or when the page came back from long enough away to doubt it. */
+const stream = { open: false, openedAt: 0, hiddenAt: 0 };
+
+/**
+ * Reads the event stream keeps current: everything that changes them on the server sends an event, which marks them
+ * stale at once. While the stream is up, a page that shows one reads the copy already here instead of asking again.
+ * Data the server can change without an event (GitHub, the sandbox's files, the model catalog) is not in it.
+ */
+export const LIVE_KEYS: ReadonlySet<string> = new Set([
+	'sessions',
+	'session',
+	'spaces',
+	'space',
+	'space-usage',
+	'budget',
+	'usage',
+	'notifications',
+	'setup',
+	'connectors',
+	'sealed-secrets',
+	'subscriptions',
+	'automations',
+	'space-automations',
+	'artifacts',
+	'projects',
+	'general-settings',
+	'health',
+	'context',
+	'waiting',
+	'checkpoints',
+	'joins',
+	'todos',
+	'subagents',
+	'scripts',
+	'mail',
+	'tool-approvals',
+	'settled',
+]);
+
+/** A safety net for a change that sends no event (a day ending, a limit set on another device): kept reads are read again after this long. */
+export const LIVE_FRESH_MS = 5 * 60_000;
+
+/**
+ * How long a read stays fresh. One the stream keeps current, read since it connected, stays fresh for `LIVE_FRESH_MS`
+ * while the stream is up; anything else for `fallback`. An event, or the stream dropping, still reads it again.
+ */
+export function liveStaleTime(query: Pick<Query, 'queryKey' | 'state'>, fallback: number): number {
+	const root = query.queryKey[0];
+	if (!stream.open || typeof root !== 'string' || !LIVE_KEYS.has(root)) return fallback;
+	return query.state.dataUpdatedAt >= stream.openedAt ? LIVE_FRESH_MS : fallback;
+}
+
+/** For tests: the stream as `useLiveUpdates` last saw it. */
+export function setStreamForTest(open: boolean, openedAt = Date.now()) {
+	stream.open = open;
+	stream.openedAt = openedAt;
+}
 
 /** Coming back to the tab refetches only when changes may have been missed; while the stream is up its events kept the page current. */
 export function refetchOnReturn(awayMs: number, streamOpen: boolean): boolean {
@@ -128,7 +188,11 @@ export function installReturnRefetch(): void {
 				stream.hiddenAt = Date.now();
 				return;
 			}
-			if (refetchOnReturn(stream.hiddenAt ? Date.now() - stream.hiddenAt : 0, stream.open)) handleFocus();
+			if (refetchOnReturn(stream.hiddenAt ? Date.now() - stream.hiddenAt : 0, stream.open)) {
+				// The stream may have been frozen with the page: what it kept current is read again, not trusted.
+				stream.openedAt = Date.now();
+				handleFocus();
+			}
 			stream.hiddenAt = 0;
 		};
 		document.addEventListener('visibilitychange', changed);
@@ -160,6 +224,8 @@ export function useLiveUpdates() {
 			if (dropped) void queryClient.invalidateQueries();
 			dropped = false;
 			stream.open = true;
+			// Reads from before now may predate the events this stream will carry, so they are not kept on its word.
+			stream.openedAt = Date.now();
 		};
 		return () => {
 			stream.open = false;

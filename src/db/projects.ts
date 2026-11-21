@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Project, ProjectSettings } from '../core/types.ts';
+import { announce } from '../core/changes.ts';
 import { appDb } from './client.ts';
+
+// Every write here announces `projects`, so pages that keep the project list (`/api/projects`) read it again.
 
 type Row = Record<string, unknown>;
 const optional = (value: unknown) => (value == null ? null : String(value));
@@ -60,6 +63,7 @@ export async function upsertProject(repoFullName: string, defaultBranch: string)
 		args: [`proj_${randomUUID()}`, repoFullName, defaultBranch, now],
 	});
 	const result = await db.execute({ sql: 'SELECT * FROM projects WHERE repo_full_name = ?', args: [repoFullName] });
+	announce({ kind: 'projects' });
 	return toProject(result.rows[0] as Row);
 }
 
@@ -70,16 +74,19 @@ export async function setWarmImage(id: string, image: string, baseImage: string 
 		sql: 'UPDATE projects SET snapshot_image_id = ?, warmed_at = ? WHERE id = ? AND base_image IS ?',
 		args: [image, new Date().toISOString(), id, baseImage],
 	});
+	announce({ kind: 'projects' });
 }
 
 export async function retireDefaultWarmImages(): Promise<void> {
 	const db = await appDb();
 	await db.execute('UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE base_image IS NULL');
+	announce({ kind: 'projects' });
 }
 
 export async function clearWarmImage(id: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE projects SET snapshot_image_id = NULL, warmed_at = NULL WHERE id = ?', args: [id] });
+	announce({ kind: 'projects' });
 }
 
 /** A new base image also drops the warm image, which was built from the old one. */
@@ -107,11 +114,13 @@ export async function setProjectSettings(id: string, settings: ProjectSettings):
 			id,
 		],
 	});
+	announce({ kind: 'projects' });
 }
 
 export async function setProjectMemory(id: string, memory: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'UPDATE projects SET memory = ? WHERE id = ?', args: [memory, id] });
+	announce({ kind: 'projects' });
 }
 
 /** In one statement, so a note never overwrites another; false when it would not fit. */
@@ -122,7 +131,9 @@ export async function appendProjectMemory(id: string, line: string, maxLength: n
 			WHERE id = ? AND length(memory) + length(?) + 1 <= ?`,
 		args: [line, line, id, line, maxLength],
 	});
-	return result.rowsAffected === 1;
+	if (result.rowsAffected !== 1) return false;
+	announce({ kind: 'projects' });
+	return true;
 }
 
 export async function projectSessionIds(id: string): Promise<string[]> {
@@ -136,4 +147,5 @@ export async function deleteProjectRecord(id: string): Promise<void> {
 	const tables = ['automations', 'issue_tasks', 'sessions', 'space_repos'];
 	const statements = tables.map((table) => ({ sql: `DELETE FROM ${table} WHERE project_id = ?`, args: [id] }));
 	await db.batch([...statements, { sql: 'DELETE FROM projects WHERE id = ?', args: [id] }], 'write');
+	announce({ kind: 'projects' });
 }

@@ -1,6 +1,7 @@
 import { registerRoutedModels } from '../../core/routed-models.ts';
 import { config } from '../../config.ts';
 import type { OpenRouterEffort, Reasoning } from '../../core/ports.ts';
+import { announce } from '../../core/changes.ts';
 import { InvalidInputError } from '../../core/errors.ts';
 import type { AgentModel, HelperAgent } from '../../core/types.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
@@ -125,6 +126,7 @@ export async function setGeneralSettings(next: GeneralSettings): Promise<General
 		throw new InvalidInputError(`Titles are written by an OpenRouter model; ${next.titleModel} is not one.`);
 	}
 	await setSetting(KEY, next);
+	announce({ kind: 'general' });
 	compactAtNow = next.compactAt;
 	claudeCodeCompactAtNow = next.claudeCodeCompactAt;
 	registerRoutedModels('background', Object.values(next.backgroundModels));
