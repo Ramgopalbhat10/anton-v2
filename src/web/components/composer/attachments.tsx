@@ -69,33 +69,51 @@ function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
 
 /** `imagesAsFiles` sends all images as files; `overflowImagesAsFiles` previews supported images up to MAX_IMAGES and retains any beyond that as ordinary file attachments. */
 export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = false }: { imagesAsFiles?: boolean; overflowImagesAsFiles?: boolean } = {}) {
-	const [state, setState] = useState<{ images: ImageAttachment[]; files: FileAttachment[]; notice: string | null }>({ images: [], files: [], notice: null });
+	const [state, setState] = useState<{ images: ImageAttachment[]; files: FileAttachment[]; notice: string | null; noticeWave: number }>({
+		images: [],
+		files: [],
+		notice: null,
+		noticeWave: 0,
+	});
 	const { images, files, notice } = state;
 	/** Pictures still being read, which the tray holds a place for. */
 	const [reading, setReading] = useState(0);
 	const latest = useRef({ images, files });
 	latest.current = { images, files };
+	const inFlight = useRef(0);
+	const waveRef = useRef(0);
 	const setNotice = useCallback((next: string | null) => {
-		setState((current) => (current.notice === next ? current : { ...current, notice: next }));
+		setState((current) => (current.notice === next && next !== null ? current : { ...current, notice: next, noticeWave: next ? current.noticeWave : 0 }));
 	}, []);
 	const attach = useCallback(
 		async (list: File[]) => {
 			if (list.length === 0) return;
+			// A fresh attachment action after prior reads settled starts a new wave; overlapping reads share a wave so a later success never erases an earlier failure notice.
+			if (inFlight.current === 0) waveRef.current += 1;
+			const wave = waveRef.current;
+			inFlight.current += 1;
 			const current = latest.current;
 			const order = new Map(list.map((file, index) => [file, index]));
 			const pictures = imagesAsFiles ? 0 : Math.min(list.filter(sentAsImage).length, Math.max(0, MAX_IMAGES - current.images.length));
 			setReading((count) => count + pictures);
 			let read: Awaited<ReturnType<typeof readAttachments>>;
 			try {
+				// Retain all ordinary-file candidates through the async image read so file capacity is applied against live state at commit time.
 				read = await readAttachments(
 					list,
-					{ images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length },
+					{ images: MAX_IMAGES - current.images.length, files: list.length },
 					{ imagesAsFiles, overflowImagesAsFiles },
 				);
 			} catch {
-				setNotice('Could not read the attached files.');
+				setState((before) => {
+					const msg = 'Could not read the attached files.';
+					const prev = before.noticeWave === wave && before.notice ? [before.notice] : [];
+					if (!prev.includes(msg)) prev.push(msg);
+					return { ...before, notice: prev.join(' '), noticeWave: wave };
+				});
 				return;
 			} finally {
+				inFlight.current = Math.max(0, inFlight.current - 1);
 				setReading((count) => count - pictures);
 			}
 			// Allocate preview and file slots together against the latest queued state so overlapping reads never drop overflow silently.
@@ -114,18 +132,22 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 				);
 				const fileRoom = Math.max(0, MAX_FILES - before.files.length);
 				const keptFiles = candidateFiles.slice(0, fileRoom);
-				const notes: string[] = [];
-				if (read.rejected) notes.push(read.rejected);
-				else if (!overflowImagesAsFiles && spilledImages.length > 0) notes.push(`Up to ${MAX_IMAGES} images per message.`);
-				else if (keptFiles.length < candidateFiles.length) notes.push(`Up to ${MAX_FILES} files per message.`);
+				const notes: string[] = before.noticeWave === wave && before.notice ? [before.notice] : [];
+				const addNote = (text: string) => {
+					if (!notes.some((existing) => existing.includes(text))) notes.push(text);
+				};
+				if (read.rejected) addNote(read.rejected);
+				if (!overflowImagesAsFiles && spilledImages.length > 0) addNote(`Up to ${MAX_IMAGES} images per message.`);
+				if (keptFiles.length < candidateFiles.length) addNote(`Up to ${MAX_FILES} files per message.`);
 				return {
 					images: [...before.images, ...keptImages],
 					files: uniqueFiles([...before.files, ...keptFiles]),
 					notice: notes.length ? notes.join(' ') : null,
+					noticeWave: notes.length ? wave : 0,
 				};
 			});
 		},
-		[imagesAsFiles, overflowImagesAsFiles, setNotice],
+		[imagesAsFiles, overflowImagesAsFiles],
 	);
 	const addImages = useCallback((added: ImageAttachment[]) => {
 		setState((before) => {
@@ -134,6 +156,7 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 				...before,
 				images: [...before.images, ...added.slice(0, room)],
 				notice: added.length > room ? `Up to ${MAX_IMAGES} images per message.` : null,
+				noticeWave: 0,
 			};
 		});
 	}, []);
@@ -162,7 +185,7 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 	};
 	const take = useCallback(() => {
 		const taken = latest.current;
-		setState({ images: [], files: [], notice: null });
+		setState({ images: [], files: [], notice: null, noticeWave: 0 });
 		return taken;
 	}, []);
 	/** Puts back both the failed send and any newer attachments, without dropping over-limit items. */

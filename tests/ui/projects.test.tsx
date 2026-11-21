@@ -657,6 +657,99 @@ describe('threads', () => {
 		}
 	});
 
+	it('preserves a failed preview warning when a concurrent valid read resolves afterwards, and clears it on a subsequent action', async () => {
+		const pending = new Map<string, () => void>();
+		const OriginalFileReader = globalThis.FileReader;
+		class ControlledFileReader {
+			result: string | ArrayBuffer | null = null;
+			error: Error | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL(file: File) {
+				pending.set(file.name, () => {
+					if (file.name === 'broken.png') {
+						this.error = new Error('unreadable');
+						this.onerror?.();
+					} else {
+						this.result = 'data:image/png;base64,cG5n';
+						this.onload?.();
+					}
+				});
+			}
+		}
+		vi.stubGlobal('FileReader', ControlledFileReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			fireEvent.paste(box, { clipboardData: { files: [new File(['bad'], 'broken.png', { type: 'image/png' })], getData: () => '' } });
+			fireEvent.paste(box, { clipboardData: { files: [new File(['ok'], 'valid.png', { type: 'image/png' })], getData: () => '' } });
+			expect(pending.has('broken.png')).toBe(true);
+			expect(pending.has('valid.png')).toBe(true);
+
+			// Resolve the failing batch first and the valid concurrent batch second before React commits.
+			pending.get('broken.png')!();
+			pending.get('valid.png')!();
+
+			expect(await screen.findByRole('img', { name: 'valid.png' })).toBeTruthy();
+			expect(screen.getByText(/Could not read broken\.png\./)).toBeTruthy();
+
+			// A new attachment action after both overlapping reads settled clears the previous warning.
+			fireEvent.paste(box, { clipboardData: { files: [new File(['clean'], 'notes.txt', { type: 'text/plain' })], getData: () => '' } });
+			expect(await screen.findByText('notes.txt')).toBeTruthy();
+			expect(screen.queryByText(/Could not read broken\.png\./)).toBeNull();
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
+	});
+
+	it('applies remaining ordinary-file capacity at commit time when an existing chip is removed while an image preview loads', async () => {
+		let finishPng: (() => void) | null = null;
+		const OriginalFileReader = globalThis.FileReader;
+		class DeferredPngReader {
+			result: string | ArrayBuffer | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL() {
+				finishPng = () => {
+					this.result = 'data:image/png;base64,cG5n';
+					this.onload?.();
+				};
+			}
+		}
+		vi.stubGlobal('FileReader', DeferredPngReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			const existing = Array.from({ length: 10 }, (_, i) => new File([`f-${i}`], `file-${i + 1}.txt`, { type: 'text/plain' }));
+			fireEvent.paste(box, { clipboardData: { files: existing, getData: () => '' } });
+			expect(await screen.findByText('file-10.txt')).toBeTruthy();
+
+			// With 10 file chips attached, pick a PNG + replacement text file together.
+			fireEvent.paste(box, {
+				clipboardData: {
+					files: [
+						new File(['png'], 'shot.png', { type: 'image/png' }),
+						new File(['new'], 'replacement.txt', { type: 'text/plain' }),
+					],
+					getData: () => '',
+				},
+			});
+			expect(finishPng).not.toBeNull();
+
+			// Remove an existing file chip while the PNG preview is still loading.
+			fireEvent.click(screen.getByRole('button', { name: 'Remove file-10.txt' }));
+			expect(screen.queryByText('file-10.txt')).toBeNull();
+
+			// Once the PNG read resolves, both shot.png and replacement.txt attach with no file-limit warning.
+			finishPng!();
+			expect(await screen.findByRole('img', { name: 'shot.png' })).toBeTruthy();
+			expect(screen.getByText('replacement.txt')).toBeTruthy();
+			expect(screen.queryByText(/Up to 10 files/)).toBeNull();
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
+	});
+
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {
 		withRouter(() => <ProjectSidebarBody spaceId="space_1" onNavigate={() => {}} />);
 		await screen.findByText('Pick a name');

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 const CATCH_UP_MS = 65;
 /** Faster catch-up time (ms) to smoothly finish draining the trailing tail once streaming ends. */
 const FINISH_CATCH_UP_MS = 45;
+/** Firm upper bound (ms) to finish draining any remaining tail after streaming ends. */
+const MAX_FINISH_MS = 250;
 /** Minimum characters revealed per second so short tails finish crisply. */
 const MIN_CHARS_PER_SEC = 80;
 /** Minimum characters revealed per second when draining the final tail after streaming ends. */
@@ -44,8 +46,12 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs: I
 	const shownLengthRef = useRef(text.length);
 	const frameRef = useRef<number | null>(null);
 	const lastTimeRef = useRef(0);
+	const finishAtRef = useRef<number | null>(null);
 
-	if (streaming) hadStreamingRef.current = true;
+	if (streaming) {
+		hadStreamingRef.current = true;
+		finishAtRef.current = null;
+	}
 	streamingRef.current = streaming;
 	minIntervalRef.current = minIntervalMs;
 
@@ -62,6 +68,7 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs: I
 				frameRef.current = null;
 			}
 			lastTimeRef.current = 0;
+			finishAtRef.current = null;
 			shownTextRef.current = text;
 			shownLengthRef.current = text.length;
 			setShown((current) => (current.text === text && current.length === text.length ? current : { text, length: text.length }));
@@ -74,6 +81,7 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs: I
 				frameRef.current = null;
 			}
 			lastTimeRef.current = 0;
+			finishAtRef.current = null;
 			shownTextRef.current = text;
 			shownLengthRef.current = text.length;
 			setShown({ text, length: text.length });
@@ -90,23 +98,32 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs: I
 			if (remaining <= 0) {
 				frameRef.current = null;
 				lastTimeRef.current = 0;
+				finishAtRef.current = null;
 				return;
 			}
+			const finishing = !streamingRef.current;
+			if (finishing && finishAtRef.current === null) finishAtRef.current = now;
 			const intervalOption = minIntervalRef.current;
 			const minInterval = typeof intervalOption === 'function' ? intervalOption(target, shownLengthRef.current) : intervalOption;
-			if (minInterval > 0 && lastTimeRef.current > 0 && now - lastTimeRef.current < minInterval) {
+			const finishElapsed = finishing && finishAtRef.current !== null ? now - finishAtRef.current : 0;
+			if (minInterval > 0 && lastTimeRef.current > 0 && now - lastTimeRef.current < minInterval && finishElapsed < MAX_FINISH_MS) {
 				frameRef.current = requestAnimationFrame(tick);
 				return;
 			}
 			const maxDt = Math.max(MAX_DT_MS, minInterval);
 			const dt = lastTimeRef.current ? Math.min(maxDt, Math.max(1, now - lastTimeRef.current)) : 16;
 			lastTimeRef.current = now;
-			const finishing = !streamingRef.current;
-			const catchUpMs = Math.max(finishing ? FINISH_CATCH_UP_MS : CATCH_UP_MS, minInterval * 1.5);
-			const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
-			const minStep = Math.ceil((minRate * dt) / 1000);
-			const proportionalStep = Math.ceil((remaining * dt) / catchUpMs);
-			const nextLength = safeSliceEnd(target, Math.min(target.length, shownLengthRef.current + Math.max(minStep, proportionalStep)));
+			let nextLength: number;
+			// Once streaming has completed, commit the full tail on the next allowed large-block parse or at the firm deadline so completed replies never linger hidden.
+			if (finishing && (minInterval > 0 || finishElapsed >= MAX_FINISH_MS)) {
+				nextLength = target.length;
+			} else {
+				const catchUpMs = finishing ? FINISH_CATCH_UP_MS : Math.max(CATCH_UP_MS, minInterval * 1.5);
+				const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
+				const minStep = Math.ceil((minRate * dt) / 1000);
+				const proportionalStep = Math.ceil((remaining * dt) / catchUpMs);
+				nextLength = safeSliceEnd(target, Math.min(target.length, shownLengthRef.current + Math.max(minStep, proportionalStep)));
+			}
 			shownTextRef.current = target;
 			shownLengthRef.current = nextLength;
 			setShown({ text: target, length: nextLength });
@@ -115,6 +132,7 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs: I
 			} else {
 				frameRef.current = null;
 				lastTimeRef.current = 0;
+				finishAtRef.current = null;
 			}
 		};
 		frameRef.current = requestAnimationFrame(tick);

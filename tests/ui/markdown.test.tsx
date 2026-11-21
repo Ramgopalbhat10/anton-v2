@@ -151,6 +151,52 @@ describe('Markdown', () => {
 		expect((view.container.textContent ?? '').length).toBeGreaterThan(lenAfter1);
 	});
 
+	it('completes a large-block tail within the firm 250ms deadline after streaming becomes false', () => {
+		const frames: Array<FrameRequestCallback> = [];
+		let now = 1000;
+		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+			frames.push(cb);
+			return frames.length;
+		});
+		vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+		const header = '| Col A | Col B | Col C | Col D |\n| --- | --- | --- | --- |\n';
+		const row = (n: number) => `| row-${n}-a | row-${n}-b | row-${n}-c | row-${n}-d |\n`;
+		const initialTable = `${header}${Array.from({ length: 180 }, (_, i) => row(i + 1)).join('')}`;
+		const extraRows = Array.from({ length: 40 }, (_, i) => row(i + 181)).join('');
+		const finalSummary = '\nFinal conclusion after the table.';
+		const complete = `${initialTable}${extraRows}${finalSummary}`;
+
+		const client = new QueryClient();
+		const view = render(
+			<QueryClientProvider client={client}>
+				<Markdown text={initialTable} streaming />
+			</QueryClientProvider>,
+		);
+		expect(view.container.querySelectorAll('tbody tr').length).toBe(180);
+
+		// Final update arrives with streaming={false}.
+		const completedAt = now;
+		view.rerender(
+			<QueryClientProvider client={client}>
+				<Markdown text={complete} streaming={false} />
+			</QueryClientProvider>,
+		);
+
+		let elapsed = 0;
+		while (frames.length > 0 && elapsed < 1000) {
+			act(() => {
+				now += 16;
+				elapsed = now - completedAt;
+				frames.shift()!(now);
+			});
+			if (view.container.textContent?.includes('Final conclusion after the table.')) break;
+		}
+		expect(view.container.querySelectorAll('tbody tr').length).toBe(220);
+		expect(view.container.textContent).toContain('Final conclusion after the table.');
+		expect(elapsed).toBeLessThanOrEqual(250);
+	});
+
 	it('throttles rich Markdown reparsing cadence for large growing blocks like long GFM tables, then restores 60Hz for later paragraphs', () => {
 		expect(streamingParseIntervalMs(400)).toBe(0);
 		expect(streamingParseIntervalMs(2000)).toBe(0);
