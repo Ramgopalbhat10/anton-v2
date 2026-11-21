@@ -41,6 +41,8 @@ export type RuntimePlan = {
 	efforts?: Record<string, string>;
 	/** The runtime reports usage once when its turn ends (ACP's `session/prompt`), so a step without usage is unmeasured, not zero: estimating it would count the whole context as fresh uncached input on every step. */
 	turnUsage?: boolean;
+	/** How long an idle conversation stays open; IDLE_MS (Claude Code's cache lifetime) when left out. */
+	idleMs?: number;
 };
 
 export type RuntimeOpener = Pick<AgentRuntime, 'open'>;
@@ -228,6 +230,7 @@ export function continuation(
 
 /** Shared by all agents, so each plan's cap counts them all. */
 const conversations = new Map<string, Map<string, Bridged>>();
+const idleLimits = new Map<string, number>();
 let sweeping: ReturnType<typeof setInterval> | undefined;
 
 const openFor = (gateway: string): Map<string, Bridged> => {
@@ -240,9 +243,10 @@ const openFor = (gateway: string): Map<string, Bridged> => {
 const working = (bridged: Bridged) => bridged.busy || bridged.awaiting.size > 0;
 
 export function sweepIdle(now = Date.now()): void {
-	for (const open of conversations.values()) {
+	for (const [gateway, open] of conversations) {
+		const idleMs = idleLimits.get(gateway) ?? IDLE_MS;
 		for (const [key, bridged] of open) {
-			if (!working(bridged) && now - bridged.usedAt > IDLE_MS) {
+			if (!working(bridged) && now - bridged.usedAt > idleMs) {
 				bridged.close();
 				open.delete(key);
 			}
@@ -283,6 +287,7 @@ export function runtimeProvider(
 ): Provider {
 	const maxOpen = Math.max(1, hooks.maxOpen ?? MAX_OPEN);
 	const open = openFor(plan.gateway);
+	if (plan.idleMs) idleLimits.set(plan.gateway, plan.idleMs);
 	if (!sweeping) {
 		sweeping = setInterval(sweepIdle, 60_000);
 		sweeping.unref();

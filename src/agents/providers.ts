@@ -10,6 +10,9 @@ import { gatewayKey, gatewayKeyOf, gatewayToken, planKey, planRuntime, runtimeFo
 
 // Registered once at load; each agent imports this file for its side effect. No `'use agent'`: it defines no agent.
 
+/** An ACP agent's conversation holds a Modal container and no prompt cache worth keeping, unlike Claude Code's hour. */
+const ACP_IDLE_MS = 5 * 60_000;
+
 // Any model in OpenRouter's live list resolves, not only those pi knew when it was published.
 setProvider(withPruning(liveOpenRouterProvider(loadedModels, gatewayKey, routedModels)));
 setProvider(withPruning(liveVercelProvider(loadedModels, () => gatewayKeyOf('vercel'), routedModels)));
@@ -19,7 +22,7 @@ setProvider(withPruning(openCodeGoProvider(loadedModels, () => planKey('opencode
 setProvider(cursorProvider(loadedModels, () => planRuntime('cursor'), runtimeHooks('cursor')));
 setProvider(
 	runtimeProvider(
-		{ gateway: 'devin', name: 'Devin (Devin CLI)', program: 'Devin CLI', plan: 'Devin', turnUsage: true },
+		{ gateway: 'devin', name: 'Devin (Devin CLI)', program: 'Devin CLI', plan: 'Devin', turnUsage: true, idleMs: ACP_IDLE_MS },
 		loadedModels,
 		() => planRuntime('devin'),
 		runtimeHooks('devin'),
@@ -27,7 +30,7 @@ setProvider(
 );
 setProvider(
 	runtimeProvider(
-		{ gateway: 'antigravity', name: 'Antigravity (Antigravity CLI)', program: 'Antigravity CLI', plan: 'Google Antigravity', turnUsage: true },
+		{ gateway: 'antigravity', name: 'Antigravity (Antigravity CLI)', program: 'Antigravity CLI', plan: 'Google Antigravity', turnUsage: true, idleMs: ACP_IDLE_MS },
 		loadedModels,
 		() => planRuntime('antigravity'),
 		runtimeHooks('antigravity'),
