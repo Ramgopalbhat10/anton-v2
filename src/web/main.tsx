@@ -22,6 +22,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/workspace/vm-panel';
 import { CATEGORIES } from '@/lib/artifacts';
 import { installReturnRefetch } from '@/lib/live-updates';
+import { persistQueries } from '@/lib/persist';
 import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
@@ -240,8 +241,11 @@ declare module '@tanstack/react-router' {
 
 const el = document.getElementById('root');
 if (!el) throw new Error('root missing');
-createRoot(el).render(
-	<StrictMode>
-		<RouterProvider router={router} />
-	</StrictMode>,
+// The lists kept from last time are drawn in the first frame (waiting a moment at most), then read again.
+void persistQueries(queryClient).finally(() =>
+	createRoot(el).render(
+		<StrictMode>
+			<RouterProvider router={router} />
+		</StrictMode>,
+	),
 );
