@@ -48,6 +48,9 @@ test('a terminal runs as bash in the repo and reports its exit code and output',
 	assert.deepEqual(await b.handle('terminal/output', { terminalId }), { output: 'FAIL src/a.test.ts', truncated: false, exitStatus: { exitCode: 1, signal: null } });
 	assert.equal(calls[0]?.args.command, `export CI='1'; cd 'pkg' && npm 'test' '--' 'it'\\''s'`);
 	assert.equal(await b.handle('terminal/release', { terminalId }), null);
+	const second = (await b.handle('terminal/create', { command: 'ls', cwd: '/work' })) as { terminalId: string };
+	await b.handle('terminal/wait_for_exit', second);
+	assert.equal(calls[1]?.args.command, 'ls', 'no cd into the repo root it already runs in');
 	await assert.rejects(b.handle('terminal/output', { terminalId })!, /Unknown terminal/);
 });
 
