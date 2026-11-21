@@ -8,6 +8,7 @@ import type {
 	GatewayAccount,
 	KeyPlan,
 	ModelInfo,
+	OAuthClient,
 	PlanWindow,
 	RuntimeSignIn,
 	SubscriptionCredential,
@@ -77,6 +78,8 @@ export type SubscriptionView = {
 	envVar?: string | null;
 	/** Set on runtimes whose agent container placement is configurable (ACP on Modal). */
 	isolation?: 'sidecar' | 'sandbox' | null;
+	/** The OAuth client a runtime's sign-in uses, when Settings keeps one (empty until saved); a public installed-app client, so shown whole. */
+	oauthClient?: OAuthClient | null;
 };
 
 type GatewayFields = { vendor?: string; price?: Pick<ModelInfo['price'], 'input' | 'output'> };
@@ -583,6 +586,19 @@ export async function setSubscriptionOptions(id: string, options: SubscriptionOp
 	return subscriptionView(provider);
 }
 
+/** An empty client id removes the client. A sign-in already waiting started on the old client, so it ends. */
+export async function setRuntimeClient(id: string, input: { clientId: string; clientSecret: string }): Promise<SubscriptionView> {
+	const runtime = runtimeById(id);
+	if (!runtime?.oauthClient) throw new NotFoundError(`${runtime?.name ?? id} has no OAuth client to set`);
+	const clientId = input.clientId.trim();
+	const clientSecret = input.clientSecret.trim();
+	if (clientId && !clientSecret) throw new InvalidInputError('Paste the client secret too');
+	await runtime.oauthClient.set(clientId ? { clientId, clientSecret } : null);
+	endRuntimeAttempt(runtime.id);
+	announce({ kind: 'subscriptions' });
+	return runtimeView(runtime);
+}
+
 /** For a runtime its sign-in is read again first, so a sign-in on the server shows at once. */
 export async function refreshSubscriptionModels(id: string): Promise<SubscriptionView> {
 	const runtime = runtimeById(id);
@@ -727,6 +743,7 @@ export async function runtimeView(runtime: AgentRuntime): Promise<SubscriptionVi
 		keyHint: null,
 		windows,
 		isolation: runtime.isolation ? await runtime.isolation().catch(() => null) : null,
+		oauthClient: runtime.oauthClient ? ((await runtime.oauthClient.get()) ?? { clientId: '', clientSecret: '' }) : null,
 	};
 }
 

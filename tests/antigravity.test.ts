@@ -5,13 +5,10 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { authParams, type AcpProcess } from '../src/providers/acp/runtime.ts';
 
-// config reads env at module load; the OAuth client must exist before oauth.ts is imported.
-process.env.ANTIGRAVITY_CLIENT_ID = 'test-client-id';
-process.env.ANTIGRAVITY_CLIENT_SECRET = 'test-client-secret';
-
-const { antigravityAgent } = await import('../src/providers/acp/antigravity.ts');
-const { antigravitySignIn, readCredential } = await import('../src/providers/antigravity/oauth.ts');
-const { localCredential } = await import('../src/providers/acp/local-cli.ts');
+import { antigravityAgent } from '../src/providers/acp/antigravity.ts';
+import { antigravitySignIn, readCredential } from '../src/providers/antigravity/oauth.ts';
+import { localCredential } from '../src/providers/acp/local-cli.ts';
+import type { OAuthClient, OAuthClientSlot } from '../src/core/ports.ts';
 
 const realFetch = globalThis.fetch;
 /** Answers `fetch` from a table of handlers by URL prefix, recording each request. */
@@ -31,6 +28,7 @@ after(() => {
 });
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+const CLIENT: OAuthClient = { clientId: 'test-client-id', clientSecret: 'test-client-secret' };
 
 async function tempFile(): Promise<{ dir: string; file: string }> {
 	const dir = await mkdtemp(join(tmpdir(), 'anton-agy-'));
@@ -107,9 +105,43 @@ test('provision writes the token where agy reads it in the container', async () 
 	assert.equal(written.get('/root/.gemini/antigravity-cli/antigravity-oauth-token'), '{"token":{}}');
 });
 
+/** The settings-backed slot, in memory. */
+function memorySlot(): OAuthClientSlot {
+	let stored: OAuthClient | null = null;
+	return { get: async () => stored, set: async (client) => (stored = client) };
+}
+
+test('sign-in asks for the OAuth client until Settings saves one, then trades the code on it', async () => {
+	const { dir, file } = await tempFile();
+	try {
+		const slot = memorySlot();
+		const agent = antigravityAgent({ credentialFile: file, client: slot });
+		assert.equal(agent.oauthClient, slot);
+		assert.ok(agent.auth.kind === 'token-file');
+		await assert.rejects(agent.auth.login(), /OAuth client id and secret under Settings/);
+
+		await slot.set({ clientId: 'saved-id.apps.googleusercontent.com', clientSecret: 'saved-secret' });
+		const login = await agent.auth.login();
+		const url = new URL(login.url);
+		assert.equal(url.searchParams.get('client_id'), 'saved-id.apps.googleusercontent.com');
+		stubFetch({
+			[TOKEN_ENDPOINT]: async (request) => {
+				const body = new URLSearchParams(await request.text());
+				assert.equal(body.get('client_id'), 'saved-id.apps.googleusercontent.com');
+				assert.equal(body.get('client_secret'), 'saved-secret');
+				return Response.json({ access_token: 'ya29.a', refresh_token: '1//r', expires_in: 3600 });
+			},
+		});
+		await login.complete(`https://antigravity.google/oauth-callback?code=c&state=${url.searchParams.get('state')}`);
+		assert.ok(await readCredential(file));
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test('sign-in URL carries agy scopes, PKCE and the paste-back redirect', async () => {
 	const { file } = await tempFile();
-	const login = antigravitySignIn(file);
+	const login = antigravitySignIn(file, CLIENT);
 	const url = new URL(login.url);
 	assert.equal(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
 	assert.equal(url.searchParams.get('client_id'), 'test-client-id');
@@ -124,7 +156,7 @@ test('sign-in URL carries agy scopes, PKCE and the paste-back redirect', async (
 test('complete() trades a pasted callback URL for agy’s token-file shape', async () => {
 	const { dir, file } = await tempFile();
 	try {
-		const login = antigravitySignIn(file);
+		const login = antigravitySignIn(file, CLIENT);
 		const state = new URL(login.url).searchParams.get('state')!;
 		const seen = stubFetch({
 			[TOKEN_ENDPOINT]: async (request) => {
@@ -164,7 +196,7 @@ test('complete() keeps the stored refresh token when Google omits it on re-conse
 	const { dir, file } = await tempFile();
 	try {
 		await writeFile(file, JSON.stringify({ token: { refresh_token: '1//old' }, auth_method: 'consumer' }));
-		const login = antigravitySignIn(file);
+		const login = antigravitySignIn(file, CLIENT);
 		const state = new URL(login.url).searchParams.get('state')!;
 		stubFetch({
 			[TOKEN_ENDPOINT]: () =>
@@ -181,7 +213,7 @@ test('complete() keeps the stored refresh token when Google omits it on re-conse
 test('complete() rejects a callback URL from a different sign-in', async () => {
 	const { dir, file } = await tempFile();
 	try {
-		const login = antigravitySignIn(file);
+		const login = antigravitySignIn(file, CLIENT);
 		stubFetch({});
 		await assert.rejects(
 			login.complete('https://antigravity.google/oauth-callback?code=c&state=bogus-state'),

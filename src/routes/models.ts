@@ -5,7 +5,7 @@ import { InvalidInputError } from '../core/errors.ts';
 import { listModels, modelEndpoints, pinnedModels, setPinnedModels } from '../services/models/models.ts';
 import { imageModels, imagesAvailable } from '../services/artifacts/images.ts';
 import { defaultModel } from '../services/models/general.ts';
-import { beginLogin, cancelLogin, connectKey, disconnect, finishLogin, importLogin, refreshSubscriptionModels, setSubscriptionOptions, subscriptionsView } from '../services/models/subscriptions.ts';
+import { beginLogin, cancelLogin, connectKey, disconnect, finishLogin, importLogin, refreshSubscriptionModels, setRuntimeClient, setSubscriptionOptions, subscriptionsView } from '../services/models/subscriptions.ts';
 import { body } from './shared.ts';
 
 const app = new Hono();
@@ -41,6 +41,13 @@ app.post('/api/subscriptions/:id/import', async (c) => {
 app.put('/api/subscriptions/:id/key', async (c) => {
 	const { key } = await body(c, v.object({ key: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)) }));
 	return c.json(await connectKey(c.req.param('id'), key));
+});
+app.put('/api/subscriptions/:id/client', async (c) => {
+	const client = await body(
+		c,
+		v.object({ clientId: v.pipe(v.string(), v.trim(), v.maxLength(500)), clientSecret: v.pipe(v.string(), v.trim(), v.maxLength(500)) }),
+	);
+	return c.json(await setRuntimeClient(c.req.param('id'), client));
 });
 app.post('/api/subscriptions/:id/models/refresh', async (c) => c.json(await refreshSubscriptionModels(c.req.param('id'))));
 

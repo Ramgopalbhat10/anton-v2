@@ -586,6 +586,24 @@ test('the Claude plan’s card shows the limits Claude Code reports, once signed
 	subscriptions.resetSubscriptionsForTests();
 });
 
+test('a runtime’s OAuth client starts empty on its card, saves to show filled in, and can be removed', async () => {
+	const fake = fakeRuntime({}, []);
+	let saved: { clientId: string; clientSecret: string } | null = null;
+	fake.runtime.oauthClient = { get: async () => saved, set: async (client) => (saved = client) };
+	const plain = fakeRuntime({}, []);
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, subscriptions: [], runtimes: [fake.runtime] });
+	assert.deepEqual((await subscriptions.subscriptionsView())[0].oauthClient, { clientId: '', clientSecret: '' });
+	const changed = await subscriptions.setRuntimeClient(fake.runtime.id, { clientId: ' mine.apps.googleusercontent.com ', clientSecret: 'mine-secret' });
+	assert.deepEqual(changed.oauthClient, { clientId: 'mine.apps.googleusercontent.com', clientSecret: 'mine-secret' });
+	assert.deepEqual((await subscriptions.subscriptionsView())[0].oauthClient, { clientId: 'mine.apps.googleusercontent.com', clientSecret: 'mine-secret' });
+	await assert.rejects(subscriptions.setRuntimeClient(fake.runtime.id, { clientId: 'x', clientSecret: ' ' }), /client secret/);
+	assert.deepEqual((await subscriptions.setRuntimeClient(fake.runtime.id, { clientId: '', clientSecret: '' })).oauthClient, { clientId: '', clientSecret: '' });
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, subscriptions: [], runtimes: [plain.runtime] });
+	assert.equal((await subscriptions.subscriptionsView())[0].oauthClient, null);
+	await assert.rejects(subscriptions.setRuntimeClient(plain.runtime.id, { clientId: 'x', clientSecret: 'y' }), /no OAuth client/);
+	subscriptions.resetSubscriptionsForTests();
+});
+
 test('Claude Code gets no keys or tokens from Anton’s environment, and its own config folder', () => {
 	const env = childEnv('/data/claude-code', { PATH: '/bin', ANTHROPIC_API_KEY: 'sk', CLAUDE_CODE_OAUTH_TOKEN: 't', ANTHROPIC_BASE_URL: 'x', OPENROUTER_API_KEY: 'o', HTTPS_PROXY: 'p' });
 	assert.equal(env.PATH, '/bin');

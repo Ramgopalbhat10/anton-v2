@@ -7,6 +7,7 @@
 import type {
 	AgentRuntime,
 	AgentRuntimeStatus,
+	OAuthClientSlot,
 	RuntimeContent,
 	RuntimeConversation,
 	RuntimeConversationOptions,
@@ -97,6 +98,8 @@ export type AcpAgent = {
 	/** The vendor's `_meta` namespace (Devin's `cognition.ai`): its usage counters and permission rules are read from `<namespace>/<key>` first. */
 	metaNamespace?: string;
 	auth: AcpAuth;
+	/** The OAuth client `auth.login` signs in on, when Settings may change it. */
+	oauthClient?: OAuthClientSlot;
 };
 
 /**
@@ -690,6 +693,7 @@ export function acpRuntime(agent: AcpAgent, account: AcpAccount, compute: AcpCom
 			compute.drain?.();
 		},
 		...(compute.isolation ? { isolation: () => compute.isolation!() } : {}),
+		...(agent.oauthClient ? { oauthClient: agent.oauthClient } : {}),
 		status: async (): Promise<AgentRuntimeStatus> => {
 			const s = await account.signedIn();
 			return { signedIn: s.signedIn, email: null, plan: agent.plan, version: null, problem: s.problem };

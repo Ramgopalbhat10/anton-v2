@@ -61,6 +61,77 @@ function RuntimePending({ subscription, finish }: { subscription: Subscription; 
 	);
 }
 
+type OAuthClient = NonNullable<Subscription['oauthClient']>;
+
+/** The OAuth client the sign-in uses, kept in Anton's database and shown filled in once saved. */
+function OAuthClientForm({ subscription, client }: { subscription: Subscription; client: OAuthClient }) {
+	const saved = useSaved();
+	const [clientId, setClientId] = useState(client.clientId);
+	const [clientSecret, setClientSecret] = useState(client.clientSecret);
+	const save = useMutation({
+		mutationFn: (next: { clientId: string; clientSecret: string }) => api.setSubscriptionClient(subscription.id, next),
+		onSuccess: (result) => {
+			saved(result);
+			if (!result.oauthClient) return;
+			setClientId(result.oauthClient.clientId);
+			setClientSecret(result.oauthClient.clientSecret);
+		},
+	});
+	const name = subscription.name;
+	const stored = Boolean(client.clientId);
+	const changed = clientId.trim() !== client.clientId || clientSecret.trim() !== client.clientSecret;
+	return (
+		<CardSection label="OAuth client" hint={stored ? 'Saved' : 'Required'}>
+			<Note info={`Use the public client ${name}'s own sign-in uses. A sign-in made on a different client may need signing in again.`}>
+				{stored ? `The Google OAuth client Anton signs in to ${name} with. Edit it and save to change it.` : `Paste ${name}'s OAuth client id and secret once, before signing in. They're saved in Anton's database.`}
+			</Note>
+			<form
+				className="flex flex-col gap-2"
+				onSubmit={(event) => {
+					event.preventDefault();
+					save.mutate({ clientId, clientSecret });
+				}}
+			>
+				<label className="flex flex-col gap-1">
+					<span className="text-small text-(--text-3)">Client ID</span>
+					<input
+						value={clientId}
+						onChange={(event) => setClientId(event.target.value)}
+						placeholder="Client id, …apps.googleusercontent.com"
+						aria-label={`${name} client id`}
+						autoComplete="off"
+						spellCheck={false}
+						className={`${FIELD} font-mono text-small`}
+					/>
+				</label>
+				<label className="flex flex-col gap-1">
+					<span className="text-small text-(--text-3)">Client secret</span>
+					<input
+						value={clientSecret}
+						onChange={(event) => setClientSecret(event.target.value)}
+						placeholder="Client secret"
+						aria-label={`${name} client secret`}
+						autoComplete="off"
+						spellCheck={false}
+						className={`${FIELD} font-mono text-small`}
+					/>
+				</label>
+				<div className="flex flex-wrap items-center gap-2">
+					<Btn type="submit" size="sm" variant="secondary" disabled={!changed || !clientId.trim() || !clientSecret.trim() || save.isPending}>
+						{save.isPending ? 'Saving…' : 'Save client'}
+					</Btn>
+					{stored ? (
+						<Btn type="button" size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate({ clientId: '', clientSecret: '' })}>
+							Remove
+						</Btn>
+					) : null}
+					<SaveState pending={save.isPending} success={save.isSuccess && !changed} error={save.error} />
+				</div>
+			</form>
+		</CardSection>
+	);
+}
+
 /** Held by the card, so a refused code's message stays after the sign-in ends. */
 function useRuntimeFinish(subscription: Subscription) {
 	const saved = useSaved();
@@ -180,6 +251,9 @@ export function RuntimePlan({ subscription }: { subscription: Subscription }) {
 					<SaveState pending={signIn.isPending || refresh.isPending} success={false} error={finish.error ?? signIn.error ?? refresh.error} />
 				</CardSection>
 			)}
+			{subscription.oauthClient && !pending ? (
+				<OAuthClientForm subscription={subscription} client={subscription.oauthClient} />
+			) : null}
 			{pending ? null : (
 				<CardFooter
 					caption={
