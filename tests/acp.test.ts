@@ -618,3 +618,59 @@ test('the MCP server serves the live tool list and announces changes', async () 
 	assert.deepEqual(await listed(), ['read', 'write']);
 	server.close();
 });
+
+test('readUsage takes cached tokens out of an input total that already holds them', async () => {
+	const { readUsage } = await import('../src/providers/acp/runtime.ts');
+	// Devin's numbers from a prod call: 22,707 in, 22,528 of them cached.
+	assert.deepEqual(readUsage({ 'cognition.ai/inputTokens': 22_707, 'cognition.ai/cachedReadTokens': 22_528, 'cognition.ai/outputTokens': 201 }), {
+		input: 179,
+		output: 201,
+		cacheRead: 22_528,
+		cacheWrite: 0,
+	});
+	assert.deepEqual(readUsage({ used: 50_000, size: 262_144 }), { input: 50_000, output: 0, cacheRead: 0, cacheWrite: 0 });
+	assert.equal(readUsage({ sessionUpdate: 'usage_update' }), null);
+});
+
+test('a turn measured call by call does not book its summed total onto the last step', async () => {
+	const { acp, conv, seen } = rig(async () => ({ content: [], isError: false }));
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [{ id: 'devin-browser' }] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [{ id: 'model', currentValue: 'swe-2-high', options: [{ value: 'swe-2-high' }] }] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const promptId = parse(acp.sent).find((m) => m.method === 'session/prompt')!.id;
+	acp.incoming.push(update('s', { sessionUpdate: 'usage_update', used: 30_000, size: 262_144, _meta: { 'cognition.ai/inputTokens': 30_000, 'cognition.ai/cachedReadTokens': 29_000, 'cognition.ai/outputTokens': 50 } }));
+	acp.incoming.push(chunk('s', 'agent_message_chunk', 'Hello.'));
+	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn', usage: { inputTokens: 900_000, cachedReadTokens: 880_000, outputTokens: 4000 } } }));
+	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
+	const deltas = seen.filter((e): e is Extract<RuntimeEvent, { type: 'message_delta' }> => e.type === 'message_delta');
+	assert.deepEqual(deltas[0]?.usage, { input: 1000, output: 50, cacheRead: 29_000, cacheWrite: 0 });
+	assert.deepEqual(deltas.at(-1)?.usage, {}, 'the turn total is not added on top');
+	conv.close();
+});
+
+test('an agent that reports only its turn total still gets it, and a turn ending after a tool result answers that step', async () => {
+	const delivered: RuntimeToolOutput[] = [];
+	const { acp, mcp, conv, seen } = rig(async () => {
+		await until(() => delivered.length > 0, 'a tool result');
+		return delivered.shift()!;
+	});
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [{ id: 'devin-browser' }] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [{ id: 'model', currentValue: 'swe-2-high', options: [{ value: 'swe-2-high' }] }] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const promptId = parse(acp.sent).find((m) => m.method === 'session/prompt')!.id;
+	const called = mcpCall(mcp, 'bash', { command: 'ls' });
+	await until(() => seen.some((e) => e.type === 'message_stop'), 'the tool step to close');
+	delivered.push({ content: [{ type: 'text', text: 'ok' }], isError: false });
+	await called;
+	const stopsBefore = seen.filter((e) => e.type === 'message_stop').length;
+	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn', usage: { inputTokens: 500, outputTokens: 20 } } }));
+	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
+	assert.equal(seen.filter((e) => e.type === 'message_stop').length, stopsBefore + 1, 'the last step gets its own closing message');
+	const last = [...seen].reverse().find((e): e is Extract<RuntimeEvent, { type: 'message_delta' }> => e.type === 'message_delta');
+	assert.deepEqual(last?.usage, { input: 500, output: 20, cacheRead: 0, cacheWrite: 0 });
+	conv.close();
+});

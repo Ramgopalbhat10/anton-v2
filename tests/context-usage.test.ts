@@ -10,7 +10,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-context-'));
 process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-const { COMPACTION_SUMMARY_EFFORT, compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context/context-usage.ts');
+const { agentCompaction, COMPACTION_SUMMARY_EFFORT, compactionFor, compactionReserve, contextView, keptAfterCompaction, measureRequest, recordContext, scaleParts } = await import('../src/services/context/context-usage.ts');
 const { backfillLatestInputs, recordLatestInput } = await import('../src/services/tasks/latest-input.ts');
 const { planUsage, recordPlanLimit, resetSubscriptionsForTests } = await import('../src/services/models/subscriptions.ts');
 const { setProviders } = await import('../src/providers/index.ts');
@@ -236,4 +236,10 @@ test('a plan’s use is counted in tokens by day, priced at OpenRouter’s price
 	await recordPlanLimit({ type: 'turn', request: { providerId: 'openai' }, response: { error: { message: 'Error: subscription_sharing_usage_limit_exceeded' } } });
 	[usage] = await planUsage();
 	assert.ok(usage.limitHitAt);
+});
+
+test('agents that keep their own context get no threshold compaction', () => {
+	assert.equal(agentCompaction('devin/swe-2-flash-medium'), false);
+	assert.equal(agentCompaction('antigravity/gemini-4-neon'), false);
+	assert.notEqual(agentCompaction('openrouter/deepseek/deepseek-v4'), false);
 });

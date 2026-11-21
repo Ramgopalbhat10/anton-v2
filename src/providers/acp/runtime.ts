@@ -259,6 +259,8 @@ class AcpConversation implements RuntimeConversation {
 	private lastActivity = 0;
 	/** Anton tool calls in flight; the agent legitimately waits silently while they run. */
 	private parkedTools = 0;
+	/** The agent reported a model call's usage during this turn, so its summed total must not be booked again. */
+	private turnMeasured = false;
 
 	constructor(agent: AcpAgent, host: AcpHost, options: RuntimeConversationOptions) {
 		this.agent = agent;
@@ -396,24 +398,12 @@ class AcpConversation implements RuntimeConversation {
 		return this.isAntonToolRef(update);
 	}
 
+	/** One model call's usage, which is the step's context as Flue measures it. */
 	private pushUsage(update: SessionUpdate): void {
-		const meta = update._meta ?? {};
-		const num = (...keys: string[]) => {
-			for (const key of keys) {
-				const v = meta[key] ?? update[key];
-				if (typeof v === 'number') return v;
-			}
-			return 0;
-		};
-		const usage = {
-			input: num('cognition.ai/inputTokens', 'inputTokens', 'input'),
-			output: num('cognition.ai/outputTokens', 'outputTokens', 'output'),
-			cacheRead: num('cognition.ai/cachedReadTokens', 'cachedReadTokens', 'cacheRead'),
-			cacheWrite: num('cognition.ai/cachedWriteTokens', 'cachedWriteTokens', 'cacheWrite'),
-		};
-		if (usage.input || usage.output || usage.cacheRead || usage.cacheWrite) {
-			this.push({ type: 'message_delta', stopReason: null, usage });
-		}
+		const usage = readUsage({ ...update, ...update._meta });
+		if (!usage) return;
+		this.turnMeasured = true;
+		this.push({ type: 'message_delta', stopReason: null, usage });
 	}
 
 	private async onRequest(method: string, params: unknown, id: number | string): Promise<unknown> {
@@ -571,6 +561,7 @@ class AcpConversation implements RuntimeConversation {
 		const t0 = Date.now();
 		this.promptAt = t0;
 		this.ttftMs = null;
+		this.turnMeasured = false;
 		this.lastActivity = t0;
 		let stalled = false;
 		let stallTimer: ReturnType<typeof setInterval> | undefined;
@@ -592,13 +583,12 @@ class AcpConversation implements RuntimeConversation {
 				}),
 				stall,
 			])) as { stopReason?: string; usage?: Record<string, unknown> };
-			const usage = result?.usage ?? {};
-			this.closeSegment(result?.stopReason ?? 'end_turn', {
-				input: num(usage.inputTokens ?? usage.input),
-				output: num(usage.outputTokens ?? usage.output),
-				cacheRead: num(usage.cachedReadTokens ?? usage.cacheRead),
-				cacheWrite: num(usage.cachedWriteTokens ?? usage.cacheWrite),
-			});
+			// The turn's total sums every model call in it; booked onto one step it reads as that step's context.
+			// Only an agent that reported no call on its own gets it, as the best measure there is.
+			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {});
+			// A turn that ends right after a tool result still answers that step, if only with nothing.
+			this.ensureSegment();
+			this.closeSegment(result?.stopReason ?? 'end_turn', total ?? {});
 			this.push({ type: 'turn_end' });
 		} catch (error) {
 			this.closeSegment(null);
@@ -616,6 +606,29 @@ class AcpConversation implements RuntimeConversation {
 }
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) || 0 : 0);
+
+/**
+ * ACP usage (a `usage_update`, its `_meta`, or `session/prompt`'s total) in pi's shape, where `input` is the uncached
+ * part only. Vendors count cached tokens inside their input total (Devin does: summing them again showed 343K of a
+ * 262K window when the call held 171K), so they are taken out of it. An agent that reports only the spec's `used`
+ * occupancy gets that as input. Null when nothing was measured.
+ */
+export function readUsage(fields: Record<string, unknown>): RuntimeUsage | null {
+	const first = (...keys: string[]) => {
+		for (const key of keys) if (fields[key] !== undefined) return num(fields[key]);
+		return 0;
+	};
+	const total = first('cognition.ai/inputTokens', 'inputTokens', 'input');
+	const output = first('cognition.ai/outputTokens', 'outputTokens', 'output');
+	const cacheRead = first('cognition.ai/cachedReadTokens', 'cachedReadTokens', 'cacheRead');
+	const cacheWrite = first('cognition.ai/cachedWriteTokens', 'cachedWriteTokens', 'cacheWrite');
+	if (total || output || cacheRead || cacheWrite) {
+		const input = total >= cacheRead + cacheWrite ? total - cacheRead - cacheWrite : total;
+		return { input, output, cacheRead, cacheWrite };
+	}
+	const used = num(fields.used);
+	return used ? { input: used, output: 0, cacheRead: 0, cacheWrite: 0 } : null;
+}
 
 const textOf = (update: SessionUpdate): string => {
 	const content = update.content;

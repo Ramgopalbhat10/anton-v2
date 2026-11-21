@@ -38,7 +38,7 @@ import { onPlan, planOf } from '../../services/models/subscriptions.ts';
 import { finishReply, replyFacts, replyTotal, startReply } from '../../services/models/response-usage.ts';
 import { finishTrace, startTrace } from '../../services/context/response-trace.ts';
 import { saveTrace } from '../../db/traces.ts';
-import { compactionFor } from '../../services/context/context-usage.ts';
+import { agentCompaction } from '../../services/context/context-usage.ts';
 import { fullResultTool } from '../../services/context/tool-results.ts';
 import { liveMachine, machineFor } from '../../services/sandbox/workspace.ts';
 import { prewarmFor } from '../../services/sandbox/prewarm-intent.ts';
@@ -167,7 +167,7 @@ async function followUp(id: string): Promise<void> {
 /** A repository task reads a repo snapshot with no sandbox until its first command or change starts one. */
 export function Coder({ id }: AgentProps) {
 	const { model, reasoning } = agentModelFor(id);
-	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
+	useModel(model, { thinkingLevel: reasoning, compaction: agentCompaction(model) });
 	const profile = toolProfileFor(model, config.toolProfile);
 	const prompts = PROMPTS[profile];
 	const [started, setStarted] = usePersistentState('workspace', false);

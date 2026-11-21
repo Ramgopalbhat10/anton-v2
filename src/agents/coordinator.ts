@@ -3,7 +3,7 @@
 import { type AgentProps, defineTool, useAgentStart, useDelivery, useModel, usePersistentState, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { STATE_SIGNAL } from '../services/context/context-prune.ts';
-import { compactionFor } from '../services/context/context-usage.ts';
+import { agentCompaction } from '../services/context/context-usage.ts';
 import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
@@ -198,7 +198,7 @@ function useCoordinatorTools(spaceId: string) {
 /** One conversation per project (the instance id is the project's id). Its picture of the project is the latest state block, not its history. */
 export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
-	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: compactionFor(brief.model) });
+	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: agentCompaction(brief.model) });
 	useCoordinatorTools(id);
 	useTool(fullResultTool(id));
 	useResponseStart(() => ({ startedAt: Date.now() }));

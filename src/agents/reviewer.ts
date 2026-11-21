@@ -4,7 +4,7 @@ import { type AgentProps, useModel, useSandbox, useTool } from '@flue/runtime';
 import { machineSandbox } from '../flue/machine-sandbox.ts';
 import { helperModelFor } from '../services/tasks/agent-runner.ts';
 import { REVIEW_GUIDE } from '../services/git/code-review.ts';
-import { compactionFor } from '../services/context/context-usage.ts';
+import { agentCompaction } from '../services/context/context-usage.ts';
 import { fullResultTool } from '../services/context/tool-results.ts';
 import { postReviewTool } from './review-tool.ts';
 import { repoDir } from '../services/git/git.ts';
@@ -23,7 +23,7 @@ const PROMPT = [
 /** Its own conversation, so the coder never sees how it reasoned, only its comments. */
 export function Reviewer({ id }: AgentProps) {
 	const { model, reasoning } = helperModelFor(id, 'reviewer') ?? modelFor(id);
-	useModel(model, { thinkingLevel: reasoning, compaction: compactionFor(model) });
+	useModel(model, { thinkingLevel: reasoning, compaction: agentCompaction(model) });
 	useSandbox({
 		async createSandbox() {
 			const [machine, secrets] = await Promise.all([machineFor(id), secretsToHide(id)]);
