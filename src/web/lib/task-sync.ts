@@ -3,6 +3,22 @@ import type { Session } from '@/lib/api/sessions';
 
 type List = { sessions: Session[] };
 
+/** A list row with the open task's whole texts where the row cut them and they still begin the same; a changed text stays cut, and named so, until the task is read again. */
+export function withWholeText(row: Session, own: Session): Session {
+	if (!row.cut?.length) return row;
+	const whole: Session = { ...row };
+	const cut = row.cut.filter((field) => {
+		const text = own[field];
+		const shown = row[field];
+		if (typeof text !== 'string' || typeof shown !== 'string' || !text.startsWith(shown)) return true;
+		whole[field] = text;
+		return false;
+	});
+	if (cut.length) whole.cut = cut;
+	else delete whole.cut;
+	return whole;
+}
+
 /** A task is read in the list and on its own; whichever read lands last is written into the other, so the header never lags the sidebar. */
 export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: Query<unknown, unknown, unknown>): void {
 	const [key, id] = query.queryKey;
@@ -12,7 +28,7 @@ export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: 
 			// By its hash, a lookup rather than a scan of the cache, since this runs for every task in the list.
 			const own = queryClient.getQueryCache().get(hashKey(['session', session.id]));
 			if (!own?.state.data || own.state.fetchStatus === 'fetching') continue;
-			queryClient.setQueryData(['session', session.id], session);
+			queryClient.setQueryData(['session', session.id], withWholeText(session, own.state.data as Session));
 		}
 	}
 	if (key === 'session' && typeof id === 'string' && query.queryKey.length === 2 && data) {

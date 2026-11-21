@@ -28,13 +28,18 @@ import { decideSend, mailApprovals } from '../services/connectors/mail.ts';
 import { decideToolApproval, toolApprovals } from '../services/connectors/tool-approvals.ts';
 import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from '../services/git/pull-requests.ts';
 import { requestReview } from '../services/git/code-review.ts';
+import { taskRows } from '../core/task-rows.ts';
 import { REASONING, ROUTE, body, contentType, bytes } from './shared.ts';
 
 const app = new Hono();
 
 const RUN_ON = v.picklist(['sandbox', 'host']);
 
-app.get('/api/sessions', async (c) => c.json({ sessions: await listSessions() }));
+// `?view=rows` cuts long texts to what a list row shows; the whole task is `GET /api/sessions/:id`.
+app.get('/api/sessions', async (c) => {
+	const sessions = await listSessions();
+	return c.json({ sessions: c.req.query('view') === 'rows' ? taskRows(sessions) : sessions });
+});
 app.get('/api/sessions/:id/skills', async (c) => c.json({ skills: await sessionSkills(c.req.param('id')) }));
 app.post('/api/sessions', async (c) => {
 	const input = await body(
