@@ -85,7 +85,7 @@ test('the routes read Flue’s history in-process and pass other reads on', asyn
 	const { app, asked } = server(history(12));
 	const window = await app.request('/api/agents/coder/t1?view=history&turns=3');
 	assert.equal(window.status, 200);
-	assert.equal(window.headers.get('cache-control'), 'no-store');
+	assert.equal(window.headers.get('cache-control'), 'private, no-cache');
 	assert.equal(((await window.json()) as { messages: unknown[] }).messages.length, 6);
 	assert.deepEqual(asked, ['/t1?view=history']);
 	const again = await app.request('/api/agents/coder/t1?view=history&turns=3&from=u8');

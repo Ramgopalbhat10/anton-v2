@@ -22,6 +22,9 @@ export function conversationWindow(routerFor: (kind: string) => HistoryRouter): 
 		if (!response.ok) return response;
 		const headers = new Headers(response.headers);
 		headers.delete('content-length');
+		// Flue's `no-store` would make the browser fetch the whole window on every open. The window is revalidated instead
+		// (`conditionalJson` tags it), so a conversation unchanged since it was last opened costs an empty 304.
+		headers.set('cache-control', 'private, no-cache');
 		const snapshot = (await response.json()) as HistorySnapshot;
 		const from = c.req.query('from');
 		return new Response(JSON.stringify(from ? turnsFrom(snapshot, from, turns) : latestTurns(snapshot, turns)), { status: 200, headers });
