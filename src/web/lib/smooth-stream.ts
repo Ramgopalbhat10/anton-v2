@@ -51,6 +51,11 @@ export function useSmoothText(text: string, streaming: boolean): string {
 		}
 
 		if (shownLengthRef.current > text.length || !text.startsWith(shownTextRef.current.slice(0, shownLengthRef.current))) {
+			if (frameRef.current !== null) {
+				cancelAnimationFrame(frameRef.current);
+				frameRef.current = null;
+			}
+			lastTimeRef.current = 0;
 			shownTextRef.current = text;
 			shownLengthRef.current = text.length;
 			setShown({ text, length: text.length });
