@@ -277,7 +277,7 @@ class AcpConversation implements RuntimeConversation {
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
-		this.acp?.notify('session/cancel', { sessionId: this.sessionId });
+		if (this.sessionId) this.acp?.notify('session/cancel', { sessionId: this.sessionId });
 		this.acp?.close();
 		this.mcp?.close();
 		void this.proc?.close();
@@ -471,6 +471,11 @@ class AcpConversation implements RuntimeConversation {
 		this.chunk('thinking', `\n[${this.agent.name}] starting session…\n`);
 		const proc = await this.host.spawn(this.options.model);
 		this.spawnMs = Date.now() - t0;
+		// close() during the spawn could not reach this container; nothing else will end it.
+		if (this.closed) {
+			await proc.close().catch(() => undefined);
+			throw new Error('The conversation was closed.');
+		}
 		this.proc = proc;
 		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.handleToolCall(name, args));
 		this.acp = new AcpClient(proc.acp, {
@@ -559,7 +564,8 @@ class AcpConversation implements RuntimeConversation {
 			await this.ready;
 		} catch (error) {
 			this.push({ type: 'error', message: error instanceof Error ? error.message : String(error), limit: false });
-			this.eventsOut.close();
+			// A half-set-up session holds a container; close() ends it along with the event stream.
+			this.close();
 			return;
 		}
 		const t0 = Date.now();

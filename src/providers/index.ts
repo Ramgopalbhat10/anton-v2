@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { config } from '../config.ts';
 import type {
@@ -19,7 +20,7 @@ import type {
 	TextModel,
 	VisionModel,
 } from '../core/ports.ts';
-import { getSetting } from '../db/settings.ts';
+import { getSetting, setSetting } from '../db/settings.ts';
 import { acpIsolationKey, acpRuntime, type AcpIsolation } from './acp/runtime.ts';
 import { antigravityAgent } from './acp/antigravity.ts';
 import { devinAgent } from './acp/devin.ts';
@@ -104,6 +105,15 @@ let providers: Providers | undefined;
 let real = false;
 let decisionModel: DecisionModel | null = null;
 
+/** This server's id on the ACP containers it starts; it lives in this database, so dev and prod never take each other's for orphans. */
+async function acpOwner(): Promise<string> {
+	const existing = await getSetting<string | null>('acp.owner', null);
+	if (existing) return existing;
+	const id = randomUUID();
+	await setSetting('acp.owner', id);
+	return id;
+}
+
 const makeDecisions = (): DecisionModel | null =>
 	config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl: config.openrouter.apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
 
@@ -137,10 +147,10 @@ function production(): Providers {
 			// ACP agents need Modal for their jailed containers; without its token there is nowhere to run them.
 			...(process.env.MODAL_TOKEN_ID
 				? [
-						acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(devinAgent.id), 'sidecar') })),
+						acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(devinAgent.id), 'sidecar'), owner: acpOwner })),
 						...(() => {
 							const antigravity = antigravityAgent({ credentialFile: path.join(config.dataDir, 'antigravity', 'oauth-token.json') });
-							return [acpRuntime(antigravity, modalAcpHost(antigravity, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(antigravity.id), 'sidecar') }))];
+							return [acpRuntime(antigravity, modalAcpHost(antigravity, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(antigravity.id), 'sidecar'), owner: acpOwner }))];
 						})(),
 					]
 				: []),
