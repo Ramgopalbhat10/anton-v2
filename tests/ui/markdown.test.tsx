@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
-import { components, fileRef, Markdown, markdownBlocks } from '@/components/content/markdown';
+import { components, fileRef, Markdown, markdownBlocks, streamingParseIntervalMs } from '@/components/content/markdown';
 
 /** Code blocks highlight through a query, so the markup renders inside a client. */
 const html = (node: ReactNode) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>);
@@ -63,5 +63,20 @@ describe('Markdown', () => {
 		expect(fileRef('package.json')).toBeNull();
 		expect(fileRef('npm run build')).toBeNull();
 		expect(fileRef('a.b')).toBeNull();
+	});
+
+	it('throttles rich Markdown reparsing cadence for large growing blocks like long GFM tables, then restores 60Hz for later paragraphs', () => {
+		expect(streamingParseIntervalMs(400)).toBe(0);
+		expect(streamingParseIntervalMs(2000)).toBe(0);
+		expect(streamingParseIntervalMs(4000)).toBe(80);
+		const largeTable = `| Col A | Col B | Col C | Col D |\n| --- | --- | --- | --- |\n${'| value-a | value-b | value-c | value-d |\n'.repeat(200)}`;
+		const trailingTable = markdownBlocks(largeTable).at(-1)!;
+		expect(trailingTable.length).toBeGreaterThan(8000);
+		expect(streamingParseIntervalMs(trailingTable.length)).toBeGreaterThanOrEqual(160);
+		expect(streamingParseIntervalMs(trailingTable.length)).toBeLessThanOrEqual(250);
+
+		const afterTable = `${largeTable}\nSummary paragraph after the table.`;
+		const trailingParagraph = markdownBlocks(afterTable).at(-1)!;
+		expect(streamingParseIntervalMs(trailingParagraph.length)).toBe(0);
 	});
 });

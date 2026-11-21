@@ -3,7 +3,7 @@ import { type ClipboardEvent, type DragEvent, useCallback, useRef, useState } fr
 import { Icon, IconBtn, Spinner } from '@/components/kit/signal';
 import type { AttachmentRef } from '../../../core/attachments';
 import { uniqueUploadNames } from '../../../core/upload-name';
-import { type FileAttachment, type ImageAttachment, MAX_FILES, MAX_IMAGES, readAttachments, sentAsImage } from '@/lib/attachments';
+import { type FileAttachment, type ImageAttachment, imageFile, MAX_FILES, MAX_IMAGES, readAttachments, sentAsImage } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
 const EXTENSION_ICONS: Array<[RegExp, IconComponent]> = [
@@ -67,8 +67,8 @@ function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
 	});
 }
 
-/** `imagesAsFiles` is for a box whose message carries no pictures (a new thread's brief), where images are saved as files. */
-export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: boolean } = {}) {
+/** `imagesAsFiles` sends all images as files; `overflowImagesAsFiles` previews supported images up to MAX_IMAGES and retains any beyond that as ordinary file attachments. */
+export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = false }: { imagesAsFiles?: boolean; overflowImagesAsFiles?: boolean } = {}) {
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<FileAttachment[]>([]);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -82,15 +82,29 @@ export function useAttachments({ imagesAsFiles = false }: { imagesAsFiles?: bool
 			const current = latest.current;
 			const pictures = imagesAsFiles ? 0 : Math.min(list.filter(sentAsImage).length, Math.max(0, MAX_IMAGES - current.images.length));
 			setReading((count) => count + pictures);
-			const read = await readAttachments(list, { images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length }, imagesAsFiles).finally(() =>
-				setReading((count) => count - pictures),
-			);
+			const read = await readAttachments(
+				list,
+				{ images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length },
+				{ imagesAsFiles, overflowImagesAsFiles },
+			).finally(() => setReading((count) => count - pictures));
 			// Clamped here too: two quick pastes both read the counts from before either landed.
-			setImages((before) => [...before, ...read.images.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
-			setFiles((before) => uniqueFiles([...before, ...read.files.slice(0, Math.max(0, MAX_FILES - before.length))]));
+			if (overflowImagesAsFiles) {
+				const roomImages = Math.max(0, MAX_IMAGES - latest.current.images.length);
+				const keptImages = read.images.slice(0, roomImages);
+				const spilledFiles: FileAttachment[] = read.images.slice(roomImages).map((image) => {
+					const file = imageFile(image);
+					return { id: image.id, file, name: image.filename, size: file.size };
+				});
+				const incomingFiles = [...spilledFiles, ...read.files];
+				setImages((before) => [...before, ...keptImages.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
+				setFiles((before) => uniqueFiles([...before, ...incomingFiles.slice(0, Math.max(0, MAX_FILES - before.length))]));
+			} else {
+				setImages((before) => [...before, ...read.images.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
+				setFiles((before) => uniqueFiles([...before, ...read.files.slice(0, Math.max(0, MAX_FILES - before.length))]));
+			}
 			setNotice(read.rejected);
 		},
-		[imagesAsFiles],
+		[imagesAsFiles, overflowImagesAsFiles],
 	);
 	const addImages = useCallback((added: ImageAttachment[]) => {
 		const room = MAX_IMAGES - latest.current.images.length;

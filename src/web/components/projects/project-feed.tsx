@@ -486,8 +486,8 @@ export function NewThreadForm({ space, onDone }: { space: Space; onDone: () => v
 	const [repoId, setRepoId] = useState<string | null>(space.repos[0]?.id ?? null);
 	const [choice, setChoice] = useState<Partial<ModelChoice>>({});
 	const [planMode, setPlanMode] = useState(false);
-	// Images preview like the coordinator composer; both images and files go to the project Library and the server hands images on as pictures.
-	const attachments = useAttachments();
+	// Images preview like the coordinator composer while retaining overflow images as ordinary Library files; original File objects upload directly.
+	const attachments = useAttachments({ overflowImagesAsFiles: true });
 	const repo = repoId === null ? undefined : (space.repos.find((item) => item.id === repoId) ?? space.repos[0]);
 	const model = choice.model ?? space.threadModel ?? models.data?.default ?? '';
 	const ready = Boolean((brief.trim() || attachments.count) && !attachments.limitError && attachments.reading === 0);

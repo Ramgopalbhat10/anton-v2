@@ -503,31 +503,64 @@ describe('threads', () => {
 		for (const file of files) expect(message).toContain(`path="${file.name}"`);
 	});
 
-	it('previews attached images in the new thread composer, saves images and files to the project Library, and puts them in its brief', async () => {
+	it('previews attached images in the new thread composer, uploads original File objects directly, and puts them in its brief', async () => {
+		const atobSpy = vi.spyOn(globalThis, 'atob');
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			const image = new File(['png'], 'mock.png', { type: 'image/png' });
+			const spec = new File(['spec'], 'spec.txt', { type: 'text/plain' });
+			fireEvent.paste(box, {
+				clipboardData: {
+					files: [image, spec],
+					getData: () => '',
+				},
+			});
+			const preview = await screen.findByRole('img', { name: 'mock.png' });
+			expect(preview.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+			expect(screen.queryByText('mock.png')).toBeNull();
+			expect(screen.getByText('spec.txt')).toBeTruthy();
+			api.attachToProject
+				.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null })
+				.mockResolvedValueOnce({ name: 'spec.txt', path: 'spec.txt', size: 4, kind: 'text', text: 'spec', cut: null });
+			await userEvent.type(box, 'Build this screen');
+			await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+			await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+			expect(atobSpy).not.toHaveBeenCalled();
+			expect(api.attachToProject.mock.calls[0]?.[1]).toBe(image);
+			expect(api.attachToProject.mock.calls[1]?.[1]).toBe(spec);
+			const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
+			expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
+			expect(brief).toContain('<attachment name="spec.txt" path="spec.txt" kind="text" size="4" library="project">');
+		} finally {
+			atobSpy.mockRestore();
+		}
+	});
+
+	it('previews the first four PNGs and retains overflow PNGs as Library attachments so all five upload', async () => {
 		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+		const pngs = Array.from({ length: 5 }, (_, index) => new File([`png-${index + 1}`], `shot-${index + 1}.png`, { type: 'image/png' }));
 		fireEvent.paste(box, {
 			clipboardData: {
-				files: [
-					new File(['png'], 'mock.png', { type: 'image/png' }),
-					new File(['spec'], 'spec.txt', { type: 'text/plain' }),
-				],
+				files: pngs,
 				getData: () => '',
 			},
 		});
-		const preview = await screen.findByRole('img', { name: 'mock.png' });
-		expect(preview.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
-		expect(screen.queryByText('mock.png')).toBeNull();
-		expect(screen.getByText('spec.txt')).toBeTruthy();
-		api.attachToProject
-			.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null })
-			.mockResolvedValueOnce({ name: 'spec.txt', path: 'spec.txt', size: 4, kind: 'text', text: 'spec', cut: null });
-		await userEvent.type(box, 'Build this screen');
+		await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(4));
+		expect(screen.getByText('shot-5.png')).toBeTruthy();
+		expect(screen.queryByText(/Up to 4 images/)).toBeNull();
+		for (const file of pngs) {
+			api.attachToProject.mockResolvedValueOnce({ name: file.name, path: file.name, size: file.size, kind: 'PNG image', text: null, cut: null });
+		}
+		await userEvent.type(box, 'Inspect all five');
 		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
 		await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+		expect(api.attachToProject).toHaveBeenCalledTimes(5);
+		const uploaded = api.attachToProject.mock.calls.map((call) => call[1] as File);
+		expect(uploaded).toEqual(pngs);
 		const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
-		expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
-		expect(brief).toContain('<attachment name="spec.txt" path="spec.txt" kind="text" size="4" library="project">');
+		for (const file of pngs) expect(brief).toContain(`path="${file.name}"`);
 	});
 
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {

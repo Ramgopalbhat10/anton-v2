@@ -2,8 +2,8 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { safeSliceEnd, useSmoothText } from '@/lib/smooth-stream';
 
-function Display({ text, streaming }: { text: string; streaming: boolean }) {
-	const visible = useSmoothText(text, streaming);
+function Display({ text, streaming, minIntervalMs = 0 }: { text: string; streaming: boolean; minIntervalMs?: number }) {
+	const visible = useSmoothText(text, streaming, minIntervalMs);
 	return <div data-testid="out">{visible}</div>;
 }
 
@@ -71,11 +71,13 @@ describe('useSmoothText', () => {
 		expect(cancel).not.toHaveBeenCalled();
 	});
 
-	it('cancels active animation frame when streaming text resets to a non-prefix', () => {
+	it('cancels active animation frame when streaming text resets to a non-prefix and animates subsequent appends from the replacement', () => {
 		const frames: Array<FrameRequestCallback> = [];
+		let nextId = 0;
+		let now = 100;
 		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
 			frames.push(cb);
-			return frames.length;
+			return ++nextId;
 		});
 		const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
 
@@ -83,9 +85,65 @@ describe('useSmoothText', () => {
 		view.rerender(<Display text="Start plus more streaming words..." streaming />);
 		expect(frames.length).toBe(1);
 
-		view.rerender(<Display text="Completely replaced text" streaming />);
+		const replacement = 'Completely replaced text';
+		view.rerender(<Display text={replacement} streaming />);
 		expect(cancel).toHaveBeenCalledWith(1);
-		expect(screen.getByTestId('out').textContent).toBe('Completely replaced text');
+		expect(screen.getByTestId('out').textContent).toBe(replacement);
+		// Drop the canceled callback as the browser would.
+		frames.shift();
+
+		const extended = `${replacement} followed by newly streamed words from the replacement prefix.`;
+		view.rerender(<Display text={extended} streaming />);
+		expect(screen.getByTestId('out').textContent).toBe(replacement);
+		expect(frames.length).toBe(1);
+
+		act(() => {
+			now += 16;
+			frames.shift()!(now);
+		});
+		const afterAppend = screen.getByTestId('out').textContent ?? '';
+		expect(afterAppend.length).toBeGreaterThan(replacement.length);
+		expect(afterAppend.length).toBeLessThan(extended.length);
+		expect(extended.startsWith(afterAppend)).toBe(true);
+	});
+
+	it('throttles emissions to minIntervalMs for large blocks while still catching up cleanly', () => {
+		const frames: Array<FrameRequestCallback> = [];
+		let now = 1000;
+		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+			frames.push(cb);
+			return frames.length;
+		});
+		vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+		const start = 'Header\n';
+		const extended = `${start}${'| col1 | col2 | col3 |\n'.repeat(20)}`;
+		const view = render(<Display text={start} streaming minIntervalMs={200} />);
+		view.rerender(<Display text={extended} streaming minIntervalMs={200} />);
+
+		// First frame emits immediately and records timestamp.
+		act(() => {
+			frames.shift()!(now);
+		});
+		const afterFirst = screen.getByTestId('out').textContent ?? '';
+		expect(afterFirst.length).toBeGreaterThan(start.length);
+		expect(afterFirst.length).toBeLessThan(extended.length);
+
+		// Intermediate frames before 200ms elapse skip updating state.
+		for (let step = 0; step < 5; step++) {
+			act(() => {
+				now += 16;
+				frames.shift()!(now);
+			});
+			expect(screen.getByTestId('out').textContent).toBe(afterFirst);
+		}
+
+		// Once 200ms has elapsed, the next frame advances.
+		act(() => {
+			now += 140;
+			frames.shift()!(now);
+		});
+		expect((screen.getByTestId('out').textContent ?? '').length).toBeGreaterThan(afterFirst.length);
 	});
 
 	it('respects prefers-reduced-motion by showing bursts immediately', () => {

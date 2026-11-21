@@ -25,15 +25,18 @@ function reducedMotion(): boolean {
 
 /**
  * Smoothly paces newly arrived text over animation frames while a block is streaming, and smoothly drains
- * any remaining tail when streaming finishes so responses never jump at the end. Non-streaming text,
- * reduced motion, and text already present on mount return immediately without replay.
+ * any remaining tail when streaming finishes so responses never jump at the end. When `minIntervalMs` > 0
+ * (e.g. a large growing Markdown block such as a long GFM table), emissions are throttled to at least that
+ * spacing so expensive reparses stay within the frame budget. Non-streaming text, reduced motion, and text
+ * already present on mount return immediately without replay.
  */
-export function useSmoothText(text: string, streaming: boolean): string {
+export function useSmoothText(text: string, streaming: boolean, minIntervalMs = 0): string {
 	const reduced = reducedMotion();
 	const [shown, setShown] = useState(() => ({ text, length: text.length }));
 	const targetRef = useRef(text);
 	const streamingRef = useRef(streaming);
 	const hadStreamingRef = useRef(streaming);
+	const minIntervalRef = useRef(minIntervalMs);
 	const shownTextRef = useRef(text);
 	const shownLengthRef = useRef(text.length);
 	const frameRef = useRef<number | null>(null);
@@ -41,6 +44,7 @@ export function useSmoothText(text: string, streaming: boolean): string {
 
 	if (streaming) hadStreamingRef.current = true;
 	streamingRef.current = streaming;
+	minIntervalRef.current = minIntervalMs;
 
 	const pacing = !reduced && (streaming || (hadStreamingRef.current && shown.length < text.length));
 	const isExtension = pacing && text.startsWith(shown.text.slice(0, shown.length));
@@ -79,14 +83,20 @@ export function useSmoothText(text: string, streaming: boolean): string {
 		lastTimeRef.current = 0;
 		const tick = (now: number) => {
 			const target = targetRef.current;
-			const dt = lastTimeRef.current ? Math.min(MAX_DT_MS, Math.max(1, now - lastTimeRef.current)) : 16;
-			lastTimeRef.current = now;
 			const remaining = target.length - shownLengthRef.current;
 			if (remaining <= 0) {
 				frameRef.current = null;
 				lastTimeRef.current = 0;
 				return;
 			}
+			const minInterval = minIntervalRef.current;
+			if (minInterval > 0 && lastTimeRef.current > 0 && now - lastTimeRef.current < minInterval) {
+				frameRef.current = requestAnimationFrame(tick);
+				return;
+			}
+			const maxDt = Math.max(MAX_DT_MS, minInterval);
+			const dt = lastTimeRef.current ? Math.min(maxDt, Math.max(1, now - lastTimeRef.current)) : 16;
+			lastTimeRef.current = now;
 			const finishing = !streamingRef.current;
 			const catchUpMs = finishing ? FINISH_CATCH_UP_MS : CATCH_UP_MS;
 			const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
