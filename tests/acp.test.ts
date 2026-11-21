@@ -265,7 +265,7 @@ test('a model already selected in session/new skips set_config_option', async ()
 	conv.close();
 });
 
-test('permission requests allow Anton tools and refuse the agent\'s own', async () => {
+test('permission requests allow Anton tools and the agent\'s own, whose files and commands come back to Anton', async () => {
 	const { acp, conv } = rig(async () => ({ content: [], isError: false }));
 	conv.send([{ type: 'text', text: 'hi' }]);
 	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
@@ -309,17 +309,17 @@ test('permission requests allow Anton tools and refuse the agent\'s own', async 
 	ask(8, 'exec rm -rf /');
 	askAgy(9, 'mcp_anton_render_html', 'Run mcp_anton_render_html');
 	askAgy(10, 'run_command', 'Run a terminal command');
-	// A bare anton_<tool> is Anton's only when it names one of Anton's tools as a whole word.
+	// Bare anton_<tool> names and native edits alike: every request is allowed.
 	askAgy(11, 'anton_bash', 'Run anton_bash');
 	askAgy(12, 'edit_file', 'Edit anton_config.ts');
 	await until(() => parse(acp.sent).filter((m) => [7, 8, 9, 10, 11, 12].includes(Number(m.id))).length === 6, 'permission answers');
 	const answers = parse(acp.sent).filter((m) => [7, 8, 9, 10, 11, 12].includes(Number(m.id)));
 	assert.deepEqual(answers.find((m) => m.id === 11)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
-	assert.deepEqual(answers.find((m) => m.id === 12)?.result, { outcome: { outcome: 'selected', optionId: 'deny' } });
+	assert.deepEqual(answers.find((m) => m.id === 12)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
 	assert.deepEqual(answers.find((m) => m.id === 7)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
-	assert.deepEqual(answers.find((m) => m.id === 8)?.result, { outcome: { outcome: 'selected', optionId: 'reject' } });
+	assert.deepEqual(answers.find((m) => m.id === 8)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
 	assert.deepEqual(answers.find((m) => m.id === 9)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
-	assert.deepEqual(answers.find((m) => m.id === 10)?.result, { outcome: { outcome: 'selected', optionId: 'deny' } });
+	assert.deepEqual(answers.find((m) => m.id === 10)?.result, { outcome: { outcome: 'selected', optionId: 'allow' } });
 	conv.close();
 });
 
@@ -734,4 +734,47 @@ test('signing out drains compute, and a status check never touches it', async ()
 	assert.equal(spawned, 0);
 	await runtime.signOut!();
 	assert.equal(drained, 1);
+});
+
+test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions open the first prompt', async () => {
+	const READ: RuntimeTool = { name: 'read', description: 'Read a file', inputSchema: { type: 'object', properties: { path: { type: 'string' } } } };
+	const calls: string[] = [];
+	const acp = fakeChannel();
+	const mcp = fakeChannel();
+	const proc: AcpProcess = { acp: acp.transport, mcp: mcp.transport, writeFile: async () => undefined, close: async () => undefined, stderrTail: () => '' };
+	const conv = acpRuntime(devinAgent, fakeAccount(), { spawn: async () => proc }).open({
+		model: 'swe-2-high',
+		instructions: 'Be brief.',
+		tools: [READ],
+		effort: null,
+		callTool: async (_id, name) => {
+			calls.push(name);
+			return { content: [{ type: 'text', text: 'export const a = 1;' }], isError: false };
+		},
+	});
+	const seen: RuntimeEvent[] = [];
+	void (async () => {
+		for await (const event of conv.events) seen.push(event);
+	})();
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await until(() => parse(acp.sent).some((m) => m.method === 'initialize'), 'initialize');
+	const init = parse(acp.sent).find((m) => m.method === 'initialize')!.params as { clientCapabilities: unknown };
+	assert.deepEqual(init.clientCapabilities, { fs: { readTextFile: true, writeTextFile: true }, terminal: true });
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const prompt = parse(acp.sent).find((m) => m.method === 'session/prompt')!.params as { prompt: { text?: string }[] };
+	assert.match(prompt.prompt[0]?.text ?? '', /<instructions>\nBe brief\.\n<\/instructions>/);
+	assert.equal(prompt.prompt[1]?.text, 'hi');
+
+	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 900, method: 'fs/read_text_file', params: { sessionId: 's', path: '/work/src/a.ts' } }));
+	await until(() => parse(acp.sent).some((m) => m.id === 900), 'the read answer');
+	assert.deepEqual(parse(acp.sent).find((m) => m.id === 900)?.result, { content: 'export const a = 1;' });
+	assert.deepEqual(calls, ['read']);
+	const use = seen.find((e): e is Extract<RuntimeEvent, { type: 'block_start' }> => e.type === 'block_start' && e.block.type === 'tool_use');
+	assert.equal(use?.block.type === 'tool_use' && use.block.name, 'read');
+	const json = seen.find((e): e is Extract<RuntimeEvent, { type: 'block_delta' }> => e.type === 'block_delta' && Boolean(e.json));
+	assert.equal(json?.json, '{"path":"src/a.ts"}');
+	conv.close();
 });
