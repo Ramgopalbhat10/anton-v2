@@ -2368,6 +2368,26 @@ test('a repo\'s prepared image is built in a sandbox of its own, renewed when ol
 	}
 });
 
+test('a prepared image that can no longer be loaded starts the task from the base and is replaced', async () => {
+	settings.prepareImages = true;
+	try {
+		const project = await addProject('acme/lost-image');
+		const built = await buildPreparedImage(project.id);
+		assert.ok(built);
+		// Another Modal workspace's image, or a deleted one: fresh by its date, unusable by its id.
+		await database.execute({ sql: 'UPDATE projects SET snapshot_image_id = ?, warmed_at = ? WHERE id = ?', args: ['im-gone', new Date().toISOString(), project.id] });
+		const task = await sessions.createSession({ projectId: project.id, title: 'After a token change' });
+		const machine = await machineFor(task.id);
+		assert.equal((await run(machine, 'git branch --show-current')).trim(), task.branch, 'the task still gets a working checkout');
+		await buildPreparedImage(project.id);
+		const now = (await getProject(project.id))?.warmImage;
+		assert.ok(now && now !== 'im-gone', 'the lost image is replaced by a new build');
+		await sessions.stopSession(task.id);
+	} finally {
+		settings.prepareImages = false;
+	}
+});
+
 test('a sandbox woken while a new task is typed is set up for it, and one let go stops', async () => {
 	settings.wakeSandbox = true;
 	try {

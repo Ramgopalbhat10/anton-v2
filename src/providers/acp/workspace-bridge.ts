@@ -110,7 +110,8 @@ export class WorkspaceBridge {
 		const args = Array.isArray(p.args) ? p.args.map(String) : [];
 		const env = Array.isArray(p.env) ? (p.env as { name?: string; value?: string }[]) : [];
 		const exports = env.filter((e) => e.name && /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name)).map((e) => `export ${e.name}=${quote(String(e.value ?? ''))}; `);
-		const cwd = typeof p.cwd === 'string' && p.cwd ? `cd ${quote(this.path(p.cwd))} && ` : '';
+		const dir = typeof p.cwd === 'string' && p.cwd ? this.path(p.cwd) : '.';
+		const cwd = dir === '.' ? '' : `cd ${quote(dir)} && `;
 		const command = `${exports.join('')}${cwd}${[String(p.command ?? ''), ...args.map(quote)].join(' ')}`;
 		const id = `term-${++this.terminalSeq}`;
 		const terminal: Terminal = { done: Promise.resolve({ output: '', exitCode: 0 }), result: null, limit: num(p.outputByteLimit) };
