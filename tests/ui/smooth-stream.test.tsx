@@ -26,14 +26,14 @@ describe('useSmoothText', () => {
 		expect(screen.getByTestId('out').textContent).toBe('Already streamed content from before mount.');
 	});
 
-	it('smoothly paces appended bursts across animation frames while streaming, then snaps on finish', () => {
+	it('smoothly paces appended bursts across animation frames and drains the tail on finish without jumping', () => {
 		const frames: Array<FrameRequestCallback> = [];
 		let now = 100;
 		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
 			frames.push(cb);
 			return frames.length;
 		});
-		vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+		const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
 
 		const start = 'First chunk.';
 		const burst = `${start} ${'Smoothly streamed words arriving in a big burst from the model. '.repeat(4)}`;
@@ -55,18 +55,37 @@ describe('useSmoothText', () => {
 		expect(afterFrame1.length).toBeLessThan(burst.length);
 		expect(burst.startsWith(afterFrame1)).toBe(true);
 
-		// Step frame 2: reveals more text monotonically.
-		act(() => {
-			now += 16;
-			frames.shift()!(now);
-		});
-		const afterFrame2 = screen.getByTestId('out').textContent ?? '';
-		expect(afterFrame2.length).toBeGreaterThan(afterFrame1.length);
-		expect(afterFrame2.length).toBeLessThan(burst.length);
-
-		// Finishing snaps immediately to the complete text.
+		// Finishing drains the remaining tail across rAF frames instead of jumping at once.
 		view.rerender(<Display text={burst} streaming={false} />);
+		expect(screen.getByTestId('out').textContent).toBe(afterFrame1);
+		let steps = 0;
+		while (frames.length > 0 && steps < 30) {
+			act(() => {
+				now += 16;
+				frames.shift()!(now);
+			});
+			steps++;
+		}
+		expect(steps).toBeGreaterThan(1);
 		expect(screen.getByTestId('out').textContent).toBe(burst);
+		expect(cancel).not.toHaveBeenCalled();
+	});
+
+	it('cancels active animation frame when streaming text resets to a non-prefix', () => {
+		const frames: Array<FrameRequestCallback> = [];
+		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+			frames.push(cb);
+			return frames.length;
+		});
+		const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+		const view = render(<Display text="Start" streaming />);
+		view.rerender(<Display text="Start plus more streaming words..." streaming />);
+		expect(frames.length).toBe(1);
+
+		view.rerender(<Display text="Completely replaced text" streaming />);
+		expect(cancel).toHaveBeenCalledWith(1);
+		expect(screen.getByTestId('out').textContent).toBe('Completely replaced text');
 	});
 
 	it('respects prefers-reduced-motion by showing bursts immediately', () => {

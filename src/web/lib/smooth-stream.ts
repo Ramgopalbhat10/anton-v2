@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Target time (ms) for the catch-up cursor to absorb an incoming burst. */
-const CATCH_UP_MS = 120;
+/** Target time (ms) for the catch-up cursor to absorb an incoming burst while streaming. */
+const CATCH_UP_MS = 65;
+/** Faster catch-up time (ms) to smoothly finish draining the trailing tail once streaming ends. */
+const FINISH_CATCH_UP_MS = 45;
 /** Minimum characters revealed per second so short tails finish crisply. */
 const MIN_CHARS_PER_SEC = 80;
+/** Minimum characters revealed per second when draining the final tail after streaming ends. */
+const FINISH_MIN_CHARS_PER_SEC = 180;
 /** Cap per-frame delta so returning from a backgrounded tab advances cleanly. */
 const MAX_DT_MS = 50;
 
@@ -20,25 +24,32 @@ function reducedMotion(): boolean {
 }
 
 /**
- * Smoothly paces newly arrived text over animation frames while a block is streaming, so bursts from the
- * server or provider glide in instead of jumping in chunks. Non-streaming text, reduced motion, and text
- * already present on mount return immediately without replay.
+ * Smoothly paces newly arrived text over animation frames while a block is streaming, and smoothly drains
+ * any remaining tail when streaming finishes so responses never jump at the end. Non-streaming text,
+ * reduced motion, and text already present on mount return immediately without replay.
  */
 export function useSmoothText(text: string, streaming: boolean): string {
-	const immediate = !streaming || reducedMotion();
+	const reduced = reducedMotion();
 	const [shown, setShown] = useState(() => ({ text, length: text.length }));
 	const targetRef = useRef(text);
+	const streamingRef = useRef(streaming);
+	const hadStreamingRef = useRef(streaming);
 	const shownTextRef = useRef(text);
 	const shownLengthRef = useRef(text.length);
 	const frameRef = useRef<number | null>(null);
 	const lastTimeRef = useRef(0);
 
-	const isExtension = !immediate && text.startsWith(shown.text.slice(0, shown.length));
-	const displayLength = immediate ? text.length : isExtension ? Math.min(shown.length, text.length) : text.length;
+	if (streaming) hadStreamingRef.current = true;
+	streamingRef.current = streaming;
+
+	const pacing = !reduced && (streaming || (hadStreamingRef.current && shown.length < text.length));
+	const isExtension = pacing && text.startsWith(shown.text.slice(0, shown.length));
+	const displayLength = !pacing ? text.length : isExtension ? Math.min(shown.length, text.length) : text.length;
 
 	useEffect(() => {
 		targetRef.current = text;
-		if (immediate) {
+		const shouldPace = !reduced && (streaming || (hadStreamingRef.current && shownLengthRef.current < text.length));
+		if (!shouldPace) {
 			if (frameRef.current !== null) {
 				cancelAnimationFrame(frameRef.current);
 				frameRef.current = null;
@@ -76,8 +87,11 @@ export function useSmoothText(text: string, streaming: boolean): string {
 				lastTimeRef.current = 0;
 				return;
 			}
-			const minStep = Math.ceil((MIN_CHARS_PER_SEC * dt) / 1000);
-			const proportionalStep = Math.ceil((remaining * dt) / CATCH_UP_MS);
+			const finishing = !streamingRef.current;
+			const catchUpMs = finishing ? FINISH_CATCH_UP_MS : CATCH_UP_MS;
+			const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
+			const minStep = Math.ceil((minRate * dt) / 1000);
+			const proportionalStep = Math.ceil((remaining * dt) / catchUpMs);
 			const nextLength = safeSliceEnd(target, Math.min(target.length, shownLengthRef.current + Math.max(minStep, proportionalStep)));
 			shownTextRef.current = target;
 			shownLengthRef.current = nextLength;
@@ -90,7 +104,7 @@ export function useSmoothText(text: string, streaming: boolean): string {
 			}
 		};
 		frameRef.current = requestAnimationFrame(tick);
-	}, [text, immediate]);
+	}, [text, streaming, reduced]);
 
 	useEffect(() => {
 		return () => {
