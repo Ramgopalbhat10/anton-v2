@@ -23,20 +23,23 @@ function reducedMotion(): boolean {
 	return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 
+export type IntervalForCursor = number | ((target: string, shownLength: number) => number);
+
 /**
  * Smoothly paces newly arrived text over animation frames while a block is streaming, and smoothly drains
- * any remaining tail when streaming finishes so responses never jump at the end. When `minIntervalMs` > 0
- * (e.g. a large growing Markdown block such as a long GFM table), emissions are throttled to at least that
- * spacing so expensive reparses stay within the frame budget. Non-streaming text, reduced motion, and text
- * already present on mount return immediately without replay.
+ * any remaining tail when streaming finishes so responses never jump at the end. When `minIntervalMs` (or
+ * a cursor-aware callback) returns > 0 (e.g. while the reveal cursor is inside a large growing Markdown block
+ * such as a long GFM table), emissions are throttled to at least that spacing so expensive reparses stay
+ * within the frame budget. Non-streaming text, reduced motion, and text already present on mount return
+ * immediately without replay.
  */
-export function useSmoothText(text: string, streaming: boolean, minIntervalMs = 0): string {
+export function useSmoothText(text: string, streaming: boolean, minIntervalMs: IntervalForCursor = 0): string {
 	const reduced = reducedMotion();
 	const [shown, setShown] = useState(() => ({ text, length: text.length }));
 	const targetRef = useRef(text);
 	const streamingRef = useRef(streaming);
 	const hadStreamingRef = useRef(streaming);
-	const minIntervalRef = useRef(minIntervalMs);
+	const minIntervalRef = useRef<IntervalForCursor>(minIntervalMs);
 	const shownTextRef = useRef(text);
 	const shownLengthRef = useRef(text.length);
 	const frameRef = useRef<number | null>(null);
@@ -89,7 +92,8 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs = 
 				lastTimeRef.current = 0;
 				return;
 			}
-			const minInterval = minIntervalRef.current;
+			const intervalOption = minIntervalRef.current;
+			const minInterval = typeof intervalOption === 'function' ? intervalOption(target, shownLengthRef.current) : intervalOption;
 			if (minInterval > 0 && lastTimeRef.current > 0 && now - lastTimeRef.current < minInterval) {
 				frameRef.current = requestAnimationFrame(tick);
 				return;
@@ -98,7 +102,7 @@ export function useSmoothText(text: string, streaming: boolean, minIntervalMs = 
 			const dt = lastTimeRef.current ? Math.min(maxDt, Math.max(1, now - lastTimeRef.current)) : 16;
 			lastTimeRef.current = now;
 			const finishing = !streamingRef.current;
-			const catchUpMs = finishing ? FINISH_CATCH_UP_MS : CATCH_UP_MS;
+			const catchUpMs = Math.max(finishing ? FINISH_CATCH_UP_MS : CATCH_UP_MS, minInterval * 1.5);
 			const minRate = finishing ? FINISH_MIN_CHARS_PER_SEC : MIN_CHARS_PER_SEC;
 			const minStep = Math.ceil((minRate * dt) / 1000);
 			const proportionalStep = Math.ceil((remaining * dt) / catchUpMs);

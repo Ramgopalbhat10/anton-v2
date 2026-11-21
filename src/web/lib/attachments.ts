@@ -35,7 +35,7 @@ function readAsDataUrl(file: File): Promise<string> {
 /** Whether the model is handed the file as a picture: an image it can see, small enough to send as one. */
 export const sentAsImage = (file: File) => IMAGE_TYPES.has(file.type) && file.size <= MAX_IMAGE_BYTES;
 
-/** Sorts picked, pasted or dropped files: images the model sees go as images, anything else (and an image too large) as a file; `imagesAsFiles` sends images as files too, and `overflowImagesAsFiles` keeps images past the image limit as ordinary files instead of dropping them. Says why any were left out. */
+/** Sorts picked, pasted or dropped files: images the model sees go as images, anything else (and an image too large) as a file; `imagesAsFiles` sends images as files too, and `overflowImagesAsFiles` keeps images past the image limit as ordinary files in selection order instead of dropping them. Says why any were left out. */
 export async function readAttachments(
 	files: File[],
 	room: { images: number; files: number },
@@ -46,20 +46,26 @@ export async function readAttachments(
 	const fits = files.filter((file) => file.size <= MAX_FILE_BYTES);
 	const pictures = imagesAsFiles ? [] : fits.filter(sentAsImage);
 	const keptPictures = pictures.slice(0, Math.max(0, room.images));
-	const overflowPictures = overflowImagesAsFiles ? pictures.slice(keptPictures.length) : [];
-	const others = [...overflowPictures, ...fits.filter((file) => !pictures.includes(file))];
+	const previewed = new Set(keptPictures);
+	const skippedPictures = overflowImagesAsFiles ? null : new Set(pictures.slice(keptPictures.length));
+	const others = fits.filter((file) => !previewed.has(file) && !skippedPictures?.has(file));
 	const keptOthers = others.slice(0, Math.max(0, room.files));
-	const images = await Promise.all(keptPictures.map(async (file) => ({ ...imageFromDataUrl(await readAsDataUrl(file), file.name || 'image'), file })));
+	const settled = await Promise.allSettled(
+		keptPictures.map(async (file) => ({ ...imageFromDataUrl(await readAsDataUrl(file), file.name || 'image'), file })),
+	);
+	const images: ImageAttachment[] = [];
+	const unreadable: string[] = [];
+	settled.forEach((result, index) => {
+		if (result.status === 'fulfilled') images.push(result.value);
+		else unreadable.push(keptPictures[index]?.name || 'image');
+	});
 	const attached = keptOthers.map((file) => ({ id: crypto.randomUUID(), file, name: file.name || 'file', size: file.size }));
-	const rejected =
-		fits.length < files.length
-			? 'Files up to 20 MB can be attached.'
-			: !overflowImagesAsFiles && keptPictures.length < pictures.length
-				? `Up to ${MAX_IMAGES} images per message.`
-				: keptOthers.length < others.length
-					? `Up to ${MAX_FILES} files per message.`
-					: null;
-	return { images, files: attached, rejected };
+	const notes: string[] = [];
+	if (unreadable.length) notes.push(`Could not read ${unreadable.join(', ')}.`);
+	if (fits.length < files.length) notes.push('Files up to 20 MB can be attached.');
+	else if (!overflowImagesAsFiles && keptPictures.length < pictures.length) notes.push(`Up to ${MAX_IMAGES} images per message.`);
+	else if (keptOthers.length < others.length) notes.push(`Up to ${MAX_FILES} files per message.`);
+	return { images, files: attached, rejected: notes.length ? notes.join(' ') : null };
 }
 
 /** Images as the agent runtime takes them with a message. */

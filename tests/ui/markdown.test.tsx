@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { components, fileRef, Markdown, markdownBlocks, streamingParseIntervalMs } from '@/components/content/markdown';
 
 /** Code blocks highlight through a query, so the markup renders inside a client. */
@@ -63,6 +64,91 @@ describe('Markdown', () => {
 		expect(fileRef('package.json')).toBeNull();
 		expect(fileRef('npm run build')).toBeNull();
 		expect(fileRef('a.b')).toBeNull();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('keeps coarse reparse cadence while reveal cursor is still inside a large table even after a trailing paragraph arrives, then resumes 60Hz in the paragraph', () => {
+		const frames: Array<FrameRequestCallback> = [];
+		let now = 1000;
+		vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+			frames.push(cb);
+			return frames.length;
+		});
+		vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+		const header = '| Col A | Col B | Col C | Col D |\n| --- | --- | --- | --- |\n';
+		const row = (n: number) => `| row-${n}-a | row-${n}-b | row-${n}-c | row-${n}-d |\n`;
+		const initialTable = `${header}${Array.from({ length: 180 }, (_, i) => row(i + 1)).join('')}`;
+		const extraRows = Array.from({ length: 40 }, (_, i) => row(i + 181)).join('');
+		const summaryStart = '\nSummary paragraph after the table.';
+		const fullWithSummary = `${initialTable}${extraRows}${summaryStart}`;
+
+		const client = new QueryClient();
+		const view = render(
+			<QueryClientProvider client={client}>
+				<Markdown text={initialTable} streaming />
+			</QueryClientProvider>,
+		);
+		expect(view.container.querySelectorAll('tbody tr').length).toBe(180);
+
+		// Burst finishes the 220-row table AND starts a short summary paragraph.
+		view.rerender(
+			<QueryClientProvider client={client}>
+				<Markdown text={fullWithSummary} streaming />
+			</QueryClientProvider>,
+		);
+
+		// First animation frame advances into the remaining table rows (still inside the table, paragraph not yet visible).
+		act(() => {
+			frames.shift()!(now);
+		});
+		const rowsAfterFirst = view.container.querySelectorAll('tbody tr').length;
+		expect(rowsAfterFirst).toBeGreaterThan(180);
+		expect(rowsAfterFirst).toBeLessThan(220);
+		expect(view.container.textContent).not.toContain('Summary paragraph');
+
+		// While the reveal cursor is still inside the 220-row table, 16ms frames must NOT reparse/update the table.
+		for (let step = 0; step < 5; step++) {
+			act(() => {
+				now += 16;
+				frames.shift()!(now);
+			});
+			expect(view.container.querySelectorAll('tbody tr').length).toBe(rowsAfterFirst);
+		}
+
+		// Advance past the large-block cadence until the reveal cursor crosses into the summary paragraph.
+		let guard = 0;
+		while (frames.length > 0 && !view.container.textContent?.includes('Summary paragraph') && guard++ < 20) {
+			act(() => {
+				now += 260;
+				frames.shift()!(now);
+			});
+		}
+		expect(view.container.querySelectorAll('tbody tr').length).toBe(220);
+		expect(view.container.textContent).toContain('Summary paragraph');
+
+		// Once the reveal cursor is in the short trailing paragraph, 16ms frames immediately resume 60Hz pacing.
+		const moreSummary = `${fullWithSummary} More streamed words arriving smoothly in the summary paragraph.`;
+		view.rerender(
+			<QueryClientProvider client={client}>
+				<Markdown text={moreSummary} streaming />
+			</QueryClientProvider>,
+		);
+		const lenBefore = (view.container.textContent ?? '').length;
+		act(() => {
+			now += 16;
+			frames.shift()!(now);
+		});
+		const lenAfter1 = (view.container.textContent ?? '').length;
+		expect(lenAfter1).toBeGreaterThan(lenBefore);
+		act(() => {
+			now += 16;
+			frames.shift()!(now);
+		});
+		expect((view.container.textContent ?? '').length).toBeGreaterThan(lenAfter1);
 	});
 
 	it('throttles rich Markdown reparsing cadence for large growing blocks like long GFM tables, then restores 60Hz for later paragraphs', () => {

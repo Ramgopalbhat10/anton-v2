@@ -240,6 +240,12 @@ export function streamingParseIntervalMs(blockChars: number): number {
 	return Math.min(MAX_LARGE_BLOCK_INTERVAL_MS, Math.round((blockChars / LARGE_BLOCK_CHARS) * 40));
 }
 
+function revealedBlockParseIntervalMs(target: string, shownLength: number): number {
+	if (shownLength <= LARGE_BLOCK_CHARS) return 0;
+	const trailing = markdownBlocks(target.slice(0, shownLength)).at(-1)?.length ?? shownLength;
+	return streamingParseIntervalMs(trailing);
+}
+
 /** Parsing is the expensive part, so a reply is parsed a block at a time and an unchanged block is not parsed again: while a reply streams, only its last block is. */
 export const Markdown = memo(function Markdown({ text, html = false, streaming = false }: {
 	text: string;
@@ -248,12 +254,7 @@ export const Markdown = memo(function Markdown({ text, html = false, streaming =
 	/** Smoothly paces newly arrived text while a reply is still streaming. */
 	streaming?: boolean;
 }) {
-	const parseIntervalMs = useMemo(() => {
-		if (html || text.length <= LARGE_BLOCK_CHARS) return 0;
-		const trailing = markdownBlocks(text).at(-1)?.length ?? text.length;
-		return streamingParseIntervalMs(trailing);
-	}, [text, html]);
-	const visible = useSmoothText(text, streaming && !html, parseIntervalMs);
+	const visible = useSmoothText(text, streaming && !html, html ? 0 : revealedBlockParseIntervalMs);
 	// HTML wrappers can span Markdown blocks; parse documents whole, while replies
 	// retain their streaming optimization and never opt into HTML.
 	const blocks = useMemo(() => html ? [visible] : markdownBlocks(visible), [visible, html]);

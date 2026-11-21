@@ -69,47 +69,73 @@ function uniqueFiles(files: FileAttachment[]): FileAttachment[] {
 
 /** `imagesAsFiles` sends all images as files; `overflowImagesAsFiles` previews supported images up to MAX_IMAGES and retains any beyond that as ordinary file attachments. */
 export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = false }: { imagesAsFiles?: boolean; overflowImagesAsFiles?: boolean } = {}) {
-	const [images, setImages] = useState<ImageAttachment[]>([]);
-	const [files, setFiles] = useState<FileAttachment[]>([]);
-	const [notice, setNotice] = useState<string | null>(null);
+	const [state, setState] = useState<{ images: ImageAttachment[]; files: FileAttachment[]; notice: string | null }>({ images: [], files: [], notice: null });
+	const { images, files, notice } = state;
 	/** Pictures still being read, which the tray holds a place for. */
 	const [reading, setReading] = useState(0);
 	const latest = useRef({ images, files });
 	latest.current = { images, files };
+	const setNotice = useCallback((next: string | null) => {
+		setState((current) => (current.notice === next ? current : { ...current, notice: next }));
+	}, []);
 	const attach = useCallback(
 		async (list: File[]) => {
 			if (list.length === 0) return;
 			const current = latest.current;
+			const order = new Map(list.map((file, index) => [file, index]));
 			const pictures = imagesAsFiles ? 0 : Math.min(list.filter(sentAsImage).length, Math.max(0, MAX_IMAGES - current.images.length));
 			setReading((count) => count + pictures);
-			const read = await readAttachments(
-				list,
-				{ images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length },
-				{ imagesAsFiles, overflowImagesAsFiles },
-			).finally(() => setReading((count) => count - pictures));
-			// Clamped here too: two quick pastes both read the counts from before either landed.
-			if (overflowImagesAsFiles) {
-				const roomImages = Math.max(0, MAX_IMAGES - latest.current.images.length);
-				const keptImages = read.images.slice(0, roomImages);
-				const spilledFiles: FileAttachment[] = read.images.slice(roomImages).map((image) => {
-					const file = imageFile(image);
-					return { id: image.id, file, name: image.filename, size: file.size };
-				});
-				const incomingFiles = [...spilledFiles, ...read.files];
-				setImages((before) => [...before, ...keptImages.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
-				setFiles((before) => uniqueFiles([...before, ...incomingFiles.slice(0, Math.max(0, MAX_FILES - before.length))]));
-			} else {
-				setImages((before) => [...before, ...read.images.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
-				setFiles((before) => uniqueFiles([...before, ...read.files.slice(0, Math.max(0, MAX_FILES - before.length))]));
+			let read: Awaited<ReturnType<typeof readAttachments>>;
+			try {
+				read = await readAttachments(
+					list,
+					{ images: MAX_IMAGES - current.images.length, files: MAX_FILES - current.files.length },
+					{ imagesAsFiles, overflowImagesAsFiles },
+				);
+			} catch {
+				setNotice('Could not read the attached files.');
+				return;
+			} finally {
+				setReading((count) => count - pictures);
 			}
-			setNotice(read.rejected);
+			// Allocate preview and file slots together against the latest queued state so overlapping reads never drop overflow silently.
+			setState((before) => {
+				const imageRoom = Math.max(0, MAX_IMAGES - before.images.length);
+				const keptImages = read.images.slice(0, imageRoom);
+				const spilledImages = read.images.slice(keptImages.length);
+				const spilledFiles: FileAttachment[] = overflowImagesAsFiles
+					? spilledImages.map((image) => {
+							const file = imageFile(image);
+							return { id: image.id, file, name: image.filename, size: file.size };
+						})
+					: [];
+				const candidateFiles = [...spilledFiles, ...read.files].sort(
+					(a, b) => (order.get(a.file) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.file) ?? Number.MAX_SAFE_INTEGER),
+				);
+				const fileRoom = Math.max(0, MAX_FILES - before.files.length);
+				const keptFiles = candidateFiles.slice(0, fileRoom);
+				const notes: string[] = [];
+				if (read.rejected) notes.push(read.rejected);
+				else if (!overflowImagesAsFiles && spilledImages.length > 0) notes.push(`Up to ${MAX_IMAGES} images per message.`);
+				else if (keptFiles.length < candidateFiles.length) notes.push(`Up to ${MAX_FILES} files per message.`);
+				return {
+					images: [...before.images, ...keptImages],
+					files: uniqueFiles([...before.files, ...keptFiles]),
+					notice: notes.length ? notes.join(' ') : null,
+				};
+			});
 		},
-		[imagesAsFiles, overflowImagesAsFiles],
+		[imagesAsFiles, overflowImagesAsFiles, setNotice],
 	);
 	const addImages = useCallback((added: ImageAttachment[]) => {
-		const room = MAX_IMAGES - latest.current.images.length;
-		setImages((before) => [...before, ...added.slice(0, Math.max(0, MAX_IMAGES - before.length))]);
-		setNotice(added.length > room ? `Up to ${MAX_IMAGES} images per message.` : null);
+		setState((before) => {
+			const room = Math.max(0, MAX_IMAGES - before.images.length);
+			return {
+				...before,
+				images: [...before.images, ...added.slice(0, room)],
+				notice: added.length > room ? `Up to ${MAX_IMAGES} images per message.` : null,
+			};
+		});
 	}, []);
 	const onPaste = useCallback(
 		(event: ClipboardEvent<HTMLElement>) => {
@@ -136,15 +162,16 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 	};
 	const take = useCallback(() => {
 		const taken = latest.current;
-		setImages([]);
-		setFiles([]);
-		setNotice(null);
+		setState({ images: [], files: [], notice: null });
 		return taken;
 	}, []);
 	/** Puts back both the failed send and any newer attachments, without dropping over-limit items. */
 	const restore = useCallback((taken: { images: ImageAttachment[]; files: FileAttachment[] }) => {
-		setImages((current) => [...taken.images, ...current]);
-		setFiles((current) => uniqueFiles([...taken.files, ...current]));
+		setState((current) => ({
+			...current,
+			images: [...taken.images, ...current.images],
+			files: uniqueFiles([...taken.files, ...current.files]),
+		}));
 	}, []);
 	const limitError = images.length > MAX_IMAGES ? `Remove ${images.length - MAX_IMAGES} image${images.length - MAX_IMAGES === 1 ? '' : 's'} to send (up to ${MAX_IMAGES} per message).` : files.length > MAX_FILES ? `Remove ${files.length - MAX_FILES} file${files.length - MAX_FILES === 1 ? '' : 's'} to send (up to ${MAX_FILES} per message).` : null;
 	return {
@@ -160,8 +187,8 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 		dropZone,
 		take,
 		restore,
-		removeImage: (id: string) => setImages((current) => current.filter((image) => image.id !== id)),
-		removeFile: (id: string) => setFiles((current) => current.filter((file) => file.id !== id)),
+		removeImage: (id: string) => setState((current) => ({ ...current, images: current.images.filter((image) => image.id !== id) })),
+		removeFile: (id: string) => setState((current) => ({ ...current, files: current.files.filter((file) => file.id !== id) })),
 		count: images.length + files.length,
 		full: images.length >= MAX_IMAGES && files.length >= MAX_FILES,
 	};
