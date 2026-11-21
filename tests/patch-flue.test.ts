@@ -63,6 +63,18 @@ function assertCompaction(definition, label) {
 	for (const key of Object.keys(definition)) if (key !== "reserveTokens" && key !== "keepRecentTokens" && key !== "model") throw new Error(\`[flue] \${label} compaction received unknown field "\${key}".\`);
 }`;
 
+const FLUSH = `const CANONICAL_FLUSH_DELAY_MS = 1e3;
+var ConversationRecordWriter = class ConversationRecordWriter {
+	batchesSinceFoldCheckpoint = 0;
+	record(records, writeFoldCheckpoint) {
+		this.batchesSinceFoldCheckpoint += 1;
+		if (this.batchesSinceFoldCheckpoint >= 64) {
+			this.batchesSinceFoldCheckpoint = 0;
+			writeFoldCheckpoint();
+		}
+	}
+};`;
+
 /** A runtime laid out as Flue's is: the providers at the top, the Node adapter under node/. */
 function runtime(name: string, providers: string, open = OPEN): URL {
 	const dist = path.join(dir, name);
@@ -71,6 +83,7 @@ function runtime(name: string, providers: string, open = OPEN): URL {
 	writeFileSync(path.join(dist, 'builtin-providers-x.mjs'), providers);
 	writeFileSync(path.join(dist, 'conversation-store-x.mjs'), COMPACTION);
 	writeFileSync(path.join(dist, 'dispatch-x.mjs'), SUMMARY);
+	writeFileSync(path.join(dist, 'sql-agent-execution-store-x.mjs'), FLUSH);
 	writeFileSync(path.join(dist, 'node', 'index.mjs'), open);
 	return pathToFileURL(`${dist}/`);
 }
@@ -253,6 +266,32 @@ test('a write that reads first waits for another connection\'s lock once patched
 	db.close();
 });
 
+test('streamed deltas flush at 100ms while keeping fold checkpoint cadence independent of live flush rate', async () => {
+	const dist = runtime('flush', `${BROKEN}\n${TASK}`);
+	assert.equal((await patchFlueEach(dist))['smoother live streaming'], 'patched');
+	const patched = readFileSync(new URL('sql-agent-execution-store-x.mjs', dist), 'utf8');
+	assert.match(patched, /const CANONICAL_FLUSH_DELAY_MS = 100;/);
+	assert.doesNotMatch(patched, /const CANONICAL_FLUSH_DELAY_MS = 1e3;/);
+	assert.equal((await patchFlueEach(dist))['smoother live streaming'], 'already');
+
+	// Evaluate the patched ConversationRecordWriter checkpoint weight behavior directly.
+	const Writer = new Function(`${patched}\nreturn ConversationRecordWriter;`)() as new () => {
+		batchesSinceFoldCheckpoint: number;
+		record: (records: Array<{ type: string }>, writeFoldCheckpoint: () => void) => void;
+	};
+	const writer = new Writer();
+	let checkpoints = 0;
+	for (let i = 0; i < 64; i++) writer.record([{ type: 'assistant_text_delta' }], () => checkpoints++);
+	assert.equal(checkpoints, 0, '64 delta-only batches must not trigger a full fold checkpoint');
+	for (let i = 0; i < 576; i++) writer.record([{ type: 'assistant_text_delta' }], () => checkpoints++);
+	assert.equal(checkpoints, 1, '640 delta-only batches (~64s at 100ms) trigger one fold checkpoint');
+
+	const nonDeltaWriter = new Writer();
+	let nonDeltaCheckpoints = 0;
+	for (let i = 0; i < 64; i++) nonDeltaWriter.record([{ type: 'tool_result' }], () => nonDeltaCheckpoints++);
+	assert.equal(nonDeltaCheckpoints, 1, '64 non-delta batches keep the original checkpoint threshold');
+});
+
 test('the installed runtime is patched', () => {
 	const dist = new URL('../node_modules/@flue/runtime/dist/', import.meta.url);
 	const sources = readdirSync(dist).filter((name) => name.endsWith('.mjs')).map((name) => readFileSync(new URL(name, dist), 'utf8'));
@@ -262,6 +301,8 @@ test('the installed runtime is patched', () => {
 	assert.doesNotMatch(swap, /compaction: this\.config\.compaction\n/);
 	assert.ok(sources.some((source) => source.includes('compactionConfig?.reasoning ? { ...sessionModel, summaryReasoning: compactionConfig.reasoning }')));
 	assert.ok(sources.some((source) => source.includes('completionOptions.reasoning = model.summaryReasoning ?? "high"')));
+	assert.ok(sources.some((source) => source.includes('const CANONICAL_FLUSH_DELAY_MS = 100;')));
+	assert.ok(sources.some((source) => source.includes('records.every((r) => r.type === "assistant_text_delta" || r.type === "assistant_reasoning_delta") ? 0.1 : 1')));
 	const node = readFileSync(new URL('node/index.mjs', dist), 'utf8');
 	assert.match(node, /busy_timeout=5000/);
 	assert.match(node, /db\.exec\("BEGIN IMMEDIATE"\);/);

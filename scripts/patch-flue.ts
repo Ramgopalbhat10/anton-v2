@@ -50,6 +50,15 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
  * seconds. Its transactions now open with BEGIN IMMEDIATE, which takes the
  * lock first, where the timeout applies. Flue has one connection a process,
  * so a transaction that only reads loses nothing by it.
+ *
+ * Smoother live streaming. Flue's ConversationRecordWriter coalesces streamed
+ * text and thinking deltas for 1000 ms (`CANONICAL_FLUSH_DELAY_MS = 1e3`)
+ * before appending to the durable stream and notifying SSE observers, causing
+ * replies to jump a paragraph at a time. Lowering the delay to 100 ms delivers
+ * deltas continuously while keeping SQLite write load bounded; weighting
+ * delta-only batches at 0.1 toward the 64-batch fold checkpoint keeps full
+ * conversation checkpoint writes at the same ~64-second cadence instead of
+ * triggering them 10x as often.
  */
 
 type Patch = { name: string; dir: string; marker: string; fixes: Array<[string, string]> };
@@ -111,6 +120,20 @@ const PATCHES: Patch[] = [
 		dir: 'node/',
 		marker: 'function createNodeTransactionSync(',
 		fixes: [['db.exec("BEGIN");', 'db.exec("BEGIN IMMEDIATE");']],
+	},
+	{
+		name: 'smoother live streaming',
+		dir: '',
+		marker: 'const CANONICAL_FLUSH_DELAY_MS =',
+		fixes: [
+			['const CANONICAL_FLUSH_DELAY_MS = 1e3;', 'const CANONICAL_FLUSH_DELAY_MS = 100;'],
+			// Upgrade from the earlier 50ms patch value if already applied in node_modules.
+			['const CANONICAL_FLUSH_DELAY_MS = 50;', 'const CANONICAL_FLUSH_DELAY_MS = 100;'],
+			[
+				'this.batchesSinceFoldCheckpoint += 1;',
+				'this.batchesSinceFoldCheckpoint += records.every((r) => r.type === "assistant_text_delta" || r.type === "assistant_reasoning_delta") ? 0.1 : 1;',
+			],
+		],
 	},
 ];
 

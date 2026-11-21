@@ -503,17 +503,251 @@ describe('threads', () => {
 		for (const file of files) expect(message).toContain(`path="${file.name}"`);
 	});
 
-	it('saves a new thread’s attached files, images too, to the project Library and puts them in its brief', async () => {
+	it('previews attached images in the new thread composer, uploads original File objects directly, and puts them in its brief', async () => {
+		const atobSpy = vi.spyOn(globalThis, 'atob');
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			const image = new File(['png'], 'mock.png', { type: 'image/png' });
+			const spec = new File(['spec'], 'spec.txt', { type: 'text/plain' });
+			fireEvent.paste(box, {
+				clipboardData: {
+					files: [image, spec],
+					getData: () => '',
+				},
+			});
+			const preview = await screen.findByRole('img', { name: 'mock.png' });
+			expect(preview.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+			expect(screen.queryByText('mock.png')).toBeNull();
+			expect(screen.getByText('spec.txt')).toBeTruthy();
+			api.attachToProject
+				.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null })
+				.mockResolvedValueOnce({ name: 'spec.txt', path: 'spec.txt', size: 4, kind: 'text', text: 'spec', cut: null });
+			await userEvent.type(box, 'Build this screen');
+			await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+			await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+			expect(atobSpy).not.toHaveBeenCalled();
+			expect(api.attachToProject.mock.calls[0]?.[1]).toBe(image);
+			expect(api.attachToProject.mock.calls[1]?.[1]).toBe(spec);
+			const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
+			expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
+			expect(brief).toContain('<attachment name="spec.txt" path="spec.txt" kind="text" size="4" library="project">');
+		} finally {
+			atobSpy.mockRestore();
+		}
+	});
+
+	it('previews the first four PNGs and retains overflow PNGs as Library attachments so all five upload', async () => {
 		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
 		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
-		fireEvent.paste(box, { clipboardData: { files: [new File(['png'], 'mock.png', { type: 'image/png' })], getData: () => '' } });
-		expect(await screen.findByText('mock.png')).toBeTruthy();
-		api.attachToProject.mockResolvedValueOnce({ name: 'mock.png', path: 'mock.png', size: 3, kind: 'PNG image', text: null, cut: null });
-		await userEvent.type(box, 'Build this screen');
+		const pngs = Array.from({ length: 5 }, (_, index) => new File([`png-${index + 1}`], `shot-${index + 1}.png`, { type: 'image/png' }));
+		fireEvent.paste(box, {
+			clipboardData: {
+				files: pngs,
+				getData: () => '',
+			},
+		});
+		await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(4));
+		expect(screen.getByText('shot-5.png')).toBeTruthy();
+		expect(screen.queryByText(/Up to 4 images/)).toBeNull();
+		for (const file of pngs) {
+			api.attachToProject.mockResolvedValueOnce({ name: file.name, path: file.name, size: file.size, kind: 'PNG image', text: null, cut: null });
+		}
+		await userEvent.type(box, 'Inspect all five');
 		await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
 		await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+		expect(api.attachToProject).toHaveBeenCalledTimes(5);
+		const uploaded = api.attachToProject.mock.calls.map((call) => call[1] as File);
+		expect(uploaded).toEqual(pngs);
 		const brief = (api.startThread.mock.calls[0] as unknown as [string, { brief: string }])[1].brief;
-		expect(brief).toMatch(/^Build this screen\n\n<attachment name="mock\.png" path="mock\.png" kind="PNG image" size="3" library="project">/);
+		for (const file of pngs) expect(brief).toContain(`path="${file.name}"`);
+	});
+
+	it('allocates preview and file slots atomically across overlapping PNG reads without dropping files', async () => {
+		const pending: Array<() => void> = [];
+		const OriginalFileReader = globalThis.FileReader;
+		class DeferredFileReader {
+			result: string | ArrayBuffer | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL(file: File) {
+				pending.push(() => {
+					this.result = `data:${file.type || 'image/png'};base64,cG5n`;
+					this.onload?.();
+				});
+			}
+		}
+		vi.stubGlobal('FileReader', DeferredFileReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			const batch1 = Array.from({ length: 3 }, (_, i) => new File([`a-${i}`], `batch1-${i + 1}.png`, { type: 'image/png' }));
+			const batch2 = Array.from({ length: 3 }, (_, i) => new File([`b-${i}`], `batch2-${i + 1}.png`, { type: 'image/png' }));
+			fireEvent.paste(box, { clipboardData: { files: batch1, getData: () => '' } });
+			fireEvent.paste(box, { clipboardData: { files: batch2, getData: () => '' } });
+			expect(pending).toHaveLength(6);
+			// Resolve both overlapping batches in the same tick before React commits either one.
+			while (pending.length) pending.shift()!();
+			await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(4));
+			expect(screen.getByText('batch2-2.png')).toBeTruthy();
+			expect(screen.getByText('batch2-3.png')).toBeTruthy();
+			expect(screen.queryByText(/Up to 4 images/)).toBeNull();
+			for (const file of [...batch1, ...batch2]) {
+				api.attachToProject.mockResolvedValueOnce({ name: file.name, path: file.name, size: file.size, kind: 'PNG image', text: null, cut: null });
+			}
+			await userEvent.type(box, 'Check all six');
+			await userEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+			await waitFor(() => expect(api.startThread).toHaveBeenCalled());
+			expect(api.attachToProject).toHaveBeenCalledTimes(6);
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
+	});
+
+	it('keeps ordinary files in selection order so overflow PNGs never displace earlier text files', async () => {
+		withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+		const texts = Array.from({ length: 10 }, (_, i) => new File([`t-${i}`], `doc-${i + 1}.txt`, { type: 'text/plain' }));
+		const pngs = Array.from({ length: 5 }, (_, i) => new File([`p-${i}`], `img-${i + 1}.png`, { type: 'image/png' }));
+		fireEvent.paste(box, { clipboardData: { files: [...texts, ...pngs], getData: () => '' } });
+		await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(4));
+		for (const file of texts) expect(screen.getByText(file.name)).toBeTruthy();
+		expect(screen.queryByText('img-5.png')).toBeNull();
+		expect(screen.getByText('Up to 10 files per message.')).toBeTruthy();
+	});
+
+	it('isolates an unreadable image preview failure while keeping the rest of the batch', async () => {
+		const OriginalFileReader = globalThis.FileReader;
+		class PartiallyFailingFileReader {
+			result: string | ArrayBuffer | null = null;
+			error: Error | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL(file: File) {
+				queueMicrotask(() => {
+					if (file.name === 'broken.png') {
+						this.error = new Error('unreadable');
+						this.onerror?.();
+					} else {
+						this.result = 'data:image/png;base64,cG5n';
+						this.onload?.();
+					}
+				});
+			}
+		}
+		vi.stubGlobal('FileReader', PartiallyFailingFileReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			fireEvent.paste(box, {
+				clipboardData: {
+					files: [
+						new File(['bad'], 'broken.png', { type: 'image/png' }),
+						new File(['ok'], 'good.png', { type: 'image/png' }),
+						new File(['hello'], 'valid.txt', { type: 'text/plain' }),
+					],
+					getData: () => '',
+				},
+			});
+			expect(await screen.findByRole('img', { name: 'good.png' })).toBeTruthy();
+			expect(screen.getByText('valid.txt')).toBeTruthy();
+			expect(screen.getByText(/Could not read broken\.png\./)).toBeTruthy();
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
+	});
+
+	it('preserves a failed preview warning when a concurrent valid read resolves afterwards, and clears it on a subsequent action', async () => {
+		const pending = new Map<string, () => void>();
+		const OriginalFileReader = globalThis.FileReader;
+		class ControlledFileReader {
+			result: string | ArrayBuffer | null = null;
+			error: Error | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL(file: File) {
+				pending.set(file.name, () => {
+					if (file.name === 'broken.png') {
+						this.error = new Error('unreadable');
+						this.onerror?.();
+					} else {
+						this.result = 'data:image/png;base64,cG5n';
+						this.onload?.();
+					}
+				});
+			}
+		}
+		vi.stubGlobal('FileReader', ControlledFileReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			fireEvent.paste(box, { clipboardData: { files: [new File(['bad'], 'broken.png', { type: 'image/png' })], getData: () => '' } });
+			fireEvent.paste(box, { clipboardData: { files: [new File(['ok'], 'valid.png', { type: 'image/png' })], getData: () => '' } });
+			expect(pending.has('broken.png')).toBe(true);
+			expect(pending.has('valid.png')).toBe(true);
+
+			// Resolve the failing batch first and the valid concurrent batch second before React commits.
+			pending.get('broken.png')!();
+			pending.get('valid.png')!();
+
+			expect(await screen.findByRole('img', { name: 'valid.png' })).toBeTruthy();
+			expect(screen.getByText(/Could not read broken\.png\./)).toBeTruthy();
+
+			// A new attachment action after both overlapping reads settled clears the previous warning.
+			fireEvent.paste(box, { clipboardData: { files: [new File(['clean'], 'notes.txt', { type: 'text/plain' })], getData: () => '' } });
+			expect(await screen.findByText('notes.txt')).toBeTruthy();
+			expect(screen.queryByText(/Could not read broken\.png\./)).toBeNull();
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
+	});
+
+	it('applies remaining ordinary-file capacity at commit time when an existing chip is removed while an image preview loads', async () => {
+		let finishPng: (() => void) | null = null;
+		const OriginalFileReader = globalThis.FileReader;
+		class DeferredPngReader {
+			result: string | ArrayBuffer | null = null;
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL() {
+				finishPng = () => {
+					this.result = 'data:image/png;base64,cG5n';
+					this.onload?.();
+				};
+			}
+		}
+		vi.stubGlobal('FileReader', DeferredPngReader);
+		try {
+			withRouter(() => <NewThreadForm space={space} onDone={() => {}} />);
+			const box = await screen.findByRole('textbox', { name: /What should this thread do/ });
+			const existing = Array.from({ length: 10 }, (_, i) => new File([`f-${i}`], `file-${i + 1}.txt`, { type: 'text/plain' }));
+			fireEvent.paste(box, { clipboardData: { files: existing, getData: () => '' } });
+			expect(await screen.findByText('file-10.txt')).toBeTruthy();
+
+			// With 10 file chips attached, pick a PNG + replacement text file together.
+			fireEvent.paste(box, {
+				clipboardData: {
+					files: [
+						new File(['png'], 'shot.png', { type: 'image/png' }),
+						new File(['new'], 'replacement.txt', { type: 'text/plain' }),
+					],
+					getData: () => '',
+				},
+			});
+			expect(finishPng).not.toBeNull();
+
+			// Remove an existing file chip while the PNG preview is still loading.
+			fireEvent.click(screen.getByRole('button', { name: 'Remove file-10.txt' }));
+			expect(screen.queryByText('file-10.txt')).toBeNull();
+
+			// Once the PNG read resolves, both shot.png and replacement.txt attach with no file-limit warning.
+			finishPng!();
+			expect(await screen.findByRole('img', { name: 'shot.png' })).toBeTruthy();
+			expect(screen.getByText('replacement.txt')).toBeTruthy();
+			expect(screen.queryByText(/Up to 10 files/)).toBeNull();
+		} finally {
+			vi.stubGlobal('FileReader', OriginalFileReader);
+		}
 	});
 
 	it('lists threads in the project sidebar by state, needs-you first, done folded', async () => {

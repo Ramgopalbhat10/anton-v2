@@ -496,8 +496,15 @@ export function SegmentedItem({
 }
 
 export function Tabs({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+	const dragScroll = useDragScroll();
 	return (
-		<div data-noscrollbar role="tablist" aria-label={label} className={cn('flex gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]', className)}>
+		<div
+			{...dragScroll}
+			data-noscrollbar
+			role="tablist"
+			aria-label={label}
+			className={cn('flex min-w-0 gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]', className)}
+		>
 			{children}
 		</div>
 	);
