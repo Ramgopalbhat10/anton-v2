@@ -58,6 +58,8 @@ export type Session = {
 	resolvedAt?: string | null;
 	/** The brief a queued thread starts with once a slot frees. */
 	brief?: string | null;
+	/** In the task list, the texts cut to a row's length; `GET /api/sessions/:id` sends them whole. */
+	cut?: Array<'lastReply' | 'lastInput' | 'brief' | 'plan'>;
 	/** The start of the thread's latest reply. */
 	lastReply?: string | null;
 	/** Someone else's pull request (`prUrl`) the task reviews; null for a task doing its own work. */
@@ -123,7 +125,7 @@ export const sessionsApi = {
 	wakeSession: (id: string) => post<{ waking: boolean }>(`/api/sessions/${id}/wake`),
 	// Tasks still being made are listed too, as the server lists them only once made.
 	sessions: async () => {
-		const data = await json<{ sessions: Session[] }>('/api/sessions');
+		const data = await json<{ sessions: Session[] }>('/api/sessions?view=rows');
 		return { ...data, sessions: withStarting(data.sessions) };
 	},
 	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
