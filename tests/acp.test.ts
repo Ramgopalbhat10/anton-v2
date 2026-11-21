@@ -632,8 +632,57 @@ test('readUsage takes cached tokens out of an input total that already holds the
 		cacheRead: 22_528,
 		cacheWrite: 0,
 	});
-	assert.deepEqual(readUsage({ used: 50_000, size: 262_144 }), { input: 50_000, output: 0, cacheRead: 0, cacheWrite: 0 });
+	assert.deepEqual(readUsage({ used: 50_000, size: 262_144 }), { input: 50_000, output: 0, cacheRead: 0, cacheWrite: 0, occupancy: true });
 	assert.equal(readUsage({ sessionUpdate: 'usage_update' }), null);
+});
+
+test('readUsage counts reasoning as output unless the grand total already holds it', async () => {
+	const { readUsage } = await import('../src/providers/acp/runtime.ts');
+	assert.equal(readUsage({ inputTokens: 1000, outputTokens: 40, thoughtTokens: 60, totalTokens: 1100 })?.output, 100);
+	assert.equal(readUsage({ inputTokens: 1000, outputTokens: 40, thoughtTokens: 60 })?.output, 100);
+	assert.equal(readUsage({ inputTokens: 1000, outputTokens: 100, thoughtTokens: 60, totalTokens: 1100 })?.output, 100);
+});
+
+test('settle leaves the last step what the turn total has that its steps did not book', async () => {
+	const { settle } = await import('../src/providers/acp/runtime.ts');
+	const total = { input: 30_000, output: 900, cacheRead: 120_000, cacheWrite: 0 };
+	// Earlier steps booked 100K of context as input; 70K of it was cached, so it comes off the cache read.
+	assert.deepEqual(settle(total, { input: 100_000, output: 0, cacheRead: 0, cacheWrite: 0 }), { input: 0, output: 900, cacheRead: 50_000, cacheWrite: 0 });
+	assert.deepEqual(settle(total, { input: 10_000, output: 0, cacheRead: 0, cacheWrite: 0 }), { input: 20_000, output: 900, cacheRead: 120_000, cacheWrite: 0 });
+	assert.deepEqual(settle(total, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }), total);
+});
+
+test('an agent that reports only each call\'s context gets the turn\'s output and cache on its last step', async () => {
+	const delivered: RuntimeToolOutput[] = [];
+	const { acp, mcp, conv, seen } = rig(async () => {
+		await until(() => delivered.length > 0, 'a tool result');
+		return delivered.shift()!;
+	});
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [{ id: 'devin-browser' }] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [{ id: 'model', currentValue: 'swe-2-high', options: [{ value: 'swe-2-high' }] }] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const promptId = parse(acp.sent).find((m) => m.method === 'session/prompt')!.id;
+	const deltas = () => seen.filter((e): e is Extract<RuntimeEvent, { type: 'message_delta' }> => e.type === 'message_delta');
+	// The first call's context arrives while the session's own note keeps a step open.
+	acp.incoming.push(update('s', { sessionUpdate: 'usage_update', used: 20_000, size: 1_000_000 }));
+	await until(() => deltas().length === 1, 'the first call\'s context');
+	const called = mcpCall(mcp, 'bash', { command: 'ls' });
+	await until(() => seen.some((e) => e.type === 'message_stop'), 'the tool step to close');
+	delivered.push({ content: [{ type: 'text', text: 'ok' }], isError: false });
+	await called;
+	// The second call reports before any output, between steps: it opens that call's step rather than being lost.
+	const startsBefore = seen.filter((e) => e.type === 'message_start').length;
+	acp.incoming.push(update('s', { sessionUpdate: 'usage_update', used: 25_000, size: 1_000_000 }));
+	await until(() => seen.filter((e) => e.type === 'message_start').length === startsBefore + 1, 'the second call\'s step');
+	assert.deepEqual(seen.at(-1), { type: 'message_delta', stopReason: null, usage: { input: 25_000, output: 0, cacheRead: 0, cacheWrite: 0 } });
+	acp.incoming.push(chunk('s', 'agent_message_chunk', 'Done.'));
+	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn', usage: { inputTokens: 45_000, cachedReadTokens: 18_000, outputTokens: 300, thoughtTokens: 200, totalTokens: 45_500 } } }));
+	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
+	// The first step booked 20K of context as input: of the total's 27K uncached, 7K is left for the last step, with all the output and cache.
+	assert.deepEqual(deltas().at(-1)?.usage, { input: 7000, output: 500, cacheRead: 18_000, cacheWrite: 0 });
+	conv.close();
 });
 
 test('a turn measured call by call does not book its summed total onto the last step', async () => {
