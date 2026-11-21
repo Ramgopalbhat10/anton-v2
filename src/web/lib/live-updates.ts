@@ -1,6 +1,7 @@
-import { type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
+import { focusManager, type QueryClient, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { AgentNow } from '@/lib/api/sessions';
+import type { AgentNow, Session } from '@/lib/api/sessions';
+import { taskQueries } from '@/lib/task-queries';
 
 type Change =
 	| { kind: 'sessions' }
@@ -54,7 +55,8 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'task' && change.what === 'pr-metadata') return [['pr-metadata', change.id]];
 	if (change.kind === 'task' && change.what === 'settled') return [['settled', change.id]];
 	// A model turn ended: the context meter, and what the task and the day have spent, moved. Its tool calls send their own `files`.
-	if (change.kind === 'task' && change.what === 'usage') return [['context', change.id], ['session', change.id], ['sessions'], ['budget'], ['usage'], ['space-usage']];
+	// The task's row in the list is read again on its own (`rowsFor`): a reply makes a model turn every few seconds.
+	if (change.kind === 'task' && change.what === 'usage') return [['context', change.id], ['session', change.id], ['budget'], ['usage'], ['space-usage']];
 	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;
 	return [
@@ -81,20 +83,57 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	];
 }
 
+/** Tasks whose row in the list a change moves, read alone and written into the list rather than reading the whole list again. */
+export function rowsFor(change: Exclude<Change, { kind: 'now' }>): string[] {
+	return change.kind === 'task' && change.what === 'usage' ? [change.id] : [];
+}
+
 /** Changes that land together refetch once. */
 const SETTLE_MS = 300;
 
-function refetcher(queryClient: QueryClient) {
+export function refetcher(queryClient: QueryClient) {
 	const pending = new Map<string, QueryKey>();
+	const rows = new Set<string>();
 	let timer: ReturnType<typeof setTimeout> | null = null;
-	return (keys: QueryKey[]) => {
+	return (keys: QueryKey[], ids: string[] = []) => {
 		for (const key of keys) pending.set(JSON.stringify(key), key);
+		for (const id of ids) rows.add(id);
 		timer ??= setTimeout(() => {
 			timer = null;
 			for (const key of pending.values()) void queryClient.invalidateQueries({ queryKey: key });
 			pending.clear();
+			const list = queryClient.getQueryData<{ sessions: Session[] }>(['sessions']);
+			// Joins a read the invalidation above started for an open task; `keepTasksInStep` writes the answer into the list.
+			for (const id of rows) if (list?.sessions.some((session) => session.id === id)) void queryClient.fetchQuery({ ...taskQueries.session(id), staleTime: 0 }).catch(() => undefined);
+			rows.clear();
 		}, SETTLE_MS);
 	};
+}
+
+/** Back from this long away, a page reads again what it shows: a phone may have frozen the page and its stream meanwhile. */
+export const AWAY_REFETCH_MS = 60_000;
+
+const stream = { open: false, hiddenAt: 0 };
+
+/** Coming back to the tab refetches only when changes may have been missed; while the stream is up its events kept the page current. */
+export function refetchOnReturn(awayMs: number, streamOpen: boolean): boolean {
+	return !streamOpen || awayMs >= AWAY_REFETCH_MS;
+}
+
+/** Replaces TanStack's refetch on every return to the tab. */
+export function installReturnRefetch(): void {
+	focusManager.setEventListener((handleFocus) => {
+		const changed = () => {
+			if (document.visibilityState === 'hidden') {
+				stream.hiddenAt = Date.now();
+				return;
+			}
+			if (refetchOnReturn(stream.hiddenAt ? Date.now() - stream.hiddenAt : 0, stream.open)) handleFocus();
+			stream.hiddenAt = 0;
+		};
+		document.addEventListener('visibilitychange', changed);
+		return () => document.removeEventListener('visibilitychange', changed);
+	});
 }
 
 /** Refetches just what the server says changed; after a dropped connection everything is refetched, since changes may have been missed. */
@@ -111,15 +150,20 @@ export function useLiveUpdates() {
 				return;
 			}
 			if (change.kind === 'page') for (const listener of pageListeners) listener(change);
-			refetch(staleFor(change));
+			refetch(staleFor(change), rowsFor(change));
 		};
 		events.onerror = () => {
 			dropped = true;
+			stream.open = false;
 		};
 		events.onopen = () => {
 			if (dropped) void queryClient.invalidateQueries();
 			dropped = false;
+			stream.open = true;
 		};
-		return () => events.close();
+		return () => {
+			stream.open = false;
+			events.close();
+		};
 	}, [queryClient]);
 }

@@ -25,9 +25,14 @@ export function keepTasksInStep(queryClient: QueryClient, data: unknown, query: 
 	}
 }
 
+/** How long an answer serves another reader of the same query without asking again. */
+export const MOUNT_FRESH_MS = 5_000;
+
 export function appQueryClient(): QueryClient {
 	const queryClient: QueryClient = new QueryClient({
 		queryCache: new QueryCache({ onSuccess: (data, query) => keepTasksInStep(queryClient, data, query) }),
+		// Server events mark what changed stale whatever this says; it only stops readers that mount together on a page from each reading again.
+		defaultOptions: { queries: { staleTime: MOUNT_FRESH_MS } },
 	});
 	return queryClient;
 }
