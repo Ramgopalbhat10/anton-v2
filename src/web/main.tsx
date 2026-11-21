@@ -21,10 +21,12 @@ import { TitleTips } from '@/components/shell/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type PanelName, panels } from '@/components/workspace/vm-panel';
 import { CATEGORIES } from '@/lib/artifacts';
+import { installReturnRefetch } from '@/lib/live-updates';
 import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
 const queryClient = appQueryClient();
+installReturnRefetch();
 bootTheme();
 
 /* Home and a task are in the first download; every other page loads its code on first visit. */
