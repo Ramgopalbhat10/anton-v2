@@ -676,12 +676,28 @@ test('an agent that reports only each call\'s context gets the turn\'s output an
 	const startsBefore = seen.filter((e) => e.type === 'message_start').length;
 	acp.incoming.push(update('s', { sessionUpdate: 'usage_update', used: 25_000, size: 1_000_000 }));
 	await until(() => seen.filter((e) => e.type === 'message_start').length === startsBefore + 1, 'the second call\'s step');
-	assert.deepEqual(seen.at(-1), { type: 'message_delta', stopReason: null, usage: { input: 25_000, output: 0, cacheRead: 0, cacheWrite: 0 } });
+	// Its 20K shared with the call before is booked as read from the cache.
+	assert.deepEqual(seen.at(-1), { type: 'message_delta', stopReason: null, usage: { input: 5000, output: 0, cacheRead: 20_000, cacheWrite: 0 } });
+	const again = mcpCall(mcp, 'bash', { command: 'pwd' });
+	await until(() => seen.filter((e) => e.type === 'message_stop').length === 2, 'the second tool step to close');
+	delivered.push({ content: [{ type: 'text', text: 'ok' }], isError: false });
+	await again;
+	acp.incoming.push(update('s', { sessionUpdate: 'usage_update', used: 30_000, size: 1_000_000 }));
 	acp.incoming.push(chunk('s', 'agent_message_chunk', 'Done.'));
-	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn', usage: { inputTokens: 45_000, cachedReadTokens: 18_000, outputTokens: 300, thoughtTokens: 200, totalTokens: 45_500 } } }));
+	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn', usage: { inputTokens: 75_000, cachedReadTokens: 45_000, outputTokens: 300, thoughtTokens: 200, totalTokens: 75_500 } } }));
 	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
-	// The first step booked 20K of context as input: of the total's 27K uncached, 7K is left for the last step, with all the output and cache.
-	assert.deepEqual(deltas().at(-1)?.usage, { input: 7000, output: 500, cacheRead: 18_000, cacheWrite: 0 });
+	// The steps booked 45K of context, 20K of it cached: the last step has the other 30K, 25K of it the rest of the cache.
+	assert.deepEqual(deltas().at(-1)?.usage, { input: 5000, output: 500, cacheRead: 25_000, cacheWrite: 0 });
+	// Each step's usage as the bridge folds it: every delta in the step assigned over the one before.
+	const steps: Partial<Record<string, number>>[] = [];
+	for (const e of seen) {
+		if (e.type === 'message_start') steps.push({ ...e.usage });
+		if (e.type === 'message_delta') Object.assign(steps.at(-1)!, e.usage);
+	}
+	const sum = (key: string) => steps.reduce((n, u) => n + (u[key] ?? 0), 0);
+	assert.equal(sum('cacheRead'), 45_000, 'the turn reads as cached as its total says');
+	assert.equal(sum('input'), 30_000);
+	assert.equal(sum('output'), 500);
 	conv.close();
 });
 
