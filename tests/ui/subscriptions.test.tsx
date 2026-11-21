@@ -58,6 +58,7 @@ const api = vi.hoisted(() => ({
 	cancelSubscriptionLogin: vi.fn(),
 	importSubscriptionLogin: vi.fn(),
 	setSubscriptionOptions: vi.fn(),
+	setSubscriptionClient: vi.fn(),
 	refreshSubscriptionModels: vi.fn(),
 	disconnectSubscription: vi.fn(),
 	connectSubscriptionKey: vi.fn(),
@@ -137,6 +138,30 @@ describe('Subscriptions', () => {
 		expect(await screen.findByLabelText('Code from Devin')).toBeTruthy();
 		expect(screen.queryByText(/Claude/)).toBeNull();
 		open.mockRestore();
+	});
+
+	it('asks for Antigravity’s OAuth client once, then shows it filled in and lets it be removed', async () => {
+		const empty = { clientId: '', clientSecret: '' };
+		const antigravity = plan({ id: 'antigravity', name: 'Antigravity', kind: 'runtime', gateway: 'antigravity', signIn: 'Sign in with Google', oauthClient: empty });
+		const saved = { clientId: 'public.apps.googleusercontent.com', clientSecret: 'public-secret' };
+		api.subscriptions.mockResolvedValue({ subscriptions: [antigravity] });
+		api.setSubscriptionClient.mockResolvedValueOnce({ ...antigravity, oauthClient: saved }).mockResolvedValueOnce(antigravity);
+		page();
+		const id = (await screen.findByLabelText('Antigravity client id')) as HTMLInputElement;
+		const secret = screen.getByLabelText('Antigravity client secret') as HTMLInputElement;
+		expect([id.value, secret.value]).toEqual(['', '']);
+		expect(screen.getByText('Required')).toBeTruthy();
+		const save = screen.getByRole('button', { name: 'Save client' }) as HTMLButtonElement;
+		fireEvent.change(id, { target: { value: saved.clientId } });
+		expect(save.disabled).toBe(true);
+		fireEvent.change(secret, { target: { value: saved.clientSecret } });
+		fireEvent.click(save);
+		await waitFor(() => expect(api.setSubscriptionClient).toHaveBeenCalledWith('antigravity', saved));
+		expect(await screen.findByText('Saved', { selector: 'span' })).toBeTruthy();
+		expect([id.value, secret.value]).toEqual([saved.clientId, saved.clientSecret]);
+		fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+		await waitFor(() => expect(api.setSubscriptionClient).toHaveBeenLastCalledWith('antigravity', empty));
+		await waitFor(() => expect(id.value).toBe(''));
 	});
 
 	it('keeps a refused code’s message after the sign-in ends', async () => {

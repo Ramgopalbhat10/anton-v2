@@ -8,8 +8,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { config } from '../../config.ts';
-import type { RuntimeSignIn } from '../../core/ports.ts';
+import type { OAuthClient, RuntimeSignIn } from '../../core/ports.ts';
 
 /** agy's own scope list (what `agy acp --login` requests); aicode and openid are its additions. */
 const SCOPES = [
@@ -24,16 +23,6 @@ const SCOPES = [
 // The redirect agy's own login uses; its hosted page shows the code to paste back.
 const REDIRECT_URI = 'https://antigravity.google/oauth-callback';
 const TIMEOUT_MS = 15_000;
-
-// The client is agy's public installed-app registration, kept in env so the
-// repo carries no vendor credential; every function that trades codes or
-// refreshes tokens needs it.
-function oauthClient(): { id: string; secret: string } {
-	const id = config.antigravity.oauthClientId;
-	const secret = config.antigravity.oauthClientSecret;
-	if (!id || !secret) throw new Error('Antigravity OAuth is not configured: set ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET (agy’s public installed-app client) and try again.');
-	return { id, secret };
-}
 
 const base64url = (bytes: Buffer) => bytes.toString('base64url');
 
@@ -138,13 +127,13 @@ async function readStored(file: string): Promise<StoredToken | null> {
 	}
 }
 
-export function antigravitySignIn(file: string): RuntimeSignIn {
-	const client = oauthClient();
+/** `client` is agy's public installed-app client, which Settings keeps: agy refreshes the token file with it. */
+export function antigravitySignIn(file: string, client: OAuthClient): RuntimeSignIn {
 	const verifier = base64url(randomBytes(32));
 	const state = encodeState(verifier);
 	const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 	url.search = new URLSearchParams({
-		client_id: client.id,
+		client_id: client.clientId,
 		response_type: 'code',
 		redirect_uri: REDIRECT_URI,
 		scope: SCOPES.join(' '),
@@ -175,8 +164,8 @@ export function antigravitySignIn(file: string): RuntimeSignIn {
 			const token = await requestToken(
 				new URLSearchParams({
 					grant_type: 'authorization_code',
-					client_id: client.id,
-					client_secret: client.secret,
+					client_id: client.clientId,
+					client_secret: client.clientSecret,
 					code,
 					code_verifier: decodeState(callbackState) || verifier,
 					redirect_uri: REDIRECT_URI,
@@ -194,13 +183,12 @@ export function antigravitySignIn(file: string): RuntimeSignIn {
  * token file is never written here — agy owns it and may rotate the refresh
  * token; callers keep the result in memory only.
  */
-export async function antigravityRefresh(refreshToken: string): Promise<{ accessToken: string; expiresIn: number }> {
-	const client = oauthClient();
+export async function antigravityRefresh(refreshToken: string, client: OAuthClient): Promise<{ accessToken: string; expiresIn: number }> {
 	const token = await requestToken(
 		new URLSearchParams({
 			grant_type: 'refresh_token',
-			client_id: client.id,
-			client_secret: client.secret,
+			client_id: client.clientId,
+			client_secret: client.clientSecret,
 			refresh_token: refreshToken,
 		}),
 	);

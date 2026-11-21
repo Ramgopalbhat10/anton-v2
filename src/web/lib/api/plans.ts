@@ -86,6 +86,8 @@ export type Subscription = {
 	envVar?: string | null;
 	/** Runtimes whose agent container placement is configurable: 'sidecar' shares one anchor sandbox, 'sandbox' is dedicated per conversation. */
 	isolation?: 'sidecar' | 'sandbox' | null;
+	/** The OAuth client a runtime signs in on, when Settings keeps one; empty strings until it is saved. */
+	oauthClient?: { clientId: string; clientSecret: string } | null;
 };
 export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
 
@@ -105,6 +107,8 @@ export const plansApi = {
 	finishSubscriptionLogin: (id: string, callbackUrl: string) => post<Subscription>(`/api/subscriptions/${id}/login/complete`, { callbackUrl }),
 	importSubscriptionLogin: (id: string, credential: string) => post<Subscription>(`/api/subscriptions/${id}/import`, { credential }),
 	connectSubscriptionKey: (id: string, key: string) => json<Subscription>(`/api/subscriptions/${id}/key`, { method: 'PUT', body: JSON.stringify({ key }) }),
+	setSubscriptionClient: (id: string, client: { clientId: string; clientSecret: string }) =>
+		json<Subscription>(`/api/subscriptions/${id}/client`, { method: 'PUT', body: JSON.stringify(client) }),
 	refreshSubscriptionModels: (id: string) => post<Subscription>(`/api/subscriptions/${id}/models/refresh`),
 	disconnectSubscription: (id: string) => json<Subscription>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
 };

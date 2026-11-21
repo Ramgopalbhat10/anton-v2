@@ -4,7 +4,7 @@
 // already keeps. Read-only, and the token file is never written: agy owns it and
 // may rotate the refresh token, so refreshes live in memory only.
 
-import type { PlanWindow } from '../../core/ports.ts';
+import type { OAuthClient, PlanWindow } from '../../core/ports.ts';
 import { antigravityRefresh, readCredential } from './oauth.ts';
 
 const DAILY = 'https://daily-cloudcode-pa.googleapis.com';
@@ -126,13 +126,13 @@ async function post(endpoint: string, operation: string, accessToken: string): P
 // fresh file never costs a token call.
 let refreshed: { refreshToken: string; accessToken: string; expiresAt: number } | null = null;
 
-async function accessTokenFor(token: Token): Promise<string | null> {
+async function accessTokenFor(token: Token, client: () => Promise<OAuthClient>): Promise<string | null> {
 	const now = Date.now();
 	if (refreshed && refreshed.refreshToken === token.refresh_token && refreshed.expiresAt > now + 60_000) return refreshed.accessToken;
 	if (token.access_token && Date.parse(token.expiry ?? '') > now + 60_000) return token.access_token;
 	if (!token.refresh_token) return token.access_token ?? null;
 	try {
-		const next = await antigravityRefresh(token.refresh_token);
+		const next = await antigravityRefresh(token.refresh_token, await client());
 		refreshed = { refreshToken: token.refresh_token, accessToken: next.accessToken, expiresAt: now + next.expiresIn * 1000 };
 		return next.accessToken;
 	} catch {
@@ -140,13 +140,13 @@ async function accessTokenFor(token: Token): Promise<string | null> {
 	}
 }
 
-async function readWindows(file: string): Promise<PlanWindow[] | null> {
+async function readWindows(file: string, client: () => Promise<OAuthClient>): Promise<PlanWindow[] | null> {
 	const credential = await readCredential(file);
 	if (!credential) return null;
 	const parsed = JSON.parse(credential) as { token?: Token; auth_method?: string };
 	const token = parsed.token;
 	if (!token?.access_token) return null;
-	const accessToken = await accessTokenFor(token);
+	const accessToken = await accessTokenFor(token, client);
 	if (!accessToken) return null;
 	const endpoints = parsed.auth_method === 'consumer' ? [DAILY, PROD] : [PROD, DAILY];
 	const requestedAt = Date.now();
@@ -174,9 +174,9 @@ let inflight: Promise<PlanWindow[] | null> | null = null;
  * minute like the other plans' windows; a failed read serves the last good
  * answer so one flaky probe does not blank the bars.
  */
-export async function antigravityWindows(file: string): Promise<PlanWindow[] | null> {
+export async function antigravityWindows(file: string, client: () => Promise<OAuthClient>): Promise<PlanWindow[] | null> {
 	if (cache && Date.now() - cache.at < TTL_MS) return cache.value ?? lastGood;
-	inflight ??= readWindows(file).catch(() => null);
+	inflight ??= readWindows(file, client).catch(() => null);
 	const value = await inflight.finally(() => {
 		inflight = null;
 	});

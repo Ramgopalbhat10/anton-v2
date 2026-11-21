@@ -13,6 +13,8 @@ import type {
 	KeyPlan,
 	Mailbox,
 	ModelCatalog,
+	OAuthClient,
+	OAuthClientSlot,
 	ObjectStore,
 	PushSender,
 	SandboxProvider,
@@ -115,6 +117,19 @@ async function acpOwner(): Promise<string> {
 	return id;
 }
 
+/** An OAuth client kept in the settings table under `key`. */
+function savedOAuthClient(key: string): OAuthClientSlot {
+	let saved: Promise<OAuthClient | null> | null = null;
+	return {
+		get: () => (saved ??= getSetting<OAuthClient | null>(key, null)),
+		set: async (client) => {
+			await setSetting(key, client);
+			saved = Promise.resolve(client);
+			return client;
+		},
+	};
+}
+
 /** An ACP agent signed in on this host and run in Modal. */
 const acpOnModal = (agent: AcpAgent) =>
 	acpRuntime(agent, localAccount(agent), modalCompute(agent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(agent.id), 'sidecar'), owner: acpOwner }));
@@ -154,7 +169,10 @@ function production(): Providers {
 				? [
 						acpOnModal(devinAgent),
 						...(() => {
-							const antigravity = antigravityAgent({ credentialFile: path.join(config.dataDir, 'antigravity', 'oauth-token.json') });
+							const antigravity = antigravityAgent({
+								credentialFile: path.join(config.dataDir, 'antigravity', 'oauth-token.json'),
+								client: savedOAuthClient('oauthClient.antigravity'),
+							});
 							return [acpOnModal(antigravity)];
 						})(),
 					]

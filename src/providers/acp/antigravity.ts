@@ -5,7 +5,7 @@
 
 import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { REASONING_LEVELS, type Reasoning, type SubscriptionModel } from '../../core/ports.ts';
+import { REASONING_LEVELS, type OAuthClient, type OAuthClientSlot, type Reasoning, type SubscriptionModel } from '../../core/ports.ts';
 import { antigravitySignIn, antigravitySignOut } from '../antigravity/oauth.ts';
 import { antigravityWindows } from '../antigravity/quota.ts';
 import { downloadArchive, olderThan, untar } from './install.ts';
@@ -50,8 +50,14 @@ const TOKEN_NAME = 'antigravity-oauth-token';
 /** agy resolves this under $HOME; containers run as root, probes redirect HOME. */
 const tokenPath = (home: string) => join(home, '.gemini', 'antigravity-cli', TOKEN_NAME);
 
-export function antigravityAgent(opts: { credentialFile: string }): AcpAgent {
+/** `client` is the OAuth client saved in Settings; signing in and reading quota need it. */
+export function antigravityAgent(opts: { credentialFile: string; client?: OAuthClientSlot }): AcpAgent {
 	const file = opts.credentialFile;
+	const client = async (): Promise<OAuthClient> => {
+		const saved = await opts.client?.get();
+		if (!saved) throw new Error('Add Antigravity’s OAuth client id and secret under Settings › Subscriptions › Antigravity first.');
+		return saved;
+	};
 	return {
 		id: 'antigravity',
 		name: 'Antigravity',
@@ -135,7 +141,7 @@ export function antigravityAgent(opts: { credentialFile: string }): AcpAgent {
 			kind: 'token-file',
 			methodId: 'oauth-personal',
 			credentialFile: file,
-			login: async () => antigravitySignIn(file),
+			login: async () => antigravitySignIn(file, await client()),
 			logout: () => antigravitySignOut(file),
 			provision: async (proc, token) => {
 				const path = tokenPath('/root');
@@ -144,7 +150,8 @@ export function antigravityAgent(opts: { credentialFile: string }): AcpAgent {
 		},
 		// ACP reports the tier but no quota; the 5-hour/weekly bars read Google's
 		// retrieveUserQuotaSummary with this same token file (see quota.ts).
-		windows: () => antigravityWindows(file),
+		windows: () => antigravityWindows(file, client),
+		...(opts.client ? { oauthClient: opts.client } : {}),
 		// listModels probes agy on this host with a throwaway HOME holding only the token file
 		// and a dead D-Bus address, so the keyring can never leak in or be consulted.
 		probeCommand: () => ['agy', 'acp'],

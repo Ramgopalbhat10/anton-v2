@@ -419,7 +419,15 @@ export type AgentRuntime = {
 	windows?(): Promise<PlanWindow[] | null>;
 	/** Where the vendor agent's jailed process runs when the runtime offers a choice (ACP agents on Modal). */
 	isolation?(): Promise<'sidecar' | 'sandbox'>;
+	/** The OAuth client Anton's sign-in for this program uses, when Settings may change it (Antigravity). */
+	oauthClient?: OAuthClientSlot;
 	open(options: RuntimeConversationOptions): RuntimeConversation;
+};
+
+/** An OAuth client kept in Settings; null until one is saved, and `set(null)` removes it. */
+export type OAuthClientSlot = {
+	get(): Promise<OAuthClient | null>;
+	set(client: OAuthClient | null): Promise<OAuthClient | null>;
 };
 
 export type PlanWindow = { label: string; usedPercent: number; resetsAt: string | null; limited: boolean };
