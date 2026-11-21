@@ -269,6 +269,10 @@ class AcpConversation implements RuntimeConversation {
 	/** What this turn's closed steps booked, and what the open step holds, so the turn's total can settle the difference. */
 	private turnBooked: RuntimeUsage = { ...ZERO_USAGE };
 	private segUsage: RuntimeUsage | null = null;
+	/** The context of this session's last model call, the prefix the next call can read from the model's cache. */
+	private lastContext = 0;
+	/** The last turn total, for the step log line. */
+	private lastTotal: RuntimeUsage | null = null;
 	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
 	private steering: string[] = [];
 	/** The agent's native file and shell requests, run as Anton's own tools on the task's sandbox. */
@@ -439,12 +443,19 @@ class AcpConversation implements RuntimeConversation {
 	/**
 	 * One model call's usage, which is the step's context as Flue measures it. An agent reports it as the call starts,
 	 * before any of its output: it opens the call's step, or the step's start would reset it to zero.
+	 *
+	 * A report of the context alone (Antigravity) does not say how much of it the cache served; the turn's total does,
+	 * once the turn ends, after these steps are closed. The step books the part it shares with the session's previous
+	 * call as read from the cache, since that prefix is what the model caches, and `settle` squares the turn with the
+	 * total. Booked all as uncached, the cache could land only on the last step and a turn read as a quarter cached.
 	 */
 	private pushUsage(update: SessionUpdate): void {
 		const usage = readUsage({ ...update, ...update._meta }, this.agent.metaNamespace);
 		if (!usage) return;
 		if (!usage.occupancy) this.turnMeasured = true;
-		const counters = { input: usage.input, output: usage.output, cacheRead: usage.cacheRead, cacheWrite: usage.cacheWrite };
+		const cached = usage.occupancy ? Math.min(this.lastContext, usage.input) : 0;
+		if (usage.occupancy) this.lastContext = usage.input;
+		const counters = { input: usage.input - cached, output: usage.output, cacheRead: usage.cacheRead + cached, cacheWrite: usage.cacheWrite };
 		this.ensureSegment();
 		this.segUsage = counters;
 		this.push({ type: 'message_delta', stopReason: null, usage: counters });
@@ -617,6 +628,7 @@ class AcpConversation implements RuntimeConversation {
 		this.ttftMs = null;
 		this.turnMeasured = false;
 		this.turnBooked = { ...ZERO_USAGE };
+		this.lastTotal = null;
 		this.lastActivity = t0;
 		let stalled = false;
 		let stallTimer: ReturnType<typeof setInterval> | undefined;
@@ -643,7 +655,11 @@ class AcpConversation implements RuntimeConversation {
 			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {}, this.agent.metaNamespace);
 			// A turn that ends right after a tool result still answers that step, if only with nothing.
 			this.ensureSegment();
-			this.closeSegment(result?.stopReason ?? 'end_turn', total && !total.occupancy ? settle(total, this.turnBooked) : {});
+			const last = total && !total.occupancy ? settle(total, this.turnBooked) : null;
+			this.lastTotal = total;
+			// What the cache could not have served was not covered by any report: the last call's context.
+			if (last && this.lastContext) this.lastContext = Math.max(this.lastContext, last.input + last.cacheRead + last.cacheWrite);
+			this.closeSegment(result?.stopReason ?? 'end_turn', last ?? {});
 			this.push({ type: 'turn_end' });
 		} catch (error) {
 			this.closeSegment(null);
@@ -655,7 +671,7 @@ class AcpConversation implements RuntimeConversation {
 			if (stallTimer) clearInterval(stallTimer);
 		}
 		console.error(
-			`[acp:${this.agent.id}] step ${++this.stepSeq}: spawn=${this.spawnMs}ms setup=${this.setupMs}ms ttft=${this.ttftMs ?? '—'}ms prompt=${Date.now() - t0}ms model=${this.options.model}`,
+			`[acp:${this.agent.id}] step ${++this.stepSeq}: spawn=${this.spawnMs}ms setup=${this.setupMs}ms ttft=${this.ttftMs ?? '—'}ms prompt=${Date.now() - t0}ms model=${this.options.model}${this.lastTotal ? ` total=${JSON.stringify(this.lastTotal)}` : ''}`,
 		);
 	}
 }
@@ -665,19 +681,16 @@ const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 's
 const USAGE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
 
 /**
- * The last step's share of a turn total, so the turn's steps add up to it. Each earlier step booked its whole context
- * as input, cached part included, since the agent never split it: input booked past the total's uncached input was
- * cached, and comes off the cache read instead. The last step is left with the context the reports did not cover.
+ * The last step's share of a turn total, so the turn's steps add up to it. The context the steps did not book is the
+ * last step's; the cache the total has beyond what they booked comes first in it, and the rest is uncached input. The
+ * steps' cache was the prefix each shared with the call before, so where that was not served the sum still runs over.
  */
 export function settle(total: RuntimeUsage, booked: RuntimeUsage): RuntimeUsage {
-	const input = total.input - booked.input;
-	const cacheRead = total.cacheRead - booked.cacheRead + Math.min(0, input);
-	return {
-		input: Math.max(0, input),
-		output: Math.max(0, total.output - booked.output),
-		cacheRead: Math.max(0, cacheRead),
-		cacheWrite: Math.max(0, total.cacheWrite - booked.cacheWrite + Math.min(0, cacheRead)),
-	};
+	const context = (u: RuntimeUsage) => u.input + u.cacheRead + u.cacheWrite;
+	const pool = Math.max(0, context(total) - context(booked));
+	const cacheRead = Math.min(pool, Math.max(0, total.cacheRead - booked.cacheRead));
+	const cacheWrite = Math.min(pool - cacheRead, Math.max(0, total.cacheWrite - booked.cacheWrite));
+	return { input: pool - cacheRead - cacheWrite, output: Math.max(0, total.output - booked.output), cacheRead, cacheWrite };
 }
 
 /**
