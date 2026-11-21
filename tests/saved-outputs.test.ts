@@ -9,7 +9,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { saveOutput, savedOutputs, readOutput } = await import('../src/services/git/checkpoints.ts');
-const { MAX_UPLOAD_BYTES, outputsView, readOutputFile, removeOutput, uploadOutput } = await import('../src/services/artifacts/files.ts');
+const { MAX_UPLOAD_BYTES, outputsView, readOutputFile, removeOutput, storedOutputsOf, uploadOutput } = await import('../src/services/artifacts/files.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { upsertProject } = await import('../src/db/projects.ts');
@@ -131,4 +131,13 @@ test('a skill folder added as a zip installs with its scripts beside its SKILL.m
 	await assert.rejects(installAddedSkill(empty), /has no SKILL\.md/);
 	const broken = await addFile('broken.zip', enc('not a zip'), 'application/zip');
 	await assert.rejects(installAddedSkill(broken), /could not be opened as a zip/);
+});
+
+test('a project reads its threads’ saved Libraries in one go, the same lists each task’s own read gives', async () => {
+	await saveOutput('ro', 'report.md', new TextEncoder().encode('# hi'), 'text/markdown');
+	const all = await storedOutputsOf(['ro', 'nobody', 'ro']);
+	assert.deepEqual(Object.keys(all).sort(), ['nobody', 'ro']);
+	assert.deepEqual(all.ro, (await outputsView('ro')).outputs);
+	assert.deepEqual(all.nobody, []);
+	assert.equal(Object.keys(await storedOutputsOf(Array.from({ length: 80 }, (_, index) => `t${index}`))).length, 50);
 });

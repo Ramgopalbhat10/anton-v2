@@ -61,7 +61,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	// A model turn ended: the context meter, and what the task and the day have spent, moved. Its tool calls send their own `files`.
 	// The task's row in the list is read again on its own (`rowsFor`): a reply makes a model turn every few seconds.
 	if (change.kind === 'task' && change.what === 'usage') return [['context', change.id], ['session', change.id], ['budget'], ['usage'], ['space-usage']];
-	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['previews', change.id], ['artifacts']];
+	const files: QueryKey[] = [['changes', change.id], ['files', change.id], ['file', change.id], ['outputs', change.id], ['stored-outputs', change.id], ['previews', change.id], ['artifacts']];
 	if (change.what === 'files') return files;
 	return [
 		['sessions'],
@@ -154,6 +154,8 @@ export const LIVE_KEYS: ReadonlySet<string> = new Set([
 	'mail',
 	'tool-approvals',
 	'settled',
+	// What a task saved (its checkpoint and kept files) changes only by its own writes, each sending `files` or `state`.
+	'stored-outputs',
 ]);
 
 /** A safety net for a change that sends no event (a day ending, a limit set on another device): kept reads are read again after this long. */
