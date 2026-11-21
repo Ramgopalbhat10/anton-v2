@@ -192,11 +192,13 @@ export function describeTool(part: ToolCall): { icon: IconComponent; body: React
 			const offset = Number(field(input, 'offset')) || 0;
 			const limit = Number(field(input, 'limit')) || 0;
 			const range = limit ? `:${offset || 1}-${(offset || 1) + limit - 1}` : '';
+			const more = input && typeof input === 'object' && Array.isArray((input as { more?: unknown }).more) ? (input as { more: unknown[] }).more.length : 0;
 			return {
 				icon: FileText,
 				body: (
 					<>
 						Read <Em>{field(input, 'path') + range}</Em>
+						{more ? ` and ${more} more ${more === 1 ? 'file' : 'files'}` : null}
 						{inRepo(input)}
 					</>
 				),

@@ -33,7 +33,7 @@ Every outside service sits behind an interface in `src/core/ports.ts`; implement
 
 ## Machine files
 
-`readMachineFile` and `writeMachineFile` (`src/core/machine-fs.ts`) use the machine's own file access when it has one (`Machine.readFile`, `writeFile`), else a command (`wc -c` and `cat`, `cat >`), which every provider has; a login shell per file is costly where a command is a network round trip. The local machine uses Node. Modal's file API is behind `ANTON_SANDBOX_FILE_API=1`, off until tried on a real sandbox: it takes absolute paths only, has a read size limit, and makes missing folders where `cat >` fails; anything it cannot take falls back to the command. Docker has no file access. Either way a failure is one `CommandError` naming operation, path and reason (`fileError`).
+`readMachineFile` and `writeMachineFile` (`src/core/machine-fs.ts`) use the machine's own file access when it has one (`Machine.readFile`, `writeFile`), else a command (`wc -c` and `cat`, `cat >`), which every provider has; a login shell per file is costly where a command is a network round trip, so the read runs with `ExecOptions.plain` (`bash -c` on Modal and Docker; the local machine reads with Node). The local machine uses Node. Modal's file API is behind `ANTON_SANDBOX_FILE_API=1`, off until tried on a real sandbox: it takes absolute paths only, has a read size limit, and makes missing folders where `cat >` fails; anything it cannot take falls back to the command. Docker has no file access. Either way a failure is one `CommandError` naming operation, path and reason (`fileError`).
 
 ## Setup and Connections
 
