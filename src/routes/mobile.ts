@@ -43,6 +43,19 @@ function trimSession(session: Session) {
 	};
 }
 
+/** How much of a task's last reply the list sends: the app shows at most its first five lines, 360 characters. */
+export const LIST_REPLY_CHARS = 1_000;
+
+/**
+ * A task as the list shows it: without its plan, which only the task's own screen reads, and with the start of its
+ * last reply. A list of hundreds of tasks was mostly those two, read again on every change.
+ */
+export function listRow(session: Session) {
+	const { plan: _plan, ...row } = trimSession(session);
+	const reply = row.lastReply;
+	return { ...row, lastReply: reply && reply.length > LIST_REPLY_CHARS ? reply.slice(0, LIST_REPLY_CHARS) : reply };
+}
+
 type FluePart = Record<string, unknown> & { type?: string };
 
 /** Unknown part kinds keep their kind under `raw`, so an older app still renders the text around them. */
@@ -103,7 +116,7 @@ async function transcript(agents: AgentRouter, id: string) {
 export function mobileApi(agents: AgentRouter, coordinators?: AgentRouter) {
 	const app = new Hono();
 
-	app.get('/sessions', async (c) => c.json({ sessions: (await listSessions()).map(trimSession) }));
+	app.get('/sessions', async (c) => c.json({ sessions: (await listSessions()).map(listRow) }));
 
 	app.get('/sessions/:id', async (c) => {
 		const id = c.req.param('id');
