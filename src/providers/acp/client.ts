@@ -16,6 +16,13 @@ export type AcpTransport = {
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 
+/** What Anton says in `initialize`: no client filesystem or terminal, so the agent's native tools stay inside its container. */
+export const INITIALIZE = {
+	protocolVersion: 1,
+	clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+	clientInfo: { name: 'anton', version: '1.0.0' },
+};
+
 export class AcpClient {
 	private nextId = 1;
 	private pending = new Map<number, Pending>();

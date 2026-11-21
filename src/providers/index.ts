@@ -21,10 +21,11 @@ import type {
 	VisionModel,
 } from '../core/ports.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
-import { acpIsolationKey, acpRuntime, type AcpIsolation } from './acp/runtime.ts';
+import { acpIsolationKey, acpRuntime, type AcpAgent, type AcpIsolation } from './acp/runtime.ts';
 import { antigravityAgent } from './acp/antigravity.ts';
 import { devinAgent } from './acp/devin.ts';
-import { modalAcpHost } from './acp/modal.ts';
+import { localAccount } from './acp/local-cli.ts';
+import { modalCompute } from './acp/modal.ts';
 import { chatGptSubscription } from './chatgpt/subscription.ts';
 import { claudeCodeRuntime } from './claude-code/runtime.ts';
 import { composioApps } from './composio/index.ts';
@@ -114,6 +115,10 @@ async function acpOwner(): Promise<string> {
 	return id;
 }
 
+/** An ACP agent signed in on this host and run in Modal. */
+const acpOnModal = (agent: AcpAgent) =>
+	acpRuntime(agent, localAccount(agent), modalCompute(agent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(agent.id), 'sidecar'), owner: acpOwner }));
+
 const makeDecisions = (): DecisionModel | null =>
 	config.decisionModel !== 'off' ? openRouterDecisions({ apiUrl: config.openrouter.apiUrl, apiKey: openRouterKey, model: config.decisionModel }) : null;
 
@@ -147,10 +152,10 @@ function production(): Providers {
 			// ACP agents need Modal for their jailed containers; without its token there is nowhere to run them.
 			...(process.env.MODAL_TOKEN_ID
 				? [
-						acpRuntime(devinAgent, modalAcpHost(devinAgent, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(devinAgent.id), 'sidecar'), owner: acpOwner })),
+						acpOnModal(devinAgent),
 						...(() => {
 							const antigravity = antigravityAgent({ credentialFile: path.join(config.dataDir, 'antigravity', 'oauth-token.json') });
-							return [acpRuntime(antigravity, modalAcpHost(antigravity, config.acp.app, { isolation: () => getSetting<AcpIsolation>(acpIsolationKey(antigravity.id), 'sidecar'), owner: acpOwner }))];
+							return [acpOnModal(antigravity)];
 						})(),
 					]
 				: []),

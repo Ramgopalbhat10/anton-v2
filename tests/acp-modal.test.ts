@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 import type { ModalClient } from 'modal';
 import { devinAgent } from '../src/providers/acp/devin.ts';
-import { modalAcpHost } from '../src/providers/acp/modal.ts';
-import { acpRuntime, type AcpAgent, type AcpHost, type AcpIsolation, type AcpProcess } from '../src/providers/acp/runtime.ts';
+import { modalCompute } from '../src/providers/acp/modal.ts';
+import { acpRuntime, type AcpAccount, type AcpAgent, type AcpIsolation, type AcpProcess } from '../src/providers/acp/runtime.ts';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -31,7 +31,7 @@ type FakeBox = {
 	tags: Record<string, string>;
 };
 
-/** Just enough of ModalClient for modalAcpHost: apps, images, sandboxes, sidecars and execs. */
+/** Just enough of ModalClient for modalCompute: apps, images, sandboxes, sidecars and execs. */
 function fakeModal(opts: { failBuilds?: number; listed?: { sandboxId: string; tags: Record<string, string> }[] } = {}) {
 	const boxes: FakeBox[] = [];
 	const built: string[][] = [];
@@ -127,8 +127,16 @@ const resetSweep = () => {
 };
 
 function host(fake: ReturnType<typeof fakeModal>, isolation: AcpIsolation = 'sidecar') {
-	return modalAcpHost(agent, 'anton-acp-test', { client: fake.client, isolation: async () => isolation, owner: async () => 'server-a' });
+	return modalCompute(agent, 'anton-acp-test', { client: fake.client, isolation: async () => isolation, owner: async () => 'server-a' });
 }
+
+const account: AcpAccount = {
+	signedIn: async () => ({ signedIn: true, problem: null }),
+	credential: async () => 'token',
+	signIn: () => Promise.reject(new Error('unused')),
+	signOut: async () => undefined,
+	listModels: async () => [],
+};
 
 const live = (fake: ReturnType<typeof fakeModal>, kind: FakeBox['kind']) => fake.live().filter((b) => b.kind === kind);
 
@@ -239,15 +247,8 @@ test('the orphan sweep kills only this server\'s leftovers that predate the proc
 test('a conversation closed while its container is still starting ends that container', async () => {
 	let finish: (proc: AcpProcess) => void = () => undefined;
 	let closed = 0;
-	const h: AcpHost = {
-		signedIn: async () => ({ signedIn: true, problem: null }),
-		credential: async () => 'token',
-		signIn: () => Promise.reject(new Error('unused')),
-		signOut: async () => undefined,
-		listModels: async () => [],
-		spawn: () => new Promise((resolve) => (finish = resolve)),
-	};
-	const conv = acpRuntime(agent, h).open({ model: 'swe-2-high', instructions: '', tools: [], effort: null, callTool: async () => ({ content: [], isError: false }) });
+	const spawn = () => new Promise<AcpProcess>((resolve) => (finish = resolve));
+	const conv = acpRuntime(agent, account, { spawn }).open({ model: 'swe-2-high', instructions: '', tools: [], effort: null, callTool: async () => ({ content: [], isError: false }) });
 	conv.send([{ type: 'text', text: 'hi' }]);
 	await sleep(10);
 	conv.close();
@@ -264,15 +265,8 @@ test('a session whose setup fails closes its container', async () => {
 		closeStdin: async () => undefined,
 		kill: async () => undefined,
 	};
-	const h: AcpHost = {
-		signedIn: async () => ({ signedIn: true, problem: null }),
-		credential: async () => 'token',
-		signIn: () => Promise.reject(new Error('unused')),
-		signOut: async () => undefined,
-		listModels: async () => [],
-		spawn: async () => ({ acp: failing, mcp: failing, writeFile: async () => undefined, close: async () => void (closed += 1), stderrTail: () => '' }),
-	};
-	const conv = acpRuntime({ ...agent }, h).open({ model: 'swe-2-high', instructions: '', tools: [], effort: null, callTool: async () => ({ content: [], isError: false }) });
+	const spawn = async (): Promise<AcpProcess> => ({ acp: failing, mcp: failing, writeFile: async () => undefined, close: async () => void (closed += 1), stderrTail: () => '' });
+	const conv = acpRuntime(agent, account, { spawn }).open({ model: 'swe-2-high', instructions: '', tools: [], effort: null, callTool: async () => ({ content: [], isError: false }) });
 	conv.send([{ type: 'text', text: 'hi' }]);
 	// The agent's output ends at once, so initialize fails right after the spawn.
 	await sleep(10);

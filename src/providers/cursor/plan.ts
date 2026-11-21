@@ -27,6 +27,7 @@ import {
 	type RuntimeUsage,
 	type SubscriptionModel,
 } from '../../core/ports.ts';
+import { channel } from '../../core/channel.ts';
 
 /**
  * Cursor has no plain model endpoint, so each conversation is a local Cursor agent with its built-in tools off
@@ -149,36 +150,6 @@ export function selectionFor(model: string, item: ModelListItem | undefined, eff
 		}
 	}
 	return params.length ? { id, params } : { id };
-}
-
-function channel<T>() {
-	const items: T[] = [];
-	let waiting: ((result: IteratorResult<T>) => void) | null = null;
-	let closed = false;
-	return {
-		push(item: T) {
-			if (closed) return;
-			if (waiting) {
-				const wake = waiting;
-				waiting = null;
-				wake({ value: item, done: false });
-			} else items.push(item);
-		},
-		close() {
-			closed = true;
-			waiting?.({ value: undefined, done: true });
-			waiting = null;
-		},
-		[Symbol.asyncIterator](): AsyncIterator<T> {
-			return {
-				next: () => {
-					if (items.length) return Promise.resolve({ value: items.shift()!, done: false });
-					if (closed) return Promise.resolve({ value: undefined, done: true });
-					return new Promise((resolve) => (waiting = resolve));
-				},
-			};
-		},
-	};
 }
 
 const zero = (): RuntimeUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });

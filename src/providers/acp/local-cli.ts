@@ -10,8 +10,8 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../../config.ts';
 import type { RuntimeSignIn, SubscriptionModel } from '../../core/ports.ts';
-import { AcpClient, type AcpTransport } from './client.ts';
-import type { AcpAgent, ConfigOption, SessionInfo } from './runtime.ts';
+import { AcpClient, INITIALIZE, type AcpTransport } from './client.ts';
+import { authParams, type AcpAccount, type AcpAgent, type ConfigOption, type SessionInfo } from './runtime.ts';
 
 const tomlValue = (text: string, key: string): string | null => {
 	const match = new RegExp(`${key}\\s*=\\s*["']([^"']+)["']`).exec(text);
@@ -140,8 +140,7 @@ export async function localCredential(agent: AcpAgent): Promise<string | null> {
 		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
 		throw error;
 	}
-	// credentialKey '' means the file itself is the credential (JSON token stores like agy's).
-	if (agent.auth.credentialKey === '') return text.trim() || null;
+	if (agent.auth.kind === 'token-file') return text.trim() || null;
 	return tomlValue(text, agent.auth.credentialKey);
 }
 
@@ -167,8 +166,8 @@ function childTail(proc: ChildProcess): () => string {
  * our pipes stay attached. Flags differ: util-linux takes -c "cmd", BSD/macOS
  * takes the command as argv after the typescript file.
  */
-function loginSpawn(agent: AcpAgent): ReturnType<typeof spawn> {
-	const [cmd, ...rest] = agent.auth.loginCommand;
+function loginSpawn(loginCommand: string[]): ReturnType<typeof spawn> {
+	const [cmd, ...rest] = loginCommand;
 	const argv =
 		process.platform === 'darwin'
 			? ['-q', '/dev/null', cmd, ...rest]
@@ -177,9 +176,10 @@ function loginSpawn(agent: AcpAgent): ReturnType<typeof spawn> {
 }
 
 export async function localSignIn(agent: AcpAgent): Promise<RuntimeSignIn> {
-	if (agent.auth.customLogin) return agent.auth.customLogin();
+	const auth = agent.auth;
+	if (auth.kind === 'token-file') return auth.login();
 	if (!(await ensureCli(agent))) throw cliMissing(agent);
-	const proc = loginSpawn(agent);
+	const proc = loginSpawn(auth.loginCommand);
 	const tail = childTail(proc);
 	const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => resolve(code)));
 	let buf = '';
@@ -190,7 +190,7 @@ export async function localSignIn(agent: AcpAgent): Promise<RuntimeSignIn> {
 		const decoder = new TextDecoder();
 		const scan = (chunk: string) => {
 			buf = (buf + plain(chunk)).slice(-64_000);
-			const match = agent.auth.loginUrl.exec(buf);
+			const match = auth.loginUrl.exec(buf);
 			if (match) {
 				clearTimeout(timer);
 				resolve(match[0]);
@@ -223,7 +223,7 @@ export async function localSignIn(agent: AcpAgent): Promise<RuntimeSignIn> {
 }
 
 export async function localSignOut(agent: AcpAgent): Promise<void> {
-	const [cmd, ...rest] = agent.auth.logoutCommand ?? [];
+	const [cmd, ...rest] = (agent.auth.kind === 'cli' && agent.auth.logoutCommand) || [];
 	if (cmd) {
 		await new Promise<void>((resolve) => {
 			const proc = spawn(cmd, rest, { stdio: 'ignore' });
@@ -241,7 +241,7 @@ export async function localSignOut(agent: AcpAgent): Promise<void> {
 			});
 		});
 	}
-	await agent.auth.customLogout?.();
+	if (agent.auth.kind === 'token-file') await agent.auth.logout();
 	await rm(credentialPath(agent), { force: true }).catch(() => undefined);
 }
 
@@ -285,14 +285,10 @@ async function probeConfigOptions(agent: AcpAgent, token: string): Promise<Sessi
 		try {
 			await acp.request(
 				'initialize',
-				{
-					protocolVersion: 1,
-					clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-					clientInfo: { name: 'anton', version: '1.0.0' },
-				},
+				INITIALIZE,
 				90_000,
 			);
-			await acp.request('authenticate', { methodId: agent.auth.methodId, ...agent.auth.params(token) }, 90_000);
+			await acp.request('authenticate', authParams(agent.auth, token), 90_000);
 			return (await acp.request('session/new', { cwd: dir, mcpServers: [] }, 90_000)) as SessionInfo;
 		} finally {
 			await acp.close();
@@ -349,4 +345,67 @@ export async function localListModels(agent: AcpAgent): Promise<SubscriptionMode
 			};
 		},
 	);
+}
+
+/** How long a sign-in status answer is reused; Settings polls it. */
+const STATUS_TTL_MS = 30_000;
+
+/**
+ * The account side of an ACP agent, all on this host: the vendor CLI's sign-in, the credential file, model probing
+ * and plan windows. Nothing here touches compute, so Settings never starts or keeps alive a container.
+ */
+export function localAccount(agent: AcpAgent): AcpAccount {
+	let statusCache: { at: number; result: Promise<{ signedIn: boolean; problem: string | null }> } | null = null;
+	// The file only changes through our own sign-in/out, so one read serves until then.
+	let credCache: string | null | undefined;
+	const forget = () => {
+		statusCache = null;
+		credCache = undefined;
+	};
+	return {
+		signedIn: () => {
+			if (statusCache && Date.now() - statusCache.at < STATUS_TTL_MS) return statusCache.result;
+			const result = (async () => {
+				const [cred, cli] = await Promise.all([localCredential(agent), localCli(agent)]);
+				// Status stays cheap: the CLI fetches itself lazily inside sign-in/model
+				// listing; warming it here keeps that wait short. ensureCli never throws.
+				if (!cli && canInstallCli(agent)) void ensureCli(agent).catch(() => undefined);
+				const gap = cliInstallGap(agent);
+				const problem = cli
+					? null
+					: canInstallCli(agent)
+						? `${agent.name} CLI is not installed on this server — it will be fetched on first use`
+						: gap
+							? `${agent.name} CLI is not installed on this server (${gap})`
+							: `${agent.name} CLI is not installed on this server${cred ? '; model lists cannot refresh' : ''}`;
+				return { signedIn: Boolean(cred), problem };
+			})().catch((error) => ({
+				signedIn: false,
+				problem: `Could not check ${agent.name} sign-in: ${error instanceof Error ? error.message : String(error)}`,
+			}));
+			statusCache = { at: Date.now(), result };
+			return result;
+		},
+		credential: async () => {
+			if (credCache === undefined) credCache = await localCredential(agent);
+			return credCache;
+		},
+		signIn: async () => {
+			const signIn = await localSignIn(agent);
+			return {
+				url: signIn.url,
+				complete: async (code) => {
+					await signIn.complete(code);
+					forget();
+				},
+				cancel: () => signIn.cancel(),
+			};
+		},
+		signOut: async () => {
+			await localSignOut(agent);
+			forget();
+		},
+		listModels: () => localListModels(agent),
+		...(agent.windows ? { windows: () => agent.windows!() } : {}),
+	};
 }

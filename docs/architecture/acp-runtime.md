@@ -37,6 +37,14 @@ The host's MCP server answers each frame on its own: a `tools/call` parks until 
 
 ACP has no way to add to a running turn, and a new `session/prompt` waits for the whole turn to end. So a message the user sends while the agent waits on an Anton tool rides back inside that tool's result, wrapped in `<user_message>`, and the agent reads it at once; a message sent at any other time is the next prompt.
 
+## Pieces
+
+Three pieces meet in `acpRuntime(agent, account, compute)` (`src/providers/acp/runtime.ts`):
+
+- **`AcpAgent`**, the descriptor: everything that differs per vendor (below). Auth is a union on `kind`, so a vendor fills only the shape it uses.
+- **`AcpAccount`** (`localAccount` in `local-cli.ts`): sign-in status, credential, sign-in and sign-out, model listing and plan windows, all on this host. Settings reads only this, so a status poll never starts or keeps alive a container.
+- **`AcpCompute`** (`modalCompute` in `modal.ts`): `spawn` one container per conversation, `prepare` the image, the isolation choice, and `drain` the warm slot on sign-out. Closing the process a spawn returned ends its container.
+
 ## Per-agent descriptor
 
 Everything agent-specific is a small descriptor; the engine is shared:
@@ -48,7 +56,8 @@ Everything agent-specific is a small descriptor; the engine is shared:
 | `release` | `static.devin.ai/cli/current/manifest.json` → version+url+sha256 | `antigravity-cli-auto-updater-*.run.app/manifests/linux_amd64.json` → version+url+sha512 |
 | `install` | same tarball → `<dataDir>/bin/devin` | same tarball → `<dataDir>/bin/antigravity` + `agy` symlink |
 | `egress` | `*.devin.ai`, `*.codeium.com`, `*.windsurf.com` | `*.googleapis.com`, `*.google.com`, `antigravity.google`, `*.gstatic.com`, the update manifest host |
-| `auth` | `authenticate{methodId:"devin-browser",_meta:{api_key}}`, key from local `credentials.toml` | `authenticate{methodId:"oauth-personal"}` with no params; agy reads `~/.gemini/antigravity-cli/antigravity-oauth-token` itself — Anton's OAuth writes that JSON on the host (`auth.customLogin`), `auth.provision` copies it into the container before authenticate |
+| `auth` | `kind: 'cli'`: `authenticate{methodId:"devin-browser",_meta:{api_key}}`, key from local `credentials.toml` | `kind: 'token-file'`: `authenticate{methodId:"oauth-personal"}` with no params; agy reads `~/.gemini/antigravity-cli/antigravity-oauth-token` itself — Anton's OAuth writes that JSON on the host (`auth.login`), `auth.provision` copies it into the container before authenticate |
+| `metaNamespace` | `cognition.ai`: usage counters and permission rules are read from `cognition.ai/<key>` first | — |
 | `modelConfigId` | `"model"` (from `session/new` configOptions) | `"model"` (base ids like `gemini-4-neon`; `session/new.models.availableModels` carries the richer per-tier variants) |
 | `effortConfigId`/`effortMap`/`sessionConfig`/`modelInfo` | — | `"thought_level"` (low/medium/high/xhigh, Anton's off/minimal/max clamp to its ends), `mode: "auto"`, variants → reasoning levels |
 | `windows` | `SeatManagementService/GetUserStatus` on `server.codeium.com` with `windsurf_api_key` in the request metadata (the public consumption API is Enterprise-only) | `retrieveUserQuotaSummary` on daily/prod cloudcode-pa with the token file (consumer→daily first); per-model `fetchAvailableModels` quotas as fallback |
@@ -89,7 +98,7 @@ The vendor credential stays on this host. Two shapes exist, both in `src/provide
 - **Token-in-params** (Devin): `devin auth login --force-manual-token-flow` runs locally under `script(1)`'s PTY (the prompt refuses piped stdin), writing `~/.local/share/devin/credentials.toml`; the runtime reads the key and passes it per-session as `_meta.api_key`. ACP ignores stored CLI credentials by design — verified with an empty `XDG_DATA_HOME`, `authenticate` alone opens `session/new` — so the file is the only store and no sidecar ever holds credentials.
 - **Token-file** (Antigravity): agy's `authenticate` ignores params and reads its own store — `~/.gemini/antigravity-cli/antigravity-oauth-token`, a JSON `{token:{access_token,refresh_token,expiry,…},auth_method:"consumer",id_token_email}` it refreshes in place, falling back to it when no OS keyring exists (verified with a dead D-Bus). Anton runs the same Google OAuth `agy acp --login` does — Antigravity's public installed-app client, agy's scopes, `antigravity.google/oauth-callback` as the paste-back redirect (`src/providers/antigravity/oauth.ts`; the client id/secret come from `ANTIGRAVITY_CLIENT_ID`/`ANTIGRAVITY_CLIENT_SECRET`, since the repo carries no vendor credential) — and keeps that JSON at `<dataDir>/antigravity/oauth-token.json`. `auth.provision` writes it into the container between spawn and `authenticate` (agy reads it lazily — verified post-spawn), so the refresh token lives only on this host and in the ephemeral container.
 
-`signOut` removes the credential and runs `customLogout` when present (Antigravity best-effort revokes the refresh token at `oauth2.googleapis.com/revoke`); warm slots drain since their sessions would fail auth.
+`signOut` removes the credential and, for a `token-file` agent, runs `auth.logout` (Antigravity best-effort revokes the refresh token at `oauth2.googleapis.com/revoke`); warm slots drain since their sessions would fail auth.
 
 The vendor CLI on this host is needed only for sign-in (Devin's PTY login) and `listModels` probing — execution runs the image-baked binary in Modal, so a missing CLI never blocks tasks with cached models. When `command[0]` is not on PATH, `ensureCli` (`local-cli.ts`) fetches it lazily: `agent.release.latest(platform)` (or `install.fallback(platform)` when the manifest is unreachable) → `install.fetch` downloads and checksum-verifies the vendor tarball (`src/providers/acp/install.ts`) into `<dataDir>/bin`, which is prepended to `PATH` so every spawn site — the login PTY's shell string, the ACP probe, `models list`, sign-out — resolves it. Installs are single-flight per agent, retried at most every 5 minutes, and cover linux/x64, linux/arm64 and macOS arm64/x64 — the platforms both vendors publish (`hostPlatform()` in `local-cli.ts`; musl hosts are excluded since the linux builds are gnu-linked). Image builds always resolve `latest('linux/x64')` since Modal containers are x64 regardless of host. `status()` stays cheap: it reports "not installed — it will be fetched on first use" and warms `ensureCli` in the background; sign-in and model listing await it and surface the failure reason, including the platform gap on unsupported hosts.
 

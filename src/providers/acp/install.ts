@@ -11,6 +11,17 @@ import type { AcpRelease } from './runtime.ts';
 
 const execFileAsync = promisify(execFile);
 
+const versionParts = (v: string) => v.split('.').map((n) => Number(n) || 0);
+
+/** Dotted versions compared numerically; a vendor manifest older than the pinned floor is not used. */
+export function olderThan(a: string, b: string): boolean {
+	const [x, y] = [versionParts(a), versionParts(b)];
+	for (let i = 0; i < Math.max(x.length, y.length); i++) {
+		if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+	}
+	return false;
+}
+
 /**
  * GET a release archive to `dest`. Archives are tens of MB at most, so buffering
  * is fine and keeps the checksum simple. Verifies sha256/sha512 when the release

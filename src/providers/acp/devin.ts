@@ -4,7 +4,7 @@
 import { chmod, mkdtemp, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AcpAgent, AcpRelease } from './runtime.ts';
-import { downloadArchive, untar } from './install.ts';
+import { downloadArchive, olderThan, untar } from './install.ts';
 import { devinUsage } from './devin-usage.ts';
 import type { SubscriptionModel } from '../../core/ports.ts';
 
@@ -20,15 +20,6 @@ const DEVIN_TRIPLES: Record<string, string> = {
 	'linux/arm64': 'aarch64-unknown-linux',
 	'darwin/x64': 'x86_64-apple-darwin',
 	'darwin/arm64': 'aarch64-apple-darwin',
-};
-
-const versionParts = (v: string) => v.split('.').map((n) => Number(n) || 0);
-const olderThan = (a: string, b: string) => {
-	const [x, y] = [versionParts(a), versionParts(b)];
-	for (let i = 0; i < Math.max(x.length, y.length); i++) {
-		if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-	}
-	return false;
 };
 
 async function devinLatest(platform: string): Promise<AcpRelease | null> {
@@ -137,7 +128,9 @@ export const devinAgent: AcpAgent = {
 	// Plan quota via the CLI's own SeatManagement status call; the public
 	// consumption API is Enterprise-only.
 	windows: () => devinUsage(devinAgent, DEVIN_VERSION),
+	metaNamespace: 'cognition.ai',
 	auth: {
+		kind: 'cli',
 		// The one method devin acp advertises; the token rides in _meta.api_key.
 		methodId: 'devin-browser',
 		params: (token) => ({ _meta: { api_key: token } }),

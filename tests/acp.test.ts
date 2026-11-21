@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { RuntimeConversationOptions, RuntimeEvent, RuntimeTool, RuntimeToolOutput, SubscriptionModel } from '../src/core/ports.ts';
 import type { AcpTransport } from '../src/providers/acp/client.ts';
 import { devinAgent } from '../src/providers/acp/devin.ts';
-import { acpRuntime, type AcpHost, type AcpProcess } from '../src/providers/acp/runtime.ts';
+import { acpRuntime, type AcpAccount, type AcpProcess } from '../src/providers/acp/runtime.ts';
 
 function queue<T>() {
 	const items: T[] = [];
@@ -63,7 +63,7 @@ async function until(predicate: () => boolean, what: string, ms = 3000): Promise
 
 const BASH: RuntimeTool = { name: 'bash', description: 'Run a command', inputSchema: { type: 'object', properties: { command: { type: 'string' } } } };
 
-function fakeHost(process: AcpProcess): AcpHost {
+function fakeAccount(): AcpAccount {
 	return {
 		async signedIn() {
 			return { signedIn: true, problem: null };
@@ -76,7 +76,6 @@ function fakeHost(process: AcpProcess): AcpHost {
 		async listModels(): Promise<SubscriptionModel[]> {
 			return [];
 		},
-		spawn: async () => process,
 	};
 }
 
@@ -90,7 +89,7 @@ function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-hi
 		close: async () => undefined,
 		stderrTail: () => '',
 	};
-	const runtime = acpRuntime(agent, fakeHost(process));
+	const runtime = acpRuntime(agent, fakeAccount(), { spawn: async () => process });
 	const conv = runtime.open({ model, instructions: 'Be brief.', tools: [BASH], effort, callTool });
 	const seen: RuntimeEvent[] = [];
 	const collecting = (async () => {
@@ -627,7 +626,7 @@ test('the MCP server serves the live tool list and announces changes', async () 
 test('readUsage takes cached tokens out of an input total that already holds them', async () => {
 	const { readUsage } = await import('../src/providers/acp/runtime.ts');
 	// Devin's numbers from a prod call: 22,707 in, 22,528 of them cached.
-	assert.deepEqual(readUsage({ 'cognition.ai/inputTokens': 22_707, 'cognition.ai/cachedReadTokens': 22_528, 'cognition.ai/outputTokens': 201 }), {
+	assert.deepEqual(readUsage({ 'cognition.ai/inputTokens': 22_707, 'cognition.ai/cachedReadTokens': 22_528, 'cognition.ai/outputTokens': 201 }, 'cognition.ai'), {
 		input: 179,
 		output: 201,
 		cacheRead: 22_528,
@@ -718,4 +717,21 @@ test('a message sent while the agent waits on a tool goes back with that tool\'s
 	await sleep(20);
 	assert.equal(parse(acp.sent).filter((m) => m.method === 'session/prompt').length, 1, 'no second prompt waits behind the turn');
 	conv.close();
+});
+
+test('signing out drains compute, and a status check never touches it', async () => {
+	let drained = 0;
+	let spawned = 0;
+	const runtime = acpRuntime(devinAgent, fakeAccount(), {
+		spawn: async () => {
+			spawned += 1;
+			throw new Error('unused');
+		},
+		drain: () => void (drained += 1),
+	});
+	await runtime.status();
+	await runtime.listModels();
+	assert.equal(spawned, 0);
+	await runtime.signOut!();
+	assert.equal(drained, 1);
 });
