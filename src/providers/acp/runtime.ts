@@ -264,8 +264,11 @@ class AcpConversation implements RuntimeConversation {
 	private parkedTools = 0;
 	/** Of those, the calls the agent made through MCP: only their results can carry the user's words back. */
 	private parkedMcp = 0;
-	/** The agent reported a model call's usage during this turn, so its summed total must not be booked again. */
+	/** The agent reported a model call's own counters during this turn, so its summed total must not be booked again. */
 	private turnMeasured = false;
+	/** What this turn's closed steps booked, and what the open step holds, so the turn's total can settle the difference. */
+	private turnBooked: RuntimeUsage = { ...ZERO_USAGE };
+	private segUsage: RuntimeUsage | null = null;
 	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
 	private steering: string[] = [];
 	/** The agent's native file and shell requests, run as Anton's own tools on the task's sandbox. */
@@ -323,6 +326,7 @@ class AcpConversation implements RuntimeConversation {
 	private ensureSegment(): void {
 		if (this.seg.open) return;
 		this.seg = { open: true, block: null, index: 0 };
+		this.segUsage = null;
 		this.push({ type: 'message_start', id: `acp-${++this.messageSeq}`, usage: { ...ZERO_USAGE } });
 	}
 
@@ -351,6 +355,12 @@ class AcpConversation implements RuntimeConversation {
 		this.push({ type: 'message_delta', stopReason, usage });
 		this.push({ type: 'message_stop' });
 		this.seg.open = false;
+		this.book({ ...(this.segUsage ?? ZERO_USAGE), ...usage });
+	}
+
+	private book(usage: RuntimeUsage): void {
+		for (const key of USAGE_KEYS) this.turnBooked[key] += usage[key];
+		this.segUsage = null;
 	}
 
 	// ---- ACP side -------------------------------------------------------
@@ -426,12 +436,18 @@ class AcpConversation implements RuntimeConversation {
 		return this.isAntonToolRef(update);
 	}
 
-	/** One model call's usage, which is the step's context as Flue measures it. */
+	/**
+	 * One model call's usage, which is the step's context as Flue measures it. An agent reports it as the call starts,
+	 * before any of its output: it opens the call's step, or the step's start would reset it to zero.
+	 */
 	private pushUsage(update: SessionUpdate): void {
 		const usage = readUsage({ ...update, ...update._meta }, this.agent.metaNamespace);
 		if (!usage) return;
-		this.turnMeasured = true;
-		this.push({ type: 'message_delta', stopReason: null, usage });
+		if (!usage.occupancy) this.turnMeasured = true;
+		const counters = { input: usage.input, output: usage.output, cacheRead: usage.cacheRead, cacheWrite: usage.cacheWrite };
+		this.ensureSegment();
+		this.segUsage = counters;
+		this.push({ type: 'message_delta', stopReason: null, usage: counters });
 	}
 
 	private async onRequest(method: string, params: unknown, id: number | string): Promise<unknown> {
@@ -473,6 +489,7 @@ class AcpConversation implements RuntimeConversation {
 		this.push({ type: 'message_delta', stopReason: 'tool_use', usage: {} });
 		this.push({ type: 'message_stop' });
 		this.seg.open = false;
+		this.book(this.segUsage ?? ZERO_USAGE);
 		this.parkedTools += 1;
 		if (steer) this.parkedMcp += 1;
 		try {
@@ -599,6 +616,7 @@ class AcpConversation implements RuntimeConversation {
 		this.promptAt = t0;
 		this.ttftMs = null;
 		this.turnMeasured = false;
+		this.turnBooked = { ...ZERO_USAGE };
 		this.lastActivity = t0;
 		let stalled = false;
 		let stallTimer: ReturnType<typeof setInterval> | undefined;
@@ -620,12 +638,12 @@ class AcpConversation implements RuntimeConversation {
 				}),
 				stall,
 			])) as { stopReason?: string; usage?: Record<string, unknown> };
-			// The turn's total sums every model call in it; booked onto one step it reads as that step's context.
-			// Only an agent that reported no call on its own gets it, as the best measure there is.
+			// The turn's total sums every model call in it. An agent that counted each call has booked it already; one
+			// that reported only each call's context (Antigravity) gets the rest of the total on the last step.
 			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {}, this.agent.metaNamespace);
 			// A turn that ends right after a tool result still answers that step, if only with nothing.
 			this.ensureSegment();
-			this.closeSegment(result?.stopReason ?? 'end_turn', total ?? {});
+			this.closeSegment(result?.stopReason ?? 'end_turn', total && !total.occupancy ? settle(total, this.turnBooked) : {});
 			this.push({ type: 'turn_end' });
 		} catch (error) {
 			this.closeSegment(null);
@@ -644,27 +662,50 @@ class AcpConversation implements RuntimeConversation {
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) || 0 : 0);
 
+const USAGE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
+
+/**
+ * The last step's share of a turn total, so the turn's steps add up to it. Each earlier step booked its whole context
+ * as input, cached part included, since the agent never split it: input booked past the total's uncached input was
+ * cached, and comes off the cache read instead. The last step is left with the context the reports did not cover.
+ */
+export function settle(total: RuntimeUsage, booked: RuntimeUsage): RuntimeUsage {
+	const input = total.input - booked.input;
+	const cacheRead = total.cacheRead - booked.cacheRead + Math.min(0, input);
+	return {
+		input: Math.max(0, input),
+		output: Math.max(0, total.output - booked.output),
+		cacheRead: Math.max(0, cacheRead),
+		cacheWrite: Math.max(0, total.cacheWrite - booked.cacheWrite + Math.min(0, cacheRead)),
+	};
+}
+
 /**
  * ACP usage (a `usage_update`, its `_meta`, or `session/prompt`'s total) in pi's shape, where `input` is the uncached
  * part only. Vendors count cached tokens inside their input total (Devin does: summing them again showed 343K of a
  * 262K window when the call held 171K), so they are taken out of it. An agent that reports only the spec's `used`
- * occupancy gets that as input. Null when nothing was measured.
+ * occupancy gets that as input, marked `occupancy`. Null when nothing was measured.
  */
-export function readUsage(fields: Record<string, unknown>, namespace?: string): RuntimeUsage | null {
+export function readUsage(fields: Record<string, unknown>, namespace?: string): (RuntimeUsage & { occupancy?: true }) | null {
 	const first = (key: string, short: string) => {
 		for (const name of [namespace ? `${namespace}/${key}` : '', key, short]) if (name && fields[name] !== undefined) return num(fields[name]);
 		return 0;
 	};
 	const total = first('inputTokens', 'input');
-	const output = first('outputTokens', 'output');
+	const written = first('outputTokens', 'output');
+	const thought = first('thoughtTokens', 'thought');
 	const cacheRead = first('cachedReadTokens', 'cacheRead');
 	const cacheWrite = first('cachedWriteTokens', 'cacheWrite');
+	const sum = first('totalTokens', 'total');
+	// Reasoning is paid as output. Gemini counts it apart from the answer; a grand total smaller than both together already has it inside.
+	const output = thought && (!sum || sum >= total + written + thought) ? written + thought : written;
 	if (total || output || cacheRead || cacheWrite) {
 		const input = total >= cacheRead + cacheWrite ? total - cacheRead - cacheWrite : total;
 		return { input, output, cacheRead, cacheWrite };
 	}
+	// The spec's `used` is the call's whole context, with no split into cached and uncached or any output.
 	const used = num(fields.used);
-	return used ? { input: used, output: 0, cacheRead: 0, cacheWrite: 0 } : null;
+	return used ? { input: used, output: 0, cacheRead: 0, cacheWrite: 0, occupancy: true } : null;
 }
 
 const textOf = (update: SessionUpdate): string => {
