@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
 	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
 	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
+	// The saved Library the project page reads for many threads at once: the same files as `outputs`.
+	storedOutputs: vi.fn(async (id: string) => ({ outputs: (await api.outputs(id)).outputs })),
 	pullMetadata: vi.fn(async (): Promise<any> => null),
 	spaceUsage: vi.fn(),
 	spaceAutomations: vi.fn(),

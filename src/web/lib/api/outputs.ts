@@ -10,8 +10,42 @@ export type OutputsPayload = { source: Source; at: string | null; outputs: Outpu
 
 export const outputUrl = (id: string, path: string) => `/api/sessions/${id}/output?path=${encodeURIComponent(path)}`;
 
+/** Ids asked for in the same moment, read together; each caller gets its own task's list. */
+let batch: Map<string, { resolve: (value: { outputs: Output[] }) => void; reject: (error: unknown) => void }[]> | null = null;
+const BATCH_MAX = 50;
+
+function flush() {
+	const asked = batch;
+	batch = null;
+	if (!asked) return;
+	const ids = [...asked.keys()];
+	for (let start = 0; start < ids.length; start += BATCH_MAX) {
+		const part = ids.slice(start, start + BATCH_MAX);
+		json<{ outputs: Record<string, Output[]> }>(`/api/outputs?ids=${part.map(encodeURIComponent).join(',')}`).then(
+			(answer) => part.forEach((id) => asked.get(id)?.forEach((caller) => caller.resolve({ outputs: answer.outputs[id] ?? [] }))),
+			(error) => part.forEach((id) => asked.get(id)?.forEach((caller) => caller.reject(error))),
+		);
+	}
+}
+
+/**
+ * A task's saved Library, read together with every other task asked for in the same moment: a project listing its
+ * threads' files makes one request, not one per thread. The task's own Library panel reads `outputs`, which also says
+ * whether its sandbox runs.
+ */
+export function storedOutputs(id: string): Promise<{ outputs: Output[] }> {
+	return new Promise((resolve, reject) => {
+		if (!batch) {
+			batch = new Map();
+			setTimeout(flush, 0);
+		}
+		batch.set(id, [...(batch.get(id) ?? []), { resolve, reject }]);
+	});
+}
+
 export const outputsApi = {
 	outputs: (id: string) => json<OutputsPayload>(`/api/sessions/${id}/outputs`),
+	storedOutputs,
 	artifacts: () => json<{ artifacts: Artifact[] }>('/api/artifacts'),
 	downloadArtifacts: async (items: { sessionId: string; path: string }[]) =>
 		(await request('/api/artifacts/download', { method: 'POST', body: JSON.stringify({ items }) })).blob(),

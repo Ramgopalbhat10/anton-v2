@@ -25,6 +25,7 @@ import { repoShort, type Session } from '@/lib/api/sessions';
 import type { Space } from '@/lib/api/spaces';
 import { age, until } from '@/lib/format';
 import { shownPaths, threadFolders } from '@/lib/project-library';
+import { storedOutputsQuery } from '@/lib/thread-outputs';
 import { stateOf } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { defaultSchedule, type Frequency, type Schedule, scheduleProblem } from '../../../core/schedule';
@@ -85,7 +86,7 @@ export function ProjectFiles({ space, threads }: { space: Space; threads: Sessio
 	const queryClient = useQueryClient();
 	const files = useQuery({ queryKey: ['space-files', space.id], queryFn: () => api.spaceFiles(space.id) });
 	const recent = threads.slice(0, LISTED_THREADS);
-	const outputs = useQueries({ queries: recent.map((thread) => ({ queryKey: ['outputs', thread.id], queryFn: () => api.outputs(thread.id), staleTime: 30_000 })) });
+	const outputs = useQueries({ queries: recent.map((thread) => storedOutputsQuery(thread.id)) });
 	const listed: Output[] = [];
 	const entries = new Map<string, Entry>();
 	for (const file of files.data?.files ?? []) {
@@ -116,7 +117,10 @@ export function ProjectFiles({ space, threads }: { space: Space; threads: Sessio
 		remove: (path) => entries.get(path)?.remove() ?? Promise.resolve(),
 		refresh: () => {
 			void queryClient.invalidateQueries({ queryKey: ['space-files', space.id] });
-			for (const thread of recent) void queryClient.invalidateQueries({ queryKey: ['outputs', thread.id] });
+			for (const thread of recent) {
+				void queryClient.invalidateQueries({ queryKey: ['outputs', thread.id] });
+				void queryClient.invalidateQueries({ queryKey: ['stored-outputs', thread.id] });
+			}
 		},
 		addedTo: 'the project files',
 		empty: `Files you add here are for every thread, which finds them in ../project-files. What the threads save shows under ${FROM_THREADS}.`,

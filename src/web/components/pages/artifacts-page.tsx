@@ -59,6 +59,7 @@ function useDeleteArtifact(artifact: Artifact, onDeleted?: () => void) {
 			);
 			void queryClient.invalidateQueries({ queryKey: ['artifacts'] });
 			void queryClient.invalidateQueries({ queryKey: ['outputs', artifact.sessionId] });
+			void queryClient.invalidateQueries({ queryKey: ['stored-outputs', artifact.sessionId] });
 			onDeleted?.();
 		},
 	});
@@ -535,7 +536,10 @@ function BulkActions({ selected, shown, keys, setKeys, busy, setBusy, finish }: 
 		queryClient.setQueryData<{ artifacts: Artifact[] }>(['artifacts'], (current) => current ? { artifacts: current.artifacts.filter((item) => !removed.has(artifactKey(item))) } : current);
 		setKeys(new Set([...keys].filter((key) => !removed.has(key))));
 		void queryClient.invalidateQueries({ queryKey: ['artifacts'] });
-		for (const id of new Set(selected.map((item) => item.sessionId))) void queryClient.invalidateQueries({ queryKey: ['outputs', id] });
+		for (const id of new Set(selected.map((item) => item.sessionId))) {
+			void queryClient.invalidateQueries({ queryKey: ['outputs', id] });
+			void queryClient.invalidateQueries({ queryKey: ['stored-outputs', id] });
+		}
 		setConfirming(null); setBusy(false); setOperation(null);
 		setNotice(`${removed.size} artifact${removed.size === 1 ? '' : 's'} deleted.`);
 		if (failures.length) setError(`${failures.length} could not be deleted. They remain selected; retry Delete. ${failures.slice(0, 3).join(' · ')}`);

@@ -194,6 +194,19 @@ export async function storedOutputs(id: string): Promise<OutputsView['outputs']>
 	return library(checkpoint, saved);
 }
 
+/** Most tasks whose saved Libraries one read returns. */
+export const MAX_OUTPUT_TASKS = 50;
+
+/**
+ * Several tasks' saved Libraries in one read, for a project that lists its threads' files. Only what is saved (the
+ * checkpoint and the files kept beside it), the same list `outputsView` gives, without asking whether each sandbox runs.
+ * A task with nothing saved, or none by that id, has an empty list.
+ */
+export async function storedOutputsOf(ids: string[]): Promise<Record<string, OutputsView['outputs']>> {
+	const unique = [...new Set(ids)].slice(0, MAX_OUTPUT_TASKS);
+	return Object.fromEntries(await Promise.all(unique.map(async (id) => [id, await storedOutputs(id).catch(() => [])] as const)));
+}
+
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_LIVE_OUTPUT_BYTES = 50 * 1024 * 1024;
 

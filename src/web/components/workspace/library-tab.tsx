@@ -485,6 +485,7 @@ export function LibraryTab({ sessionId }: { sessionId: string }) {
 	const shared = useQuery({ queryKey: ['space-files', spaceId], queryFn: () => api.spaceFiles(spaceId!), enabled: Boolean(spaceId) });
 	const refresh = useCallback(() => {
 		void queryClient.invalidateQueries({ queryKey: ['outputs', sessionId] });
+		void queryClient.invalidateQueries({ queryKey: ['stored-outputs', sessionId] });
 		if (spaceId) void queryClient.invalidateQueries({ queryKey: ['space-files', spaceId] });
 	}, [queryClient, sessionId, spaceId]);
 	const own = outputs.data?.outputs;

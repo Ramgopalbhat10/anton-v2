@@ -4,7 +4,7 @@ import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.
 import { isIncognitoId } from '../core/incognito.ts';
 import { pageFetch } from '../services/browser/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from '../services/artifacts/renders.ts';
-import { changesView, fileTree, MAX_UPLOAD_BYTES, outputsView, readFile, readOutputFile, removeOutput, uploadOutput } from '../services/artifacts/files.ts';
+import { changesView, fileTree, MAX_UPLOAD_BYTES, outputsView, readFile, readOutputFile, removeOutput, storedOutputsOf, uploadOutput } from '../services/artifacts/files.ts';
 import { wakeMachine } from '../services/sandbox/workspace.ts';
 import { sessionSkills } from '../services/settings/plugins.ts';
 import { createSession, getSession, listSessions, editSession, fallbackModel, switchToFallbackModel, forkSession, resumeSession, stopSession } from '../services/tasks/sessions.ts';
@@ -250,6 +250,11 @@ app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req
 app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));
 app.get('/api/sessions/:id/file', async (c) => bytes(c, await readFile(c.req.param('id'), c.req.query('path') ?? '')));
 app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req.param('id'))));
+/** `?ids=a,b,…`: several tasks' saved Libraries at once, for a project's threads (`storedOutputsOf`). */
+app.get('/api/outputs', async (c) => {
+	const ids = (c.req.query('ids') ?? '').split(',').filter((id) => /^[\w-]{1,80}$/.test(id));
+	return c.json({ outputs: await storedOutputsOf(ids) });
+});
 app.get('/api/sessions/:id/output', async (c) => {
 	const path = c.req.query('path') ?? '';
 	return bytes(c, await readOutputFile(c.req.param('id'), path), contentType(path));

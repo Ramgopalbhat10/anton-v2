@@ -1,6 +1,7 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { type Query, useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { api } from '@/lib/api';
+import { liveStaleTime } from '@/lib/live-updates';
 import type { Output } from '@/lib/api/outputs';
 import type { Session } from '@/lib/api/sessions';
 import type { ViewerItem } from '@/lib/viewer';
@@ -18,13 +19,17 @@ export function useThreadOutputs(sessionId: string): Output[] {
 	return useMemo(() => madeBy(outputs.data?.outputs), [outputs.data]);
 }
 
+/** A thread's saved Library, read in one request with the others a page asks for at once; events about its files mark it stale. */
+export const storedOutputsQuery = (id: string) =>
+	({ queryKey: ['stored-outputs', id], queryFn: () => api.storedOutputs(id), staleTime: (query: Query) => liveStaleTime(query, 30_000) }) as const;
+
 /** A thread named by the start of its id, as the coordinator names them. */
 const byPrefix = (threads: Session[], id: string) => threads.find((thread) => thread.id === id || (id.length >= 6 && thread.id.startsWith(id)));
 
 /** The thread file a coordinator link names: by thread id (`#thread-1a2b3c4d/outputs/x.png`), or for a copied path (`../outputs/x.png`) the newest thread that saved or named it. */
 export function useThreadFileResolver(threads: Session[]): (href: string) => ViewerItem | null {
 	const recent = useMemo(() => [...threads].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, LISTED_THREADS), [threads]);
-	const results = useQueries({ queries: recent.map((thread) => ({ queryKey: ['outputs', thread.id], queryFn: () => api.outputs(thread.id), staleTime: 30_000 })) });
+	const results = useQueries({ queries: recent.map((thread) => storedOutputsQuery(thread.id)) });
 	const stamp = results.map((result) => result.dataUpdatedAt).join(',');
 	// The results come as a new array each render; their update times say when one changed.
 	const owners = useMemo(() => {
