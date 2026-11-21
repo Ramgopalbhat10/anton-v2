@@ -128,7 +128,7 @@ function Reply({ message, live, working, last, answer, segment, showWorkspaceCha
 			) : null}
 			{blocks.map((block, index) =>
 				block.kind === 'text' ? (
-					<Markdown key={index} text={block.text} />
+					<Markdown key={index} text={block.text} streaming={(live || working) && Boolean(block.streaming)} />
 				) : block.kind === 'plan' ? (
 					<PlanCard key={block.part.toolCallId} part={block.part} answer={answer} />
 				) : block.kind === 'agents' ? (

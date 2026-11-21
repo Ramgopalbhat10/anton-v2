@@ -282,7 +282,7 @@ export function SubscriptionsPage() {
 			) : view.isError ? (
 				<p className="m-0 text-small text-(--bad)">{view.error.message}</p>
 			) : current ? (
-				<div className="flex flex-col gap-5">
+				<div className="flex min-w-0 flex-col gap-5">
 					<Tabs label="Plans">
 						{plans.map((plan) => (
 							<PlanTab key={plan.id} subscription={plan} on={plan.id === current.id} onSelect={() => setPicked(plan.id)} />

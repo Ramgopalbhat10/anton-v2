@@ -6,6 +6,7 @@ import { MermaidDiagram } from '@/components/content/mermaid-diagram';
 import { outputUrl } from '@/lib/api/outputs';
 import { documentPlugins } from '@/lib/document-markdown';
 import { deletedNoun, useDeletedOutput } from '@/lib/deleted-outputs';
+import { useSmoothText } from '@/lib/smooth-stream';
 import type { ViewerItem } from '@/lib/viewer';
 
 /** `src/app.ts:42` in inline code becomes a link when the task has that file; without a provider, references stay code. */
@@ -230,17 +231,20 @@ const Block = memo(function Block({ text }: { text: string }) {
 });
 
 /** Parsing is the expensive part, so a reply is parsed a block at a time and an unchanged block is not parsed again: while a reply streams, only its last block is. */
-export const Markdown = memo(function Markdown({ text, html = false }: {
+export const Markdown = memo(function Markdown({ text, html = false, streaming = false }: {
 	text: string;
 	/** Sanitized HTML for file/document previews, not replies. */
 	html?: boolean;
+	/** Smoothly paces newly arrived text while a reply is still streaming. */
+	streaming?: boolean;
 }) {
+	const visible = useSmoothText(text, streaming && !html);
 	// HTML wrappers can span Markdown blocks; parse documents whole, while replies
 	// retain their streaming optimization and never opt into HTML.
-	const blocks = useMemo(() => html ? [text] : markdownBlocks(text), [text, html]);
+	const blocks = useMemo(() => html ? [visible] : markdownBlocks(visible), [visible, html]);
 	if (html) return (
 		<div className="sg-markdown">
-			<ReactMarkdown remarkPlugins={plugins} rehypePlugins={documentPlugins} components={components}>{text}</ReactMarkdown>
+			<ReactMarkdown remarkPlugins={plugins} rehypePlugins={documentPlugins} components={components}>{visible}</ReactMarkdown>
 		</div>
 	);
 	return (
