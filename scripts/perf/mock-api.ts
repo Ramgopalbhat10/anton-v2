@@ -168,6 +168,127 @@ const spaces = [
 	space('space-docs', 'Docs refresh', 'Refresh the docs for the new CLI and tighten the voice.', 'active', [], [], spaceThreads.filter((item) => item.spaceId === 'space-docs'), 30),
 	space('space-mobile', 'Mobile app', 'First pass at the mobile app shell and theme.', 'archived', ['p-mobile'], [{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-mobile'), 60),
 ];
+const spaceTodos: Array<{
+	id: string;
+	spaceId: string;
+	title: string;
+	description: string;
+	status: 'open' | 'triaging' | 'in_progress' | 'done' | 'cancelled';
+	assigneeKind: 'unassigned' | 'coordinator' | 'thread';
+	priority: 'urgent' | 'high' | 'medium' | 'low' | null;
+	tags: string[];
+	projectId: string | null;
+	model: string | null;
+	reasoning: string | null;
+	planMode: boolean;
+	files: string[];
+	dueAt: string | null;
+	sourceUrl: string | null;
+	position: number;
+	createdBy: 'user' | 'coordinator' | 'routine';
+	threadIds: string[];
+	assignedAt: string | null;
+	completedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
+}> = [
+	{
+		id: 'todo-proration',
+		spaceId: 'space-billing',
+		title: 'Add mid-cycle plan proration',
+		description: 'Calculate daily proration credits when upgrading or downgrading seats mid-month.',
+		status: 'open',
+		assigneeKind: 'unassigned',
+		priority: 'high',
+		tags: ['billing', 'api'],
+		projectId: 'p-billing',
+		model: null,
+		reasoning: null,
+		planMode: true,
+		files: [],
+		dueAt: '2026-11-28',
+		sourceUrl: 'https://github.com/acme/billing-api/issues/42',
+		position: 0,
+		createdBy: 'user',
+		threadIds: [],
+		assignedAt: null,
+		completedAt: null,
+		createdAt: ago(60 * 12),
+		updatedAt: ago(60 * 12),
+	},
+	{
+		id: 'todo-tax',
+		spaceId: 'space-billing',
+		title: 'VAT ID validation on checkout',
+		description: 'Validate EU VAT numbers before issuing tax-exempt invoices.',
+		status: 'open',
+		assigneeKind: 'unassigned',
+		priority: 'medium',
+		tags: ['tax'],
+		projectId: 'p-billing',
+		model: null,
+		reasoning: null,
+		planMode: false,
+		files: [],
+		dueAt: null,
+		sourceUrl: null,
+		position: 1,
+		createdBy: 'user',
+		threadIds: [],
+		assignedAt: null,
+		completedAt: null,
+		createdAt: ago(60 * 8),
+		updatedAt: ago(60 * 8),
+	},
+	{
+		id: 'todo-ledger-linked',
+		spaceId: 'space-billing',
+		title: 'Migrate the ledger schema',
+		description: 'Move double-entry ledger columns to the v2 layout.',
+		status: 'in_progress',
+		assigneeKind: 'coordinator',
+		priority: 'urgent',
+		tags: ['schema'],
+		projectId: 'p-billing',
+		model: null,
+		reasoning: null,
+		planMode: false,
+		files: [],
+		dueAt: null,
+		sourceUrl: null,
+		position: 2,
+		createdBy: 'user',
+		threadIds: ['th-schema'],
+		assignedAt: ago(45),
+		completedAt: null,
+		createdAt: ago(60 * 20),
+		updatedAt: ago(4),
+	},
+	{
+		id: 'todo-webhook-done',
+		spaceId: 'space-billing',
+		title: 'Prune stale webhook retries',
+		description: 'Clean up retries older than 7 days.',
+		status: 'done',
+		assigneeKind: 'thread',
+		priority: 'low',
+		tags: ['cleanup'],
+		projectId: 'p-billing',
+		model: null,
+		reasoning: null,
+		planMode: false,
+		files: [],
+		dueAt: null,
+		sourceUrl: null,
+		position: 3,
+		createdBy: 'user',
+		threadIds: ['th-cleanup'],
+		assignedAt: ago(60 * 32),
+		completedAt: ago(60 * 30),
+		createdAt: ago(60 * 40),
+		updatedAt: ago(60 * 30),
+	},
+];
 const notifications = [
 	{ id: 'n-ask', kind: 'question', category: 'needs-you', sessionId: 'th-invoices', spaceId: 'space-billing', title: 'Name the invoices table', body: 'The schema is in. Before I write the migration: should the table be `invoices` or `billing_documents`?', url: '/projects/space-billing/threads/th-invoices', createdAt: ago(12), read: false },
 	{ id: 'n-checks', kind: 'checks-failed', category: 'failures', sessionId: 'th-api', spaceId: 'space-billing', title: 'Expose invoices over the API', body: 'Checks failed on pull request #12: `ui-tests`.', url: '/projects/space-billing/threads/th-api', createdAt: ago(140), read: false },
@@ -350,6 +471,100 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		const todosSpaceId = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
+		if (todosSpaceId) {
+			if (req.method === 'POST') {
+				let raw = '';
+				req.on('data', (chunk) => (raw += String(chunk)));
+				req.on('end', () => {
+					const input = JSON.parse(raw || '{}') as Record<string, unknown>;
+					const nowIso = new Date().toISOString();
+					const item = {
+						id: `todo-${Date.now()}`,
+						spaceId: todosSpaceId,
+						title: String(input.title ?? ''),
+						description: String(input.description ?? ''),
+						status: 'open' as const,
+						assigneeKind: 'unassigned' as const,
+						priority: (input.priority as 'urgent' | 'high' | 'medium' | 'low' | null) ?? null,
+						tags: Array.isArray(input.tags) ? input.tags.map(String) : [],
+						projectId: (input.projectId as string | null) ?? null,
+						model: (input.model as string | null) ?? null,
+						reasoning: (input.reasoning as string | null) ?? null,
+						planMode: Boolean(input.planMode),
+						files: Array.isArray(input.files) ? input.files.map(String) : [],
+						dueAt: (input.dueAt as string | null) ?? null,
+						sourceUrl: (input.sourceUrl as string | null) ?? null,
+						position: spaceTodos.filter((t) => t.spaceId === todosSpaceId).length,
+						createdBy: 'user' as const,
+						threadIds: [],
+						assignedAt: null,
+						completedAt: null,
+						createdAt: nowIso,
+						updatedAt: nowIso,
+					};
+					spaceTodos.push(item);
+					json(res, item);
+				});
+				return;
+			}
+			return json(res, { todos: spaceTodos.filter((item) => item.spaceId === todosSpaceId) });
+		}
+		const todoAssignMatch = path.match(/^\/api\/spaces\/([^/]+)\/todos\/([^/]+)\/assign$/);
+		if (todoAssignMatch && req.method === 'POST') {
+			let raw = '';
+			req.on('data', (chunk) => (raw += String(chunk)));
+			req.on('end', () => {
+				const [, sId, todoId] = todoAssignMatch;
+				const input = JSON.parse(raw || '{}') as { target?: string; threadId?: string };
+				const todo = spaceTodos.find((item) => item.spaceId === sId && item.id === todoId);
+				if (!todo) {
+					res.statusCode = 404;
+					return json(res, { error: 'Not found' });
+				}
+				todo.assignedAt = new Date().toISOString();
+				todo.updatedAt = todo.assignedAt;
+				if (input.target === 'coordinator') {
+					todo.status = 'triaging';
+					todo.assigneeKind = 'coordinator';
+					return json(res, { todo });
+				}
+				const threadId = input.target === 'thread' && input.threadId ? input.threadId : `th-todo-${Date.now()}`;
+				if (input.target === 'new-thread') {
+					spaceThreads.unshift(thread(threadId, sId, todo.title, 'working', { ...onRepo('p-billing', 'acme/billing-api', 'todo-thread'), working: true, status: 'running', lastReply: todo.description || todo.title, lastInputAt: todo.assignedAt }));
+				}
+				if (!todo.threadIds.includes(threadId)) todo.threadIds.push(threadId);
+				todo.status = 'in_progress';
+				todo.assigneeKind = 'thread';
+				return json(res, { todo });
+			});
+			return;
+		}
+		const todoMatch = path.match(/^\/api\/spaces\/([^/]+)\/todos\/([^/]+)$/);
+		if (todoMatch) {
+			const [, sId, todoId] = todoMatch;
+			if (req.method === 'DELETE') {
+				const index = spaceTodos.findIndex((item) => item.spaceId === sId && item.id === todoId);
+				if (index >= 0) spaceTodos.splice(index, 1);
+				return json(res, { ok: true });
+			}
+			if (req.method === 'PATCH') {
+				let raw = '';
+				req.on('data', (chunk) => (raw += String(chunk)));
+				req.on('end', () => {
+					const patch = JSON.parse(raw || '{}') as Record<string, unknown>;
+					const todo = spaceTodos.find((item) => item.spaceId === sId && item.id === todoId);
+					if (!todo) {
+						res.statusCode = 404;
+						return json(res, { error: 'Not found' });
+					}
+					Object.assign(todo, patch, { updatedAt: new Date().toISOString() });
+					json(res, todo);
+				});
+				return;
+			}
+		}
+		if (/^\/api\/spaces\/[^/]+\/files$/.test(path)) return json(res, { files: [] });
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
 		if (spaceId) {
 			const found = spaces.find((item) => item.id === spaceId);

@@ -4,6 +4,8 @@ import { InvalidInputError } from '../core/errors.ts';
 import { MAX_UPLOAD_BYTES } from '../services/artifacts/files.ts';
 import { listThreads } from '../services/tasks/sessions.ts';
 import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from '../services/projects/spaces.ts';
+import { assignTodo, createTodo, editTodo, listTodos, MAX_TODO_DESCRIPTION, MAX_TODO_FILES, MAX_TODO_TAGS, MAX_TODO_TITLE, removeTodo, reorderTodos } from '../services/projects/todos.ts';
+import { SPACE_TODO_STATUSES, TODO_PRIORITIES } from '../core/space-todos.ts';
 import { threadStarted } from '../services/projects/thread-reports.ts';
 import { listSpaceFiles, readSpaceFile, removeSpaceFile, uploadSpaceFile } from '../services/projects/space-files.ts';
 import { attachToProject } from '../services/artifacts/attachments.ts';
@@ -99,6 +101,64 @@ app.post('/api/spaces/:id/attachments', async (c) => {
 app.delete('/api/spaces/:id/file', async (c) => {
 	await removeSpaceFile(c.req.param('id'), c.req.query('path') ?? '');
 	return c.json({ ok: true });
+});
+
+const TODO_PRIORITY = v.nullable(v.picklist(TODO_PRIORITIES));
+const TODO_FIELDS = {
+	title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_TODO_TITLE))),
+	description: v.optional(v.pipe(v.string(), v.maxLength(MAX_TODO_DESCRIPTION))),
+	priority: v.optional(TODO_PRIORITY),
+	tags: v.optional(v.pipe(v.array(v.string()), v.maxLength(MAX_TODO_TAGS))),
+	projectId: v.optional(v.nullable(v.string())),
+	repo: v.optional(v.string()),
+	model: v.optional(v.nullable(v.string())),
+	reasoning: v.optional(v.nullable(REASONING)),
+	planMode: v.optional(v.boolean()),
+	files: v.optional(v.pipe(v.array(v.string()), v.maxLength(MAX_TODO_FILES))),
+	dueAt: v.optional(v.nullable(v.string())),
+	sourceUrl: v.optional(v.nullable(v.string())),
+};
+
+app.get('/api/spaces/:id/todos', async (c) => c.json({ todos: await listTodos(c.req.param('id')) }));
+app.post('/api/spaces/:id/todos', async (c) => {
+	const input = await body(c, v.object({ ...TODO_FIELDS, title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_TODO_TITLE)) }));
+	return c.json(await createTodo(c.req.param('id'), input));
+});
+app.post('/api/spaces/:id/todos/reorder', async (c) => {
+	const { ids } = await body(c, v.object({ ids: v.pipe(v.array(v.string()), v.maxLength(500)) }));
+	return c.json({ todos: await reorderTodos(c.req.param('id'), ids) });
+});
+app.patch('/api/spaces/:id/todos/:todoId', async (c) => {
+	const change = await body(c, v.object({ ...TODO_FIELDS, status: v.optional(v.picklist(SPACE_TODO_STATUSES)) }));
+	return c.json(await editTodo(c.req.param('id'), c.req.param('todoId'), change));
+});
+app.delete('/api/spaces/:id/todos/:todoId', async (c) => {
+	await removeTodo(c.req.param('id'), c.req.param('todoId'));
+	return c.json({ ok: true });
+});
+app.post('/api/spaces/:id/todos/:todoId/assign', async (c) => {
+	const input = await body(
+		c,
+		v.variant('target', [
+			v.object({ target: v.literal('coordinator'), note: v.optional(v.pipe(v.string(), v.maxLength(10_000))) }),
+			v.object({
+				target: v.literal('new-thread'),
+				id: v.optional(v.pipe(v.string(), v.uuid())),
+				projectId: v.optional(v.nullable(v.string())),
+				repo: v.optional(v.string()),
+				model: v.optional(v.string()),
+				reasoning: v.optional(REASONING),
+				planMode: v.optional(v.boolean()),
+				note: v.optional(v.pipe(v.string(), v.maxLength(10_000))),
+			}),
+			v.object({
+				target: v.literal('thread'),
+				threadId: v.pipe(v.string(), v.minLength(1)),
+				note: v.optional(v.pipe(v.string(), v.maxLength(10_000))),
+			}),
+		]),
+	);
+	return c.json(await assignTodo(c.req.param('id'), c.req.param('todoId'), input));
 });
 
 export const spaceRoutes = app;

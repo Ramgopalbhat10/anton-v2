@@ -11,7 +11,7 @@ type Change =
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
-	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
+	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' | 'todos' }
 	| { kind: 'automations' }
 	| { kind: 'notifications' }
 	| { kind: 'projects' }
@@ -46,6 +46,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts'], ['reviews']];
 	if (change.kind === 'spaces') return [['spaces'], ['space']];
 	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
+	if (change.kind === 'space' && change.what === 'todos') return [['space-todos', change.id], ['space', change.id], ['spaces']];
 	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
 	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id]];
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
@@ -130,6 +131,7 @@ export const LIVE_KEYS: ReadonlySet<string> = new Set([
 	'session',
 	'spaces',
 	'space',
+	'space-todos',
 	'space-usage',
 	'budget',
 	'usage',

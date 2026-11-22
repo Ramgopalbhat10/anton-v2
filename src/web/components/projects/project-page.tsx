@@ -7,23 +7,25 @@ import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
 import { ProjectFeed } from '@/components/projects/project-feed';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
+import { ProjectTodos } from '@/components/projects/project-todos';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
 import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell/shell';
 import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/kit/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { useOlderTurns, useWindowedClient } from '@/lib/conversation-window';
-import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
+import { readThreadPanels, saveThreadPanels, useSpace, useSpaceTodos, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/thread/starting-task';
 import { usePaneSlide } from '@/components/workspace/workspace-pane';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { cn } from '@/lib/utils';
 
-type ProjectView = 'board' | 'files' | 'activity' | 'prs' | 'routines';
+type ProjectView = 'board' | 'todos' | 'files' | 'activity' | 'prs' | 'routines';
 
 const VIEWS: Array<{ id: ProjectView; label: string }> = [
 	{ id: 'board', label: 'Board' },
+	{ id: 'todos', label: 'To-dos' },
 	{ id: 'files', label: 'Files' },
 	{ id: 'activity', label: 'Activity' },
 	{ id: 'prs', label: 'Pull requests' },
@@ -76,6 +78,8 @@ export function ProjectPage() {
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
+	const { todos } = useSpaceTodos(spaceId);
+	const openTodoCount = todos.filter((todo) => todo.status === 'open').length;
 	const path = `/api/agents/coordinator/${spaceId}`;
 	const client = useWindowedClient(path);
 	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
@@ -193,6 +197,7 @@ export function ProjectPage() {
 						{VIEWS.map((view) => (
 							<PanelTab key={view.id} on={saved.view === view.id} onSelect={() => changeDock({ view: view.id })}>
 								{view.label}
+								{view.id === 'todos' && openTodoCount > 0 ? <span className="in-num ml-1 text-micro text-(--text-3)">{openTodoCount}</span> : null}
 							</PanelTab>
 						))}
 					</PanelTabs>
@@ -212,9 +217,17 @@ export function ProjectPage() {
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					{saved.view === 'board' ? (
-						<ProjectBoard threads={threads} onNewThread={startThread} />
+						<ProjectBoard
+							space={data}
+							threads={threads}
+							todos={todos}
+							coordinatorBusy={busy}
+							onNewThread={startThread}
+							onOpenCoordinator={() => changeDock({ open: true })}
+						/>
 					) : (
 						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
+							{saved.view === 'todos' ? <ProjectTodos space={data} threads={threads} todos={todos} onOpenCoordinator={() => changeDock({ open: true })} /> : null}
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
 							{saved.view === 'activity' ? <ProjectActivity space={data} threads={threads} /> : null}
 							{saved.view === 'prs' ? <ProjectPullRequests threads={threads} /> : null}

@@ -1,9 +1,12 @@
 import type { AttachedFile } from '../../../core/attachments';
+import type { SpaceTodo, SpaceTodoStatus, TodoPriority } from '../../../core/space-todos';
 import { json, post, request } from './http';
 import type { Reasoning } from './plans';
 import type { Automation, AutomationInput } from './projects';
 import type { Session } from './sessions';
 import type { HelperAgent } from './settings';
+
+export type { SpaceTodo, SpaceTodoStatus, TodoPriority };
 
 /** In the order a project lists its threads. */
 export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
@@ -52,6 +55,39 @@ export type SpaceUsage = {
 	daily: Array<{ day: string; tokens: number; cost: number }>;
 };
 
+export type CreateSpaceTodoInput = {
+	title: string;
+	description?: string;
+	priority?: TodoPriority | null;
+	tags?: string[];
+	projectId?: string | null;
+	repo?: string;
+	model?: string | null;
+	reasoning?: Reasoning | null;
+	planMode?: boolean;
+	files?: string[];
+	dueAt?: string | null;
+	sourceUrl?: string | null;
+};
+
+export type EditSpaceTodoInput = Partial<CreateSpaceTodoInput> & {
+	status?: SpaceTodoStatus;
+};
+
+export type AssignSpaceTodoInput =
+	| { target: 'coordinator'; note?: string }
+	| {
+			target: 'new-thread';
+			id?: string;
+			projectId?: string | null;
+			repo?: string;
+			model?: string;
+			reasoning?: Reasoning;
+			planMode?: boolean;
+			note?: string;
+	  }
+	| { target: 'thread'; threadId: string; note?: string };
+
 export const spacesApi = {
 	spaces: () => json<{ spaces: Space[] }>('/api/spaces'),
 	space: (id: string) => json<Space>(`/api/spaces/${id}`),
@@ -60,6 +96,14 @@ export const spacesApi = {
 	deleteSpace: async (id: string) => void (await request(`/api/spaces/${id}`, { method: 'DELETE' })),
 	startThread: (id: string, input: ThreadInput) => post<Session>(`/api/spaces/${id}/threads`, input),
 	nudgeThread: (id: string, threadId: string, text: string) => post<Session>(`/api/spaces/${id}/threads/${threadId}/nudge`, { text }),
+	spaceTodos: (id: string) => json<{ todos: SpaceTodo[] }>(`/api/spaces/${id}/todos`),
+	createSpaceTodo: (id: string, input: CreateSpaceTodoInput) => post<SpaceTodo>(`/api/spaces/${id}/todos`, input),
+	editSpaceTodo: (id: string, todoId: string, change: EditSpaceTodoInput) =>
+		json<SpaceTodo>(`/api/spaces/${id}/todos/${todoId}`, { method: 'PATCH', body: JSON.stringify(change) }),
+	deleteSpaceTodo: async (id: string, todoId: string) => void (await request(`/api/spaces/${id}/todos/${todoId}`, { method: 'DELETE' })),
+	reorderSpaceTodos: (id: string, ids: string[]) => post<{ todos: SpaceTodo[] }>(`/api/spaces/${id}/todos/reorder`, { ids }),
+	assignSpaceTodo: (id: string, todoId: string, input: AssignSpaceTodoInput) =>
+		post<{ todo: SpaceTodo; thread?: Session }>(`/api/spaces/${id}/todos/${todoId}/assign`, input),
 	spaceUsage: (id: string) => json<SpaceUsage>(`/api/spaces/${id}/usage`),
 	spaceAutomations: (id: string) => json<{ automations: Automation[] }>(`/api/spaces/${id}/automations`),
 	/** A routine of the project: on one of its repositories, or with `projectId` null on none, starting chats. */

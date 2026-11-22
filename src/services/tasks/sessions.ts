@@ -9,6 +9,7 @@ import { getProviders } from '../../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from '../git/checkpoints.ts';
 import { saveSpaceFiles } from '../projects/space-files.ts';
+import { syncTodosForThread } from '../projects/todo-sync.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from '../sandbox/workspace.ts';
 import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
@@ -259,6 +260,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
 		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
 	});
+	if (change.resolved !== undefined) await syncTodosForThread(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos after resolving session', error, id));
 	return getSession(id);
 }
 

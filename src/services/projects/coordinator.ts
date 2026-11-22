@@ -4,6 +4,8 @@ import type { Session } from '../../core/types.ts';
 import { THREAD_STATE_LABELS } from '../../core/thread-state.ts';
 import { getProject } from '../../db/projects.ts';
 import { getSpace, listSpaces } from '../../db/spaces.ts';
+import { listSpaceTodos } from '../../db/space-todos.ts';
+import { TODO_NO_REPO, type SpaceTodo } from '../../core/space-todos.ts';
 import { generalSettings } from '../models/general.ts';
 import { findModel, reasoningFor } from '../models/models.ts';
 import { type ModelChoice, listThreads } from '../tasks/sessions.ts';
@@ -59,10 +61,28 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 
 const RESOLVED_SHOWN = 5;
 
+function todoLine(todo: SpaceTodo, repoNames: Map<string, string>): string {
+	const parts = [`[todo:${todo.id.replace(/^todo_/, '').slice(0, 8)}] "${todo.title}"`];
+	if (todo.priority) parts.push(todo.priority);
+	if (todo.projectId === TODO_NO_REPO) parts.push('no repository');
+	else if (todo.projectId && repoNames.has(todo.projectId)) parts.push(repoNames.get(todo.projectId)!);
+	if (todo.tags.length) parts.push(`tags: ${todo.tags.join(', ')}`);
+	parts.push(todo.status === 'triaging' ? 'assigned to coordinator' : todo.status === 'in_progress' ? `in progress (${todo.threadIds.length} thread${todo.threadIds.length === 1 ? '' : 's'})` : 'open');
+	if (todo.description) parts.push(`"${clip(todo.description, 160)}"`);
+	return `- ${parts.join(' · ')}`;
+}
+
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);
 	if (!space) return '';
-	const [threads, repos, deleted] = await Promise.all([listThreads(spaceId), Promise.all(space.repoIds.map((id) => getProject(id))), deletedThreads(spaceId)]);
+	const [threads, repos, deleted, todos] = await Promise.all([
+		listThreads(spaceId),
+		Promise.all(space.repoIds.map((id) => getProject(id))),
+		deletedThreads(spaceId),
+		listSpaceTodos(spaceId),
+	]);
+	const repoNames = new Map(repos.flatMap((repo) => (repo ? [[repo.id, repo.repoFullName] as const] : [])));
+	const openTodos = todos.filter((todo) => todo.status === 'open' || todo.status === 'triaging');
 	const open = threads.filter((thread) => thread.threadState !== 'resolved');
 	const resolved = threads.filter((thread) => thread.threadState === 'resolved').slice(0, RESOLVED_SHOWN);
 	const working = open.filter((thread) => thread.threadState === 'working').length;
@@ -74,6 +94,7 @@ export async function stateBlock(spaceId: string): Promise<string> {
 		`Parallel limit: ${space.maxParallel} threads working at once; now ${working} working, ${queued} queued.`,
 		space.instructions ? `\nProject instructions from the user:\n${space.instructions}` : '',
 		space.memory ? `\nProject memory (notes saved earlier; they may be out of date):\n${space.memory}` : '',
+		...(openTodos.length ? [`\nTo-dos (${openTodos.length} open/assigned):`, ...openTodos.map((todo) => todoLine(todo, repoNames))] : []),
 		`\nThreads, newest first (${open.length} open):`,
 		...(open.length ? open.map(threadLine) : ['- none yet']),
 		...(resolved.length ? [`Recently resolved:`, ...resolved.map(threadLine)] : []),

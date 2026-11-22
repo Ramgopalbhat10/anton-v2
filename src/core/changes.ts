@@ -10,7 +10,7 @@ export type Change =
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
-	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
+	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' | 'todos' }
 	| { kind: 'automations' }
 	| { kind: 'notifications' }
 	/** The added repos (`/api/projects`): settings, memory, prepared image. */
