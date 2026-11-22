@@ -62,7 +62,7 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 const RESOLVED_SHOWN = 5;
 
 const todoLine = (todo: SpaceTodo) =>
-	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}`;
+	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
 
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);
@@ -99,11 +99,14 @@ export async function stateBlock(spaceId: string): Promise<string> {
 	return lines.filter(Boolean).join('\n');
 }
 
+export async function coordinatorModel(space: { coordinatorModel: string | null }): Promise<string> {
+	return space.coordinatorModel ?? (await generalSettings()).model ?? config.model;
+}
+
 export async function primeCoordinator(spaceId: string): Promise<void> {
 	const space = await getSpace(spaceId);
 	if (!space) return;
-	const general = await generalSettings();
-	const model = space.coordinatorModel ?? general.model ?? config.model;
+	const model = await coordinatorModel(space);
 	const info = await findModel(model).catch(() => undefined);
 	// A coordinator only routes and answers, so it runs at low reasoning unless the project says otherwise.
 	const reasoning = reasoningFor(info, space.coordinatorReasoning ?? (info?.reasoning.includes('low') ? 'low' : null));

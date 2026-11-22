@@ -193,6 +193,8 @@ export const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS space_todo_threads (todo_id TEXT NOT NULL, session_id TEXT NOT NULL, linked_at TEXT NOT NULL, PRIMARY KEY (todo_id, session_id))`,
 		`CREATE INDEX IF NOT EXISTS space_todo_threads_session ON space_todo_threads (session_id)`,
 	],
+	// 47: screenshots and files attached to a to-do, kept in the project's Library.
+	[`ALTER TABLE space_todos ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

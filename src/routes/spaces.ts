@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import * as v from 'valibot';
 import { InvalidInputError } from '../core/errors.ts';
+import { MAX_TODO_ATTACHMENTS } from '../core/space-todos.ts';
 import { MAX_UPLOAD_BYTES } from '../services/artifacts/files.ts';
 import { listThreads } from '../services/tasks/sessions.ts';
 import { createSpace, editSpace, MAX_INSTRUCTIONS, MAX_SPACE_MEMORY, nudgeThread, removeSpace, spaceUsage, spacesView, spaceView, startThread } from '../services/projects/spaces.ts';
@@ -104,14 +105,18 @@ app.delete('/api/spaces/:id/file', async (c) => {
 
 const TODO_TITLE = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_TODO_TITLE));
 const TODO_DESCRIPTION = v.pipe(v.string(), v.maxLength(MAX_TODO_DESCRIPTION));
+const TODO_ATTACHMENTS = v.pipe(
+	v.array(v.object({ name: v.pipe(v.string(), v.minLength(1), v.maxLength(300)), path: v.pipe(v.string(), v.minLength(1), v.maxLength(1000)), kind: v.pipe(v.string(), v.maxLength(100)), size: v.number() })),
+	v.maxLength(MAX_TODO_ATTACHMENTS),
+);
 
 app.get('/api/spaces/:id/todos', async (c) => c.json({ todos: await listTodos(c.req.param('id')) }));
 app.post('/api/spaces/:id/todos', async (c) => {
-	const input = await body(c, v.object({ title: TODO_TITLE, description: v.optional(TODO_DESCRIPTION) }));
+	const input = await body(c, v.object({ title: TODO_TITLE, description: v.optional(TODO_DESCRIPTION), attachments: v.optional(TODO_ATTACHMENTS) }));
 	return c.json(await createTodo(c.req.param('id'), input));
 });
 app.patch('/api/spaces/:id/todos/:todoId', async (c) => {
-	const change = await body(c, v.object({ title: v.optional(TODO_TITLE), description: v.optional(TODO_DESCRIPTION), status: v.optional(v.picklist(['open', 'done'])) }));
+	const change = await body(c, v.object({ title: v.optional(TODO_TITLE), description: v.optional(TODO_DESCRIPTION), attachments: v.optional(TODO_ATTACHMENTS), status: v.optional(v.picklist(['open', 'done'])) }));
 	return c.json(await editTodo(c.req.param('id'), c.req.param('todoId'), change));
 });
 app.delete('/api/spaces/:id/todos/:todoId', async (c) => {

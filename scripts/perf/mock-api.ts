@@ -164,10 +164,15 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	updatedAt: ago(30),
 });
 const todo = (id: string, title: string, description: string, patch: Record<string, unknown> = {}) => ({
-	id, spaceId: 'space-billing', title, description, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+	id, spaceId: 'space-billing', title, description, attachments: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
-	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.'),
+	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
+		attachments: [
+			{ name: 'plan-change.png', path: 'plan-change.png', kind: 'PNG image', size: 184_320 },
+			{ name: 'proration-rules.md', path: 'proration-rules.md', kind: 'Markdown', size: 2_150 },
+		],
+	}),
 	todo('todo-tax', 'Show tax on invoices', 'Per line, with the rate used.', { status: 'in_progress', assignee: 'coordinator' }),
 	todo('todo-ledger', 'Ledger schema', '', { status: 'done', threads: 1, completedAt: ago(60) }),
 ];
@@ -250,6 +255,8 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 	}, 100).unref();
 
 	const attachments = new Map<string, { bytes: Buffer; type: string }>();
+	// The Billing to-do's screenshot, as its Library holds it.
+	attachments.set('plan-change.png', { bytes: readFileSync(join(root, 'src/web/public/icons/icon-192.png')), type: 'image/png' });
 	const json = (res: ServerResponse, body: unknown) => {
 		res.setHeader('content-type', 'application/json');
 		res.end(JSON.stringify(body));
@@ -288,6 +295,11 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				setTimeout(() => json(res, { name, path: name, size: bytes.length, kind, text: null, cut: null }), stored ? 0 : 1200);
 			});
 			return;
+		}
+		const libraryFile = /^\/api\/spaces\/[^/]+\/file$/.test(path) && req.method === 'GET' ? attachments.get(url.searchParams.get('path') ?? '') : undefined;
+		if (libraryFile) {
+			res.writeHead(200, { 'content-type': libraryFile.type });
+			return void res.end(libraryFile.bytes);
 		}
 		if (stored) {
 			const file = attachments.get(decodeURIComponent(stored));
