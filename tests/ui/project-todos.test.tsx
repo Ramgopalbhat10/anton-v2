@@ -125,6 +125,16 @@ describe('the To do column on the project board', () => {
 		expect(onOpenCoordinator).toHaveBeenCalledTimes(1);
 	});
 
+	it('creates work only from To do; the thread-state columns have no add button', async () => {
+		renderWithRouter(() => <ProjectBoard space={space} threads={threads} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} />);
+		const todo = await screen.findByRole('region', { name: 'To do' });
+		expect(within(todo).getByRole('button', { name: 'New to-do' })).toBeTruthy();
+		for (const name of ['Needs you', 'Working', 'Ready for review', 'Done']) {
+			const column = screen.getByRole('region', { name });
+			expect(within(column).queryByRole('button', { name: /^New / })).toBeNull();
+		}
+	});
+
 	it('adds a to-do, and starts one as a thread or hands it to the coordinator', async () => {
 		const onOpenCoordinator = vi.fn();
 		renderWithRouter(() => (
