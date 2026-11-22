@@ -128,3 +128,22 @@ export function parseTodoAssign(text: string): ParsedTodoAssign | null {
 		body: unescapeXml(match[2] ?? '').trim(),
 	};
 }
+
+/**
+ * Only an authenticated <todo-assign> delivery for this exact coordinator-assigned item may authorize quoted text;
+ * a model-supplied todo_id alone only links work after the user-message quote check passes.
+ */
+export function quoteSourceForTodo(
+	userText: string,
+	assignedTodo: ParsedTodoAssign | null,
+	linkedTodo: Pick<SpaceTodo, 'id' | 'title' | 'description' | 'assigneeKind' | 'assignedAt'> | null,
+): string {
+	const authenticatedAssign = Boolean(
+		assignedTodo &&
+			linkedTodo &&
+			assignedTodo.id === linkedTodo.id &&
+			linkedTodo.assigneeKind === 'coordinator' &&
+			linkedTodo.assignedAt !== null,
+	);
+	return authenticatedAssign && linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
+}

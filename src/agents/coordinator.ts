@@ -14,7 +14,7 @@ import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { splitAttachments, withAttachments } from '../core/attachments.ts';
 import { quotedFrom, threadBrief } from '../core/briefs.ts';
-import { parseTodoAssign, TODO_NO_REPO, TODO_PRIORITIES } from '../core/space-todos.ts';
+import { parseTodoAssign, quoteSourceForTodo, TODO_NO_REPO, TODO_PRIORITIES } from '../core/space-todos.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -84,16 +84,7 @@ function useCoordinatorTools(spaceId: string) {
 				const todoRef = data.todo_id?.trim() || assignedTodo?.id || null;
 				const linkedTodo = todoRef ? await findTodo(spaceId, todoRef).catch(() => null) : null;
 				const userText = splitAttachments(answering).text;
-				// Only an authenticated <todo-assign> delivery for this exact coordinator-assigned item may authorize quoted text;
-				// a model-supplied todo_id alone only links work after the user-message quote check passes.
-				const authenticatedAssign = Boolean(
-					assignedTodo &&
-						linkedTodo &&
-						assignedTodo.id === linkedTodo.id &&
-						linkedTodo.assigneeKind === 'coordinator' &&
-						linkedTodo.assignedAt !== null,
-				);
-				const said = authenticatedAssign && linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
+				const said = quoteSourceForTodo(userText, assignedTodo, linkedTodo);
 				if (said.trim() && !data.approved && !quotedFrom(data.request, said))
 					throw new Error(
 						"request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",

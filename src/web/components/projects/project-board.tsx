@@ -94,32 +94,46 @@ function TodoBoardCard({
 
 /** Temporary card while the coordinator is turning an assigned to-do into thread(s); disappears once linked threads exist. */
 function CoordinatingCard({
+	space,
 	todo,
+	threads,
 	busy,
 	onOpenCoordinator,
 }: {
+	space: Space;
 	todo: SpaceTodo;
+	threads: Session[];
 	busy: boolean;
 	onOpenCoordinator?: () => void;
 }) {
 	return (
-		<button
-			type="button"
-			onClick={() => onOpenCoordinator?.()}
+		<article
 			aria-label={`${todo.title}: ${busy ? 'Coordinating' : 'Waiting in coordinator'}`}
-			className="flex min-w-0 flex-col gap-2 rounded-card bg-(--bg-surface) p-2.5 text-left shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)] outline-none transition-shadow duration-(--t-fast) hover:shadow-[inset_0_0_0_1px_var(--line-strong),var(--sh-1)] focus-visible:shadow-(--focus)"
+			className="flex min-w-0 flex-col gap-2 rounded-card bg-(--bg-surface) p-2.5 text-left shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)] transition-shadow duration-(--t-fast) hover:shadow-[inset_0_0_0_1px_var(--line-strong),var(--sh-1)]"
 		>
-			<span className="flex min-w-0 items-start gap-2">
-				<Icon icon={Workflow} size={13} className="mt-[3px] shrink-0 text-(--accent-text)" />
-				<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
-			</span>
-			<span className="flex items-center gap-1.5">
-				<Status tone={busy ? 'accent' : 'attention'} pulse={busy}>
-					{busy ? 'Coordinating' : 'Check coordinator'}
-				</Status>
-				<PriorityBadge priority={todo.priority} compact />
-			</span>
-		</button>
+			<button
+				type="button"
+				onClick={() => onOpenCoordinator?.()}
+				aria-label={`${todo.title}: ${busy ? 'Coordinating' : 'Waiting in coordinator'}`}
+				className="flex min-w-0 flex-col gap-2 text-left outline-none focus-visible:shadow-(--focus)"
+			>
+				<span className="flex min-w-0 items-start gap-2">
+					<Icon icon={Workflow} size={13} className="mt-[3px] shrink-0 text-(--accent-text)" />
+					<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
+				</span>
+				<span className="flex items-center gap-1.5">
+					<Status tone={busy ? 'accent' : 'attention'} pulse={busy}>
+						{busy ? 'Coordinating' : 'Check coordinator'}
+					</Status>
+					<PriorityBadge priority={todo.priority} compact />
+				</span>
+			</button>
+			{!busy ? (
+				<div className="flex items-center justify-end border-t border-(--line) pt-1.5">
+					<TodoAssignMenu space={space} todo={todo} threads={threads} size="xs" variant="secondary" retry label="Retry" onOpenCoordinator={onOpenCoordinator} />
+				</div>
+			) : null}
+		</article>
 	);
 }
 
@@ -392,7 +406,7 @@ export function ProjectBoard({
 							</header>
 							<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
 								{triagingHere.map((todo) => (
-									<CoordinatingCard key={todo.id} todo={todo} busy={coordinatorBusy} onOpenCoordinator={onOpenCoordinator} />
+									<CoordinatingCard key={todo.id} space={space} todo={todo} threads={threads} busy={coordinatorBusy} onOpenCoordinator={onOpenCoordinator} />
 								))}
 								{items.map((thread) => (
 									<BoardCard key={thread.id} thread={thread} linkedTodos={todosByThread.get(thread.id) ?? []} />
