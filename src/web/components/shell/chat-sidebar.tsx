@@ -30,6 +30,7 @@ import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/kit/signal';
 import { Count, toneFill, usedTone } from '@/components/kit/instrument';
 import { Logo } from '@/components/marks/illustrations';
+import { prTone } from '@/components/marks/pr-status';
 import { loudUnread, useNotifications } from '@/components/shell/notifications';
 import { GroupHeading, ProjectSidebarBody, ProjectSwitcher, ProjectsSection } from '@/components/projects/project-sidebar';
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/shell/task-actions';
@@ -411,8 +412,19 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 									aria-label={note.text}
 									className={cn(
 										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-										note.tone === 'danger' ? 'bg-(--bad)' : note.tone === 'conflict' ? 'bg-(--conflict)' : 'bg-(--warn)',
+										note.tone === 'conflict' || (note.pullRequest && note.tone === 'danger')
+											? undefined
+											: note.tone === 'danger'
+												? 'bg-(--bad)'
+												: 'bg-(--warn)',
 									)}
+									style={
+										note.tone === 'conflict'
+											? { background: prTone('conflicts') }
+											: note.pullRequest && note.tone === 'danger'
+												? { background: prTone('failing') }
+												: undefined
+									}
 								/>
 							) : null}
 						</div>

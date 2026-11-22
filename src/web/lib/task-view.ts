@@ -15,17 +15,19 @@ export type TaskView = {
 };
 
 /** `attention` is what waits on you (the accent); `warning` is something off (amber). */
-export type Tone = 'accent' | 'attention' | 'success' | 'warning' | 'conflict' | 'danger' | 'muted';
+export type Tone = 'accent' | 'attention' | 'success' | 'warning' | 'danger' | 'muted';
 
 /** What a task is waiting on or what happened to it, in a few words; `attention` when it waits on you. */
-export type TaskNote = { text: string; tone: Tone; attention: boolean; pullRequest?: boolean };
+export type TaskNote =
+	| { text: string; tone: Tone; attention: boolean; pullRequest?: false }
+	| { text: string; tone: Tone | 'conflict'; attention: boolean; pullRequest: true };
 
 export const prNumber = (session: Session) => (session.prUrl ? (/\/pull\/(\d+)/.exec(session.prUrl)?.[1] ?? null) : null);
 
 /** The agent's last reply proposed a plan, and it changes nothing until the plan is approved. */
 export const planReady = (session: Session) => session.planMode && !session.working && Boolean(session.plan);
 
-function prNote(session: Session): TaskNote | null {
+function prNote(session: Session): Extract<TaskNote, { pullRequest: true }> | null {
 	if (!session.prUrl) return null;
 	const pr = session.pullRequest;
 	const name = prNumber(session) ? `#${prNumber(session)}` : 'Pull request';

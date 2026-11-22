@@ -1,7 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, ListFilter, Plus, Search, Settings, Waypoints, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
-import { PrStatus } from '@/components/marks/pr-status';
+import { PrStatus, prTone } from '@/components/marks/pr-status';
 import { ProjectIcon } from '@/components/marks/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, SectionLabel } from '@/components/kit/signal';
 import { CompactViewItem, FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
@@ -158,8 +158,19 @@ function ThreadRow({ thread, active, repos, compact, onNavigate }: { thread: Ses
 						aria-label={note.text}
 						className={cn(
 							'relative size-1.5 shrink-0 rounded-full',
-							note.tone === 'danger' ? 'bg-(--bad)' : note.tone === 'conflict' ? 'bg-(--conflict)' : 'bg-(--warn)',
+							note.tone === 'conflict' || (note.pullRequest && note.tone === 'danger')
+								? undefined
+								: note.tone === 'danger'
+									? 'bg-(--bad)'
+									: 'bg-(--warn)',
 						)}
+						style={
+							note.tone === 'conflict'
+								? { background: prTone('conflicts') }
+								: note.pullRequest && note.tone === 'danger'
+									? { background: prTone('failing') }
+									: undefined
+						}
 					/>
 				) : null}
 			</Link>

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
 import type { Space } from '@/lib/api/spaces';
+import { prTone } from '@/components/marks/pr-status';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { session } from './render';
 
@@ -802,9 +803,10 @@ describe('threads', () => {
 		expect(within(prRow()).queryByLabelText('Pull request #12 open · checks pass')).toBeNull();
 		expect(within(waitingRow()).queryByText('Billing or invoices?')).toBeNull();
 		expect(within(waitingRow()).getByRole('img', { name: 'Waiting on you' })).toBeTruthy();
-		expect(within(failingRow()).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+		const failingDot = within(failingRow()).getByRole('img', { name: 'Checks failing on #7' });
+		expect(failingDot.style.background).toBe(prTone('failing'));
 		const conflictDot = within(conflictRow()).getByRole('img', { name: 'Merge conflicts on #9' });
-		expect(conflictDot.className).toContain('bg-(--conflict)');
+		expect(conflictDot.style.background).toBe(prTone('conflicts'));
 
 		// Clearing active filters leaves compact view enabled.
 		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));

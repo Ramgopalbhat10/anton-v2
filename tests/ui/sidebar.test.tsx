@@ -3,6 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { prTone } from '@/components/marks/pr-status';
 import { session } from './render';
 
 const api = vi.hoisted(() => ({
@@ -244,9 +245,10 @@ describe('sidebar', () => {
 		await userEvent.click(toggle);
 		await userEvent.keyboard('{Escape}');
 		expect(within(row('New merged')).queryByRole('link', { name: /#12/ })).toBeNull();
-		expect(within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+		const failingDot = within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' });
+		expect(failingDot.style.background).toBe(prTone('failing'));
 		const conflictDot = within(row('Conflicted PR')).getByRole('img', { name: 'Merge conflicts on #9' });
-		expect(conflictDot.className).toContain('bg-(--conflict)');
+		expect(conflictDot.style.background).toBe(prTone('conflicts'));
 	});
 
 	it('syncs compact view between the homepage sidebar and the project sidebar', async () => {
