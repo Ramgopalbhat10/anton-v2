@@ -460,6 +460,13 @@ test('linking an already-resolved thread reconciles todo completion immediately 
 		assert.equal(started.thread?.id, current.threadIds[0]);
 		assert.equal(current.status, 'done');
 		assert.equal(current.completedBy, 'auto');
+
+		// Existing-thread path: if the nudged thread resolves immediately during delivery, the todo reconciles to done too.
+		const existingTodo = await todos.createTodo(space.id, { title: 'Fast existing-thread nudge' });
+		await todos.assignTodo(space.id, existingTodo.id, { target: 'thread', threadId: doneThread.id });
+		const afterNudge = (await todos.listTodos(space.id)).find((e) => e.id === existingTodo.id)!;
+		assert.equal(afterNudge.status, 'done');
+		assert.equal(afterNudge.completedBy, 'auto');
 	} finally {
 		setAgentDelivery(async (id, text) => {
 			toThreads.push({ id, text });
