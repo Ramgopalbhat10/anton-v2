@@ -6,7 +6,7 @@ import { after, beforeEach, test } from 'node:test';
 import { createClient } from '@libsql/client';
 import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
-import { todoStartMessage } from '../src/core/space-todos.ts';
+import { todoStartMessage, todoThreadFiles } from '../src/core/space-todos.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-space-todos-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -230,4 +230,14 @@ test("a to-do's screenshots and files are kept in the project's Library and go w
 
 	const edited = await todos.editTodo(space.id, second.id, { attachments: [] });
 	assert.deepEqual(edited.attachments, []);
+});
+
+test("a to-do split over threads sends each only the files the coordinator names for it, or all of them when it names none", () => {
+	const file = (name: string) => ({ name, path: name, kind: 'PNG image', size: 1 });
+	const todo = { attachments: [file('chips.png'), file('repos.png'), file('sidebar.png')] };
+	assert.deepEqual(todoThreadFiles(todo, ['repos.png']), ['repos.png']);
+	assert.deepEqual(todoThreadFiles(todo, []), ['chips.png', 'repos.png', 'sidebar.png']);
+	assert.deepEqual(todoThreadFiles(todo, undefined), ['chips.png', 'repos.png', 'sidebar.png']);
+	assert.deepEqual(todoThreadFiles(null, ['notes.md']), ['notes.md']);
+	assert.equal(todoThreadFiles({ attachments: [] }, undefined), undefined);
 });

@@ -32,11 +32,12 @@ type FakeBox = {
 };
 
 /** Just enough of ModalClient for modalCompute: apps, images, sandboxes, sidecars and execs. */
-function fakeModal(opts: { failBuilds?: number; listed?: { sandboxId: string; tags: Record<string, string> }[] } = {}) {
+function fakeModal(opts: { failBuilds?: number; failCreates?: number; listed?: { sandboxId: string; tags: Record<string, string> }[] } = {}) {
 	const boxes: FakeBox[] = [];
 	const built: string[][] = [];
 	const swept: string[] = [];
 	let failBuilds = opts.failBuilds ?? 0;
+	let failCreates = opts.failCreates ?? 0;
 	let seq = 0;
 
 	function proc(box: FakeBox) {
@@ -97,6 +98,13 @@ function fakeModal(opts: { failBuilds?: number; listed?: { sandboxId: string; ta
 		},
 		sandboxes: {
 			create: async (_app: unknown, _image: unknown, params: { name: string; tags: Record<string, string> }) => {
+				await sleep(5);
+				if (failCreates > 0) {
+					failCreates -= 1;
+					throw new Error('create failed');
+				}
+				// Modal keeps sandbox names unique per app while one is running.
+				if (boxes.some((b) => b.kind === 'sandbox' && !b.exited && b.name === params.name)) throw new Error(`sandbox name "${params.name}" is already in use`);
 				const box: FakeBox = { kind: 'sandbox', name: params.name, exited: false, execs: [], tags: params.tags };
 				boxes.push(box);
 				return boxApi(box);
@@ -156,6 +164,27 @@ test('sidecar mode keeps one warm slot, and a claim never takes more than it han
 	await first.close();
 	await second.close();
 	assert.equal(live(fake, 'sidecar').length, 1, 'only the warm slot is left');
+});
+
+test('conversations started together share one anchor sandbox', async () => {
+	resetSweep();
+	const fake = fakeModal();
+	const h = host(fake);
+	// Three threads starting at once, with no anchor yet: each once raced to create it under the same name.
+	const convs = await Promise.all([h.spawn('swe-2-high'), h.spawn('swe-2-high'), h.spawn('swe-2-high')]);
+	assert.equal(fake.boxes.filter((b) => b.kind === 'sandbox').length, 1, 'one anchor created');
+	assert.ok(live(fake, 'sidecar').length >= 3, 'every conversation got its sidecar');
+	for (const conv of convs) await conv.close();
+});
+
+test('an anchor that failed to start is created again by the next conversation', async () => {
+	resetSweep();
+	const fake = fakeModal({ failCreates: 1 });
+	const h = host(fake);
+	await assert.rejects(() => h.spawn('swe-2-high'), /create failed/);
+	const conv = await h.spawn('swe-2-high');
+	assert.equal(live(fake, 'sandbox').length, 1);
+	await conv.close();
 });
 
 test('dedicated-sandbox mode starts no warm slot', async () => {

@@ -223,23 +223,33 @@ export function modalCompute(agent: AcpAgent, appName: string, opts?: ModalCompu
 
 	async function mainSandbox(): Promise<Sandbox> {
 		if (sandbox) {
-			const live = await sandbox.then((s) => s.poll().then((code) => (code === null ? s : null))).catch(() => null);
+			const checked = sandbox;
+			const live = await checked.then((s) => s.poll().then((code) => (code === null ? s : null))).catch(() => null);
 			if (live) return live;
+			// Another spawn may have started the replacement while this one polled.
+			if (sandbox !== checked) return mainSandbox();
 			sandbox = null;
 		}
-		sandbox = client.sandboxes.create(await appRef(), await anchorImage(), {
-			name: sandboxName,
-			command: ['sleep', 'infinity'],
-			workdir: '/',
-			cpu: SANDBOX_CPU,
-			memoryMiB: SANDBOX_MEMORY_MIB,
-			timeoutMs: SANDBOX_TIMEOUT_MS,
-			idleTimeoutMs: SANDBOX_IDLE_MS,
-			// The anchor container needs no network at all; sidecars get their own policy.
-			outboundCidrAllowlist: [],
-			tags: await tags(),
+		// Set before anything awaits: parallel spawns must share this one create, since a second
+		// create under the same name fails with "sandbox name ... is already in use".
+		const creating = (async () =>
+			client.sandboxes.create(await appRef(), await anchorImage(), {
+				name: sandboxName,
+				command: ['sleep', 'infinity'],
+				workdir: '/',
+				cpu: SANDBOX_CPU,
+				memoryMiB: SANDBOX_MEMORY_MIB,
+				timeoutMs: SANDBOX_TIMEOUT_MS,
+				idleTimeoutMs: SANDBOX_IDLE_MS,
+				// The anchor container needs no network at all; sidecars get their own policy.
+				outboundCidrAllowlist: [],
+				tags: await tags(),
+			}))();
+		sandbox = creating;
+		creating.catch(() => {
+			if (sandbox === creating) sandbox = null;
 		});
-		return sandbox;
+		return creating;
 	}
 
 	/**

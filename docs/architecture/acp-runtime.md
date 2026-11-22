@@ -74,7 +74,7 @@ Connection setup is the warm-up point: `signIn().complete()` fires `host.prepare
 
 Each conversation's jailed container comes in two flavors, chosen per agent in Settings › Subscriptions ("Dedicated sandbox") and stored as `acp.isolation.<agentId>`:
 
-- **`sidecar`** (default): every conversation is a Modal *Sandbox Sidecar* of one shared anchor sandbox per host. Sidecars share the anchor's CPU/memory reservation, so cost is per anchor, not per sidecar — but sidecars are an experimental API and share one lifecycle.
+- **`sidecar`** (default): every conversation is a Modal *Sandbox Sidecar* of one shared anchor sandbox per host. The anchor has a fixed name, so its create is recorded before anything awaits and parallel spawns share it; a second create under the same name fails with `sandbox name … is already in use` (three threads started together once lost two this way). Sidecars share the anchor's CPU/memory reservation, so cost is per anchor, not per sidecar — but sidecars are an experimental API and share one lifecycle.
 - **`sandbox`**: every conversation (and warm slot) is a standalone Modal Sandbox from the standard `sandboxes.create` API — own filesystem, own egress policy, own `timeoutMs`/`idleTimeoutMs`, billed per sandbox while alive. Stronger isolation and no experimental surface; costs roughly one sandbox's reservation per open conversation.
 
 Both get the same treatment otherwise: `sleep infinity` main process, `linkd` + agent execs inside, vendor-domain egress only, no credentials.

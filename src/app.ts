@@ -7,6 +7,7 @@ import { statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { recordAgentEvent } from './services/tasks/activity.ts';
+import { noteReplyOutcome } from './services/projects/thread-reports.ts';
 import { generalSettings } from './services/models/general.ts';
 import { recordTurnUsage } from './services/models/usage.ts';
 import { countReplyCall } from './services/models/response-usage.ts';
@@ -74,6 +75,7 @@ observeRuntime((event) => {
 	void recordPlanLimit(event as Parameters<typeof recordPlanLimit>[0]).catch((error: unknown) => logProblem('warn', 'Plan limit not recorded', error));
 	logRuntimeEvent(event as Parameters<typeof logRuntimeEvent>[0]);
 	recordFailedReply(event as Parameters<typeof recordFailedReply>[0]);
+	noteReplyOutcome(event as Parameters<typeof noteReplyOutcome>[0]);
 	notifyFailedReply(event as Parameters<typeof notifyFailedReply>[0]);
 	void recordTurnUsage(event as Parameters<typeof recordTurnUsage>[0])
 		.then((id) => (id ? stopIfOverBudget(id) : undefined))

@@ -14,7 +14,7 @@ import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { splitAttachments, withAttachments } from '../core/attachments.ts';
 import { quotedFrom, threadBrief } from '../core/briefs.ts';
-import type { SpaceTodo } from '../core/space-todos.ts';
+import { todoThreadFiles } from '../core/space-todos.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -37,7 +37,7 @@ const PROMPT = [
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
 	"When the user asks how a thread is going, read_thread it and say what it is doing now; a thread works its messages in turn, so one stuck on a step for many minutes cannot answer one. Say so, and offer to stop it or start it again.",
 	'Files and images the user attaches are saved in the project Library and arrive after their message as <attachment> blocks (an image is also shown to you, a document comes with its text). A thread sees nothing of this conversation, so whenever its work involves an attached file (a reference image, a spec, a spreadsheet), pass the file names in files with start_thread or message_thread: the thread then gets each one with its brief, an image as a picture.',
-	'A message "Start the project to-do [todo:…]" is the user starting that to-do from the board: start its thread(s) right away (even when the project is set to propose first) with start_thread, or route it to an existing thread with message_thread, passing its todo_id either way. To save work for later without starting it, use create_todo.',
+	'A message "Start the project to-do [todo:…]" is the user starting that to-do from the board: start its thread(s) right away (even when the project is set to propose first) with start_thread, or route it to an existing thread with message_thread, passing its todo_id either way. When you split a to-do over several threads, pass each one in files only the to-do files its part needs; a thread you pass no files gets all of them. To save work for later without starting it, use create_todo.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply. Link a file a thread saved (its reply names it as ../outputs/<path>) by the thread\'s id and that path, as [diagram.png](#thread-1a2b3c4d/outputs/diagram.png): it shows as a card that opens the file.',
 ].join(' ');
@@ -60,8 +60,6 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 	return withAttachments(message, await Promise.all(names.map((name) => projectAttachment(spaceId, name))), 'project');
 }
 
-/** A to-do's own files go to the thread that works on it, beside any the coordinator names. */
-const withTodoFiles = (todo: SpaceTodo | null, listed?: string[]) => (todo?.attachments.length ? [...new Set([...(listed ?? []), ...todo.attachments.map((file) => file.path)])] : listed);
 
 function useCoordinatorTools(spaceId: string) {
 	const delivery = useDelivery();
@@ -92,7 +90,7 @@ function useCoordinatorTools(spaceId: string) {
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
 				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
-				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, withTodoFiles(todo, data.files), answering), repo: data.repo }, { wait: false });
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), answering), repo: data.repo }, { wait: false });
 				if (todo) await linkTodoToThread(spaceId, todo.id, started.id);
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
@@ -127,7 +125,7 @@ function useCoordinatorTools(spaceId: string) {
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
 				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
-				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, withTodoFiles(todo, data.files), answering));
+				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), answering));
 				if (todo) await linkTodoToThread(spaceId, todo.id, target.id);
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
 			},
