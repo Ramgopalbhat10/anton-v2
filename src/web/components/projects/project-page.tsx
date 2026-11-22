@@ -1,6 +1,6 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { HoverCard } from 'radix-ui';
+import { Popover } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Space } from '@/lib/api/spaces';
@@ -72,12 +72,166 @@ function saveDock(spaceId: string, state: DockState) {
 	}
 }
 
-const repoName = (fullName: string) => fullName.split('/').pop() ?? fullName;
+const repoName = (fullName: string) => fullName.split('/').filter(Boolean).pop() ?? fullName;
 
 const REPO_CHIP = 'inline-flex h-[20px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]';
 
-export function ProjectReposChip({ repos }: { repos: Space['repos'] }) {
+/** Keeps hover as a non-focus-stealing preview while letting keyboard activation move focus into the scrollable list. */
+function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: Space['repos'] }) {
 	const [open, setOpen] = useState(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const focusListOnOpen = useRef(false);
+	const restoreFocus = useRef(false);
+	const openedByHover = useRef(false);
+
+	const clear = () => clearTimeout(timerRef.current);
+	const focusList = () => listRef.current?.focus();
+	const scheduleClose = () => {
+		clear();
+		if (!panelRef.current?.contains(document.activeElement)) {
+			timerRef.current = setTimeout(() => setOpen(false), 80);
+		}
+	};
+
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	const engage = () => {
+		clear();
+		openedByHover.current = false;
+		if (open) focusList();
+		else {
+			focusListOnOpen.current = true;
+			setOpen(true);
+		}
+	};
+
+	return (
+		<Popover.Root open={open} onOpenChange={setOpen} modal={false}>
+			<Popover.Anchor asChild>
+				<button
+					ref={triggerRef}
+					type="button"
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					onPointerEnter={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (!open) {
+							timerRef.current = setTimeout(() => {
+								focusListOnOpen.current = false;
+								openedByHover.current = true;
+								setOpen(true);
+							}, 120);
+						}
+					}}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						scheduleClose();
+					}}
+					onClick={() => {
+						if (open && !openedByHover.current) {
+							clear();
+							setOpen(false);
+						} else {
+							engage();
+						}
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'ArrowDown') return;
+						event.preventDefault();
+						engage();
+					}}
+					className={cn(
+						REPO_CHIP,
+						'max-w-[180px] cursor-default outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)',
+						open && 'bg-(--bg-hover) text-(--text-2)',
+					)}
+				>
+					<Icon icon={FolderGit2} size={10} className="shrink-0" />
+					<span className="truncate">{repoName(first.repoFullName)}</span>{' '}
+					<span className="in-num shrink-0 text-(--text-4)">+{rest.length}</span>
+				</button>
+			</Popover.Anchor>
+			<Popover.Portal>
+				<Popover.Content
+					ref={panelRef}
+					side="bottom"
+					align="end"
+					sideOffset={6}
+					collisionPadding={12}
+					aria-label="Project repositories"
+					onOpenAutoFocus={(event) => {
+						event.preventDefault();
+						if (focusListOnOpen.current) {
+							focusListOnOpen.current = false;
+							focusList();
+						}
+					}}
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						if (restoreFocus.current) {
+							restoreFocus.current = false;
+							triggerRef.current?.focus();
+						}
+					}}
+					onEscapeKeyDown={() => {
+						clear();
+						restoreFocus.current = true;
+					}}
+					onInteractOutside={(event) => {
+						if (triggerRef.current?.contains(event.target as Node)) {
+							event.preventDefault();
+							return;
+						}
+						clear();
+						restoreFocus.current = false;
+					}}
+					onPointerEnter={clear}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						scheduleClose();
+					}}
+					onFocus={clear}
+					onBlur={(event) => {
+						const next = event.relatedTarget as Node | null;
+						if (event.currentTarget.contains(next) || triggerRef.current?.contains(next)) return;
+						clear();
+						setOpen(false);
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'Tab') return;
+						// The popover is portalled to document.body; move focus back to the trigger before Tab runs so focus continues naturally in header order.
+						clear();
+						restoreFocus.current = false;
+						triggerRef.current?.focus();
+						setOpen(false);
+					}}
+					className="in-pop z-50 flex w-max max-w-[280px] min-w-[180px] flex-col p-1 outline-none"
+				>
+					<div className="border-b border-(--line) px-2 py-1.5 text-micro font-medium text-(--text-3) [overflow-wrap:anywhere]">{first.repoFullName}</div>
+					<ul
+						ref={listRef}
+						tabIndex={0}
+						aria-label="More repositories"
+						className="m-0 mt-1 flex max-h-[240px] list-none flex-col gap-0.5 overflow-y-auto rounded-inner p-0 outline-none focus-visible:shadow-(--focus)"
+					>
+						{rest.map((repo) => (
+							<li key={repo.id} title={repo.repoFullName} className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-inner px-2 py-1 text-small font-medium text-(--text-2)">
+								<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
+								<span className="truncate">{repoName(repo.repoFullName)}</span>
+							</li>
+						))}
+					</ul>
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
+	);
+}
+
+export function ProjectReposChip({ repos }: { repos: Space['repos'] }) {
 	if (repos.length === 0) return null;
 	const [first, ...rest] = repos;
 	if (rest.length === 0) {
@@ -88,33 +242,7 @@ export function ProjectReposChip({ repos }: { repos: Space['repos'] }) {
 			</span>
 		);
 	}
-	return (
-		<HoverCard.Root open={open} onOpenChange={setOpen} openDelay={120} closeDelay={80}>
-			<HoverCard.Trigger asChild>
-				<button
-					type="button"
-					onClick={() => setOpen(true)}
-					className={cn(REPO_CHIP, 'max-w-[180px] cursor-default outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)')}
-				>
-					<Icon icon={FolderGit2} size={10} className="shrink-0" />
-					<span className="truncate">{repoName(first.repoFullName)}</span>{' '}
-					<span className="in-num shrink-0 text-(--text-4)">+{rest.length}</span>
-				</button>
-			</HoverCard.Trigger>
-			<HoverCard.Portal>
-				<HoverCard.Content side="bottom" align="end" sideOffset={6} collisionPadding={12} className="in-pop z-50 flex max-w-[260px] min-w-[160px] flex-col p-1.5 outline-none">
-					<ul aria-label="More repositories" className="m-0 flex max-h-[240px] list-none flex-col gap-0.5 overflow-y-auto p-0">
-						{rest.map((repo) => (
-							<li key={repo.id} title={repo.repoFullName} className="flex min-w-0 items-center gap-1.5 rounded-inner px-2 py-1 text-small font-medium text-(--text-2)">
-								<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
-								<span className="truncate">{repoName(repo.repoFullName)}</span>
-							</li>
-						))}
-					</ul>
-				</HoverCard.Content>
-			</HoverCard.Portal>
-		</HoverCard.Root>
-	);
+	return <MultiRepoChip first={first} rest={rest} />;
 }
 
 export function ProjectPage() {

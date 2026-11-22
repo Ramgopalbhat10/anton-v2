@@ -945,7 +945,7 @@ describe('project header repo chip', () => {
 		expect(screen.getByTitle('mrgb/mrgb-chat')).toBeTruthy();
 	});
 
-	it('keeps one repo chip with the remaining count and shows the rest in a hover popover', async () => {
+	it('keeps one repo chip with the remaining count and shows the first repo full name and the rest in a hover popover without stealing focus', async () => {
 		const repos = [
 			repo('r1', 'mrgb/mrgb-chat'),
 			repo('r2', 'mrgb/notes'),
@@ -960,10 +960,50 @@ describe('project header repo chip', () => {
 		expect(screen.queryByText('anton-v2')).toBeNull();
 
 		fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
-		const list = await screen.findByRole('list', { name: 'More repositories' });
+		const dialog = await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(within(dialog).getByText('mrgb/mrgb-chat')).toBeTruthy();
+		const list = within(dialog).getByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).not.toBe(list);
 		const items = within(list).getAllByRole('listitem');
 		expect(items.map((item) => item.textContent)).toEqual(['notes', 'my-astro-blog', 'anton-v2']);
 		expect(items.map((item) => item.getAttribute('title'))).toEqual(['mrgb/notes', 'mrgb/my-astro-blog', 'mrgb/anton-v2']);
 		expect(within(list).queryByText('mrgb-chat')).toBeNull();
+	});
+
+	it('moves focus to the scrollable overflow list on keyboard activation and restores focus or advances cleanly', async () => {
+		const user = userEvent.setup();
+		const repos = Array.from({ length: 20 }, (_, index) => repo(`r${index + 1}`, `org-${index + 1}/repo-${index + 1}`));
+		render(
+			<div>
+				<ProjectReposChip repos={repos} />
+				<button type="button">Project settings</button>
+			</div>,
+		);
+		const trigger = screen.getByRole('button', { name: 'repo-1 +19' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+
+		await user.tab();
+		expect(document.activeElement).toBe(trigger);
+		expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull();
+
+		await user.keyboard('{Enter}');
+		const dialog = await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(within(dialog).getByText('org-1/repo-1')).toBeTruthy();
+		const list = within(dialog).getByRole('list', { name: 'More repositories' });
+		expect(list.tabIndex).toBe(0);
+		expect(within(list).getAllByRole('listitem')).toHaveLength(19);
+		expect(document.activeElement).toBe(list);
+
+		await user.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(trigger);
+
+		await user.keyboard('{ArrowDown}');
+		const reopened = await screen.findByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).toBe(reopened);
+
+		await user.tab();
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
 	});
 });
