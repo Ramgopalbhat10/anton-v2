@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
 	editSession: vi.fn(async (id: string, change: { pinned?: boolean }) => ({ id, pinnedAt: change.pinned ? 'now' : null })),
 	forkSession: vi.fn(async () => ({ id: 'fork' })),
 	stopAllSandboxes: vi.fn(async () => ({ stopped: 2 })),
+	spaces: vi.fn(async () => ({ spaces: [] as Array<Record<string, unknown>> })),
 	notifications: vi.fn(async () => ({ notifications: [], unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0 } })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
@@ -47,14 +48,16 @@ const tasks = [
 	}),
 ];
 
-function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }), { collapsed = false, onExpand = () => {} } = {}) {
+function open(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }), { collapsed = false, onExpand = () => {}, path = '/' } = {}) {
 	const root = createRootRoute({ component: () => <ChatSidebar open collapsed={collapsed} onNavigate={() => {}} onCollapse={() => {}} onExpand={onExpand} onOpenPalette={() => {}} /> });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: Outlet }),
 		createRoute({ getParentRoute: () => root, path: '/agents/$sessionId', component: () => <div>Task page</div> }),
 		createRoute({ getParentRoute: () => root, path: '/tasks', component: () => <div>Task list</div> }),
+		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId', component: () => <div>Project page</div> }),
+		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/threads/$threadId', component: () => <div>Thread page</div> }),
 	]);
-	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
 	render(
 		<QueryClientProvider client={queryClient}>
 			<RouterProvider router={router} />
@@ -235,6 +238,54 @@ describe('sidebar', () => {
 		await userEvent.keyboard('{Escape}');
 		expect(within(row('New merged')).queryByRole('link', { name: /#12/ })).toBeNull();
 		expect(within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+	});
+
+	it('syncs compact view between the homepage sidebar and the project sidebar', async () => {
+		const thread = session({
+			id: 'th-1',
+			spaceId: 'space_1',
+			threadState: 'review',
+			title: 'Ship compact toggle',
+			prUrl: 'https://github.com/acme/demo/pull/42',
+			pullRequest: { state: 'open', checks: 'passed', runs: [] },
+		});
+		api.sessions.mockResolvedValue({ sessions: [...tasks, thread] });
+		api.spaces.mockResolvedValue({
+			spaces: [
+				{
+					id: 'space_1',
+					name: 'Billing',
+					icon: null,
+					state: 'active',
+					repos: [{ id: 'p1', repoFullName: 'acme/demo', defaultBranch: 'main' }],
+					counts: { waiting: 0, working: 0, queued: 0, review: 1, landing: 0, idle: 0, resolved: 0 },
+					threads: 1,
+				},
+			],
+		});
+		const router = open(undefined, { path: '/projects/space_1' });
+		const projectRow = () => within(screen.getByRole('region', { name: 'Ready for review' })).getByRole('link', { name: /Ship compact toggle/ });
+		await waitFor(() => expect(projectRow()).toBeTruthy());
+		expect(within(projectRow()).getByLabelText('Pull request #42 open · checks pass')).toBeTruthy();
+
+		// Turn on compact view in the project sidebar filter menu.
+		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Compact view' }));
+		await userEvent.keyboard('{Escape}');
+		expect(within(projectRow()).queryByLabelText('Pull request #42 open · checks pass')).toBeNull();
+
+		// Navigating home keeps compact view active in the homepage sidebar.
+		await router.navigate({ to: '/' });
+		await screen.findByText('New merged');
+		expect(within(row('New merged')).queryByRole('link', { name: /#12/ })).toBeNull();
+
+		// Turning it off from the homepage sidebar updates the project sidebar too.
+		await userEvent.click(screen.getByRole('button', { name: 'View options' }));
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Compact view' }));
+		await userEvent.keyboard('{Escape}');
+		await router.navigate({ to: '/projects/$spaceId', params: { spaceId: 'space_1' } });
+		await waitFor(() => expect(projectRow()).toBeTruthy());
+		expect(within(projectRow()).getByLabelText('Pull request #42 open · checks pass')).toBeTruthy();
 	});
 
 	it('searches every section', async () => {

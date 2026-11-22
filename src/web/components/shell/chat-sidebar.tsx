@@ -16,7 +16,6 @@ import {
 	Pin,
 	PinOff,
 	RotateCcw,
-	Rows2,
 	Rows3,
 	Search,
 	Settings,
@@ -36,7 +35,7 @@ import { GroupHeading, ProjectSidebarBody, ProjectSwitcher, ProjectsSection } fr
 import { TaskMenu, TitleInput, useFork, usePin } from '@/components/shell/task-actions';
 import { TaskCues } from '@/components/shell/task-cues';
 import { TaskPeek } from '@/components/shell/task-peek';
-import { FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
+import { CompactViewItem, FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { isLive, TaskStatusIcon } from '@/components/marks/task-status';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
@@ -172,19 +171,7 @@ function ViewMenu({ view, onChange, tasks }: { view: TaskView; onChange: (next: 
 						))}
 					</MenuSubContent>
 				</MenuSub>
-				<MenuItem
-					icon={Rows2}
-					role="menuitemcheckbox"
-					aria-checked={view.compact}
-					onSelect={stay(() => onChange({ ...view, compact: !view.compact }))}
-					hint={
-						<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', view.compact ? 'bg-(--accent)' : 'bg-(--track)')}>
-							<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', view.compact ? 'translate-x-3' : 'translate-x-0.5')} />
-						</span>
-					}
-				>
-					Compact view
-				</MenuItem>
+				<CompactViewItem compact={view.compact} onToggle={() => onChange({ ...view, compact: !view.compact })} />
 				<MenuSeparator />
 				<MenuItem
 					icon={Square}
@@ -566,7 +553,16 @@ export function ChatSidebar({
 				)}
 			</Link>
 
-			{params.spaceId ? <ProjectSidebarBody spaceId={params.spaceId} threadId={params.threadId} collapsed={collapsed} onNavigate={onNavigate} /> : null}
+			{params.spaceId ? (
+				<ProjectSidebarBody
+					spaceId={params.spaceId}
+					threadId={params.threadId}
+					collapsed={collapsed}
+					compact={view.compact}
+					onCompactChange={(compact) => changeView({ ...view, compact })}
+					onNavigate={onNavigate}
+				/>
+			) : null}
 			<nav aria-label="Pages" className={cn('flex shrink-0 flex-col gap-px', inProject && 'hidden')}>
 				<Link to="/inbox" onClick={onNavigate} aria-label={unread ? `Inbox, ${unread} unread` : 'Inbox'} title={tip('Inbox')} className={NAV_ROW}>
 					<NavIcon icon={Inbox} />
