@@ -1006,4 +1006,56 @@ describe('project header repo chip', () => {
 		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
 		expect(document.activeElement).toBe(settings);
 	});
+
+	it('leaves unrelated focus alone when Escape dismisses a hover preview', async () => {
+		const user = userEvent.setup();
+		const repos = [repo('r1', 'mrgb/mrgb-chat'), repo('r2', 'mrgb/notes')];
+		render(
+			<header>
+				<ProjectReposChip repos={repos} />
+				<button type="button">Project settings</button>
+			</header>,
+		);
+		const trigger = screen.getByRole('button', { name: 'mrgb-chat +1' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+
+		settings.focus();
+		expect(document.activeElement).toBe(settings);
+
+		fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
+		await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(document.activeElement).toBe(settings);
+
+		await user.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
+	});
+
+	it('closes the popover and moves focus to a visible header control when its anchor becomes hidden', async () => {
+		const user = userEvent.setup();
+		const repos = Array.from({ length: 6 }, (_, index) => repo(`r${index + 1}`, `org/repo-${index + 1}`));
+		render(
+			<header>
+				<div data-testid="chip-slot">
+					<ProjectReposChip repos={repos} />
+				</div>
+				<button type="button">Project settings</button>
+			</header>,
+		);
+		const trigger = screen.getByRole('button', { name: 'repo-1 +5' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+		const slot = screen.getByTestId('chip-slot');
+
+		trigger.focus();
+		await user.keyboard('{Enter}');
+		const list = await screen.findByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).toBe(list);
+
+		// Simulate the header hiding the chip below the `xl` breakpoint on resize.
+		slot.style.display = 'none';
+		fireEvent(window, new Event('resize'));
+
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
+	});
 });

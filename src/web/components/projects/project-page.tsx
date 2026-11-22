@@ -75,6 +75,26 @@ function saveDock(spaceId: string, state: DockState) {
 const repoName = (fullName: string) => fullName.split('/').filter(Boolean).pop() ?? fullName;
 
 const REPO_CHIP = 'inline-flex h-[20px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]';
+const HEADER_FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+function isShown(element: HTMLElement | null): boolean {
+	if (!element || !element.isConnected) return false;
+	for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+		if (node.hidden) return false;
+		const style = getComputedStyle(node);
+		if (style.display === 'none' || style.visibility === 'hidden') return false;
+	}
+	return true;
+}
+
+function fallbackHeaderControl(trigger: HTMLElement | null): HTMLElement | null {
+	const header = trigger?.closest('header');
+	if (!header) return null;
+	const controls = [...header.querySelectorAll<HTMLElement>(HEADER_FOCUSABLE)];
+	const index = trigger ? controls.indexOf(trigger) : -1;
+	const ordered = index >= 0 ? [...controls.slice(index + 1), ...controls.slice(0, index)] : controls;
+	return ordered.find((control) => control !== trigger && isShown(control)) ?? null;
+}
 
 /** Keeps hover as a non-focus-stealing preview while letting keyboard activation move focus into the scrollable list. */
 function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: Space['repos'] }) {
@@ -97,6 +117,27 @@ function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: S
 	};
 
 	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	// The header hides the repo chip below `xl`; close its portalled popover if the anchor disappears and move focus to a visible header control when needed.
+	useEffect(() => {
+		if (!open) return;
+		const closeIfHidden = () => {
+			if (isShown(triggerRef.current)) return;
+			const hadFocus = Boolean(panelRef.current?.contains(document.activeElement));
+			clearTimeout(timerRef.current);
+			restoreFocus.current = false;
+			setOpen(false);
+			if (hadFocus) fallbackHeaderControl(triggerRef.current)?.focus();
+		};
+		closeIfHidden();
+		window.addEventListener('resize', closeIfHidden);
+		const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(closeIfHidden) : null;
+		if (observer && triggerRef.current) observer.observe(triggerRef.current);
+		return () => {
+			window.removeEventListener('resize', closeIfHidden);
+			observer?.disconnect();
+		};
+	}, [open]);
 
 	const engage = () => {
 		clear();
@@ -172,14 +213,14 @@ function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: S
 					}}
 					onCloseAutoFocus={(event) => {
 						event.preventDefault();
-						if (restoreFocus.current) {
-							restoreFocus.current = false;
-							triggerRef.current?.focus();
-						}
+						if (!restoreFocus.current) return;
+						restoreFocus.current = false;
+						const target = isShown(triggerRef.current) ? triggerRef.current : fallbackHeaderControl(triggerRef.current);
+						target?.focus();
 					}}
 					onEscapeKeyDown={() => {
 						clear();
-						restoreFocus.current = true;
+						restoreFocus.current = Boolean(panelRef.current?.contains(document.activeElement));
 					}}
 					onInteractOutside={(event) => {
 						if (triggerRef.current?.contains(event.target as Node)) {
@@ -206,7 +247,12 @@ function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: S
 						// The popover is portalled to document.body; move focus back to the trigger before Tab runs so focus continues naturally in header order.
 						clear();
 						restoreFocus.current = false;
-						triggerRef.current?.focus();
+						if (isShown(triggerRef.current)) {
+							triggerRef.current?.focus();
+						} else {
+							event.preventDefault();
+							fallbackHeaderControl(triggerRef.current)?.focus();
+						}
 						setOpen(false);
 					}}
 					className="in-pop z-50 flex w-max max-w-[280px] min-w-[180px] flex-col p-1 outline-none"
