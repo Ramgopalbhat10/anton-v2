@@ -36,7 +36,6 @@ import { recordWebCall } from './services/context/web-digest.ts';
 import { notifyFailedReply } from './services/notify/notifications.ts';
 import { recordFailedReply } from './services/notify/push.ts';
 import { keepSettledReply } from './services/replies/settled-reply.ts';
-import { reconcileCoordinatorSettlement } from './services/projects/todo-sync.ts';
 import { agentRoutes } from './routes/agents.ts';
 import { miscRoutes } from './routes/misc.ts';
 import { settingsRoutes } from './routes/settings.ts';
@@ -66,7 +65,6 @@ observeRuntime((event) => {
 	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	keepSettledReply(event as Parameters<typeof keepSettledReply>[0]);
-	reconcileCoordinatorSettlement(event as Parameters<typeof reconcileCoordinatorSettlement>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);
@@ -89,9 +87,9 @@ appDb()
 	.catch((error: unknown) => logProblem('error', 'Database migration failed', error));
 scheduleCleanup();
 const delivered = (text: string, images?: DeliveredImage[]) => (images?.length ? { kind: 'user' as const, body: text, attachments: images } : text);
-setAgentDelivery(async (id, text, images) => (await dispatch(Coder, { id, message: delivered(text, images) }))?.submissionId);
-setAgentDelivery(async (id, text, images) => (await dispatch(Reviewer, { id, message: delivered(text, images) }))?.submissionId, 'reviewer');
-setAgentDelivery(async (id, text, images) => (await dispatch(Coordinator, { id, message: delivered(text, images) }))?.submissionId, 'coordinator');
+setAgentDelivery(async (id, text, images) => void (await dispatch(Coder, { id, message: delivered(text, images) })));
+setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id, message: delivered(text, images) })), 'reviewer');
+setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
 // Before anything calls OpenRouter.
 await loadGatewayKey().catch((error: unknown) => logProblem('warn', 'Could not load the OpenRouter key', error));
 await loadComposioKey().catch((error: unknown) => logProblem('warn', 'Could not load the Composio key', error));

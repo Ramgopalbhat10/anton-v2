@@ -4,9 +4,8 @@ import { createClient } from '@libsql/client';
 import { config } from '../../config.ts';
 import { splitAttachments } from '../../core/attachments.ts';
 import { appDb } from '../../db/client.ts';
-import { getSessionRecord, updateSession } from '../../db/sessions.ts';
+import { updateSession } from '../../db/sessions.ts';
 import { logProblem } from '../../core/log.ts';
-import { onThreadReopened } from '../projects/todo-sync.ts';
 
 const MAX_LENGTH = 2000;
 
@@ -15,14 +14,10 @@ export async function recordLatestInput(id: string, text: string, at = new Date(
 	const message = splitAttachments(text);
 	const input = [message.text.trim(), ...message.files.map((file) => `[${file.name}]`)].filter(Boolean).join(' ');
 	if (!input) return;
-	const wasResolved = delivered ? Boolean((await getSessionRecord(id).catch(() => null))?.resolvedAt) : false;
 	// A message answers whatever the agent was waiting on, and one given now reopens a thread that was done.
 	await updateSession(id, { lastInput: input.slice(0, MAX_LENGTH), lastInputAt: at.toISOString(), asking: null, ...(delivered ? { resolvedAt: null } : {}) }).catch((error: unknown) =>
 		logProblem('warn', 'Could not keep the latest input', error, id),
 	);
-	if (wasResolved) {
-		await onThreadReopened(id).catch((error: unknown) => logProblem('warn', 'Could not reopen to-dos after thread follow-up', error, id));
-	}
 }
 
 export function bodyOf(payload: string): string | null {

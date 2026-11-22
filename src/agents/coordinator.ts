@@ -8,13 +8,12 @@ import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
-import { createTodo, editTodo, findTodo, linkTodoToThread } from '../services/projects/todos.ts';
+import { createTodo, findTodo, linkTodoToThread } from '../services/projects/todos.ts';
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { splitAttachments, withAttachments } from '../core/attachments.ts';
 import { quotedFrom, threadBrief } from '../core/briefs.ts';
-import { parseTodoAssign, quoteSourceForTodo, TODO_NO_REPO, TODO_PRIORITIES } from '../core/space-todos.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -37,14 +36,15 @@ const PROMPT = [
 	'When a thread is waiting on the user, say what it asks; when the user answers it here, pass the answer on with message_thread.',
 	"When the user asks how a thread is going, read_thread it and say what it is doing now; a thread works its messages in turn, so one stuck on a step for many minutes cannot answer one. Say so, and offer to stop it or start it again.",
 	'Files and images the user attaches are saved in the project Library and arrive after their message as <attachment> blocks (an image is also shown to you, a document comes with its text). A thread sees nothing of this conversation, so whenever its work involves an attached file (a reference image, a spec, a spreadsheet), pass the file names in files with start_thread or message_thread: the thread then gets each one with its brief, an image as a picture.',
-	'Project to-dos explicitly assigned to you arrive as <todo-assign> messages: start the thread(s) right away with start_thread passing todo_id (even if the project is set to propose first), or route to an existing thread with message_thread passing todo_id. If a to-do needs no thread (already done or a quick question), answer briefly and mark it done with update_todo. When the user asks to save items for later without starting them yet, use create_todo or update_todo.',
+	'A message "Start the project to-do [todo:…]" is the user starting that to-do from the board: start its thread(s) right away (even when the project is set to propose first) with start_thread, or route it to an existing thread with message_thread, passing its todo_id either way. To save work for later without starting it, use create_todo.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply. Link a file a thread saved (its reply names it as ../outputs/<path>) by the thread\'s id and that path, as [diagram.png](#thread-1a2b3c4d/outputs/diagram.png): it shows as a card that opens the file.',
 ].join(' ');
 
-const PROPOSE = 'This project is set to propose first: for new work, call suggest_threads with the threads you would start, and let the user start them. Only call start_thread when the user asks you to start one, or when the user explicitly assigns a to-do via <todo-assign> (start those right away).';
+const PROPOSE = 'This project is set to propose first: for new work, call suggest_threads with the threads you would start, and let the user start them. Only call start_thread when the user asks you to start one, or starts a project to-do.';
 
 const thread = v.pipe(v.string(), v.minLength(1), v.description('The thread, by the id shown in brackets in the project state'));
+const todoId = v.optional(v.pipe(v.string(), v.description('The project to-do this works on, by the id shown as [todo:…] in the project state')));
 const files = v.optional(
 	v.pipe(
 		v.array(v.string()),
@@ -62,7 +62,6 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 function useCoordinatorTools(spaceId: string) {
 	const delivery = useDelivery();
 	const answering = delivery.kind === 'user' ? delivery.body : '';
-	const assignedTodo = parseTodoAssign(splitAttachments(answering).text);
 	useTool(
 		defineTool({
 			name: 'start_thread',
@@ -70,48 +69,27 @@ function useCoordinatorTools(spaceId: string) {
 				'Start a thread: a coding agent on its own branch and sandbox that does one task and reports back. It starts at once, or waits as queued when the project already runs as many threads as it allows.',
 			input: v.object({
 				title: v.pipe(v.string(), v.minLength(1), v.maxLength(80), v.description('A few plain words')),
-				request: v.pipe(v.string(), v.minLength(1), v.description("The user's words for this task, copied exactly from their message or the assigned to-do; join parts you leave out with …")),
+				request: v.pipe(v.string(), v.minLength(1), v.description("The user's words for this task, copied exactly from their message; join parts you leave out with …")),
 				context: v.optional(v.pipe(v.string(), v.description('Only what the thread cannot see: files, area, decisions made here, earlier findings. No checks or work the user did not ask for'))),
 				approved: v.optional(v.pipe(v.boolean(), v.description('true when the request copies your own proposal that the user approved, not their message'))),
 				part: v.optional(
 					v.pipe(v.string(), v.description('When one ask is split over several threads (several pull requests), the part this thread does, in a sentence: its share of the request, no checks')),
 				),
 				repo: v.optional(v.pipe(v.string(), v.description('owner/name of one of the project repositories, or "none" for a thread with no repository; defaults to the first, or none when the project has no repositories'))),
-				todo_id: v.optional(v.pipe(v.string(), v.description('Project to-do id when this thread implements a project to-do'))),
+				todo_id: todoId,
 				files,
 			}),
 			async run({ data }) {
-				const todoRef = data.todo_id?.trim() || assignedTodo?.id || null;
-				const linkedTodo = todoRef ? await findTodo(spaceId, todoRef).catch(() => null) : null;
-				const userText = splitAttachments(answering).text;
-				const said = quoteSourceForTodo(userText, assignedTodo, linkedTodo);
+				const said = splitAttachments(answering).text;
 				if (said.trim() && !data.approved && !quotedFrom(data.request, said))
 					throw new Error(
 						"request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",
 					);
 				const brief = threadBrief(data.request, data.context, data.part);
-				const mergedFiles = [...new Set([...(linkedTodo?.files ?? []), ...(data.files ?? [])])];
-				const projectId =
-					!data.repo && linkedTodo?.projectId
-						? linkedTodo.projectId === TODO_NO_REPO
-							? null
-							: linkedTodo.projectId
-						: undefined;
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
-				const started = await startThread(
-					spaceId,
-					{
-						title: data.title,
-						brief: await withFiles(spaceId, brief, mergedFiles, answering),
-						projectId,
-						repo: data.repo,
-						model: linkedTodo?.model ?? undefined,
-						reasoning: linkedTodo?.reasoning ?? undefined,
-						planMode: linkedTodo?.planMode,
-					},
-					{ wait: false },
-				);
-				if (linkedTodo) await linkTodoToThread(spaceId, linkedTodo.id, started.id);
+				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, data.files, answering), repo: data.repo }, { wait: false });
+				if (todo) await linkTodoToThread(spaceId, todo.id, started.id);
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
 			},
@@ -141,19 +119,12 @@ function useCoordinatorTools(spaceId: string) {
 		defineTool({
 			name: 'message_thread',
 			description: 'Send a thread a message, such as a follow-up, an answer to its question, or a change of plan. It reads it after the step it is on.',
-			input: v.object({
-				thread,
-				message: v.pipe(v.string(), v.minLength(1)),
-				todo_id: v.optional(v.pipe(v.string(), v.description('Project to-do id when routing a to-do into this thread'))),
-				files,
-			}),
+			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)), todo_id: todoId, files }),
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
-				const todoRef = data.todo_id?.trim() || assignedTodo?.id || null;
-				const linkedTodo = todoRef ? await findTodo(spaceId, todoRef).catch(() => null) : null;
-				const mergedFiles = [...new Set([...(linkedTodo?.files ?? []), ...(data.files ?? [])])];
-				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, mergedFiles, answering));
-				if (linkedTodo) await linkTodoToThread(spaceId, linkedTodo.id, target.id);
+				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
+				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, data.files, answering));
+				if (todo) await linkTodoToThread(spaceId, todo.id, target.id);
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
 			},
 		}),
@@ -204,6 +175,17 @@ function useCoordinatorTools(spaceId: string) {
 	);
 	useTool(
 		defineTool({
+			name: 'create_todo',
+			description: 'Add a to-do to the project board for later, without starting it.',
+			input: v.object({ title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)), description: v.optional(v.pipe(v.string(), v.description('What done looks like, in the user’s words where you have them'))) }),
+			async run({ data }) {
+				const todo = await createTodo(spaceId, { ...data, createdBy: 'coordinator' });
+				return { output: `Added to-do "${todo.title}".` };
+			},
+		}),
+	);
+	useTool(
+		defineTool({
 			name: 'read_project_file',
 			description:
 				"Read a file from the project's Library as text, such as one the user attached: PDFs, Word, PowerPoint, Excel and OpenDocument files are converted. Without a path, lists the files.",
@@ -212,55 +194,6 @@ function useCoordinatorTools(spaceId: string) {
 				offset: v.optional(v.pipe(v.number(), v.description('Character to start from, for the next part of a long file'))),
 			}),
 			run: async ({ data }) => ({ output: await readSpaceFileForAgent(spaceId, data.path, data.offset) }),
-		}),
-	);
-	useTool(
-		defineTool({
-			name: 'create_todo',
-			description: 'Add a to-do item to the project backlog without starting a thread yet.',
-			input: v.object({
-				title: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
-				description: v.optional(v.string()),
-				priority: v.optional(v.picklist(TODO_PRIORITIES)),
-				tags: v.optional(v.array(v.string())),
-				repo: v.optional(v.string()),
-			}),
-			async run({ data }) {
-				const created = await createTodo(spaceId, {
-					title: data.title,
-					description: data.description,
-					priority: data.priority ?? null,
-					tags: data.tags,
-					repo: data.repo,
-					createdBy: 'coordinator',
-				});
-				return { output: `Added to-do "${created.title}" [todo:${created.id}].` };
-			},
-		}),
-	);
-	useTool(
-		defineTool({
-			name: 'update_todo',
-			description: 'Update a project to-do (for example, mark an assigned to-do done when it needed no thread, or update its details).',
-			input: v.object({
-				todo: v.pipe(v.string(), v.minLength(1), v.description('The to-do id or exact title')),
-				status: v.optional(v.picklist(['open', 'done', 'cancelled'])),
-				title: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(200))),
-				description: v.optional(v.string()),
-				priority: v.optional(v.nullable(v.picklist(TODO_PRIORITIES))),
-				tags: v.optional(v.array(v.string())),
-			}),
-			async run({ data }) {
-				const target = await findTodo(spaceId, data.todo);
-				const updated = await editTodo(spaceId, target.id, {
-					status: data.status,
-					title: data.title,
-					description: data.description,
-					priority: data.priority,
-					tags: data.tags,
-				});
-				return { output: `Updated to-do "${updated.title}" (${updated.status}).` };
-			},
 		}),
 	);
 	useTool(

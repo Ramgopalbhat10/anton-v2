@@ -40,8 +40,6 @@ import { useFollowLatest } from '@/lib/use-follow-latest';
 import { JumpToLatest } from '@/components/kit/jump-to-latest';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../../core/attachments';
-import { parseTodoAssign } from '../../../core/space-todos';
-import { PriorityBadge } from '@/components/projects/project-todos';
 import { uniqueUploadNames } from '../../../core/upload-name';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
@@ -341,9 +339,7 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 		case 'add_repo':
 			return <ActionRow icon={FolderGit2} failed={failed}>Added {field(part.input, 'repo')}</ActionRow>;
 		case 'create_todo':
-			return <ActionRow icon={ListTodo} failed={failed}>Added to-do “{field(part.input, 'title') || 'item'}”</ActionRow>;
-		case 'update_todo':
-			return <ActionRow icon={Check} failed={failed}>Updated to-do {field(part.input, 'todo') || ''}</ActionRow>;
+			return <ActionRow icon={ListTodo} failed={failed}>Added to-do “{field(part.input, 'title')}”</ActionRow>;
 		default:
 			return null;
 	}
@@ -440,22 +436,6 @@ const UserEntry = memo(
 	function UserEntry({ message, threads, composer }: { message: FlueConversationMessage; threads: Session[]; composer: string }) {
 		const text = textOf(message);
 		const reports = useMemo(() => parseReports(text), [text]);
-		const assigned = useMemo(() => (reports ? null : parseTodoAssign(splitAttachments(text).text)), [reports, text]);
-		if (assigned) {
-			return (
-				<div className="flex justify-end">
-					<div className="in-tile flex max-w-[85%] flex-col gap-1 px-3 py-2 text-left">
-						<div className="flex items-center gap-1.5 text-small text-(--text-3)">
-							<Icon icon={ListTodo} size={12} />
-							<span>Assigned to-do</span>
-							<PriorityBadge priority={assigned.priority} compact />
-						</div>
-						<div className="text-body font-medium text-(--text)">{assigned.title}</div>
-						{assigned.body ? <div className="line-clamp-3 text-small leading-[17px] text-(--text-3)">{assigned.body}</div> : null}
-					</div>
-				</div>
-			);
-		}
 		if (!reports) return <Bubble message={message} composer={composer} />;
 		const started = reports.filter((report) => report.started);
 		const changed = reports.filter((report) => !report.started);

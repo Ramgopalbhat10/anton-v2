@@ -9,7 +9,6 @@ import { getProviders } from '../../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from '../git/checkpoints.ts';
 import { saveSpaceFiles } from '../projects/space-files.ts';
-import { onThreadReopened, onThreadResolved, unlinkThreadFromTodos } from '../projects/todo-sync.ts';
 import { forgetMachine, isStarting, liveMachine, machineFor } from '../sandbox/workspace.ts';
 import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
@@ -247,8 +246,7 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 	const model = parsed?.model;
 	if (parsed?.route && !('route' in change)) change = { ...change, route: parsed.route };
 	const title = change.title?.trim();
-	const record = 'route' in change || model || change.resolved !== undefined ? await getSessionRecord(id) : null;
-	const wasResolved = Boolean(record?.resolvedAt);
+	const record = 'route' in change || model ? await getSessionRecord(id) : null;
 	const route = routeAfter(record, change, model || undefined);
 	if (route && !routable(model || record?.model || '')) throw new InvalidInputError('Only a model on OpenRouter or Vercel AI Gateway takes a provider or sort.');
 	await updateSession(id, {
@@ -261,11 +259,6 @@ export async function editSession(id: string, change: SessionChange): Promise<Se
 		...(change.pinned !== undefined ? { pinnedAt: change.pinned ? new Date().toISOString() : null } : {}),
 		...(change.resolved !== undefined ? { resolvedAt: change.resolved ? new Date().toISOString() : null } : {}),
 	});
-	if (change.resolved === true && !wasResolved) {
-		await onThreadResolved(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos after resolving session', error, id));
-	} else if (change.resolved === false && wasResolved) {
-		await onThreadReopened(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos after reopening session', error, id));
-	}
 	return getSession(id);
 }
 
@@ -343,6 +336,5 @@ export async function deleteSession(id: string): Promise<void> {
 	forgetGate(id);
 	forgetRepoCheck(id);
 	await deleteSessionRecord(id);
-	await unlinkThreadFromTodos(id);
 	await forgetNotificationsOf(id);
 }

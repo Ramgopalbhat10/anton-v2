@@ -16,7 +16,6 @@ import { readOutputFile, storedOutputs } from '../artifacts/files.ts';
 import { createSession, deleteSession, getSession, listThreads, stopSession } from '../tasks/sessions.ts';
 import { keepThreadFiles } from './space-files.ts';
 import { deletedThreads, noteDeleted } from './deleted-threads.ts';
-import { onThreadReopened, unlinkThreadFromTodos } from './todo-sync.ts';
 
 export const MAX_INSTRUCTIONS = 16_000;
 export const MAX_SPACE_MEMORY = 8_000;
@@ -288,10 +287,7 @@ export async function nudgeThread(spaceId: string, threadId: string, text: strin
 		await updateSession(threadId, { brief: `${record.brief}\n\n${message}` });
 		return getSession(threadId);
 	}
-	if (record.resolvedAt) {
-		await updateSession(threadId, { resolvedAt: null });
-		await onThreadReopened(threadId);
-	}
+	if (record.resolvedAt) await updateSession(threadId, { resolvedAt: null });
 	await updateSession(threadId, { asking: null });
 	await sendWithPictures(spaceId, threadId, message, record.model);
 	return getSession(threadId);
@@ -305,7 +301,6 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 		if (record.projectId && !space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
 	}
 	await updateSession(threadId, { spaceId, brief: null, reportedState: null });
-	if (record.spaceId && record.spaceId !== spaceId) await unlinkThreadFromTodos(threadId);
 	announce({ kind: 'sessions' });
 	if (record.spaceId) announce({ kind: 'space', id: record.spaceId, what: 'threads' });
 	if (spaceId) announce({ kind: 'space', id: spaceId, what: 'threads' });

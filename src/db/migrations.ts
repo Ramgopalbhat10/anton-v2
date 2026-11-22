@@ -186,21 +186,12 @@ export const migrations: string[][] = [
 	// 44: a reply the runtime resumes after a restart ends with the same checks as it would have without one.
 	[`CREATE TABLE IF NOT EXISTS task_gate_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`],
 	[`ALTER TABLE projects ADD COLUMN check_command TEXT NOT NULL DEFAULT ''`],
-	// 46: project-level to-do backlog items and their linked threads.
+	// 46: project to-dos and the threads working on them.
 	[
-		`CREATE TABLE IF NOT EXISTS space_todos (id TEXT PRIMARY KEY, space_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', assignee_kind TEXT NOT NULL DEFAULT 'unassigned', priority TEXT, tags_json TEXT NOT NULL DEFAULT '[]', project_id TEXT, model TEXT, reasoning TEXT, plan_mode INTEGER NOT NULL DEFAULT 0, files_json TEXT NOT NULL DEFAULT '[]', due_at TEXT, source_url TEXT, position INTEGER NOT NULL DEFAULT 0, created_by TEXT NOT NULL DEFAULT 'user', assigned_at TEXT, completed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-		`CREATE INDEX IF NOT EXISTS space_todos_space ON space_todos (space_id, position, created_at)`,
+		`CREATE TABLE IF NOT EXISTS space_todos (id TEXT PRIMARY KEY, space_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', assignee TEXT, created_by TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS space_todos_space ON space_todos (space_id, created_at)`,
 		`CREATE TABLE IF NOT EXISTS space_todo_threads (todo_id TEXT NOT NULL, session_id TEXT NOT NULL, linked_at TEXT NOT NULL, PRIMARY KEY (todo_id, session_id))`,
 		`CREATE INDEX IF NOT EXISTS space_todo_threads_session ON space_todo_threads (session_id)`,
-	],
-	// 47: distinguish automatic thread-driven completion from manual user Done changes.
-	[`ALTER TABLE space_todos ADD COLUMN completed_by TEXT`],
-	// 48: track each assignment attempt and coordinator dispatch submission for scoped rollback, settlement and retry.
-	[
-		`ALTER TABLE space_todos ADD COLUMN attempt_id TEXT`,
-		`ALTER TABLE space_todos ADD COLUMN attempt_submission_id TEXT`,
-		`ALTER TABLE space_todos ADD COLUMN attempt_settled_at TEXT`,
-		`ALTER TABLE space_todos ADD COLUMN attempt_linked INTEGER NOT NULL DEFAULT 0`,
 	],
 ];
 

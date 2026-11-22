@@ -8,7 +8,6 @@ import { isWorking } from '../tasks/activity.ts';
 import { logProblem } from '../../core/log.ts';
 import { finishesWork } from '../replies/reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
-import { onThreadResolved } from './todo-sync.ts';
 import { getSession } from '../tasks/sessions.ts';
 
 /** Notes are batched per project and only a change of state is sent, so a thread that follows up on CI three times reports once. */
@@ -74,10 +73,7 @@ export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Prom
 	const record = await getSessionRecord(id);
 	if (!record) return;
 	const pr = record.prUrl ? record.pullRequest : null;
-	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) {
-		await updateSession(id, { resolvedAt: new Date().toISOString() });
-		await onThreadResolved(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
-	}
+	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) await updateSession(id, { resolvedAt: new Date().toISOString() });
 	if (!record.spaceId) return;
 	const spaceId = record.spaceId;
 	pending.set(spaceId, (pending.get(spaceId) ?? new Set()).add(id));
@@ -120,10 +116,7 @@ async function closeIfFinished(id: string, reply: string): Promise<void> {
 	// This runs once the reply has settled; a task working again was sent a message meanwhile, which reopens it anyway.
 	if (threadState(task) !== 'idle' || task.prUrl) return;
 	const done = (await scheduledRun(task)) || (await finishesWork(id, task.lastInput, reply));
-	if (done && !isWorking(id)) {
-		await updateSession(id, { resolvedAt: new Date().toISOString() });
-		await onThreadResolved(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
-	}
+	if (done && !isWorking(id)) await updateSession(id, { resolvedAt: new Date().toISOString() });
 }
 
 /** A labeled issue's task is there to open a pull request, so it is judged as any other. */
@@ -141,7 +134,6 @@ export async function resolveIdleThreads(now = Date.now()): Promise<number> {
 		const at = new Date(thread.checkpointAt ?? thread.lastInputAt ?? thread.createdAt).getTime();
 		if (thread.threadState !== 'idle' || now - at < IDLE_RESOLVE_MS) continue;
 		await updateSession(record.id, { resolvedAt: new Date(now).toISOString() });
-		await onThreadResolved(record.id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, record.id));
 		resolved += 1;
 	}
 	return resolved;
