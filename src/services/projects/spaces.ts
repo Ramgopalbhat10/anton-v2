@@ -16,7 +16,7 @@ import { readOutputFile, storedOutputs } from '../artifacts/files.ts';
 import { createSession, deleteSession, getSession, listThreads, stopSession } from '../tasks/sessions.ts';
 import { keepThreadFiles } from './space-files.ts';
 import { deletedThreads, noteDeleted } from './deleted-threads.ts';
-import { handleDeletedThread, syncTodosForThread } from './todo-sync.ts';
+import { onThreadReopened, unlinkThreadFromTodos } from './todo-sync.ts';
 
 export const MAX_INSTRUCTIONS = 16_000;
 export const MAX_SPACE_MEMORY = 8_000;
@@ -290,7 +290,7 @@ export async function nudgeThread(spaceId: string, threadId: string, text: strin
 	}
 	if (record.resolvedAt) {
 		await updateSession(threadId, { resolvedAt: null });
-		await syncTodosForThread(threadId);
+		await onThreadReopened(threadId);
 	}
 	await updateSession(threadId, { asking: null });
 	await sendWithPictures(spaceId, threadId, message, record.model);
@@ -305,6 +305,7 @@ export async function moveToSpace(threadId: string, spaceId: string | null): Pro
 		if (record.projectId && !space.repoIds.includes(record.projectId)) await setSpaceRepos(spaceId, [...space.repoIds, record.projectId]);
 	}
 	await updateSession(threadId, { spaceId, brief: null, reportedState: null });
+	if (record.spaceId && record.spaceId !== spaceId) await unlinkThreadFromTodos(threadId);
 	announce({ kind: 'sessions' });
 	if (record.spaceId) announce({ kind: 'space', id: record.spaceId, what: 'threads' });
 	if (spaceId) announce({ kind: 'space', id: spaceId, what: 'threads' });
@@ -343,7 +344,6 @@ async function removeTask(id: string): Promise<{ kept: string[] }> {
 		files.flatMap((file) => (file.bytes ? [{ path: file.path, bytes: file.bytes }] : [])),
 	);
 	await deleteSession(id);
-	await handleDeletedThread(id);
 	// Its coordinator started it or heard from it, and may still route a follow-up to it.
 	await noteDeleted(record.spaceId, { id, title: record.title, lastReply: record.lastReply, at: new Date().toISOString() }).catch((error: unknown) =>
 		logProblem('warn', 'Could not tell the coordinator a thread was deleted', error, id),

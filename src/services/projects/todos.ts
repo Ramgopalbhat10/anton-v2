@@ -14,11 +14,13 @@ import {
 import { getProject } from '../../db/projects.ts';
 import { getSpace, touchSpace, type Space } from '../../db/spaces.ts';
 import {
+	claimSpaceTodo,
 	deleteSpaceTodoRecord,
 	getSpaceTodo,
 	insertSpaceTodo,
 	linkTodoThreadRecord,
 	listSpaceTodos,
+	releaseSpaceTodoClaim,
 	reorderSpaceTodoRecords,
 	updateSpaceTodo,
 } from '../../db/space-todos.ts';
@@ -221,14 +223,18 @@ export async function editTodo(spaceId: string, todoId: string, change: EditTodo
 	const sourceUrl = normalizeSourceUrl(change.sourceUrl);
 	const now = new Date().toISOString();
 	let completedAt: string | null | undefined;
-	let assigneeKind = undefined;
+	let completedBy: 'auto' | 'manual' | null | undefined;
+	let assigneeKind: 'unassigned' | undefined;
 	if (change.status === 'done') {
 		completedAt = current.completedAt ?? now;
+		completedBy = 'manual';
 	} else if (change.status === 'open') {
 		completedAt = null;
-		if (current.threadIds.length === 0) assigneeKind = 'unassigned' as const;
-	} else if (change.status === 'in_progress' || change.status === 'triaging') {
+		completedBy = null;
+		if (current.threadIds.length === 0) assigneeKind = 'unassigned';
+	} else if (change.status === 'in_progress' || change.status === 'triaging' || change.status === 'cancelled') {
 		completedAt = null;
+		completedBy = null;
 	}
 	const updated = await updateSpaceTodo(todoId, {
 		...(change.title !== undefined ? { title: change.title.trim() } : {}),
@@ -245,6 +251,7 @@ export async function editTodo(spaceId: string, todoId: string, change: EditTodo
 		...(dueAt !== undefined ? { dueAt } : {}),
 		...(sourceUrl !== undefined ? { sourceUrl } : {}),
 		...(completedAt !== undefined ? { completedAt } : {}),
+		...(completedBy !== undefined ? { completedBy } : {}),
 	});
 	return updated!;
 }
@@ -260,11 +267,21 @@ export async function reorderTodos(spaceId: string, orderedIds: string[]): Promi
 	return listSpaceTodos(spaceId);
 }
 
-async function attachTodoFiles(spaceId: string, message: string, files: string[]): Promise<string> {
-	if (files.length === 0) return message;
-	const attachments = await Promise.all(files.map((name) => projectAttachment(spaceId, name).catch(() => null)));
-	const valid = attachments.filter((item): item is NonNullable<typeof item> => item !== null);
-	return valid.length ? withAttachments(message, valid, 'project') : message;
+/** Reads every attached Library file upfront so missing or unreadable specs fail before claiming or starting work. */
+async function resolveTodoAttachments(spaceId: string, files: string[]) {
+	if (files.length === 0) return [];
+	const resolved = [];
+	for (const name of files) {
+		try {
+			resolved.push(await projectAttachment(spaceId, name));
+		} catch (error) {
+			if (error instanceof NotFoundError) {
+				throw new ConflictError(`Attached project file "${name}" is missing. Restore it in Files or detach it from the to-do before assigning.`);
+			}
+			throw new ConflictError(`Attached project file "${name}" could not be read. Check Files or detach it from the to-do before assigning.`);
+		}
+	}
+	return resolved;
 }
 
 export async function linkTodoToThread(spaceId: string, todoId: string, sessionId: string): Promise<SpaceTodo> {
@@ -276,12 +293,13 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 		assigneeKind: current.assigneeKind === 'coordinator' ? 'coordinator' : 'thread',
 		assignedAt: current.assignedAt ?? now,
 		completedAt: null,
+		completedBy: null,
 	});
 	return updated!;
 }
 
 export type AssignTodoInput =
-	| { target: 'coordinator'; note?: string }
+	| { target: 'coordinator'; note?: string; retry?: boolean }
 	| {
 			target: 'new-thread';
 			id?: string;
@@ -291,24 +309,31 @@ export type AssignTodoInput =
 			reasoning?: Reasoning;
 			planMode?: boolean;
 			note?: string;
+			retry?: boolean;
 	  }
-	| { target: 'thread'; threadId: string; note?: string };
+	| { target: 'thread'; threadId: string; note?: string; retry?: boolean };
 
 export async function assignTodo(spaceId: string, todoId: string, input: AssignTodoInput): Promise<{ todo: SpaceTodo; thread?: Session }> {
 	const [space, todo] = await Promise.all([existingSpace(spaceId), existingTodo(spaceId, todoId)]);
 	if (space.state === 'archived') throw new ConflictError('The project is archived; restore it to assign to-dos');
+	const allowTriagingRetry = Boolean(input.retry);
+	if (todo.status !== 'open' && !(allowTriagingRetry && todo.status === 'triaging' && todo.threadIds.length === 0)) {
+		throw new ConflictError('This to-do is already assigned or completed');
+	}
+
+	// Validate attachments, repo, model, and target thread BEFORE claiming so errors never mutate the to-do.
+	const attachments = await resolveTodoAttachments(spaceId, todo.files);
 	const now = new Date().toISOString();
 
 	if (input.target === 'coordinator') {
 		let repoLabel: string | null = null;
 		if (todo.projectId === TODO_NO_REPO) repoLabel = TODO_NO_REPO;
-		else if (todo.projectId) repoLabel = (await getProject(todo.projectId))?.repoFullName ?? null;
-		const updated = (await updateSpaceTodo(todo.id, {
-			status: 'triaging',
-			assigneeKind: 'coordinator',
-			assignedAt: now,
-			completedAt: null,
-		}))!;
+		else if (todo.projectId) {
+			if (!space.repoIds.includes(todo.projectId)) {
+				throw new InvalidInputError('The repository selected on this to-do is no longer in this project. Pick another repository before assigning.');
+			}
+			repoLabel = (await getProject(todo.projectId))?.repoFullName ?? null;
+		}
 		const rawMessage = todoAssignMessage({
 			id: todo.id,
 			title: todo.title,
@@ -321,25 +346,22 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 			description: todo.description,
 			note: input.note,
 		});
-		const message = await attachTodoFiles(spaceId, rawMessage, todo.files);
+		const message = attachments.length ? withAttachments(rawMessage, attachments, 'project') : rawMessage;
+		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'triaging', assigneeKind: 'coordinator', assignedAt: now }, { allowTriagingRetry });
+		if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
 		try {
 			await sendToAgent(spaceId, message, 'coordinator');
 		} catch (error) {
-			await updateSpaceTodo(todo.id, {
-				status: todo.status,
-				assigneeKind: todo.assigneeKind,
-				assignedAt: todo.assignedAt,
-				completedAt: todo.completedAt,
-			});
+			await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
 			throw error;
 		}
 		await touchSpace(spaceId);
-		return { todo: updated };
+		return { todo: claimed };
 	}
 
 	const baseBrief = todoBrief(todo);
 	const fullBrief = input.note?.trim() ? `${baseBrief}\n\n${input.note.trim()}` : baseBrief;
-	const briefWithFiles = await attachTodoFiles(spaceId, fullBrief, todo.files);
+	const briefWithFiles = attachments.length ? withAttachments(fullBrief, attachments, 'project') : fullBrief;
 
 	if (input.target === 'new-thread') {
 		const projectId =
@@ -350,40 +372,48 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 					: todo.projectId === TODO_NO_REPO
 						? null
 						: (todo.projectId ?? undefined);
-		const thread = await startThread(
-			spaceId,
-			{
-				id: input.id,
-				title: todo.title,
-				brief: briefWithFiles,
-				projectId,
-				repo: input.repo,
-				model: input.model ?? todo.model ?? undefined,
-				reasoning: input.reasoning ?? todo.reasoning ?? undefined,
-				planMode: input.planMode ?? todo.planMode,
-			},
-			{ wait: false },
-		);
+		if (projectId && !space.repoIds.includes(projectId)) {
+			throw new InvalidInputError('That repository is not in this project');
+		}
+		await checkModel(input.model ?? todo.model);
+		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now }, { allowTriagingRetry });
+		if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
+		let thread: Session;
+		try {
+			thread = await startThread(
+				spaceId,
+				{
+					id: input.id,
+					title: todo.title,
+					brief: briefWithFiles,
+					projectId,
+					repo: input.repo,
+					model: input.model ?? todo.model ?? undefined,
+					reasoning: input.reasoning ?? todo.reasoning ?? undefined,
+					planMode: input.planMode ?? todo.planMode,
+				},
+				{ wait: false },
+			);
+		} catch (error) {
+			await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
+			throw error;
+		}
 		await linkTodoThreadRecord(todo.id, thread.id);
-		const updated = (await updateSpaceTodo(todo.id, {
-			status: 'in_progress',
-			assigneeKind: 'thread',
-			assignedAt: now,
-			completedAt: null,
-		}))!;
 		await threadStarted(thread.id, { by: 'you', brief: fullBrief });
-		return { todo: updated, thread };
+		return { todo: (await getSpaceTodo(todo.id))!, thread };
 	}
 
 	const targetThread = await findThread(spaceId, input.threadId);
-	const nudged = await nudgeThread(spaceId, targetThread.id, briefWithFiles);
+	const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now }, { allowTriagingRetry });
+	if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
+	let nudged: Session;
+	try {
+		nudged = await nudgeThread(spaceId, targetThread.id, briefWithFiles);
+	} catch (error) {
+		await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
+		throw error;
+	}
 	await linkTodoThreadRecord(todo.id, targetThread.id);
-	const updated = (await updateSpaceTodo(todo.id, {
-		status: 'in_progress',
-		assigneeKind: 'thread',
-		assignedAt: now,
-		completedAt: null,
-	}))!;
-	return { todo: updated, thread: nudged };
+	return { todo: (await getSpaceTodo(todo.id))!, thread: nudged };
 }
 

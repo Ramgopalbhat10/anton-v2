@@ -36,6 +36,7 @@ import { recordWebCall } from './services/context/web-digest.ts';
 import { notifyFailedReply } from './services/notify/notifications.ts';
 import { recordFailedReply } from './services/notify/push.ts';
 import { keepSettledReply } from './services/replies/settled-reply.ts';
+import { reconcileCoordinatorSettlement } from './services/projects/todo-sync.ts';
 import { agentRoutes } from './routes/agents.ts';
 import { miscRoutes } from './routes/misc.ts';
 import { settingsRoutes } from './routes/settings.ts';
@@ -65,6 +66,7 @@ observeRuntime((event) => {
 	noteRepoCheckEvent(event as Parameters<typeof noteRepoCheckEvent>[0]);
 	recordTraceEvent(event as Parameters<typeof recordTraceEvent>[0]);
 	keepSettledReply(event as Parameters<typeof keepSettledReply>[0]);
+	reconcileCoordinatorSettlement(event as Parameters<typeof reconcileCoordinatorSettlement>[0]);
 	recordSubagentEvent(event as Parameters<typeof recordSubagentEvent>[0]);
 	recordWebCall(event as Parameters<typeof recordWebCall>[0]);
 	recordReplyText(event as Parameters<typeof recordReplyText>[0]);

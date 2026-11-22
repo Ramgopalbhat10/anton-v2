@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, test } from 'node:test';
@@ -50,6 +50,10 @@ const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts
 const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 const spaces = await import('../src/services/projects/spaces.ts');
 const todos = await import('../src/services/projects/todos.ts');
+const todoSync = await import('../src/services/projects/todo-sync.ts');
+const reports = await import('../src/services/projects/thread-reports.ts');
+const spaceFiles = await import('../src/services/projects/space-files.ts');
+const { recordLatestInput } = await import('../src/services/tasks/latest-input.ts');
 const { stateBlock } = await import('../src/services/projects/coordinator.ts');
 const sessions = await import('../src/services/tasks/sessions.ts');
 const { spaceRoutes } = await import('../src/routes/spaces.ts');
@@ -308,4 +312,133 @@ test('HTTP routes for space todos handle CRUD, reorder, and assignment', async (
 		listed.todos.map((item) => item.id),
 		[created.id],
 	);
+});
+
+test('atomic claim prevents duplicate assignments and failed coordinator settlement restores triaging items', async () => {
+	const space = await spaces.createSpace({ name: 'Atomic Claim', repoIds: [apiRepo.id] });
+	const item = await todos.createTodo(space.id, { title: 'Single-flight task', description: 'Only start once.' });
+
+	// Concurrent assignments: exactly one succeeds and the second is rejected with ConflictError.
+	const results = await Promise.allSettled([
+		todos.assignTodo(space.id, item.id, { target: 'new-thread' }),
+		todos.assignTodo(space.id, item.id, { target: 'new-thread' }),
+	]);
+	const fulfilled = results.filter((entry) => entry.status === 'fulfilled');
+	const rejected = results.filter((entry) => entry.status === 'rejected');
+	assert.equal(fulfilled.length, 1);
+	assert.equal(rejected.length, 1);
+	assert.match(String((rejected[0] as PromiseRejectedResult).reason), /already assigned/);
+
+	// Triaging item is restored to open if coordinator reply settles as failed or aborted.
+	const triaged = await todos.createTodo(space.id, { title: 'Coord settle test' });
+	await todos.assignTodo(space.id, triaged.id, { target: 'coordinator' });
+	// Without retry, a second assignment is rejected.
+	await assert.rejects(() => todos.assignTodo(space.id, triaged.id, { target: 'new-thread' }), /already assigned/);
+	// Explicit retry on an unlinked triaging item succeeds if desired.
+	const retried = await todos.assignTodo(space.id, triaged.id, { target: 'coordinator', retry: true });
+	assert.equal(retried.todo.status, 'triaging');
+
+	// Failed coordinator settlement automatically returns unlinked triaging items to open.
+	todoSync.reconcileCoordinatorSettlement({ type: 'submission_settled', instanceId: space.id, agentName: 'Coordinator', outcome: 'failed' });
+	for (let tries = 0; tries < 50; tries++) {
+		const current = (await todos.listTodos(space.id)).find((entry) => entry.id === triaged.id)!;
+		if (current.status === 'open') break;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	const restored = (await todos.listTodos(space.id)).find((entry) => entry.id === triaged.id)!;
+	assert.equal(restored.status, 'open');
+	assert.equal(restored.assigneeKind, 'unassigned');
+	assert.equal(restored.assignedAt, null);
+});
+
+test('direct deleteSession and moveToSpace unlink todos and reopen unfinished items', async () => {
+	const spaceA = await spaces.createSpace({ name: 'Space A', repoIds: [apiRepo.id] });
+	const spaceB = await spaces.createSpace({ name: 'Space B', repoIds: [apiRepo.id] });
+
+	// Direct deleteSession (used when removing a repo) unlinks and reopens.
+	const todoDel = await todos.createTodo(spaceA.id, { title: 'Direct delete unlink' });
+	const { thread: tDel } = await todos.assignTodo(spaceA.id, todoDel.id, { target: 'new-thread' });
+	await sessions.deleteSession(tDel!.id);
+	const afterDel = (await todos.listTodos(spaceA.id)).find((item) => item.id === todoDel.id)!;
+	assert.equal(afterDel.status, 'open');
+	assert.deepEqual(afterDel.threadIds, []);
+
+	// Moving a thread to another project unlinks it from the old project's todo and prevents cross-project completion.
+	const todoMove = await todos.createTodo(spaceA.id, { title: 'Moved thread unlink' });
+	const { thread: tMove } = await todos.assignTodo(spaceA.id, todoMove.id, { target: 'new-thread' });
+	await spaces.moveToSpace(tMove!.id, spaceB.id);
+	const afterMove = (await todos.listTodos(spaceA.id)).find((item) => item.id === todoMove.id)!;
+	assert.equal(afterMove.status, 'open');
+	assert.deepEqual(afterMove.threadIds, []);
+	await sessions.editSession(tMove!.id, { resolved: true });
+	const afterCrossResolve = (await todos.listTodos(spaceA.id)).find((item) => item.id === todoMove.id)!;
+	assert.equal(afterCrossResolve.status, 'open', 'resolving moved thread in another project does not touch old todo');
+});
+
+test('direct composer reopen syncs auto-completed todos while preserving manual Done and manual Reopen', async () => {
+	const space = await spaces.createSpace({ name: 'Manual vs Auto', repoIds: [apiRepo.id] });
+	const autoTodo = await todos.createTodo(space.id, { title: 'Auto lifecycle' });
+	const { thread } = await todos.assignTodo(space.id, autoTodo.id, { target: 'new-thread' });
+
+	// Resolving thread auto-completes todo.
+	await sessions.editSession(thread!.id, { resolved: true });
+	let current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'done');
+	assert.equal(current.completedBy, 'auto');
+
+	// Direct-composer follow-up via recordLatestInput clears resolvedAt and reopens auto-completed todo.
+	await recordLatestInput(thread!.id, 'One more tweak from the thread composer');
+	current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'in_progress');
+	assert.equal(current.completedBy, null);
+
+	// Manual Done while thread is open is NOT flipped back by threadChanged (e.g. PR check update) or thread reopen.
+	await todos.editTodo(space.id, autoTodo.id, { status: 'done' });
+	current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'done');
+	assert.equal(current.completedBy, 'manual');
+
+	await reports.threadChanged(thread!.id, 5_000);
+	current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'done', 'unrelated threadChanged must not flip manual Done back to in_progress');
+
+	await sessions.editSession(thread!.id, { resolved: true });
+	await recordLatestInput(thread!.id, 'Another follow-up');
+	current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'done', 'thread reopen must not undo manual Done');
+
+	// Manual Reopen while old linked thread is resolved stays open across subsequent threadChanged.
+	await sessions.editSession(thread!.id, { resolved: true });
+	await todos.editTodo(space.id, autoTodo.id, { status: 'open' });
+	await reports.threadChanged(thread!.id, 5_000);
+	current = (await todos.listTodos(space.id)).find((item) => item.id === autoTodo.id)!;
+	assert.equal(current.status, 'open', 'manual Reopen must not be auto-completed back by already-resolved thread');
+});
+
+test('missing attached Library files fail before claiming or starting work, and succeed once restored', async () => {
+	const space = await spaces.createSpace({ name: 'Attachment Validation', repoIds: [apiRepo.id] });
+	const item = await todos.createTodo(space.id, {
+		title: 'Implement spec',
+		files: ['spec.md'],
+	});
+
+	await assert.rejects(() => todos.assignTodo(space.id, item.id, { target: 'new-thread' }), /spec\.md.*missing/i);
+	await assert.rejects(() => todos.assignTodo(space.id, item.id, { target: 'coordinator' }), /spec\.md.*missing/i);
+	const unchanged = (await todos.listTodos(space.id)).find((entry) => entry.id === item.id)!;
+	assert.equal(unchanged.status, 'open', 'failed attachment check leaves todo open');
+	assert.equal(toThreads.length, 0);
+	assert.equal(toCoordinator.length, 0);
+
+	// Restore the file in the project Library and assign succeeds.
+	await spaceFiles.uploadSpaceFile(space.id, 'spec.md', new TextEncoder().encode('# Spec\nShip it.\n'), 'text/markdown');
+	const assigned = await todos.assignTodo(space.id, item.id, { target: 'coordinator' });
+	assert.equal(assigned.todo.status, 'triaging');
+	assert.equal(toCoordinator.length, 1);
+	assert.match(toCoordinator[0].text, /spec\.md/);
+});
+
+test('coordinator restricts todo quote authorization to authenticated <todo-assign> and preserves planMode: false', () => {
+	const source = readFileSync(new URL('../src/agents/coordinator.ts', import.meta.url), 'utf8');
+	assert.match(source, /authenticatedAssign[\s\S]*assignedTodo\.id === linkedTodo\.id[\s\S]*linkedTodo\.assigneeKind === 'coordinator'/);
+	assert.match(source, /planMode:\s*linkedTodo\?\.planMode,/);
 });

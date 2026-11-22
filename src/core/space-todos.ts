@@ -22,6 +22,7 @@ export type SpaceTodoStatus = (typeof SPACE_TODO_STATUSES)[number];
 
 export type SpaceTodoAssignee = 'unassigned' | 'coordinator' | 'thread';
 export type SpaceTodoCreator = 'user' | 'coordinator' | 'routine';
+export type SpaceTodoCompletedBy = 'auto' | 'manual';
 
 /** Stored in `projectId` when a todo explicitly targets no repository (a chat thread). `null` means unspecified / project default. */
 export const TODO_NO_REPO = 'none';
@@ -47,6 +48,7 @@ export type SpaceTodo = {
 	threadIds: string[];
 	assignedAt: string | null;
 	completedAt: string | null;
+	completedBy: SpaceTodoCompletedBy | null;
 	createdAt: string;
 	updatedAt: string;
 };

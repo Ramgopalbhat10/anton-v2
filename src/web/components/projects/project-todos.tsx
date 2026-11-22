@@ -110,6 +110,8 @@ export function TodoAssignMenu({
 	threads,
 	size = 'xs',
 	variant = 'secondary',
+	retry = false,
+	label = 'Assign',
 	onAssigned,
 	onOpenCoordinator,
 	beforeAssign,
@@ -119,6 +121,8 @@ export function TodoAssignMenu({
 	threads: Session[];
 	size?: 'xs' | 'sm';
 	variant?: 'primary' | 'secondary' | 'ghost';
+	retry?: boolean;
+	label?: string;
 	onAssigned?: (target: AssignSpaceTodoInput['target']) => void;
 	onOpenCoordinator?: () => void;
 	beforeAssign?: () => Promise<void>;
@@ -127,7 +131,7 @@ export function TodoAssignMenu({
 	const assign = useMutation({
 		mutationFn: async (input: AssignSpaceTodoInput) => {
 			if (beforeAssign) await beforeAssign();
-			return api.assignSpaceTodo(space.id, todo.id, input);
+			return api.assignSpaceTodo(space.id, todo.id, retry ? { ...input, retry: true } : input);
 		},
 		onSuccess: (_result, input) => {
 			void queryClient.invalidateQueries({ queryKey: ['space-todos', space.id] });
@@ -146,8 +150,8 @@ export function TodoAssignMenu({
 		<span className="inline-flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
 			<Menu>
 				<MenuTrigger asChild>
-					<Btn size={size} variant={variant} icon={Workflow} disabled={archived || assign.isPending} aria-label={`Assign ${todo.title}`}>
-						{assign.isPending ? 'Assigning…' : 'Assign'}
+					<Btn size={size} variant={variant} icon={Workflow} disabled={archived || assign.isPending} aria-label={`${label} ${todo.title}`}>
+						{assign.isPending ? 'Assigning…' : label}
 					</Btn>
 				</MenuTrigger>
 				<MenuContent align="end" className="min-w-[220px]">
@@ -590,13 +594,15 @@ export function TodoEditorDialog({
 							</>
 						) : null}
 						<span className="flex-1" />
-						{todo && todo.status === 'open' ? (
+						{todo && (todo.status === 'open' || (todo.status === 'triaging' && todo.threadIds.length === 0)) ? (
 							<TodoAssignMenu
 								space={space}
 								todo={todo}
 								threads={threads}
 								size="sm"
 								variant="secondary"
+								retry={todo.status === 'triaging'}
+								label={todo.status === 'triaging' ? 'Retry assign' : 'Assign'}
 								beforeAssign={saveBeforeAssign}
 								onAssigned={() => onClose()}
 								onOpenCoordinator={onOpenCoordinator}
@@ -841,13 +847,15 @@ function TodoListRow({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1">
-				{todo.status === 'open' ? (
+				{todo.status === 'open' || (todo.status === 'triaging' && todo.threadIds.length === 0) ? (
 					<TodoAssignMenu
 						space={space}
 						todo={todo}
 						threads={threads}
 						size="xs"
 						variant="secondary"
+						retry={todo.status === 'triaging'}
+						label={todo.status === 'triaging' ? 'Retry' : 'Assign'}
 						onOpenCoordinator={onOpenCoordinator}
 					/>
 				) : null}

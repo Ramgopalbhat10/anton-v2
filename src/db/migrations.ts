@@ -193,6 +193,8 @@ export const migrations: string[][] = [
 		`CREATE TABLE IF NOT EXISTS space_todo_threads (todo_id TEXT NOT NULL, session_id TEXT NOT NULL, linked_at TEXT NOT NULL, PRIMARY KEY (todo_id, session_id))`,
 		`CREATE INDEX IF NOT EXISTS space_todo_threads_session ON space_todo_threads (session_id)`,
 	],
+	// 47: distinguish automatic thread-driven completion from manual user Done changes.
+	[`ALTER TABLE space_todos ADD COLUMN completed_by TEXT`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

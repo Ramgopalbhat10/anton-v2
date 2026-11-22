@@ -75,7 +75,7 @@ export type EditSpaceTodoInput = Partial<CreateSpaceTodoInput> & {
 };
 
 export type AssignSpaceTodoInput =
-	| { target: 'coordinator'; note?: string }
+	| { target: 'coordinator'; note?: string; retry?: boolean }
 	| {
 			target: 'new-thread';
 			id?: string;
@@ -85,8 +85,9 @@ export type AssignSpaceTodoInput =
 			reasoning?: Reasoning;
 			planMode?: boolean;
 			note?: string;
+			retry?: boolean;
 	  }
-	| { target: 'thread'; threadId: string; note?: string };
+	| { target: 'thread'; threadId: string; note?: string; retry?: boolean };
 
 export const spacesApi = {
 	spaces: () => json<{ spaces: Space[] }>('/api/spaces'),

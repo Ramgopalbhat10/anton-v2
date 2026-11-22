@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,6 +88,7 @@ const makeTodo = (patch: Partial<SpaceTodo>): SpaceTodo => ({
 	threadIds: [],
 	assignedAt: null,
 	completedAt: null,
+	completedBy: null,
 	createdAt: '2026-10-02T00:00:00Z',
 	updatedAt: '2026-10-02T00:00:00Z',
 	...patch,
@@ -178,6 +179,40 @@ describe('ProjectBoard with To do column', () => {
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
 		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', { target: 'new-thread' }));
 	});
+
+	it('assigns a to-do when dropped onto Working and shows an error banner if drop assignment fails', async () => {
+		const openTodo = makeTodo({ id: 'todo_drop', title: 'Drag me to working' });
+		renderWithRouter(() => (
+			<ProjectBoard space={space} threads={threads} todos={[openTodo]} onNewThread={() => undefined} />
+		));
+
+		const todoCard = await screen.findByRole('article', { name: 'Drag me to working' });
+		const workingCol = screen.getByRole('region', { name: 'Working' });
+		const data = new Map<string, string>();
+		const dataTransfer = {
+			types: ['application/x-anton-todo'],
+			setData: (type: string, value: string) => data.set(type, value),
+			getData: (type: string) => data.get(type) ?? '',
+			effectAllowed: 'move',
+			dropEffect: 'move',
+		};
+
+		// Successful drop starts a new thread.
+		fireEvent.dragStart(todoCard, { dataTransfer });
+		fireEvent.dragOver(workingCol, { dataTransfer });
+		fireEvent.drop(workingCol, { dataTransfer });
+		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_drop', { target: 'new-thread' }));
+
+		// Rejected drop renders a visible error banner that can be dismissed.
+		api.assignSpaceTodo.mockRejectedValueOnce(new Error('That repository is not in this project'));
+		fireEvent.dragStart(todoCard, { dataTransfer });
+		fireEvent.dragOver(workingCol, { dataTransfer });
+		fireEvent.drop(workingCol, { dataTransfer });
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain('That repository is not in this project');
+		await userEvent.click(within(alert).getByRole('button', { name: 'Dismiss error' }));
+		expect(screen.queryByRole('alert')).toBeNull();
+	});
 });
 
 describe('ProjectTodos view', () => {
@@ -227,6 +262,16 @@ describe('ProjectTodos view', () => {
 		// Switch to Done tab.
 		await userEvent.click(screen.getByRole('tab', { name: /Done/ }));
 		expect(await screen.findByText('Finished task')).toBeTruthy();
+	});
+
+	it('allows retrying an unlinked triaging to-do from the Active tab', async () => {
+		const triaging = makeTodo({ id: 't_triage', title: 'Stalled triage item', status: 'triaging', assigneeKind: 'coordinator', threadIds: [] });
+		renderWithRouter(() => <ProjectTodos space={space} threads={threads} todos={[triaging]} />);
+
+		await userEvent.click(await screen.findByRole('tab', { name: /Active/ }));
+		await userEvent.click(await screen.findByRole('button', { name: 'Retry Stalled triage item' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
+		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 't_triage', { target: 'new-thread', retry: true }));
 	});
 });
 

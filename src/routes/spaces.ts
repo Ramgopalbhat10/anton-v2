@@ -140,7 +140,7 @@ app.post('/api/spaces/:id/todos/:todoId/assign', async (c) => {
 	const input = await body(
 		c,
 		v.variant('target', [
-			v.object({ target: v.literal('coordinator'), note: v.optional(v.pipe(v.string(), v.maxLength(10_000))) }),
+			v.object({ target: v.literal('coordinator'), note: v.optional(v.pipe(v.string(), v.maxLength(10_000))), retry: v.optional(v.boolean()) }),
 			v.object({
 				target: v.literal('new-thread'),
 				id: v.optional(v.pipe(v.string(), v.uuid())),
@@ -150,11 +150,13 @@ app.post('/api/spaces/:id/todos/:todoId/assign', async (c) => {
 				reasoning: v.optional(REASONING),
 				planMode: v.optional(v.boolean()),
 				note: v.optional(v.pipe(v.string(), v.maxLength(10_000))),
+				retry: v.optional(v.boolean()),
 			}),
 			v.object({
 				target: v.literal('thread'),
 				threadId: v.pipe(v.string(), v.minLength(1)),
 				note: v.optional(v.pipe(v.string(), v.maxLength(10_000))),
+				retry: v.optional(v.boolean()),
 			}),
 		]),
 	);

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, FolderGit2, ListTodo, MessageSquare, Plus, Tag, Workflow } from '@/lib/icons';
+import { Calendar, FolderGit2, ListTodo, MessageSquare, Plus, Tag, Workflow, X } from '@/lib/icons';
 import { type DragEvent, type FormEvent, useMemo, useState } from 'react';
 import { Chip, Status } from '@/components/kit/instrument';
 import { Btn, Icon, IconBtn } from '@/components/kit/signal';
@@ -296,8 +296,17 @@ export function ProjectBoard({
 	}
 
 	return (
-		<div className="h-full overflow-auto p-4">
-			<div className="grid h-full grid-flow-col auto-cols-[minmax(196px,1fr)] gap-3">
+		<div className="flex h-full flex-col overflow-auto p-4">
+			{startDroppedTodo.isError ? (
+				<div
+					role="alert"
+					className="mb-3 flex shrink-0 items-center justify-between gap-2 rounded-control border border-(--bad) bg-(--bad-soft) px-3 py-2 text-small text-(--bad)"
+				>
+					<span>{startDroppedTodo.error instanceof Error ? startDroppedTodo.error.message : 'Could not assign to-do.'}</span>
+					<IconBtn icon={X} size="xs" label="Dismiss error" onClick={() => startDroppedTodo.reset()} />
+				</div>
+			) : null}
+			<div className="grid min-h-0 flex-1 grid-flow-col auto-cols-[minmax(196px,1fr)] gap-3">
 				<section aria-label="To do" className="flex min-h-0 min-w-0 flex-col gap-1.5">
 					<header className="flex h-7 shrink-0 items-center gap-1.5 px-1">
 						<Icon icon={ListTodo} size={13} className="text-(--text-3)" />
@@ -317,6 +326,7 @@ export function ProjectBoard({
 								onEdit={() => setEditing({ mode: 'edit', todo })}
 								onOpenCoordinator={onOpenCoordinator}
 								onDragStart={(event) => {
+									startDroppedTodo.reset();
 									event.dataTransfer.setData(TODO_DRAG_MIME, todo.id);
 									event.dataTransfer.effectAllowed = 'move';
 									setDraggingTodoId(todo.id);

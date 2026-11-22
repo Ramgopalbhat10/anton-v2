@@ -8,7 +8,7 @@ import { isWorking } from '../tasks/activity.ts';
 import { logProblem } from '../../core/log.ts';
 import { finishesWork } from '../replies/reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
-import { syncTodosForThread } from './todo-sync.ts';
+import { onThreadResolved } from './todo-sync.ts';
 import { getSession } from '../tasks/sessions.ts';
 
 /** Notes are batched per project and only a change of state is sent, so a thread that follows up on CI three times reports once. */
@@ -74,8 +74,10 @@ export async function threadChanged(id: string, delayMs = REPORT_DELAY_MS): Prom
 	const record = await getSessionRecord(id);
 	if (!record) return;
 	const pr = record.prUrl ? record.pullRequest : null;
-	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) await updateSession(id, { resolvedAt: new Date().toISOString() });
-	await syncTodosForThread(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
+	if (!record.resolvedAt && (pr?.state === 'merged' || pr?.state === 'closed')) {
+		await updateSession(id, { resolvedAt: new Date().toISOString() });
+		await onThreadResolved(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
+	}
 	if (!record.spaceId) return;
 	const spaceId = record.spaceId;
 	pending.set(spaceId, (pending.get(spaceId) ?? new Set()).add(id));
@@ -120,7 +122,7 @@ async function closeIfFinished(id: string, reply: string): Promise<void> {
 	const done = (await scheduledRun(task)) || (await finishesWork(id, task.lastInput, reply));
 	if (done && !isWorking(id)) {
 		await updateSession(id, { resolvedAt: new Date().toISOString() });
-		await syncTodosForThread(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
+		await onThreadResolved(id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, id));
 	}
 }
 
@@ -139,7 +141,7 @@ export async function resolveIdleThreads(now = Date.now()): Promise<number> {
 		const at = new Date(thread.checkpointAt ?? thread.lastInputAt ?? thread.createdAt).getTime();
 		if (thread.threadState !== 'idle' || now - at < IDLE_RESOLVE_MS) continue;
 		await updateSession(record.id, { resolvedAt: new Date(now).toISOString() });
-		await syncTodosForThread(record.id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, record.id));
+		await onThreadResolved(record.id).catch((error: unknown) => logProblem('warn', 'Could not sync to-dos for thread', error, record.id));
 		resolved += 1;
 	}
 	return resolved;

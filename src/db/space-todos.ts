@@ -6,6 +6,7 @@ import {
 	TODO_PRIORITIES,
 	type SpaceTodo,
 	type SpaceTodoAssignee,
+	type SpaceTodoCompletedBy,
 	type SpaceTodoCreator,
 	type SpaceTodoStatus,
 	type TodoPriority,
@@ -45,6 +46,12 @@ function asCreator(value: unknown): SpaceTodoCreator {
 	return text === 'coordinator' || text === 'routine' ? text : 'user';
 }
 
+function asCompletedBy(value: unknown): SpaceTodoCompletedBy | null {
+	if (value == null) return null;
+	const text = String(value);
+	return text === 'auto' || text === 'manual' ? text : null;
+}
+
 function toTodo(row: Row, threadIds: string[]): SpaceTodo {
 	return {
 		id: String(row.id),
@@ -67,6 +74,7 @@ function toTodo(row: Row, threadIds: string[]): SpaceTodo {
 		threadIds,
 		assignedAt: optional(row.assigned_at),
 		completedAt: optional(row.completed_at),
+		completedBy: asCompletedBy(row.completed_by),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};
@@ -196,6 +204,7 @@ const COLUMNS = {
 	position: 'position',
 	assignedAt: 'assigned_at',
 	completedAt: 'completed_at',
+	completedBy: 'completed_by',
 } as const;
 
 export type SpaceTodoUpdate = Partial<{
@@ -215,6 +224,7 @@ export type SpaceTodoUpdate = Partial<{
 	position: number;
 	assignedAt: string | null;
 	completedAt: string | null;
+	completedBy: SpaceTodoCompletedBy | null;
 }>;
 
 export async function updateSpaceTodo(id: string, update: SpaceTodoUpdate): Promise<SpaceTodo | null> {
@@ -289,4 +299,59 @@ export async function unlinkSessionTodos(sessionId: string): Promise<SpaceTodo[]
 	const spaces = new Set(linked.map((todo) => todo.spaceId));
 	for (const spaceId of spaces) announce({ kind: 'space', id: spaceId, what: 'todos' });
 	return linked;
+}
+
+/**
+ * Atomically claims an open to-do (or an unlinked triaging to-do on explicit retry) before dispatching work.
+ * Returns null if another request already claimed or completed it.
+ */
+export async function claimSpaceTodo(
+	id: string,
+	spaceId: string,
+	next: { status: 'triaging' | 'in_progress'; assigneeKind: 'coordinator' | 'thread'; assignedAt: string },
+	{ allowTriagingRetry = false }: { allowTriagingRetry?: boolean } = {},
+): Promise<SpaceTodo | null> {
+	const db = await appDb();
+	const guard = allowTriagingRetry
+		? "(status = 'open' OR (status = 'triaging' AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)))"
+		: "status = 'open'";
+	const result = await db.execute({
+		sql: `UPDATE space_todos
+			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = NULL, completed_by = NULL, updated_at = ?
+			WHERE id = ? AND space_id = ? AND ${guard}`,
+		args: [next.status, next.assigneeKind, next.assignedAt, next.assignedAt, id, spaceId],
+	});
+	if (result.rowsAffected === 0) return null;
+	announce({ kind: 'space', id: spaceId, what: 'todos' });
+	return getSpaceTodo(id);
+}
+
+/** Reverts a failed claim only if no newer assignment has superseded it. */
+export async function releaseSpaceTodoClaim(
+	id: string,
+	spaceId: string,
+	expectedAssignedAt: string,
+	previous: Pick<SpaceTodo, 'status' | 'assigneeKind' | 'assignedAt' | 'completedAt' | 'completedBy'>,
+): Promise<void> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `UPDATE space_todos
+			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = ?, completed_by = ?, updated_at = ?
+			WHERE id = ? AND space_id = ? AND assigned_at = ? AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)`,
+		args: [previous.status, previous.assigneeKind, previous.assignedAt, previous.completedAt, previous.completedBy, new Date().toISOString(), id, spaceId, expectedAssignedAt],
+	});
+	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
+}
+
+/** Restores unhandled triaging items (no linked threads) back to open when a coordinator reply fails or is aborted. */
+export async function restoreUnhandledTriaging(spaceId: string): Promise<number> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: `UPDATE space_todos
+			SET status = 'open', assignee_kind = 'unassigned', assigned_at = NULL, updated_at = ?
+			WHERE space_id = ? AND status = 'triaging' AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)`,
+		args: [new Date().toISOString(), spaceId],
+	});
+	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
+	return result.rowsAffected;
 }

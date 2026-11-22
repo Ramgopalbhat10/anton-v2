@@ -189,6 +189,7 @@ const spaceTodos: Array<{
 	threadIds: string[];
 	assignedAt: string | null;
 	completedAt: string | null;
+	completedBy: 'auto' | 'manual' | null;
 	createdAt: string;
 	updatedAt: string;
 }> = [
@@ -213,6 +214,7 @@ const spaceTodos: Array<{
 		threadIds: [],
 		assignedAt: null,
 		completedAt: null,
+		completedBy: null,
 		createdAt: ago(60 * 12),
 		updatedAt: ago(60 * 12),
 	},
@@ -237,6 +239,7 @@ const spaceTodos: Array<{
 		threadIds: [],
 		assignedAt: null,
 		completedAt: null,
+		completedBy: null,
 		createdAt: ago(60 * 8),
 		updatedAt: ago(60 * 8),
 	},
@@ -261,6 +264,7 @@ const spaceTodos: Array<{
 		threadIds: ['th-schema'],
 		assignedAt: ago(45),
 		completedAt: null,
+		completedBy: null,
 		createdAt: ago(60 * 20),
 		updatedAt: ago(4),
 	},
@@ -285,6 +289,7 @@ const spaceTodos: Array<{
 		threadIds: ['th-cleanup'],
 		assignedAt: ago(60 * 32),
 		completedAt: ago(60 * 30),
+		completedBy: 'auto',
 		createdAt: ago(60 * 40),
 		updatedAt: ago(60 * 30),
 	},
@@ -471,35 +476,88 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		const MAX_MOCK_BODY_BYTES = 64 * 1024;
+		const readJsonBody = (onBody: (body: Record<string, unknown>) => void) => {
+			let raw = '';
+			let bytes = 0;
+			let aborted = false;
+			req.on('data', (chunk) => {
+				if (aborted) return;
+				const text = String(chunk);
+				bytes += Buffer.byteLength(text);
+				if (bytes > MAX_MOCK_BODY_BYTES) {
+					aborted = true;
+					res.statusCode = 400;
+					json(res, { error: 'Request body too large' });
+					return;
+				}
+				raw += text;
+			});
+			req.on('end', () => {
+				if (aborted) return;
+				let parsed: unknown;
+				try {
+					parsed = raw.trim() ? JSON.parse(raw) : {};
+				} catch {
+					res.statusCode = 400;
+					return json(res, { error: 'Invalid JSON body' });
+				}
+				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+					res.statusCode = 400;
+					return json(res, { error: 'JSON body must be an object' });
+				}
+				try {
+					onBody(parsed as Record<string, unknown>);
+				} catch {
+					res.statusCode = 400;
+					json(res, { error: 'Invalid request body' });
+				}
+			});
+			req.on('error', () => {
+				if (aborted || res.writableEnded) return;
+				aborted = true;
+				res.statusCode = 400;
+				json(res, { error: 'Could not read request body' });
+			});
+		};
+		const VALID_PRIORITIES = new Set(['urgent', 'high', 'medium', 'low']);
+		const VALID_STATUSES = new Set(['open', 'triaging', 'in_progress', 'done', 'cancelled']);
 		const todosSpaceId = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
 		if (todosSpaceId) {
 			if (req.method === 'POST') {
-				let raw = '';
-				req.on('data', (chunk) => (raw += String(chunk)));
-				req.on('end', () => {
-					const input = JSON.parse(raw || '{}') as Record<string, unknown>;
+				readJsonBody((input) => {
+					const title = typeof input.title === 'string' ? input.title.trim() : '';
+					if (!title) {
+						res.statusCode = 400;
+						return json(res, { error: 'Give the to-do a title' });
+					}
+					if (input.priority != null && (typeof input.priority !== 'string' || !VALID_PRIORITIES.has(input.priority))) {
+						res.statusCode = 400;
+						return json(res, { error: 'Invalid priority' });
+					}
 					const nowIso = new Date().toISOString();
 					const item = {
 						id: `todo-${Date.now()}`,
 						spaceId: todosSpaceId,
-						title: String(input.title ?? ''),
-						description: String(input.description ?? ''),
+						title,
+						description: typeof input.description === 'string' ? input.description : '',
 						status: 'open' as const,
 						assigneeKind: 'unassigned' as const,
 						priority: (input.priority as 'urgent' | 'high' | 'medium' | 'low' | null) ?? null,
-						tags: Array.isArray(input.tags) ? input.tags.map(String) : [],
-						projectId: (input.projectId as string | null) ?? null,
-						model: (input.model as string | null) ?? null,
-						reasoning: (input.reasoning as string | null) ?? null,
+						tags: Array.isArray(input.tags) ? input.tags.filter((item): item is string => typeof item === 'string') : [],
+						projectId: typeof input.projectId === 'string' ? input.projectId : null,
+						model: typeof input.model === 'string' ? input.model : null,
+						reasoning: typeof input.reasoning === 'string' ? input.reasoning : null,
 						planMode: Boolean(input.planMode),
-						files: Array.isArray(input.files) ? input.files.map(String) : [],
-						dueAt: (input.dueAt as string | null) ?? null,
-						sourceUrl: (input.sourceUrl as string | null) ?? null,
+						files: Array.isArray(input.files) ? input.files.filter((item): item is string => typeof item === 'string') : [],
+						dueAt: typeof input.dueAt === 'string' ? input.dueAt : null,
+						sourceUrl: typeof input.sourceUrl === 'string' ? input.sourceUrl : null,
 						position: spaceTodos.filter((t) => t.spaceId === todosSpaceId).length,
 						createdBy: 'user' as const,
 						threadIds: [],
 						assignedAt: null,
 						completedAt: null,
+						completedBy: null,
 						createdAt: nowIso,
 						updatedAt: nowIso,
 					};
@@ -512,15 +570,24 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		}
 		const todoAssignMatch = path.match(/^\/api\/spaces\/([^/]+)\/todos\/([^/]+)\/assign$/);
 		if (todoAssignMatch && req.method === 'POST') {
-			let raw = '';
-			req.on('data', (chunk) => (raw += String(chunk)));
-			req.on('end', () => {
+			readJsonBody((input) => {
 				const [, sId, todoId] = todoAssignMatch;
-				const input = JSON.parse(raw || '{}') as { target?: string; threadId?: string };
+				if (input.target !== 'coordinator' && input.target !== 'new-thread' && input.target !== 'thread') {
+					res.statusCode = 400;
+					return json(res, { error: 'Invalid assignment target' });
+				}
+				if (input.target === 'thread' && (typeof input.threadId !== 'string' || !input.threadId.trim())) {
+					res.statusCode = 400;
+					return json(res, { error: 'Missing threadId' });
+				}
 				const todo = spaceTodos.find((item) => item.spaceId === sId && item.id === todoId);
 				if (!todo) {
 					res.statusCode = 404;
 					return json(res, { error: 'Not found' });
+				}
+				if (todo.status !== 'open' && !(input.retry === true && todo.status === 'triaging' && todo.threadIds.length === 0)) {
+					res.statusCode = 409;
+					return json(res, { error: 'This to-do is already assigned or completed' });
 				}
 				todo.assignedAt = new Date().toISOString();
 				todo.updatedAt = todo.assignedAt;
@@ -529,7 +596,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 					todo.assigneeKind = 'coordinator';
 					return json(res, { todo });
 				}
-				const threadId = input.target === 'thread' && input.threadId ? input.threadId : `th-todo-${Date.now()}`;
+				const threadId = input.target === 'thread' ? String(input.threadId) : `th-todo-${Date.now()}`;
 				if (input.target === 'new-thread') {
 					spaceThreads.unshift(thread(threadId, sId, todo.title, 'working', { ...onRepo('p-billing', 'acme/billing-api', 'todo-thread'), working: true, status: 'running', lastReply: todo.description || todo.title, lastInputAt: todo.assignedAt }));
 				}
@@ -549,14 +616,19 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				return json(res, { ok: true });
 			}
 			if (req.method === 'PATCH') {
-				let raw = '';
-				req.on('data', (chunk) => (raw += String(chunk)));
-				req.on('end', () => {
-					const patch = JSON.parse(raw || '{}') as Record<string, unknown>;
+				readJsonBody((patch) => {
 					const todo = spaceTodos.find((item) => item.spaceId === sId && item.id === todoId);
 					if (!todo) {
 						res.statusCode = 404;
 						return json(res, { error: 'Not found' });
+					}
+					if (patch.status !== undefined && (typeof patch.status !== 'string' || !VALID_STATUSES.has(patch.status))) {
+						res.statusCode = 400;
+						return json(res, { error: 'Invalid status' });
+					}
+					if (patch.priority !== undefined && patch.priority !== null && (typeof patch.priority !== 'string' || !VALID_PRIORITIES.has(patch.priority))) {
+						res.statusCode = 400;
+						return json(res, { error: 'Invalid priority' });
 					}
 					Object.assign(todo, patch, { updatedAt: new Date().toISOString() });
 					json(res, todo);

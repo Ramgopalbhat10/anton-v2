@@ -84,7 +84,16 @@ function useCoordinatorTools(spaceId: string) {
 				const todoRef = data.todo_id?.trim() || assignedTodo?.id || null;
 				const linkedTodo = todoRef ? await findTodo(spaceId, todoRef).catch(() => null) : null;
 				const userText = splitAttachments(answering).text;
-				const said = linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
+				// Only an authenticated <todo-assign> delivery for this exact coordinator-assigned item may authorize quoted text;
+				// a model-supplied todo_id alone only links work after the user-message quote check passes.
+				const authenticatedAssign = Boolean(
+					assignedTodo &&
+						linkedTodo &&
+						assignedTodo.id === linkedTodo.id &&
+						linkedTodo.assigneeKind === 'coordinator' &&
+						linkedTodo.assignedAt !== null,
+				);
+				const said = authenticatedAssign && linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
 				if (said.trim() && !data.approved && !quotedFrom(data.request, said))
 					throw new Error(
 						"request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",
@@ -107,7 +116,7 @@ function useCoordinatorTools(spaceId: string) {
 						repo: data.repo,
 						model: linkedTodo?.model ?? undefined,
 						reasoning: linkedTodo?.reasoning ?? undefined,
-						planMode: linkedTodo?.planMode || undefined,
+						planMode: linkedTodo?.planMode,
 					},
 					{ wait: false },
 				);
