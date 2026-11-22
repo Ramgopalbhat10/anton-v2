@@ -109,7 +109,7 @@ function dockerMachine(bin: string, container: string): Machine {
 		root: ROOT,
 		exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 			const env = { TERM: 'xterm-256color', ...UNSIGNED, ...options.env };
-			const args = ['exec', '-i', '-w', options.cwd ?? ROOT, ...envArgs(env), container, ...(options.timeoutMs ? timed(command, options.timeoutMs) : ['bash', '-lc', command])];
+			const args = ['exec', '-i', '-w', options.cwd ?? ROOT, ...envArgs(env), container, ...(options.timeoutMs ? timed(command, options.timeoutMs) : ['bash', options.plain ? '-c' : '-lc', command])];
 			// Stopping `docker exec` leaves the command running in the container, so the container stops it at the
 			// timeout and the client waits a little longer for that.
 			const timeoutMs = options.timeoutMs && options.timeoutMs + KILL_GRACE_S * 1000 + 5000;

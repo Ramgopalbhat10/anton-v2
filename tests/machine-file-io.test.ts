@@ -106,7 +106,7 @@ function fakeModal(files: Record<string, Uint8Array>, failure?: Error) {
 	return { sandbox: sandbox as unknown as Sandbox, calls, files };
 }
 
-test('a Modal machine reads and writes through a login shell, as before, unless ANTON_SANDBOX_FILE_API turns the file API on', async () => {
+test('a Modal machine reads through a plain shell and writes through a login shell, unless ANTON_SANDBOX_FILE_API turns the file API on', async () => {
 	const off = fakeModal({ '/workspace/a.txt': new TextEncoder().encode('hello') });
 	const machineOff = modalMachine(off.sandbox);
 	assert.equal(machineOff.readFile, undefined);
@@ -114,7 +114,7 @@ test('a Modal machine reads and writes through a login shell, as before, unless 
 	assert.equal(new TextDecoder().decode(await readMachineFile(machineOff, '/workspace/a.txt')), 'hello');
 	await writeMachineFile(machineOff, '/workspace/b.txt', every);
 	sameBytes(off.files['/workspace/b.txt'], every);
-	assert.deepEqual(off.calls, ["exec bash -lc wc -c < '/workspace/a.txt' >&2 && cat -- '/workspace/a.txt'", "exec bash -lc cat > '/workspace/b.txt'"]);
+	assert.deepEqual(off.calls, ["exec bash -c wc -c < '/workspace/a.txt' >&2 && cat -- '/workspace/a.txt'", "exec bash -lc cat > '/workspace/b.txt'"]);
 
 	const on = fakeModal({ '/workspace/a.txt': new TextEncoder().encode('hello') });
 	const machineOn = modalMachine(on.sandbox, true);
@@ -124,7 +124,7 @@ test('a Modal machine reads and writes through a login shell, as before, unless 
 	assert.deepEqual(on.calls, ['readBytes /workspace/a.txt', 'writeBytes /workspace/b.txt']);
 	// The file API takes absolute paths only: a relative one goes to the shell.
 	await readMachineFile(machineOn, 'a.txt');
-	assert.match(on.calls.at(-1)!, /^exec bash -lc wc -c < 'a\.txt'/);
+	assert.match(on.calls.at(-1)!, /^exec bash -c wc -c < 'a\.txt'/);
 });
 
 test("with the file API on, a missing file fails as the shell's read does, and a file past its limit is read by the shell", async () => {
@@ -133,7 +133,7 @@ test("with the file API on, a missing file fails as the shell's read does, and a
 	await assert.rejects(writeMachineFile(missing, '/workspace/gone/x', every), /`write \/workspace\/gone\/x` failed: \/workspace\/gone\/x: No such file or directory/);
 	const large = fakeModal({ '/workspace/big.bin': every }, new SandboxFilesystemFileTooLargeError('too large'));
 	sameBytes(await readMachineFile(modalMachine(large.sandbox, true), '/workspace/big.bin'), every);
-	assert.deepEqual(large.calls, ['readBytes /workspace/big.bin', "exec bash -lc wc -c < '/workspace/big.bin' >&2 && cat -- '/workspace/big.bin'"]);
+	assert.deepEqual(large.calls, ['readBytes /workspace/big.bin', "exec bash -c wc -c < '/workspace/big.bin' >&2 && cat -- '/workspace/big.bin'"]);
 });
 
 test('a machine without its own file access reads and writes through the shell exactly as before', async () => {
