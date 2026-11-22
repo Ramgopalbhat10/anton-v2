@@ -1,7 +1,9 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { HoverCard } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Space } from '@/lib/api/spaces';
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
@@ -68,6 +70,51 @@ function saveDock(spaceId: string, state: DockState) {
 	} catch {
 		// Storage is a convenience; the dock still works without it.
 	}
+}
+
+const repoName = (fullName: string) => fullName.split('/').pop() ?? fullName;
+
+const REPO_CHIP = 'inline-flex h-[20px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]';
+
+export function ProjectReposChip({ repos }: { repos: Space['repos'] }) {
+	const [open, setOpen] = useState(false);
+	if (repos.length === 0) return null;
+	const [first, ...rest] = repos;
+	if (rest.length === 0) {
+		return (
+			<span title={first.repoFullName} className={cn(REPO_CHIP, 'max-w-[160px]')}>
+				<Icon icon={FolderGit2} size={10} className="shrink-0" />
+				<span className="truncate">{repoName(first.repoFullName)}</span>
+			</span>
+		);
+	}
+	return (
+		<HoverCard.Root open={open} onOpenChange={setOpen} openDelay={120} closeDelay={80}>
+			<HoverCard.Trigger asChild>
+				<button
+					type="button"
+					onClick={() => setOpen(true)}
+					className={cn(REPO_CHIP, 'max-w-[180px] cursor-default outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)')}
+				>
+					<Icon icon={FolderGit2} size={10} className="shrink-0" />
+					<span className="truncate">{repoName(first.repoFullName)}</span>{' '}
+					<span className="in-num shrink-0 text-(--text-4)">+{rest.length}</span>
+				</button>
+			</HoverCard.Trigger>
+			<HoverCard.Portal>
+				<HoverCard.Content side="bottom" align="end" sideOffset={6} collisionPadding={12} className="in-pop z-50 flex max-w-[260px] min-w-[160px] flex-col p-1.5 outline-none">
+					<ul aria-label="More repositories" className="m-0 flex max-h-[240px] list-none flex-col gap-0.5 overflow-y-auto p-0">
+						{rest.map((repo) => (
+							<li key={repo.id} title={repo.repoFullName} className="flex min-w-0 items-center gap-1.5 rounded-inner px-2 py-1 text-small font-medium text-(--text-2)">
+								<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
+								<span className="truncate">{repoName(repo.repoFullName)}</span>
+							</li>
+						))}
+					</ul>
+				</HoverCard.Content>
+			</HoverCard.Portal>
+		</HoverCard.Root>
+	);
 }
 
 export function ProjectPage() {
@@ -197,14 +244,11 @@ export function ProjectPage() {
 							</PanelTab>
 						))}
 					</PanelTabs>
-					<div className="hidden shrink-0 items-center gap-1 xl:flex">
-						{data.repos.slice(0, 4).map((repo) => (
-							<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[20px] max-w-[140px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]">
-								<Icon icon={FolderGit2} size={10} className="shrink-0" />
-								<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
-							</span>
-						))}
-					</div>
+					{data.repos.length > 0 ? (
+						<div className="hidden shrink-0 items-center xl:flex">
+							<ProjectReposChip repos={data.repos} />
+						</div>
+					) : null}
 					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
 					<Btn size="sm" variant="primary" icon={Waypoints} onClick={startThread}>
 						<span className="hidden sm:inline">New thread</span>

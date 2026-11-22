@@ -41,6 +41,7 @@ const { ProjectRoutines } = await import('@/components/projects/project-panel');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/marks/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/projects/project-feed');
 const { OutputViewerHost } = await import('@/components/content/output-viewer');
+const { ProjectReposChip } = await import('@/components/projects/project-page');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -925,5 +926,44 @@ describe('project overview numbers', () => {
 		expect(screen.getByRole('button', { name: 'Brief me' }).getAttribute('aria-expanded')).toBe('false');
 		await userEvent.click(screen.getByRole('button', { name: 'Brief me' }));
 		expect(screen.getAllByText('Brief me')).toHaveLength(2);
+	});
+});
+
+describe('project header repo chip', () => {
+	const repo = (id: string, repoFullName: string) => ({ id, repoFullName, defaultBranch: 'main' });
+
+	it('renders nothing when the project has no repositories', () => {
+		const { container } = render(<ProjectReposChip repos={[]} />);
+		expect(container.innerHTML).toBe('');
+	});
+
+	it('renders a single plain chip without a count or popover when there is one repository', () => {
+		render(<ProjectReposChip repos={[repo('r1', 'mrgb/mrgb-chat')]} />);
+		expect(screen.getByText('mrgb-chat')).toBeTruthy();
+		expect(screen.queryByRole('button')).toBeNull();
+		expect(screen.queryByText(/^\+/)).toBeNull();
+		expect(screen.getByTitle('mrgb/mrgb-chat')).toBeTruthy();
+	});
+
+	it('keeps one repo chip with the remaining count and shows the rest in a hover popover', async () => {
+		const repos = [
+			repo('r1', 'mrgb/mrgb-chat'),
+			repo('r2', 'mrgb/notes'),
+			repo('r3', 'mrgb/my-astro-blog'),
+			repo('r4', 'mrgb/anton-v2'),
+		];
+		render(<ProjectReposChip repos={repos} />);
+		const trigger = screen.getByRole('button', { name: 'mrgb-chat +3' });
+		expect(trigger.textContent).toBe('mrgb-chat +3');
+		expect(screen.queryByText('notes')).toBeNull();
+		expect(screen.queryByText('my-astro-blog')).toBeNull();
+		expect(screen.queryByText('anton-v2')).toBeNull();
+
+		fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
+		const list = await screen.findByRole('list', { name: 'More repositories' });
+		const items = within(list).getAllByRole('listitem');
+		expect(items.map((item) => item.textContent)).toEqual(['notes', 'my-astro-blog', 'anton-v2']);
+		expect(items.map((item) => item.getAttribute('title'))).toEqual(['mrgb/notes', 'mrgb/my-astro-blog', 'mrgb/anton-v2']);
+		expect(within(list).queryByText('mrgb-chat')).toBeNull();
 	});
 });
