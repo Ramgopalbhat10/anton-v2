@@ -248,7 +248,7 @@ export function TodoEditorDialog({
 		priority,
 		projectId,
 		model: choice.model || null,
-		reasoning: choice.model ? choice.reasoning : null,
+		reasoning: choice.reasoning,
 		planMode: projectId === TODO_NO_REPO ? false : planMode,
 		tags,
 		files,

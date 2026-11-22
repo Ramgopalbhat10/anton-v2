@@ -228,6 +228,21 @@ test('assigning a todo directly to a new or existing thread, and cleanup on thre
 	await spaces.editSpace(space.id, { state: 'archived' });
 	await assert.rejects(() => todos.assignTodo(space.id, one.id, { target: 'coordinator' }), /archived/);
 
+	// If coordinator delivery fails, the todo rolls back to open/unassigned instead of getting stuck triaging.
+	await spaces.editSpace(space.id, { state: 'active' });
+	setAgentDelivery(async () => {
+		throw new Error('coordinator unavailable');
+	}, 'coordinator');
+	try {
+		await assert.rejects(() => todos.assignTodo(space.id, one.id, { target: 'coordinator' }), /coordinator unavailable/);
+		const rolledBack = (await todos.listTodos(space.id)).find((item) => item.id === one.id)!;
+		assert.equal(rolledBack.status, 'open');
+		assert.equal(rolledBack.assigneeKind, 'unassigned');
+		assert.equal(rolledBack.assignedAt, null);
+	} finally {
+		setAgentDelivery(async (id, text) => void toCoordinator.push({ id, text }), 'coordinator');
+	}
+
 	// Deleting the space removes its todos cleanly.
 	await spaces.removeSpace(space.id);
 	await assert.rejects(() => todos.listTodos(space.id), /Project not found/);

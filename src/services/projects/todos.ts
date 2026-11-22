@@ -309,7 +309,6 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 			assignedAt: now,
 			completedAt: null,
 		}))!;
-		await touchSpace(spaceId);
 		const rawMessage = todoAssignMessage({
 			id: todo.id,
 			title: todo.title,
@@ -323,7 +322,18 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 			note: input.note,
 		});
 		const message = await attachTodoFiles(spaceId, rawMessage, todo.files);
-		await sendToAgent(spaceId, message, 'coordinator');
+		try {
+			await sendToAgent(spaceId, message, 'coordinator');
+		} catch (error) {
+			await updateSpaceTodo(todo.id, {
+				status: todo.status,
+				assigneeKind: todo.assigneeKind,
+				assignedAt: todo.assignedAt,
+				completedAt: todo.completedAt,
+			});
+			throw error;
+		}
+		await touchSpace(spaceId);
 		return { todo: updated };
 	}
 
