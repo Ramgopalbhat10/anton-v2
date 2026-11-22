@@ -664,6 +664,28 @@ test('a thread finishing its reply frees its slot for a queued one at once', asy
 	);
 });
 
+test('a thread whose agent fails to start is Failed rather than Done, and frees its slot for a queued one at once', async () => {
+	const space = await spaces.createSpace({ name: 'Failing start', repoIds: [], maxParallel: 1 });
+	const first = await spaces.startThread(space.id, { title: 'First', brief: 'Do the first' });
+	const second = await spaces.startThread(space.id, { title: 'Second', brief: 'Do the second' });
+	assert.equal((await sessions.getSession(second.id)).threadState, 'queued', 'the first still holds its slot while it launches');
+	// The runtime settles the reply as failed before any model call, so the end-of-reply hook never runs.
+	reports.noteReplyOutcome({ type: 'submission_settled', instanceId: first.id, agentName: 'Coder', outcome: 'failed', error: { message: 'sandbox name "acp-x" is already in use' } });
+	for (let tries = 0; toThreads.length < 2 && tries < 200; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+	assert.deepEqual(
+		toThreads.map((sent) => sent.text),
+		['Do the first', 'Do the second'],
+	);
+	const failed = await sessions.getSession(first.id);
+	assert.equal(failed.status, 'error');
+	assert.equal(failed.threadState, 'waiting', 'it needs the user, not Done');
+	assert.match(failed.errorMessage ?? '', /already in use/);
+	// Sent again, its next reply clears the failure.
+	reports.noteReplyOutcome({ type: 'submission_running', instanceId: first.id, agentName: 'Coder' });
+	for (let tries = 0; (await getSessionRecord(first.id))?.failed && tries < 200; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+	assert.equal((await sessions.getSession(first.id)).status, 'stopped');
+});
+
 test('tasks and routines are named in a few words by the title model, unless renamed first', async () => {
 	const prompts: string[] = [];
 	let answer = '"Daily tech briefing."';

@@ -38,3 +38,7 @@ export const shortTodoId = (id: string) => id.replace(/^todo_/, '').slice(0, 8);
 export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>): string {
 	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}`;
 }
+
+/** The files the coordinator names for a to-do's thread; naming none sends all of the to-do's, so a to-do split over threads gives each only its part's. */
+export const todoThreadFiles = (todo: Pick<SpaceTodo, 'attachments'> | null, listed?: string[]): string[] | undefined =>
+	listed?.length || !todo?.attachments.length ? listed : todo.attachments.map((file) => file.path);

@@ -122,6 +122,47 @@ export async function threadFinished(id: string, reply: string | null): Promise<
 	await drainQueue(record.spaceId, id);
 }
 
+type RunEvent = { type: string; instanceId?: string; agentName?: string; outcome?: string; error?: unknown };
+
+const MAX_ERROR = 1_000;
+const errorText = (error: unknown) =>
+	error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : typeof error === 'string' ? error : null;
+/** One task's failure writes in the order their events came, so a retry's start never lands before the failure it clears. */
+const failureWrites = new Map<string, Promise<void>>();
+
+/**
+ * A reply that fails, even one whose agent never started, leaves its task Failed (Needs you), not Done; the next reply
+ * that runs clears it. Such a reply never reaches the end-of-reply hook, so its project slot is freed and the queue drained here.
+ */
+export function noteReplyOutcome(event: RunEvent): void {
+	const id = event.instanceId;
+	if (!id || (event.agentName && !/^coder$/i.test(event.agentName))) return;
+	const failed = event.type === 'submission_settled' && event.outcome === 'failed';
+	if (!failed && event.type !== 'submission_running') return;
+	const next = (failureWrites.get(id) ?? Promise.resolve())
+		.then(() => (failed ? threadFailed(id, errorText(event.error) ?? 'The reply stopped with an error.') : replyRunning(id)))
+		.catch((error: unknown) => logProblem('warn', 'Could not record the reply outcome', error, id));
+	failureWrites.set(id, next);
+	void next.then(() => {
+		if (failureWrites.get(id) === next) failureWrites.delete(id);
+	});
+}
+
+async function replyRunning(id: string): Promise<void> {
+	const record = await getSessionRecord(id);
+	if (record?.failed) await updateSession(id, { failed: false, errorMessage: null });
+}
+
+export async function threadFailed(id: string, message: string): Promise<void> {
+	const record = await getSessionRecord(id);
+	if (!record) return;
+	await updateSession(id, { failed: true, errorMessage: clip(message, MAX_ERROR) });
+	if (!record.spaceId) return;
+	launched(id);
+	await threadChanged(id);
+	await drainQueue(record.spaceId);
+}
+
 /** Only one that would sit idle; a scheduled run is done once it replies without asking; any other is judged by the decision model. */
 async function closeIfFinished(id: string, reply: string): Promise<void> {
 	const task = await getSession(id);

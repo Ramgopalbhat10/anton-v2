@@ -251,6 +251,12 @@ async function claim(spaceId: string, finishing?: string): Promise<Claimed[]> {
 	const claimed: Claimed[] = [];
 	for (const thread of queued.slice(0, Math.max(0, space.maxParallel - busy))) {
 		launching.set(thread.id, now);
+		// A launch that never reports back frees its slot when the window ends; nothing else would wake the queue then.
+		setTimeout(() => {
+			if (launching.get(thread.id) !== now) return;
+			launching.delete(thread.id);
+			void drainQueue(spaceId);
+		}, LAUNCH_MS).unref?.();
 		await updateSession(thread.id, { brief: null });
 		// Working from here, as a message you send is, while its agent is set up.
 		claimed.push({ thread, brief: thread.brief!, turnedAway: noteSending(thread.id) });
