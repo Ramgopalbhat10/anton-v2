@@ -41,6 +41,7 @@ const { ProjectRoutines } = await import('@/components/projects/project-panel');
 const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/components/marks/project-icon');
 const { NewThreadForm, ProjectFeed } = await import('@/components/projects/project-feed');
 const { OutputViewerHost } = await import('@/components/content/output-viewer');
+const { ProjectReposChip } = await import('@/components/projects/project-page');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -925,5 +926,136 @@ describe('project overview numbers', () => {
 		expect(screen.getByRole('button', { name: 'Brief me' }).getAttribute('aria-expanded')).toBe('false');
 		await userEvent.click(screen.getByRole('button', { name: 'Brief me' }));
 		expect(screen.getAllByText('Brief me')).toHaveLength(2);
+	});
+});
+
+describe('project header repo chip', () => {
+	const repo = (id: string, repoFullName: string) => ({ id, repoFullName, defaultBranch: 'main' });
+
+	it('renders nothing when the project has no repositories', () => {
+		const { container } = render(<ProjectReposChip repos={[]} />);
+		expect(container.innerHTML).toBe('');
+	});
+
+	it('renders a single plain chip without a count or popover when there is one repository', () => {
+		render(<ProjectReposChip repos={[repo('r1', 'mrgb/mrgb-chat')]} />);
+		expect(screen.getByText('mrgb-chat')).toBeTruthy();
+		expect(screen.queryByRole('button')).toBeNull();
+		expect(screen.queryByText(/^\+/)).toBeNull();
+		expect(screen.getByTitle('mrgb/mrgb-chat')).toBeTruthy();
+	});
+
+	it('keeps one repo chip with the remaining count and shows the first repo full name and the rest in a hover popover without stealing focus', async () => {
+		const repos = [
+			repo('r1', 'mrgb/mrgb-chat'),
+			repo('r2', 'mrgb/notes'),
+			repo('r3', 'mrgb/my-astro-blog'),
+			repo('r4', 'mrgb/anton-v2'),
+		];
+		render(<ProjectReposChip repos={repos} />);
+		const trigger = screen.getByRole('button', { name: 'mrgb-chat +3' });
+		expect(trigger.textContent).toBe('mrgb-chat +3');
+		expect(screen.queryByText('notes')).toBeNull();
+		expect(screen.queryByText('my-astro-blog')).toBeNull();
+		expect(screen.queryByText('anton-v2')).toBeNull();
+
+		fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
+		const dialog = await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(within(dialog).getByText('mrgb/mrgb-chat')).toBeTruthy();
+		const list = within(dialog).getByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).not.toBe(list);
+		const items = within(list).getAllByRole('listitem');
+		expect(items.map((item) => item.textContent)).toEqual(['notes', 'my-astro-blog', 'anton-v2']);
+		expect(items.map((item) => item.getAttribute('title'))).toEqual(['mrgb/notes', 'mrgb/my-astro-blog', 'mrgb/anton-v2']);
+		expect(within(list).queryByText('mrgb-chat')).toBeNull();
+	});
+
+	it('moves focus to the scrollable overflow list on keyboard activation and restores focus or advances cleanly', async () => {
+		const user = userEvent.setup();
+		const repos = Array.from({ length: 20 }, (_, index) => repo(`r${index + 1}`, `org-${index + 1}/repo-${index + 1}`));
+		render(
+			<div>
+				<ProjectReposChip repos={repos} />
+				<button type="button">Project settings</button>
+			</div>,
+		);
+		const trigger = screen.getByRole('button', { name: 'repo-1 +19' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+
+		await user.tab();
+		expect(document.activeElement).toBe(trigger);
+		expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull();
+
+		await user.keyboard('{Enter}');
+		const dialog = await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(within(dialog).getByText('org-1/repo-1')).toBeTruthy();
+		const list = within(dialog).getByRole('list', { name: 'More repositories' });
+		expect(list.tabIndex).toBe(0);
+		expect(within(list).getAllByRole('listitem')).toHaveLength(19);
+		expect(document.activeElement).toBe(list);
+
+		await user.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(trigger);
+
+		await user.keyboard('{ArrowDown}');
+		const reopened = await screen.findByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).toBe(reopened);
+
+		await user.tab();
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
+	});
+
+	it('leaves unrelated focus alone when Escape dismisses a hover preview', async () => {
+		const user = userEvent.setup();
+		const repos = [repo('r1', 'mrgb/mrgb-chat'), repo('r2', 'mrgb/notes')];
+		render(
+			<header>
+				<ProjectReposChip repos={repos} />
+				<button type="button">Project settings</button>
+			</header>,
+		);
+		const trigger = screen.getByRole('button', { name: 'mrgb-chat +1' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+
+		settings.focus();
+		expect(document.activeElement).toBe(settings);
+
+		fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
+		await screen.findByRole('dialog', { name: 'Project repositories' });
+		expect(document.activeElement).toBe(settings);
+
+		await user.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
+	});
+
+	it('closes the popover and moves focus to a visible header control when its anchor becomes hidden', async () => {
+		const user = userEvent.setup();
+		const repos = Array.from({ length: 6 }, (_, index) => repo(`r${index + 1}`, `org/repo-${index + 1}`));
+		render(
+			<header>
+				<div data-testid="chip-slot">
+					<ProjectReposChip repos={repos} />
+				</div>
+				<button type="button">Project settings</button>
+			</header>,
+		);
+		const trigger = screen.getByRole('button', { name: 'repo-1 +5' });
+		const settings = screen.getByRole('button', { name: 'Project settings' });
+		const slot = screen.getByTestId('chip-slot');
+
+		trigger.focus();
+		await user.keyboard('{Enter}');
+		const list = await screen.findByRole('list', { name: 'More repositories' });
+		expect(document.activeElement).toBe(list);
+
+		// Simulate the header hiding the chip below the `xl` breakpoint on resize.
+		slot.style.display = 'none';
+		fireEvent(window, new Event('resize'));
+
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Project repositories' })).toBeNull());
+		expect(document.activeElement).toBe(settings);
 	});
 });

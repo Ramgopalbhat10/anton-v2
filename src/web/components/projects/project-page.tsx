@@ -1,7 +1,9 @@
 import { useFlueAgent } from '@flue/react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Popover } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Space } from '@/lib/api/spaces';
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
@@ -68,6 +70,225 @@ function saveDock(spaceId: string, state: DockState) {
 	} catch {
 		// Storage is a convenience; the dock still works without it.
 	}
+}
+
+const repoName = (fullName: string) => fullName.split('/').filter(Boolean).pop() ?? fullName;
+
+const REPO_CHIP = 'inline-flex h-[20px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]';
+const HEADER_FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+function isShown(element: HTMLElement | null): boolean {
+	if (!element || !element.isConnected) return false;
+	for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+		if (node.hidden) return false;
+		const style = getComputedStyle(node);
+		if (style.display === 'none' || style.visibility === 'hidden') return false;
+	}
+	return true;
+}
+
+function fallbackHeaderControl(trigger: HTMLElement | null): HTMLElement | null {
+	const header = trigger?.closest('header');
+	if (!header) return null;
+	const controls = [...header.querySelectorAll<HTMLElement>(HEADER_FOCUSABLE)];
+	const index = trigger ? controls.indexOf(trigger) : -1;
+	const ordered = index >= 0 ? [...controls.slice(index + 1), ...controls.slice(0, index)] : controls;
+	return ordered.find((control) => control !== trigger && isShown(control)) ?? null;
+}
+
+/** Keeps hover as a non-focus-stealing preview while letting keyboard activation move focus into the scrollable list. */
+function MultiRepoChip({ first, rest }: { first: Space['repos'][number]; rest: Space['repos'] }) {
+	const [open, setOpen] = useState(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const focusListOnOpen = useRef(false);
+	const restoreFocus = useRef(false);
+	const openedByHover = useRef(false);
+
+	const clear = () => clearTimeout(timerRef.current);
+	const focusList = () => listRef.current?.focus();
+	const scheduleClose = () => {
+		clear();
+		if (!panelRef.current?.contains(document.activeElement)) {
+			timerRef.current = setTimeout(() => setOpen(false), 80);
+		}
+	};
+
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	// The header hides the repo chip below `xl`; close its portalled popover if the anchor disappears and move focus to a visible header control when needed.
+	useEffect(() => {
+		if (!open) return;
+		const closeIfHidden = () => {
+			if (isShown(triggerRef.current)) return;
+			const hadFocus = Boolean(panelRef.current?.contains(document.activeElement));
+			clearTimeout(timerRef.current);
+			restoreFocus.current = false;
+			setOpen(false);
+			if (hadFocus) fallbackHeaderControl(triggerRef.current)?.focus();
+		};
+		closeIfHidden();
+		window.addEventListener('resize', closeIfHidden);
+		const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(closeIfHidden) : null;
+		if (observer && triggerRef.current) observer.observe(triggerRef.current);
+		return () => {
+			window.removeEventListener('resize', closeIfHidden);
+			observer?.disconnect();
+		};
+	}, [open]);
+
+	const engage = () => {
+		clear();
+		openedByHover.current = false;
+		if (open) focusList();
+		else {
+			focusListOnOpen.current = true;
+			setOpen(true);
+		}
+	};
+
+	return (
+		<Popover.Root open={open} onOpenChange={setOpen} modal={false}>
+			<Popover.Anchor asChild>
+				<button
+					ref={triggerRef}
+					type="button"
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					onPointerEnter={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (!open) {
+							timerRef.current = setTimeout(() => {
+								focusListOnOpen.current = false;
+								openedByHover.current = true;
+								setOpen(true);
+							}, 120);
+						}
+					}}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						scheduleClose();
+					}}
+					onClick={() => {
+						if (open && !openedByHover.current) {
+							clear();
+							setOpen(false);
+						} else {
+							engage();
+						}
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'ArrowDown') return;
+						event.preventDefault();
+						engage();
+					}}
+					className={cn(
+						REPO_CHIP,
+						'max-w-[180px] cursor-default outline-none transition-colors hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)',
+						open && 'bg-(--bg-hover) text-(--text-2)',
+					)}
+				>
+					<Icon icon={FolderGit2} size={10} className="shrink-0" />
+					<span className="truncate">{repoName(first.repoFullName)}</span>{' '}
+					<span className="in-num shrink-0 text-(--text-4)">+{rest.length}</span>
+				</button>
+			</Popover.Anchor>
+			<Popover.Portal>
+				<Popover.Content
+					ref={panelRef}
+					side="bottom"
+					align="end"
+					sideOffset={6}
+					collisionPadding={12}
+					aria-label="Project repositories"
+					onOpenAutoFocus={(event) => {
+						event.preventDefault();
+						if (focusListOnOpen.current) {
+							focusListOnOpen.current = false;
+							focusList();
+						}
+					}}
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						if (!restoreFocus.current) return;
+						restoreFocus.current = false;
+						const target = isShown(triggerRef.current) ? triggerRef.current : fallbackHeaderControl(triggerRef.current);
+						target?.focus();
+					}}
+					onEscapeKeyDown={() => {
+						clear();
+						restoreFocus.current = Boolean(panelRef.current?.contains(document.activeElement));
+					}}
+					onInteractOutside={(event) => {
+						if (triggerRef.current?.contains(event.target as Node)) {
+							event.preventDefault();
+							return;
+						}
+						clear();
+						restoreFocus.current = false;
+					}}
+					onPointerEnter={clear}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						scheduleClose();
+					}}
+					onFocus={clear}
+					onBlur={(event) => {
+						const next = event.relatedTarget as Node | null;
+						if (event.currentTarget.contains(next) || triggerRef.current?.contains(next)) return;
+						clear();
+						setOpen(false);
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'Tab') return;
+						// The popover is portalled to document.body; move focus back to the trigger before Tab runs so focus continues naturally in header order.
+						clear();
+						restoreFocus.current = false;
+						if (isShown(triggerRef.current)) {
+							triggerRef.current?.focus();
+						} else {
+							event.preventDefault();
+							fallbackHeaderControl(triggerRef.current)?.focus();
+						}
+						setOpen(false);
+					}}
+					className="in-pop z-50 flex w-max max-w-[280px] min-w-[180px] flex-col p-1 outline-none"
+				>
+					<div className="border-b border-(--line) px-2 py-1.5 text-micro font-medium text-(--text-3) [overflow-wrap:anywhere]">{first.repoFullName}</div>
+					<ul
+						ref={listRef}
+						tabIndex={0}
+						aria-label="More repositories"
+						className="m-0 mt-1 flex max-h-[240px] list-none flex-col gap-0.5 overflow-y-auto rounded-inner p-0 outline-none focus-visible:shadow-(--focus)"
+					>
+						{rest.map((repo) => (
+							<li key={repo.id} title={repo.repoFullName} className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-inner px-2 py-1 text-small font-medium text-(--text-2)">
+								<Icon icon={FolderGit2} size={11} className="shrink-0 text-(--text-3)" />
+								<span className="truncate">{repoName(repo.repoFullName)}</span>
+							</li>
+						))}
+					</ul>
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
+	);
+}
+
+export function ProjectReposChip({ repos }: { repos: Space['repos'] }) {
+	if (repos.length === 0) return null;
+	const [first, ...rest] = repos;
+	if (rest.length === 0) {
+		return (
+			<span title={first.repoFullName} className={cn(REPO_CHIP, 'max-w-[160px]')}>
+				<Icon icon={FolderGit2} size={10} className="shrink-0" />
+				<span className="truncate">{repoName(first.repoFullName)}</span>
+			</span>
+		);
+	}
+	return <MultiRepoChip first={first} rest={rest} />;
 }
 
 export function ProjectPage() {
@@ -197,14 +418,11 @@ export function ProjectPage() {
 							</PanelTab>
 						))}
 					</PanelTabs>
-					<div className="hidden shrink-0 items-center gap-1 xl:flex">
-						{data.repos.slice(0, 4).map((repo) => (
-							<span key={repo.id} title={repo.repoFullName} className="inline-flex h-[20px] max-w-[140px] min-w-0 items-center gap-1 rounded-inner px-1.5 text-micro font-medium text-(--text-3) shadow-[inset_0_0_0_1px_var(--line-strong)]">
-								<Icon icon={FolderGit2} size={10} className="shrink-0" />
-								<span className="truncate">{repo.repoFullName.split('/').pop()}</span>
-							</span>
-						))}
-					</div>
+					{data.repos.length > 0 ? (
+						<div className="hidden shrink-0 items-center xl:flex">
+							<ProjectReposChip repos={data.repos} />
+						</div>
+					) : null}
 					<IconBtn icon={Settings} size="sm" label="Project settings" onClick={() => openProjectSettings(spaceId)} />
 					<Btn size="sm" variant="primary" icon={Waypoints} onClick={startThread}>
 						<span className="hidden sm:inline">New thread</span>
