@@ -136,14 +136,15 @@ export function parseTodoAssign(text: string): ParsedTodoAssign | null {
 export function quoteSourceForTodo(
 	userText: string,
 	assignedTodo: ParsedTodoAssign | null,
-	linkedTodo: Pick<SpaceTodo, 'id' | 'title' | 'description' | 'assigneeKind' | 'assignedAt'> | null,
+	linkedTodo: Pick<SpaceTodo, 'id' | 'title' | 'description' | 'status' | 'assigneeKind' | 'assignedAt'> | null,
 ): string {
 	const authenticatedAssign = Boolean(
 		assignedTodo &&
 			linkedTodo &&
 			assignedTodo.id === linkedTodo.id &&
 			linkedTodo.assigneeKind === 'coordinator' &&
-			linkedTodo.assignedAt !== null,
+			linkedTodo.assignedAt !== null &&
+			(linkedTodo.status === 'triaging' || linkedTodo.status === 'in_progress'),
 	);
 	return authenticatedAssign && linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
 }

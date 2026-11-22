@@ -157,6 +157,19 @@ describe('ProjectBoard with To do column', () => {
 		expect(onOpenCoordinator).toHaveBeenCalledTimes(1);
 	});
 
+	it('shows stalled triaging card in Needs you with a Retry assign menu when coordinator is idle', async () => {
+		const stalled = makeTodo({ id: 'todo_stalled', title: 'Stalled on board', status: 'triaging', assigneeKind: 'coordinator', threadIds: [] });
+		renderWithRouter(() => (
+			<ProjectBoard space={space} threads={threads} todos={[stalled]} coordinatorBusy={false} onNewThread={() => undefined} />
+		));
+
+		const needsCol = await screen.findByRole('region', { name: 'Needs you' });
+		expect(within(needsCol).getByText('Stalled on board')).toBeTruthy();
+		await userEvent.click(within(needsCol).getByRole('button', { name: 'Retry Stalled on board' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
+		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_stalled', { target: 'new-thread', retry: true }));
+	});
+
 	it('quick-adds a to-do in the To do column and assigns to coordinator or new thread', async () => {
 		const openTodo = makeTodo({ id: 'todo_open', title: 'Ship dark mode' });
 		const onOpenCoordinator = vi.fn();
