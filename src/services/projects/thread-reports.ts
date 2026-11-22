@@ -10,7 +10,7 @@ import { finishesWork } from '../replies/reply-check.ts';
 import { drainQueue, launched } from './spaces.ts';
 import { getSession } from '../tasks/sessions.ts';
 
-/** Notes are batched per project and only a change of state is sent, so a thread that follows up on CI three times reports once. */
+/** Notes are batched per project. A thread is reported when its state changes, or when a reply of its pushed new commits, so a round of review fixes is news. */
 export const REPORT_DELAY_MS = 20_000;
 const MAX_REPLY = 4_000;
 
@@ -22,6 +22,10 @@ const starts = new Map<string, Starter>();
 export const START_REPORT_DELAY_MS = 1_000;
 
 const QUIET: ThreadState[] = ['working', 'queued'];
+/** The state a reply ended in: the automatic review or the next message can have the thread working again before its batch goes. */
+const ended = new Map<string, ThreadState>();
+/** The pushed head each thread's last report went out with. Unknown after a restart, so the first round then reports only a change of state. */
+const reportedHead = new Map<string, string | null>();
 
 const attr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const body = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -55,14 +59,21 @@ async function flush(spaceId: string): Promise<void> {
 		const record = await getSessionRecord(id);
 		if (!record || record.spaceId !== spaceId) continue;
 		const thread = await getSession(id);
-		const state = thread.threadState;
 		if (started) {
 			// Its state is not kept: it has not replied yet, and its first reply is news whatever state it leaves.
-			lines.push(reportLine(thread, state ?? 'queued', started));
+			lines.push(reportLine(thread, thread.threadState ?? 'queued', started));
 			continue;
 		}
-		if (!state || state === record.reportedState) continue;
-		await updateSession(id, { reportedState: state });
+		const endedIn = ended.get(id);
+		ended.delete(id);
+		const state = thread.threadState === 'working' && endedIn ? endedIn : thread.threadState;
+		if (!state) continue;
+		// A review round that pushed commits is news though the state stays Ready for review.
+		const head = record.pushedSha ?? null;
+		const pushed = endedIn !== undefined && head !== null && reportedHead.has(id) && reportedHead.get(id) !== head;
+		reportedHead.set(id, head);
+		if (state === record.reportedState && !pushed) continue;
+		if (state !== record.reportedState) await updateSession(id, { reportedState: state });
 		if (!QUIET.includes(state)) lines.push(reportLine(thread, state));
 	}
 	if (lines.length === 0) return;
@@ -106,6 +117,7 @@ export async function threadFinished(id: string, reply: string | null): Promise<
 	if (reply) await updateSession(id, { lastReply: reply.slice(0, MAX_REPLY) });
 	if (reply) await closeIfFinished(id, reply).catch((error: unknown) => logProblem('warn', 'Could not judge whether the task is done', error, id));
 	if (!record.spaceId) return;
+	ended.set(id, threadState({ ...(await getSession(id)), working: false }));
 	await threadChanged(id);
 	await drainQueue(record.spaceId, id);
 }
