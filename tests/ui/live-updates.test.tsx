@@ -93,7 +93,7 @@ describe('changing pages while the event stream is up', () => {
 		{ kind: 'projects' },
 		{ kind: 'general' },
 		{ kind: 'page', id: 'p', path: 'a', version: 1, from: 'x' },
-		...(['threads', 'files', 'settings'] as const).map((what) => ({ kind: 'space', id: 'sp', what })),
+		...(['threads', 'files', 'settings', 'todos'] as const).map((what) => ({ kind: 'space', id: 'sp', what })),
 		...(['state', 'usage', 'files', 'browser', 'computer', 'subagents', 'todos', 'scripts', 'joins', 'mail', 'approvals', 'pr-metadata', 'settled'] as const).map((what) => ({ kind: 'task', id: 't', what })),
 	] as Parameters<typeof staleFor>[0][];
 

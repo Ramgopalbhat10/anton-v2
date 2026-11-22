@@ -9,7 +9,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const v = await import('valibot');
-const { changeTodos, noteTodoStep, startTodoReply, TODOS_INPUT, todoReminded, todoReminder, todosFor, updateTodos, writeTodos } = await import('../src/services/replies/todos.ts');
+const { changeTodos, NUDGE_CALLS, NUDGE_MS, noteTodoStep, startTodoReply, TODOS_INPUT, todoNudge, todoReminded, todoReminder, todosFor, updateTodos, writeTodos } = await import('../src/services/replies/todos.ts');
 const { completionGate, startCompletionGate } = await import('../src/services/replies/completion-gate.ts');
 const { setProviders } = await import('../src/providers/index.ts');
 const { onChange } = await import('../src/core/changes.ts');
@@ -279,4 +279,26 @@ test('the checks at a reply end see a list changed by number exactly as one writ
 	// Every step ticked off by number: neither check has anything to say.
 	await changeTodos('t', [4, 5, 6].map((item) => ({ item, status: 'completed' as const })));
 	assert.deepEqual(await outcome(), { reminder: null, back: null });
+});
+
+test('a list left without an update for many tool calls and minutes is brought up mid-reply, once per stretch', async () => {
+	await insertSession({ id: 'nudge', projectId: project.id, title: 'N', model: 'x', reasoning: null, branch: 'main', baseBranch: 'main', baseSha: 'abc', planMode: false });
+	const start = new Date('2026-11-22T10:00:00Z');
+	assert.equal(await todoNudge('nudge', 'read', start.getTime()), null, 'no list, no note');
+	await writeTodos('nudge', [{ content: 'Fix the bug', status: 'in_progress' }, { content: 'Run the tests', status: 'pending' }], start);
+	const late = start.getTime() + NUDGE_MS;
+	for (let i = 1; i < NUDGE_CALLS; i++) assert.equal(await todoNudge('nudge', 'bash', late), null, 'too few calls yet');
+	assert.equal(await todoNudge('nudge', 'update_todos', late), null, 'the list tool itself is not counted');
+	const note = await todoNudge('nudge', 'bash', late);
+	assert.match(note ?? '', /step 1 "Fix the bug" is still in progress after 12 tool calls and 3 minutes/);
+	assert.equal(await todoNudge('nudge', 'bash', late), null, 'once per stretch');
+
+	// Many quick calls are not enough on their own, and an update starts the count again.
+	await changeTodos('nudge', [{ item: 1, status: 'completed' }, { item: 2, status: 'in_progress' }], start);
+	for (let i = 0; i < NUDGE_CALLS * 2; i++) assert.equal(await todoNudge('nudge', 'bash', start.getTime() + 60_000), null);
+	assert.ok(await todoNudge('nudge', 'bash', late));
+
+	// A finished list is never brought up.
+	await writeTodos('nudge', [{ content: 'Ship it', status: 'completed' }], start);
+	for (let i = 0; i < NUDGE_CALLS; i++) assert.equal(await todoNudge('nudge', 'bash', late), null);
 });

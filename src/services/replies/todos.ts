@@ -89,6 +89,45 @@ function standing(list: Todo[], numbered: boolean): Saved {
 
 async function save(id: string, list: Todo[], at: Date): Promise<void> {
 	await setSessionTodos(id, JSON.stringify({ todos: list, updatedAt: at.toISOString() } satisfies TodoList));
+	sinceUpdate.delete(id);
+	sinceUpdate.set(id, { calls: 0, at: at.getTime() });
+	if (sinceUpdate.size > MAX_TRACKED) sinceUpdate.delete(sinceUpdate.keys().next().value!);
+}
+
+/**
+ * Agents tick steps off in bursts: one wrote its list, made 82 tool calls over 18 minutes without an update, then marked all
+ * seven done at once, so the user saw 0/7 jump to 7/7. A tool result is the only way into a running turn (an ACP agent's
+ * too), so after this many calls and this long without an update, the next result reminds it of the list.
+ */
+export const NUDGE_CALLS = 12;
+export const NUDGE_MS = 3 * 60_000;
+const MAX_TRACKED = 500;
+/** Per task, since its list was last written. Only a list written since Anton started is tracked, so a restart sends none. */
+const sinceUpdate = new Map<string, { calls: number; at: number }>();
+
+/** Counts one of the Coder's tool calls; the note to add to its result once the list has gone quiet too long, else null. */
+export async function todoNudge(id: string, toolName: string, now = Date.now()): Promise<string | null> {
+	const mark = sinceUpdate.get(id);
+	if (!mark || toolName === 'update_todos') return null;
+	mark.calls++;
+	if (mark.calls < NUDGE_CALLS || now - mark.at < NUDGE_MS) return null;
+	const list = await todosFor(id).catch(() => null);
+	const open = list?.todos.filter((todo) => todo.status !== 'completed') ?? [];
+	if (!list || open.length === 0) {
+		sinceUpdate.delete(id);
+		return null;
+	}
+	const calls = mark.calls;
+	const minutes = Math.round((now - mark.at) / 60_000);
+	// Once per stretch: the next comes only after as many calls and as long again.
+	mark.calls = 0;
+	mark.at = now;
+	const current = list.todos.findIndex((todo) => todo.status === 'in_progress');
+	const step = current < 0 ? `${open.length} of ${list.todos.length} steps are still open` : `step ${current + 1} "${list.todos[current].content}" is still in progress`;
+	return (
+		`[Todo list: ${step} after ${calls} tool calls and ${minutes} minutes without an update. The user follows the list as your progress: ` +
+		'if a step is done, mark it completed (and the next in_progress) with update_todos alongside your next tool call.]'
+	);
 }
 
 function write(id: string, todos: Todo[], at: Date): Promise<Saved> {
@@ -169,7 +208,9 @@ export async function updateTodos(id: string, input: TodosInput, callId?: string
 	return lone && saved.open > 0 ? `${saved.text} Send the next update with your next step's other tool calls, not as a step of its own.` : saved.text;
 }
 
-export function startTodoReply(id: string): void {
+export function startTodoReply(id: string, now = Date.now()): void {
+	const mark = sinceUpdate.get(id);
+	if (mark) sinceUpdate.set(id, { calls: 0, at: now });
 	changeGate(id, (state) => {
 		state.reminded = false;
 	});

@@ -4,6 +4,8 @@ import type { Session } from '../../core/types.ts';
 import { THREAD_STATE_LABELS } from '../../core/thread-state.ts';
 import { getProject } from '../../db/projects.ts';
 import { getSpace, listSpaces } from '../../db/spaces.ts';
+import { listSpaceTodos } from '../../db/space-todos.ts';
+import { shortTodoId, type SpaceTodo } from '../../core/space-todos.ts';
 import { generalSettings } from '../models/general.ts';
 import { findModel, reasoningFor } from '../models/models.ts';
 import { type ModelChoice, listThreads } from '../tasks/sessions.ts';
@@ -59,10 +61,19 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 
 const RESOLVED_SHOWN = 5;
 
+const todoLine = (todo: SpaceTodo) =>
+	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}`;
+
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);
 	if (!space) return '';
-	const [threads, repos, deleted] = await Promise.all([listThreads(spaceId), Promise.all(space.repoIds.map((id) => getProject(id))), deletedThreads(spaceId)]);
+	const [threads, repos, deleted, todos] = await Promise.all([
+		listThreads(spaceId),
+		Promise.all(space.repoIds.map((id) => getProject(id))),
+		deletedThreads(spaceId),
+		listSpaceTodos(spaceId),
+	]);
+	const pending = todos.filter((todo) => todo.status !== 'done');
 	const open = threads.filter((thread) => thread.threadState !== 'resolved');
 	const resolved = threads.filter((thread) => thread.threadState === 'resolved').slice(0, RESOLVED_SHOWN);
 	const working = open.filter((thread) => thread.threadState === 'working').length;
@@ -74,6 +85,7 @@ export async function stateBlock(spaceId: string): Promise<string> {
 		`Parallel limit: ${space.maxParallel} threads working at once; now ${working} working, ${queued} queued.`,
 		space.instructions ? `\nProject instructions from the user:\n${space.instructions}` : '',
 		space.memory ? `\nProject memory (notes saved earlier; they may be out of date):\n${space.memory}` : '',
+		...(pending.length ? [`\nTo-dos not done (${pending.length}):`, ...pending.map(todoLine)] : []),
 		`\nThreads, newest first (${open.length} open):`,
 		...(open.length ? open.map(threadLine) : ['- none yet']),
 		...(resolved.length ? [`Recently resolved:`, ...resolved.map(threadLine)] : []),

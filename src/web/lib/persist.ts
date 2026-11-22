@@ -31,6 +31,7 @@ export const PERSISTED: ReadonlySet<string> = new Set([
 	'session',
 	'spaces',
 	'space',
+	'space-todos',
 	'projects',
 	'notifications',
 	'artifacts',

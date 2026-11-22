@@ -108,28 +108,104 @@ const plainText = (content: Message['content']): string =>
 		? content
 		: content.map((part) => (part.type === 'text' ? part.text : part.type === 'image' ? '[image]' : part.type === 'thinking' ? '' : '')).join('\n');
 
-export function transcript(messages: Message[]): RuntimeContent[] {
+/**
+ * What a new session is handed of the conversation it takes over, in characters. Antigravity kept only the first ~140 KB of
+ * a 1.9 MB replay and cut the rest, the newest part with the user's latest message in it; past this the oldest go first.
+ */
+export const REPLAY_CHARS = 100_000;
+/** Of that, what the newest messages may fill whole before older tool results and arguments shrink to a line. */
+const WHOLE_SHARE = 0.6;
+const ARGS_CHARS = 240;
+const OLD_USER_CHARS = 4_000;
+/** Small, and the list the user follows: a write of it is never shortened. */
+const KEPT_WHOLE = new Set(['update_todos']);
+
+const clip = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max)}… [${(text.length - max).toLocaleString('en-US')} more characters left out]`);
+
+function renderLine(message: Message, short: boolean): string {
+	if (message.role === 'user') return `[user]\n${short ? clip(plainText(message.content), OLD_USER_CHARS) : plainText(message.content)}`;
+	if (message.role === 'toolResult') {
+		const text = plainText(message.content);
+		const head = `[result of ${message.toolName}${message.isError ? ', failed' : ''}]`;
+		return short && !KEPT_WHOLE.has(message.toolName)
+			? `${head} ${text.length.toLocaleString('en-US')} characters, left out of this replay: call the tool again if you need it.`
+			: `${head}\n${text}`;
+	}
+	const text = message.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
+	const calls = message.content.flatMap((block) => {
+		if (block.type !== 'toolCall') return [];
+		const args = JSON.stringify(block.arguments);
+		return [`[called ${block.name} ${short && !KEPT_WHOLE.has(block.name) ? clip(args, ARGS_CHARS) : args}]`];
+	});
+	return `[assistant]\n${[...text, ...calls].join('\n')}`;
+}
+
+/**
+ * Newest first: messages go in whole while they fit the whole share, then each as a line (a tool result as its size, a
+ * call with its arguments cut), and what still does not fit is left out from the oldest end.
+ */
+function replayLines(history: Message[], budget: number): { lines: string[]; omitted: number; full: number } {
+	const kept: string[] = [];
+	let used = 0;
+	let whole = true;
+	let full = 0;
+	let omitted = 0;
+	for (let index = history.length - 1; index >= 0; index--) {
+		const long = renderLine(history[index], false);
+		full += long.length;
+		if (omitted) {
+			omitted++;
+			continue;
+		}
+		if (whole && used + long.length <= budget * WHOLE_SHARE) {
+			kept.push(long);
+			used += long.length;
+			continue;
+		}
+		whole = false;
+		const line = renderLine(history[index], true);
+		if (used + line.length > budget) {
+			omitted++;
+			continue;
+		}
+		kept.push(line);
+		used += line.length;
+	}
+	kept.reverse();
+	if (omitted) kept.unshift(`[${omitted} older message${omitted === 1 ? '' : 's'} left out of this replay]`);
+	return { lines: kept, omitted, full };
+}
+
+export type ReplayNote = { full: number; sent: number; omitted: number };
+
+/**
+ * A new session takes over a conversation as text. The user's latest message always goes whole and on its own, after
+ * the history before it; mid-turn, the work done since follows it and the agent carries on from the last tool result.
+ */
+export function transcript(messages: Message[], budget = REPLAY_CHARS, note?: (replay: ReplayNote) => void): RuntimeContent[] {
 	const lastUser = messages.findLastIndex((message) => message.role === 'user');
 	const last = messages[lastUser];
 	if (lastUser === 0 && messages.length === 1) return asContent(last.content);
-	// Rebuilt mid-turn, the latest user message is part of the history and Claude carries on from the last tool result.
 	const ended = lastUser === messages.length - 1;
-	const history = ended ? messages.slice(0, lastUser) : messages;
-	const lines: string[] = [];
-	for (const message of history) {
-		if (message.role === 'user') lines.push(`[user]\n${plainText(message.content)}`);
-		else if (message.role === 'toolResult') lines.push(`[result of ${message.toolName}${message.isError ? ', failed' : ''}]\n${plainText(message.content)}`);
-		else {
-			const text = message.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
-			const calls = message.content.flatMap((block) => (block.type === 'toolCall' ? [`[called ${block.name} ${JSON.stringify(block.arguments)}]`] : []));
-			lines.push(`[assistant]\n${[...text, ...calls].join('\n')}`);
-		}
-	}
-	const intro = {
-		type: 'text' as const,
-		text: `<conversation_so_far>\nThis conversation began before this session. Here it is, oldest first; you made the tool calls, and their results follow them.\n\n${lines.join('\n\n')}\n</conversation_so_far>`,
-	};
-	return ended ? [intro, ...asContent(last.content)] : [intro, { type: 'text', text: 'Carry on from the last tool result.' }];
+	const before = lastUser < 0 ? messages : messages.slice(0, lastUser);
+	const since = lastUser < 0 || ended ? [] : messages.slice(lastUser + 1);
+	// The work since the latest message is the newest, so it is fitted first (leaving room for the earlier requests) and the history before gets the rest.
+	const work = replayLines(since, before.length ? budget * 0.7 : budget);
+	const workChars = work.lines.reduce((sum, line) => sum + line.length, 0);
+	const past = replayLines(before, budget - workChars);
+	const sent = workChars + past.lines.reduce((sum, line) => sum + line.length, 0);
+	if (sent < past.full + work.full) note?.({ full: past.full + work.full, sent, omitted: past.omitted + work.omitted });
+	const parts: RuntimeContent[] = [];
+	if (past.lines.length)
+		parts.push({
+			type: 'text',
+			text: `<conversation_so_far>\nThis conversation began before this session. Here it is, oldest first; you made the tool calls, and their results follow them. Older tool results and arguments may be shortened to a line.\n\n${past.lines.join('\n\n')}\n</conversation_so_far>`,
+		});
+	if (ended) return [...parts, ...asContent(last.content)];
+	if (last) parts.push({ type: 'text', text: 'The user’s latest message, which you are working on:' }, ...asContent(last.content));
+	if (work.lines.length) parts.push({ type: 'text', text: `<work_since_that_message>\n${work.lines.join('\n\n')}\n</work_since_that_message>` });
+	parts.push({ type: 'text', text: 'Carry on from the last tool result.' });
+	return parts;
 }
 
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
@@ -370,7 +446,13 @@ export function runtimeProvider(
 			makeRoom(open, maxOpen);
 			bridged = new Bridged(agent, settings, context.tools);
 			open.set(key, bridged);
-			bridged.conversation.send(transcript(context.messages));
+			bridged.conversation.send(
+				transcript(context.messages, REPLAY_CHARS, (replay) =>
+					console.error(
+						`[flue:${plan.gateway}] replay to a new session cut to ${replay.sent} of ${replay.full} characters (${replay.omitted} oldest messages left out)`,
+					),
+				),
+			);
 		}
 		const current = bridged;
 		current.seen = prints;

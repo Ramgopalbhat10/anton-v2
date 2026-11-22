@@ -186,6 +186,13 @@ export const migrations: string[][] = [
 	// 44: a reply the runtime resumes after a restart ends with the same checks as it would have without one.
 	[`CREATE TABLE IF NOT EXISTS task_gate_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)`],
 	[`ALTER TABLE projects ADD COLUMN check_command TEXT NOT NULL DEFAULT ''`],
+	// 46: project to-dos and the threads working on them.
+	[
+		`CREATE TABLE IF NOT EXISTS space_todos (id TEXT PRIMARY KEY, space_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', assignee TEXT, created_by TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS space_todos_space ON space_todos (space_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS space_todo_threads (todo_id TEXT NOT NULL, session_id TEXT NOT NULL, linked_at TEXT NOT NULL, PRIMARY KEY (todo_id, session_id))`,
+		`CREATE INDEX IF NOT EXISTS space_todo_threads_session ON space_todo_threads (session_id)`,
+	],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

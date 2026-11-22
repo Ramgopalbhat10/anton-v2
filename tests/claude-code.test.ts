@@ -421,9 +421,41 @@ test('the bridge recognises the messages it saw, and tells results and new messa
 
 	assert.deepEqual(transcript([user('Only.')]), [{ type: 'text', text: 'Only.' }]);
 	const midTurn = transcript([user('Go.'), assistant, toolResult('tu_1', 'read', 'A')]);
-	assert.equal(midTurn.length, 2);
-	assert.ok(midTurn[0].type === 'text' && midTurn[0].text.includes('[called read {}]') && midTurn[0].text.includes('[result of read]\nA'));
-	assert.deepEqual(midTurn[1], { type: 'text', text: 'Carry on from the last tool result.' });
+	assert.deepEqual(midTurn[1], { type: 'text', text: 'Go.' }, 'the latest message goes whole, on its own');
+	assert.ok(midTurn[2].type === 'text' && midTurn[2].text.includes('[called read {}]') && midTurn[2].text.includes('[result of read]\nA'));
+	assert.deepEqual(midTurn.at(-1), { type: 'text', text: 'Carry on from the last tool result.' });
+});
+
+test('a replay to a new session fits its budget, dropping old tool output first and never the latest message', () => {
+	const big = 'x'.repeat(20_000);
+	const call = (id: string, name = 'read', args: object = { path: `f-${id}` }) =>
+		({ role: 'assistant', content: [{ type: 'toolCall', id, name, arguments: args }] }) as unknown as Message;
+	const history: Message[] = [user('Build the to-do feature.')];
+	for (let i = 0; i < 100; i++) history.push(call(`a${i}`), toolResult(`a${i}`, 'read', big));
+	history.push(call('todo', 'update_todos', { todos: [{ content: 'Step one', status: 'in_progress' }] }), toolResult('todo', 'update_todos', 'Todo list saved.'));
+	const latest = `Fix these review comments: ${'c'.repeat(30_000)}`;
+	history.push(user(latest));
+	for (let i = 0; i < 50; i++) history.push(call(`b${i}`, 'edit', { path: `g-${i}`, text: big }), toolResult(`b${i}`, 'edit', big));
+
+	const notes: Array<{ full: number; sent: number; omitted: number }> = [];
+	const parts = transcript(history, 100_000, (replay) => notes.push(replay));
+	const text = (part: (typeof parts)[number]) => (part.type === 'text' ? part.text : '');
+	const sent = parts.reduce((sum, part) => sum + text(part).length, 0);
+	assert.ok(sent < 100_000 + latest.length + 2_000, `sent ${sent}`);
+	assert.ok(parts.some((part) => text(part) === latest), 'the latest message is whole');
+	assert.equal(text(parts.at(-1)!), 'Carry on from the last tool result.');
+	const past = text(parts[0]);
+	assert.ok(past.includes('[user]\nBuild the to-do feature.'), 'the earlier request survives');
+	assert.ok(past.includes('"Step one"'), 'the todo list write is kept whole');
+	assert.match(past, /\[result of read\] 20,000 characters, left out/);
+	const work = text(parts.find((part) => text(part).startsWith('<work_since_that_message>'))!);
+	assert.ok(work.endsWith(`[result of edit]\n${big}\n</work_since_that_message>`), 'the newest result is whole');
+	assert.equal(notes.length, 1);
+	assert.ok(notes[0].full > 2_000_000 && notes[0].sent <= 100_000);
+
+	const small = transcript([user('Go.'), call('s1'), toolResult('s1', 'read', 'A'), user('Next.')], 100_000, (replay) => notes.push(replay));
+	assert.deepEqual(small.at(-1), { type: 'text', text: 'Next.' });
+	assert.equal(notes.length, 1, 'nothing cut, nothing noted');
 });
 
 const stream = (event: object) => ({ type: 'stream_event', event, parent_tool_use_id: null }) as unknown as SDKMessage;

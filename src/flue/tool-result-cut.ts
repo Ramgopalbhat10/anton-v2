@@ -3,6 +3,8 @@ import { cutHeadAndTail, cutResult } from '../services/context/tool-results.ts';
 import { skillFilesReady } from '../services/sandbox/skill-files.ts';
 import { skillInParts } from '../services/context/skill-parts.ts';
 import { digestResult, WEB_TOOLS } from '../services/context/web-digest.ts';
+import { onMainCoder } from '../services/context/context-usage.ts';
+import { todoNudge } from '../services/replies/todos.ts';
 
 /** A subagent's runs in a session of its own under a task id, a tool's harness in a scope of its own. */
 const isOwnConversation = (ctx: FlueExecutionContext) =>
@@ -28,7 +30,16 @@ export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, c
 			return skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!);
 		});
 	if (subagent) return next().then((result) => cutHeadAndTail(toolName, result));
-	return next().then((result) => cutResult(ctx.instanceId!, toolCallId, toolName, result));
+	const cut = next().then((result) => cutResult(ctx.instanceId!, toolCallId, toolName, result));
+	return onMainCoder(ctx) ? cut.then((result) => withTodoNudge(ctx.instanceId!, toolName, result)) : cut;
+}
+
+/** Rides after the result's own content, so a cut result's note stays where it points. */
+async function withTodoNudge<T>(id: string, toolName: string, result: T): Promise<T> {
+	const nudge = await todoNudge(id, toolName).catch(() => null);
+	const content = (result as { content?: unknown } | null)?.content;
+	if (!nudge || !Array.isArray(content)) return result;
+	return { ...result, content: [...content, { type: 'text', text: nudge }] };
 }
 
 const key = Symbol.for('anton.tool-result-cut');
