@@ -149,12 +149,12 @@ describe('new task composer', () => {
 	it('starts a chat with no repository: no branch or plan mode, and the choice is remembered', async () => {
 		const { unmount } = setup();
 		expect(screen.getByRole('button', { name: 'Plan' })).toBeTruthy();
+		expect(screen.queryByLabelText('How a task runs')).toBeNull();
 		await userEvent.click(screen.getByRole('button', { name: 'demo' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: 'No repository' }));
 		expect(screen.getByRole('button', { name: 'No repository' })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'main' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Plan' })).toBeNull();
-		expect(screen.queryByLabelText('How a task runs')).toBeNull();
 		expect(screen.queryByLabelText('How a chat runs')).toBeNull();
 		expect(screen.getByRole('button', { name: 'Research a topic on the web' })).toBeTruthy();
 		await userEvent.type(screen.getByRole('textbox'), 'What is new in React 19?');
