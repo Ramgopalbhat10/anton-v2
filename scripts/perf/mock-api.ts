@@ -622,6 +622,10 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 						res.statusCode = 404;
 						return json(res, { error: 'Not found' });
 					}
+					if (patch.title !== undefined && (typeof patch.title !== 'string' || !patch.title.trim())) {
+						res.statusCode = 400;
+						return json(res, { error: 'Give the to-do a title' });
+					}
 					if (patch.status !== undefined && (typeof patch.status !== 'string' || !VALID_STATUSES.has(patch.status))) {
 						res.statusCode = 400;
 						return json(res, { error: 'Invalid status' });
@@ -630,7 +634,23 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 						res.statusCode = 400;
 						return json(res, { error: 'Invalid priority' });
 					}
-					Object.assign(todo, patch, { updatedAt: new Date().toISOString() });
+					if (typeof patch.title === 'string') todo.title = patch.title.trim();
+					if (typeof patch.description === 'string') todo.description = patch.description;
+					if (typeof patch.status === 'string') {
+						todo.status = patch.status as typeof todo.status;
+						todo.completedAt = todo.status === 'done' ? (todo.completedAt ?? new Date().toISOString()) : null;
+						todo.completedBy = todo.status === 'done' ? 'manual' : null;
+					}
+					if (patch.priority !== undefined) todo.priority = (patch.priority as typeof todo.priority) ?? null;
+					if (Array.isArray(patch.tags)) todo.tags = patch.tags.filter((item): item is string => typeof item === 'string');
+					if (patch.projectId === null || typeof patch.projectId === 'string') todo.projectId = patch.projectId;
+					if (patch.model === null || typeof patch.model === 'string') todo.model = patch.model;
+					if (patch.reasoning === null || typeof patch.reasoning === 'string') todo.reasoning = patch.reasoning;
+					if (typeof patch.planMode === 'boolean') todo.planMode = patch.planMode;
+					if (Array.isArray(patch.files)) todo.files = patch.files.filter((item): item is string => typeof item === 'string');
+					if (patch.dueAt === null || typeof patch.dueAt === 'string') todo.dueAt = patch.dueAt;
+					if (patch.sourceUrl === null || typeof patch.sourceUrl === 'string') todo.sourceUrl = patch.sourceUrl;
+					todo.updatedAt = new Date().toISOString();
 					json(res, todo);
 				});
 				return;
