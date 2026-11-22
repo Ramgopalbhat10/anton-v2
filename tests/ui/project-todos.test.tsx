@@ -89,6 +89,10 @@ const makeTodo = (patch: Partial<SpaceTodo>): SpaceTodo => ({
 	assignedAt: null,
 	completedAt: null,
 	completedBy: null,
+	attemptId: null,
+	attemptSubmissionId: null,
+	attemptSettledAt: null,
+	attemptLinked: false,
 	createdAt: '2026-10-02T00:00:00Z',
 	updatedAt: '2026-10-02T00:00:00Z',
 	...patch,
@@ -157,13 +161,34 @@ describe('ProjectBoard with To do column', () => {
 		expect(onOpenCoordinator).toHaveBeenCalledTimes(1);
 	});
 
-	it('shows stalled triaging card in Needs you with a Retry assign menu when coordinator is idle', async () => {
-		const stalled = makeTodo({ id: 'todo_stalled', title: 'Stalled on board', status: 'triaging', assigneeKind: 'coordinator', threadIds: [] });
+	it('shows pending triaging in Working without Retry and settled unhandled triaging in Needs you with Retry', async () => {
+		const pending = makeTodo({
+			id: 'todo_pending',
+			title: 'Pending on board',
+			status: 'triaging',
+			assigneeKind: 'coordinator',
+			attemptId: 'att-1',
+			attemptSettledAt: null,
+			attemptLinked: false,
+		});
+		const settled = makeTodo({
+			id: 'todo_stalled',
+			title: 'Stalled on board',
+			status: 'triaging',
+			assigneeKind: 'coordinator',
+			attemptId: 'att-2',
+			attemptSettledAt: '2026-10-03T00:05:00Z',
+			attemptLinked: false,
+		});
 		renderWithRouter(() => (
-			<ProjectBoard space={space} threads={threads} todos={[stalled]} coordinatorBusy={false} onNewThread={() => undefined} />
+			<ProjectBoard space={space} threads={threads} todos={[pending, settled]} coordinatorBusy={true} onNewThread={() => undefined} />
 		));
 
-		const needsCol = await screen.findByRole('region', { name: 'Needs you' });
+		const workingCol = await screen.findByRole('region', { name: 'Working' });
+		expect(within(workingCol).getByText('Pending on board')).toBeTruthy();
+		expect(within(workingCol).queryByRole('button', { name: /Retry Pending on board/ })).toBeNull();
+
+		const needsCol = screen.getByRole('region', { name: 'Needs you' });
 		expect(within(needsCol).getByText('Stalled on board')).toBeTruthy();
 		await userEvent.click(within(needsCol).getByRole('button', { name: 'Retry Stalled on board' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
@@ -277,14 +302,49 @@ describe('ProjectTodos view', () => {
 		expect(await screen.findByText('Finished task')).toBeTruthy();
 	});
 
-	it('allows retrying an unlinked triaging to-do from the Active tab', async () => {
-		const triaging = makeTodo({ id: 't_triage', title: 'Stalled triage item', status: 'triaging', assigneeKind: 'coordinator', threadIds: [] });
-		renderWithRouter(() => <ProjectTodos space={space} threads={threads} todos={[triaging]} />);
+	it('only allows retrying a settled unhandled triaging to-do from the Active tab, not a pending one', async () => {
+		const pending = makeTodo({
+			id: 't_pending',
+			title: 'Pending triage item',
+			status: 'triaging',
+			assigneeKind: 'coordinator',
+			attemptId: 'att-p',
+			attemptSettledAt: null,
+			attemptLinked: false,
+		});
+		const settled = makeTodo({
+			id: 't_triage',
+			title: 'Stalled triage item',
+			status: 'triaging',
+			assigneeKind: 'coordinator',
+			attemptId: 'att-s',
+			attemptSettledAt: '2026-10-03T00:05:00Z',
+			attemptLinked: false,
+		});
+		renderWithRouter(() => <ProjectTodos space={space} threads={threads} todos={[pending, settled]} />);
 
 		await userEvent.click(await screen.findByRole('tab', { name: /Active/ }));
+		expect(screen.queryByRole('button', { name: 'Retry Pending triage item' })).toBeNull();
 		await userEvent.click(await screen.findByRole('button', { name: 'Retry Stalled triage item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
 		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 't_triage', { target: 'new-thread', retry: true }));
+	});
+
+	it('renders missing selected attachments with a Detach button even when the Library is empty', async () => {
+		api.spaceFiles.mockResolvedValueOnce({ files: [] });
+		const withMissing = makeTodo({ id: 't_missing', title: 'Spec task', files: ['removed-spec.md'] });
+		renderWithRouter(() => <ProjectTodos space={space} threads={threads} todos={[withMissing]} />);
+
+		await userEvent.click(await screen.findByRole('button', { name: 'Spec task' }));
+		const dialog = await screen.findByRole('dialog', { name: 'Edit to-do: Spec task' });
+		expect(await within(dialog).findByText('removed-spec.md')).toBeTruthy();
+		expect(within(dialog).getByText('(missing)')).toBeTruthy();
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Detach removed-spec.md' }));
+		expect(within(dialog).queryByText('removed-spec.md')).toBeNull();
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+		await waitFor(() =>
+			expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 't_missing', expect.objectContaining({ files: [] })),
+		);
 	});
 });
 
@@ -292,6 +352,7 @@ describe('ProjectFeed todo assignment rendering', () => {
 	it('renders <todo-assign> messages as a compact assigned to-do card', async () => {
 		const assignText = todoAssignMessage({
 			id: 'todo_1',
+			attempt: 'att-1',
 			title: 'Fix OAuth redirect',
 			priority: 'urgent',
 			description: 'Keep redirect URL after sign-in.',

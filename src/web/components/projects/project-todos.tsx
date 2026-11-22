@@ -82,6 +82,10 @@ export function PriorityBadge({ priority, compact = false }: { priority: TodoPri
 	);
 }
 
+export function canRetryTriaging(todo: Pick<SpaceTodo, 'status' | 'attemptLinked' | 'attemptSettledAt'>): boolean {
+	return todo.status === 'triaging' && !todo.attemptLinked && todo.attemptSettledAt !== null;
+}
+
 export function repoLabelFor(space: Space, projectId: string | null): string | null {
 	if (!projectId) return null;
 	if (projectId === TODO_NO_REPO) return 'No repository';
@@ -504,53 +508,62 @@ export function TodoEditorDialog({
 							</div>
 						</div>
 
-						{availableFiles.length > 0 ? (
+						{availableFiles.length > 0 || files.length > 0 ? (
 							<div className="flex flex-col gap-1.5">
 								<div className="flex items-center justify-between gap-2">
 									<span className="text-small font-medium text-(--text-2)">Project files</span>
-									<Menu>
-										<MenuTrigger asChild>
-											<Btn size="xs" variant="ghost" icon={Paperclip}>
-												{files.length ? `${files.length} attached` : 'Attach file'}
-											</Btn>
-										</MenuTrigger>
-										<MenuContent align="end" className="max-h-[240px] min-w-[220px] overflow-y-auto">
-											{availableFiles.map((file) => {
-												const picked = files.includes(file.path);
-												return (
-													<MenuItem
-														key={file.path}
-														checked={picked}
-														onSelect={() =>
-															setFiles((current) => (picked ? current.filter((item) => item !== file.path) : [...current, file.path]))
-														}
-													>
-														{file.path}
-													</MenuItem>
-												);
-											})}
-										</MenuContent>
-									</Menu>
+									{availableFiles.length > 0 ? (
+										<Menu>
+											<MenuTrigger asChild>
+												<Btn size="xs" variant="ghost" icon={Paperclip}>
+													{files.length ? `${files.length} attached` : 'Attach file'}
+												</Btn>
+											</MenuTrigger>
+											<MenuContent align="end" className="max-h-[240px] min-w-[220px] overflow-y-auto">
+												{availableFiles.map((file) => {
+													const picked = files.includes(file.path);
+													return (
+														<MenuItem
+															key={file.path}
+															checked={picked}
+															onSelect={() =>
+																setFiles((current) => (picked ? current.filter((item) => item !== file.path) : [...current, file.path]))
+															}
+														>
+															{file.path}
+														</MenuItem>
+													);
+												})}
+											</MenuContent>
+										</Menu>
+									) : null}
 								</div>
 								{files.length > 0 ? (
 									<div className="flex flex-wrap gap-1.5">
-										{files.map((path) => (
-											<span
-												key={path}
-												className="inline-flex h-[20px] items-center gap-1 rounded-inner bg-(--bg-hover) px-1.5 text-micro text-(--text-2) shadow-[inset_0_0_0_1px_var(--line)]"
-											>
-												<Icon icon={Paperclip} size={10} className="text-(--text-3)" />
-												<span className="max-w-[180px] truncate">{path}</span>
-												<button
-													type="button"
-													aria-label={`Detach ${path}`}
-													onClick={() => setFiles((current) => current.filter((item) => item !== path))}
-													className="text-(--text-3) hover:text-(--text)"
+										{files.map((path) => {
+											const missing = Boolean(spaceFiles.data) && !availableFiles.some((item) => item.path === path);
+											return (
+												<span
+													key={path}
+													className={cn(
+														'inline-flex h-[20px] items-center gap-1 rounded-inner px-1.5 text-micro shadow-[inset_0_0_0_1px_var(--line)]',
+														missing ? 'bg-(--bad-soft) text-(--bad)' : 'bg-(--bg-hover) text-(--text-2)',
+													)}
 												>
-													<Icon icon={X} size={10} />
-												</button>
-											</span>
-										))}
+													<Icon icon={Paperclip} size={10} className={missing ? 'text-(--bad)' : 'text-(--text-3)'} />
+													<span className="max-w-[180px] truncate">{path}</span>
+													{missing ? <span className="text-nano">(missing)</span> : null}
+													<button
+														type="button"
+														aria-label={`Detach ${path}`}
+														onClick={() => setFiles((current) => current.filter((item) => item !== path))}
+														className={missing ? 'text-(--bad) hover:opacity-80' : 'text-(--text-3) hover:text-(--text)'}
+													>
+														<Icon icon={X} size={10} />
+													</button>
+												</span>
+											);
+										})}
 									</div>
 								) : null}
 							</div>
@@ -594,7 +607,7 @@ export function TodoEditorDialog({
 							</>
 						) : null}
 						<span className="flex-1" />
-						{todo && (todo.status === 'open' || (todo.status === 'triaging' && todo.threadIds.length === 0)) ? (
+						{todo && (todo.status === 'open' || canRetryTriaging(todo)) ? (
 							<TodoAssignMenu
 								space={space}
 								todo={todo}
@@ -847,7 +860,7 @@ function TodoListRow({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1">
-				{todo.status === 'open' || (todo.status === 'triaging' && todo.threadIds.length === 0) ? (
+				{todo.status === 'open' || canRetryTriaging(todo) ? (
 					<TodoAssignMenu
 						space={space}
 						todo={todo}

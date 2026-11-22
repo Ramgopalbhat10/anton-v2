@@ -224,7 +224,7 @@ export function releaseIncognito(id: string): void {
 	threadProjects.delete(id);
 	threadHelperModels.delete(id);
 }
-type Deliver = (id: string, text: string, images?: DeliveredImage[]) => Promise<void>;
+type Deliver = (id: string, text: string, images?: DeliveredImage[]) => Promise<string | void>;
 export type AgentName = 'coder' | 'reviewer' | 'coordinator';
 const deliveries = new Map<AgentName, Deliver>();
 
@@ -233,12 +233,13 @@ export function setAgentDelivery(next: Deliver, agent: AgentName = 'coder'): voi
 	deliveries.set(agent, next);
 }
 
-export async function sendToAgent(id: string, text: string, agent: AgentName = 'coder', images: DeliveredImage[] = []): Promise<void> {
+export async function sendToAgent(id: string, text: string, agent: AgentName = 'coder', images: DeliveredImage[] = []): Promise<string | null> {
 	const deliver = deliveries.get(agent);
 	if (!deliver) throw new Error('Agent delivery is not set up');
 	if (isRestoring(id)) throw new ConflictError('Files are being restored');
 	await assertWithinBudget(id);
 	if (agent === 'coordinator') await primeCoordinator(id);
 	else await primeAgent(id);
-	await deliver(id, text, images);
+	const submissionId = await deliver(id, text, images);
+	return typeof submissionId === 'string' && submissionId ? submissionId : null;
 }

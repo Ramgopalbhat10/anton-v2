@@ -195,6 +195,13 @@ export const migrations: string[][] = [
 	],
 	// 47: distinguish automatic thread-driven completion from manual user Done changes.
 	[`ALTER TABLE space_todos ADD COLUMN completed_by TEXT`],
+	// 48: track each assignment attempt and coordinator dispatch submission for scoped rollback, settlement and retry.
+	[
+		`ALTER TABLE space_todos ADD COLUMN attempt_id TEXT`,
+		`ALTER TABLE space_todos ADD COLUMN attempt_submission_id TEXT`,
+		`ALTER TABLE space_todos ADD COLUMN attempt_settled_at TEXT`,
+		`ALTER TABLE space_todos ADD COLUMN attempt_linked INTEGER NOT NULL DEFAULT 0`,
+	],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

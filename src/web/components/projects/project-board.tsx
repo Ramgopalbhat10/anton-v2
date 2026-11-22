@@ -5,7 +5,7 @@ import { Chip, Status } from '@/components/kit/instrument';
 import { Btn, Icon, IconBtn } from '@/components/kit/signal';
 import { PrStatus } from '@/components/marks/pr-status';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
-import { PriorityBadge, repoLabelFor, TodoAssignMenu, TodoEditorDialog } from '@/components/projects/project-todos';
+import { canRetryTriaging, PriorityBadge, repoLabelFor, TodoAssignMenu, TodoEditorDialog } from '@/components/projects/project-todos';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
@@ -92,29 +92,30 @@ function TodoBoardCard({
 	);
 }
 
-/** Temporary card while the coordinator is turning an assigned to-do into thread(s); disappears once linked threads exist. */
+/** Temporary card while the coordinator is turning an assigned to-do into thread(s); disappears once the attempt links a thread. */
 function CoordinatingCard({
 	space,
 	todo,
 	threads,
-	busy,
+	settled,
 	onOpenCoordinator,
 }: {
 	space: Space;
 	todo: SpaceTodo;
 	threads: Session[];
-	busy: boolean;
+	settled: boolean;
 	onOpenCoordinator?: () => void;
 }) {
+	const retryable = canRetryTriaging(todo);
 	return (
 		<article
-			aria-label={`${todo.title}: ${busy ? 'Coordinating' : 'Waiting in coordinator'}`}
+			aria-label={`${todo.title}: ${settled ? 'Waiting in coordinator' : 'Coordinating'}`}
 			className="flex min-w-0 flex-col gap-2 rounded-card bg-(--bg-surface) p-2.5 text-left shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)] transition-shadow duration-(--t-fast) hover:shadow-[inset_0_0_0_1px_var(--line-strong),var(--sh-1)]"
 		>
 			<button
 				type="button"
 				onClick={() => onOpenCoordinator?.()}
-				aria-label={`${todo.title}: ${busy ? 'Coordinating' : 'Waiting in coordinator'}`}
+				aria-label={`${todo.title}: ${settled ? 'Waiting in coordinator' : 'Coordinating'}`}
 				className="flex min-w-0 flex-col gap-2 text-left outline-none focus-visible:shadow-(--focus)"
 			>
 				<span className="flex min-w-0 items-start gap-2">
@@ -122,13 +123,13 @@ function CoordinatingCard({
 					<span className="line-clamp-2 min-w-0 flex-1 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
 				</span>
 				<span className="flex items-center gap-1.5">
-					<Status tone={busy ? 'accent' : 'attention'} pulse={busy}>
-						{busy ? 'Coordinating' : 'Check coordinator'}
+					<Status tone={settled ? 'attention' : 'accent'} pulse={!settled}>
+						{settled ? 'Check coordinator' : 'Coordinating'}
 					</Status>
 					<PriorityBadge priority={todo.priority} compact />
 				</span>
 			</button>
-			{!busy ? (
+			{retryable ? (
 				<div className="flex items-center justify-end border-t border-(--line) pt-1.5">
 					<TodoAssignMenu space={space} todo={todo} threads={threads} size="xs" variant="secondary" retry label="Retry" onOpenCoordinator={onOpenCoordinator} />
 				</div>
@@ -265,9 +266,9 @@ export function ProjectBoard({
 		[todos],
 	);
 
-	// Assigned to coordinator but not yet converted into thread(s).
+	// Assigned to coordinator but this attempt has not linked a thread yet.
 	const triagingTodos = useMemo(
-		() => todos.filter((todo) => todo.status === 'triaging' && todo.threadIds.length === 0),
+		() => todos.filter((todo) => todo.status === 'triaging' && !todo.attemptLinked),
 		[todos],
 	);
 
@@ -357,7 +358,11 @@ export function ProjectBoard({
 				{THREAD_COLUMNS.map((column) => {
 					const items = columnThreads(threads, column.kinds);
 					const triagingHere =
-						(column.id === 'working' && coordinatorBusy) || (column.id === 'needs' && !coordinatorBusy) ? triagingTodos : [];
+						column.id === 'working'
+							? triagingTodos.filter((todo) => !canRetryTriaging(todo))
+							: column.id === 'needs'
+								? triagingTodos.filter((todo) => canRetryTriaging(todo))
+								: [];
 					const total = items.length + triagingHere.length;
 					const canDropHere = column.id === 'working' && space.state !== 'archived';
 					return (
@@ -406,7 +411,7 @@ export function ProjectBoard({
 							</header>
 							<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
 								{triagingHere.map((todo) => (
-									<CoordinatingCard key={todo.id} space={space} todo={todo} threads={threads} busy={coordinatorBusy} onOpenCoordinator={onOpenCoordinator} />
+									<CoordinatingCard key={todo.id} space={space} todo={todo} threads={threads} settled={canRetryTriaging(todo)} onOpenCoordinator={onOpenCoordinator} />
 								))}
 								{items.map((thread) => (
 									<BoardCard key={thread.id} thread={thread} linkedTodos={todosByThread.get(thread.id) ?? []} />

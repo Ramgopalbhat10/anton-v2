@@ -75,6 +75,10 @@ function toTodo(row: Row, threadIds: string[]): SpaceTodo {
 		assignedAt: optional(row.assigned_at),
 		completedAt: optional(row.completed_at),
 		completedBy: asCompletedBy(row.completed_by),
+		attemptId: optional(row.attempt_id),
+		attemptSubmissionId: optional(row.attempt_submission_id),
+		attemptSettledAt: optional(row.attempt_settled_at),
+		attemptLinked: Number(row.attempt_linked ?? 0) === 1,
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};
@@ -205,6 +209,10 @@ const COLUMNS = {
 	assignedAt: 'assigned_at',
 	completedAt: 'completed_at',
 	completedBy: 'completed_by',
+	attemptId: 'attempt_id',
+	attemptSubmissionId: 'attempt_submission_id',
+	attemptSettledAt: 'attempt_settled_at',
+	attemptLinked: 'attempt_linked',
 } as const;
 
 export type SpaceTodoUpdate = Partial<{
@@ -225,6 +233,10 @@ export type SpaceTodoUpdate = Partial<{
 	assignedAt: string | null;
 	completedAt: string | null;
 	completedBy: SpaceTodoCompletedBy | null;
+	attemptId: string | null;
+	attemptSubmissionId: string | null;
+	attemptSettledAt: string | null;
+	attemptLinked: boolean;
 }>;
 
 export async function updateSpaceTodo(id: string, update: SpaceTodoUpdate): Promise<SpaceTodo | null> {
@@ -280,14 +292,24 @@ export async function reorderSpaceTodoRecords(spaceId: string, orderedIds: strin
 	announce({ kind: 'space', id: spaceId, what: 'todos' });
 }
 
-export async function linkTodoThreadRecord(todoId: string, sessionId: string): Promise<void> {
+/** Returns true if this link was newly inserted (false if already linked). */
+export async function linkTodoThreadRecord(todoId: string, sessionId: string): Promise<boolean> {
 	const existing = await getSpaceTodo(todoId);
-	if (!existing) return;
+	if (!existing) return false;
 	const db = await appDb();
-	await db.execute({
+	const result = await db.execute({
 		sql: 'INSERT OR IGNORE INTO space_todo_threads (todo_id, session_id, linked_at) VALUES (?, ?, ?)',
 		args: [todoId, sessionId, new Date().toISOString()],
 	});
+	announce({ kind: 'space', id: existing.spaceId, what: 'todos' });
+	return result.rowsAffected > 0;
+}
+
+export async function unlinkTodoThreadRecord(todoId: string, sessionId: string): Promise<void> {
+	const existing = await getSpaceTodo(todoId);
+	if (!existing) return;
+	const db = await appDb();
+	await db.execute({ sql: 'DELETE FROM space_todo_threads WHERE todo_id = ? AND session_id = ?', args: [todoId, sessionId] });
 	announce({ kind: 'space', id: existing.spaceId, what: 'todos' });
 }
 
@@ -302,55 +324,118 @@ export async function unlinkSessionTodos(sessionId: string): Promise<SpaceTodo[]
 }
 
 /**
- * Atomically claims an open to-do (or an unlinked triaging to-do on explicit retry) before dispatching work.
- * Returns null if another request already claimed or completed it.
+ * Atomically claims an open to-do (or a settled, unhandled triaging attempt on explicit retry) before dispatching work.
+ * Atomically replaces attempt_id and clears attempt_settled_at so concurrent retries cannot both dispatch.
  */
 export async function claimSpaceTodo(
 	id: string,
 	spaceId: string,
-	next: { status: 'triaging' | 'in_progress'; assigneeKind: 'coordinator' | 'thread'; assignedAt: string },
-	{ allowTriagingRetry = false }: { allowTriagingRetry?: boolean } = {},
+	next: { status: 'triaging' | 'in_progress'; assigneeKind: 'coordinator' | 'thread'; assignedAt: string; attemptId: string },
+	{ retryAttemptId }: { retryAttemptId?: string | null } = {},
 ): Promise<SpaceTodo | null> {
 	const db = await appDb();
-	const guard = allowTriagingRetry
-		? "(status = 'open' OR (status = 'triaging' AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)))"
-		: "status = 'open'";
+	const args: Array<string | number | null> = [next.status, next.assigneeKind, next.assignedAt, next.attemptId, next.assignedAt, id, spaceId];
+	let guard = "status = 'open'";
+	if (retryAttemptId) {
+		guard = "(status = 'open' OR (status = 'triaging' AND attempt_linked = 0 AND attempt_settled_at IS NOT NULL AND attempt_id = ?))";
+		args.push(retryAttemptId);
+	}
 	const result = await db.execute({
 		sql: `UPDATE space_todos
-			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = NULL, completed_by = NULL, updated_at = ?
+			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = NULL, completed_by = NULL,
+				attempt_id = ?, attempt_submission_id = NULL, attempt_settled_at = NULL, attempt_linked = 0, updated_at = ?
 			WHERE id = ? AND space_id = ? AND ${guard}`,
-		args: [next.status, next.assigneeKind, next.assignedAt, next.assignedAt, id, spaceId],
+		args,
 	});
 	if (result.rowsAffected === 0) return null;
 	announce({ kind: 'space', id: spaceId, what: 'todos' });
 	return getSpaceTodo(id);
 }
 
-/** Reverts a failed claim only if no newer assignment has superseded it. */
+/** Persists the dispatch receipt's submissionId for a specific assignment attempt. */
+export async function setSpaceTodoAttemptSubmission(id: string, spaceId: string, attemptId: string, submissionId: string): Promise<boolean> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: 'UPDATE space_todos SET attempt_submission_id = ?, updated_at = ? WHERE id = ? AND space_id = ? AND attempt_id = ?',
+		args: [submissionId, new Date().toISOString(), id, spaceId, attemptId],
+	});
+	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
+	return result.rowsAffected > 0;
+}
+
+/** Marks the active attempt as having linked at least one thread so rollback/settlement will not revert it. */
+export async function markSpaceTodoAttemptLinked(id: string, spaceId: string, attemptId: string | null): Promise<void> {
+	const db = await appDb();
+	const now = new Date().toISOString();
+	if (attemptId) {
+		await db.execute({
+			sql: 'UPDATE space_todos SET attempt_linked = 1, updated_at = ? WHERE id = ? AND space_id = ? AND attempt_id = ?',
+			args: [now, id, spaceId, attemptId],
+		});
+	} else {
+		await db.execute({
+			sql: 'UPDATE space_todos SET attempt_linked = 1, updated_at = ? WHERE id = ? AND space_id = ?',
+			args: [now, id, spaceId],
+		});
+	}
+	announce({ kind: 'space', id: spaceId, what: 'todos' });
+}
+
+/** Reverts a failed claim guarded strictly by this attempt_id and whether this attempt linked anything (ignores historical links). */
 export async function releaseSpaceTodoClaim(
 	id: string,
 	spaceId: string,
-	expectedAssignedAt: string,
-	previous: Pick<SpaceTodo, 'status' | 'assigneeKind' | 'assignedAt' | 'completedAt' | 'completedBy'>,
+	attemptId: string,
+	previous: Pick<SpaceTodo, 'status' | 'assigneeKind' | 'assignedAt' | 'completedAt' | 'completedBy' | 'attemptId' | 'attemptSubmissionId' | 'attemptSettledAt' | 'attemptLinked'>,
 ): Promise<void> {
 	const db = await appDb();
 	const result = await db.execute({
 		sql: `UPDATE space_todos
-			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = ?, completed_by = ?, updated_at = ?
-			WHERE id = ? AND space_id = ? AND assigned_at = ? AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)`,
-		args: [previous.status, previous.assigneeKind, previous.assignedAt, previous.completedAt, previous.completedBy, new Date().toISOString(), id, spaceId, expectedAssignedAt],
+			SET status = ?, assignee_kind = ?, assigned_at = ?, completed_at = ?, completed_by = ?,
+				attempt_id = ?, attempt_submission_id = ?, attempt_settled_at = ?, attempt_linked = ?, updated_at = ?
+			WHERE id = ? AND space_id = ? AND attempt_id = ? AND attempt_linked = 0`,
+		args: [
+			previous.status,
+			previous.assigneeKind,
+			previous.assignedAt,
+			previous.completedAt,
+			previous.completedBy,
+			previous.attemptId,
+			previous.attemptSubmissionId,
+			previous.attemptSettledAt,
+			previous.attemptLinked ? 1 : 0,
+			new Date().toISOString(),
+			id,
+			spaceId,
+			attemptId,
+		],
 	});
 	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
 }
 
-/** Restores unhandled triaging items (no linked threads) back to open when a coordinator reply fails or is aborted. */
-export async function restoreUnhandledTriaging(spaceId: string): Promise<number> {
+/** Restores only the triaging assignment whose exact submissionId failed or was aborted without linking any thread. */
+export async function restoreTriagingForSubmission(spaceId: string, submissionId: string): Promise<number> {
 	const db = await appDb();
 	const result = await db.execute({
 		sql: `UPDATE space_todos
-			SET status = 'open', assignee_kind = 'unassigned', assigned_at = NULL, updated_at = ?
-			WHERE space_id = ? AND status = 'triaging' AND NOT EXISTS (SELECT 1 FROM space_todo_threads WHERE todo_id = space_todos.id)`,
-		args: [new Date().toISOString(), spaceId],
+			SET status = 'open', assignee_kind = 'unassigned', assigned_at = NULL,
+				attempt_id = NULL, attempt_submission_id = NULL, attempt_settled_at = NULL, attempt_linked = 0, updated_at = ?
+			WHERE space_id = ? AND status = 'triaging' AND attempt_submission_id = ? AND attempt_linked = 0`,
+		args: [new Date().toISOString(), spaceId, submissionId],
+	});
+	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
+	return result.rowsAffected;
+}
+
+/** Marks a triaging attempt as settled (completed without linking a thread) so the UI may offer an explicit Retry. */
+export async function markTriagingSettledForSubmission(spaceId: string, submissionId: string): Promise<number> {
+	const db = await appDb();
+	const now = new Date().toISOString();
+	const result = await db.execute({
+		sql: `UPDATE space_todos
+			SET attempt_settled_at = ?, updated_at = ?
+			WHERE space_id = ? AND status = 'triaging' AND attempt_submission_id = ? AND attempt_linked = 0 AND attempt_settled_at IS NULL`,
+		args: [now, now, spaceId, submissionId],
 	});
 	if (result.rowsAffected > 0) announce({ kind: 'space', id: spaceId, what: 'todos' });
 	return result.rowsAffected;

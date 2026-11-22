@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Reasoning } from '../../core/ports.ts';
 import type { Session } from '../../core/types.ts';
 import { withAttachments } from '../../core/attachments.ts';
@@ -20,15 +21,19 @@ import {
 	insertSpaceTodo,
 	linkTodoThreadRecord,
 	listSpaceTodos,
+	markSpaceTodoAttemptLinked,
 	releaseSpaceTodoClaim,
 	reorderSpaceTodoRecords,
+	unlinkTodoThreadRecord,
 	updateSpaceTodo,
 } from '../../db/space-todos.ts';
-import { projectAttachment } from '../artifacts/attachments.ts';
+import { projectAttachment, projectPictures } from '../artifacts/attachments.ts';
 import { findModel } from '../models/models.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
+import { coordinatorBrief, primeCoordinator } from './coordinator.ts';
 import { findThread, nudgeThread, startThread } from './spaces.ts';
 import { threadStarted } from './thread-reports.ts';
+import { reconcileLinkedThreadState, recordTodoAttemptSubmission } from './todo-sync.ts';
 
 export const MAX_TODO_TITLE = 200;
 export const MAX_TODO_DESCRIPTION = 20_000;
@@ -225,16 +230,20 @@ export async function editTodo(spaceId: string, todoId: string, change: EditTodo
 	let completedAt: string | null | undefined;
 	let completedBy: 'auto' | 'manual' | null | undefined;
 	let assigneeKind: 'unassigned' | undefined;
+	let clearAttempt = false;
 	if (change.status === 'done') {
 		completedAt = current.completedAt ?? now;
 		completedBy = 'manual';
+		clearAttempt = true;
 	} else if (change.status === 'open') {
 		completedAt = null;
 		completedBy = null;
+		clearAttempt = true;
 		if (current.threadIds.length === 0) assigneeKind = 'unassigned';
 	} else if (change.status === 'in_progress' || change.status === 'triaging' || change.status === 'cancelled') {
 		completedAt = null;
 		completedBy = null;
+		if (change.status === 'cancelled') clearAttempt = true;
 	}
 	const updated = await updateSpaceTodo(todoId, {
 		...(change.title !== undefined ? { title: change.title.trim() } : {}),
@@ -252,6 +261,7 @@ export async function editTodo(spaceId: string, todoId: string, change: EditTodo
 		...(sourceUrl !== undefined ? { sourceUrl } : {}),
 		...(completedAt !== undefined ? { completedAt } : {}),
 		...(completedBy !== undefined ? { completedBy } : {}),
+		...(clearAttempt ? { attemptId: null, attemptSubmissionId: null, attemptSettledAt: null, attemptLinked: false } : {}),
 	});
 	return updated!;
 }
@@ -288,14 +298,17 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 	const current = await existingTodo(spaceId, todoId);
 	await linkTodoThreadRecord(todoId, sessionId);
 	const now = new Date().toISOString();
-	const updated = await updateSpaceTodo(todoId, {
+	await updateSpaceTodo(todoId, {
 		status: current.status === 'open' || current.status === 'triaging' || current.status === 'done' ? 'in_progress' : current.status,
 		assigneeKind: current.assigneeKind === 'coordinator' ? 'coordinator' : 'thread',
 		assignedAt: current.assignedAt ?? now,
 		completedAt: null,
 		completedBy: null,
+		attemptSettledAt: null,
+		attemptLinked: true,
 	});
-	return updated!;
+	await reconcileLinkedThreadState(sessionId);
+	return (await getSpaceTodo(todoId))!;
 }
 
 export type AssignTodoInput =
@@ -316,14 +329,16 @@ export type AssignTodoInput =
 export async function assignTodo(spaceId: string, todoId: string, input: AssignTodoInput): Promise<{ todo: SpaceTodo; thread?: Session }> {
 	const [space, todo] = await Promise.all([existingSpace(spaceId), existingTodo(spaceId, todoId)]);
 	if (space.state === 'archived') throw new ConflictError('The project is archived; restore it to assign to-dos');
-	const allowTriagingRetry = Boolean(input.retry);
-	if (todo.status !== 'open' && !(allowTriagingRetry && todo.status === 'triaging' && todo.threadIds.length === 0)) {
+	const canRetry = Boolean(input.retry && todo.status === 'triaging' && !todo.attemptLinked && todo.attemptSettledAt !== null && todo.attemptId !== null);
+	if (todo.status !== 'open' && !canRetry) {
 		throw new ConflictError('This to-do is already assigned or completed');
 	}
+	const retryAttemptId = canRetry ? todo.attemptId : null;
 
 	// Validate attachments, repo, model, and target thread BEFORE claiming so errors never mutate the to-do.
 	const attachments = await resolveTodoAttachments(spaceId, todo.files);
 	const now = new Date().toISOString();
+	const attemptId = randomUUID();
 
 	if (input.target === 'coordinator') {
 		let repoLabel: string | null = null;
@@ -336,6 +351,7 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 		}
 		const rawMessage = todoAssignMessage({
 			id: todo.id,
+			attempt: attemptId,
 			title: todo.title,
 			priority: todo.priority,
 			repo: repoLabel,
@@ -346,17 +362,22 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 			description: todo.description,
 			note: input.note,
 		});
-		const message = attachments.length ? withAttachments(rawMessage, attachments, 'project') : rawMessage;
-		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'triaging', assigneeKind: 'coordinator', assignedAt: now }, { allowTriagingRetry });
+		const messageWithAttachments = attachments.length ? withAttachments(rawMessage, attachments, 'project') : rawMessage;
+		await primeCoordinator(spaceId);
+		const { images, note } = await projectPictures(spaceId, spaceId, messageWithAttachments, coordinatorBrief(spaceId).model);
+		const finalMessage = note ? `${messageWithAttachments}\n\n${note}` : messageWithAttachments;
+		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'triaging', assigneeKind: 'coordinator', assignedAt: now, attemptId }, { retryAttemptId });
 		if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
+		let submissionId: string | null;
 		try {
-			await sendToAgent(spaceId, message, 'coordinator');
+			submissionId = await sendToAgent(spaceId, finalMessage, 'coordinator', images);
 		} catch (error) {
-			await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
+			await releaseSpaceTodoClaim(todo.id, spaceId, attemptId, todo);
 			throw error;
 		}
+		if (submissionId) await recordTodoAttemptSubmission(spaceId, todo.id, attemptId, submissionId);
 		await touchSpace(spaceId);
-		return { todo: claimed };
+		return { todo: (await getSpaceTodo(todo.id))! };
 	}
 
 	const baseBrief = todoBrief(todo);
@@ -376,14 +397,17 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 			throw new InvalidInputError('That repository is not in this project');
 		}
 		await checkModel(input.model ?? todo.model);
-		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now }, { allowTriagingRetry });
+		const sessionId = input.id ?? randomUUID();
+		const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now, attemptId }, { retryAttemptId });
 		if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
+		// Persist the link before starting the thread so an immediate resolution sees it, while keeping attempt_linked=0 until start succeeds.
+		const addedLink = await linkTodoThreadRecord(todo.id, sessionId);
 		let thread: Session;
 		try {
 			thread = await startThread(
 				spaceId,
 				{
-					id: input.id,
+					id: sessionId,
 					title: todo.title,
 					brief: briefWithFiles,
 					projectId,
@@ -395,25 +419,30 @@ export async function assignTodo(spaceId: string, todoId: string, input: AssignT
 				{ wait: false },
 			);
 		} catch (error) {
-			await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
+			if (addedLink) await unlinkTodoThreadRecord(todo.id, sessionId);
+			await releaseSpaceTodoClaim(todo.id, spaceId, attemptId, todo);
 			throw error;
 		}
-		await linkTodoThreadRecord(todo.id, thread.id);
+		await markSpaceTodoAttemptLinked(todo.id, spaceId, attemptId);
+		await reconcileLinkedThreadState(thread.id);
 		await threadStarted(thread.id, { by: 'you', brief: fullBrief });
 		return { todo: (await getSpaceTodo(todo.id))!, thread };
 	}
 
 	const targetThread = await findThread(spaceId, input.threadId);
-	const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now }, { allowTriagingRetry });
+	const claimed = await claimSpaceTodo(todo.id, spaceId, { status: 'in_progress', assigneeKind: 'thread', assignedAt: now, attemptId }, { retryAttemptId });
 	if (!claimed) throw new ConflictError('This to-do is already assigned or completed');
+	const addedLink = await linkTodoThreadRecord(todo.id, targetThread.id);
 	let nudged: Session;
 	try {
 		nudged = await nudgeThread(spaceId, targetThread.id, briefWithFiles);
 	} catch (error) {
-		await releaseSpaceTodoClaim(todo.id, spaceId, now, todo);
+		if (addedLink) await unlinkTodoThreadRecord(todo.id, targetThread.id);
+		await releaseSpaceTodoClaim(todo.id, spaceId, attemptId, todo);
 		throw error;
 	}
-	await linkTodoThreadRecord(todo.id, targetThread.id);
+	await markSpaceTodoAttemptLinked(todo.id, spaceId, attemptId);
+	await reconcileLinkedThreadState(targetThread.id);
 	return { todo: (await getSpaceTodo(todo.id))!, thread: nudged };
 }
 

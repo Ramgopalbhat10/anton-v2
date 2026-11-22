@@ -190,6 +190,10 @@ const spaceTodos: Array<{
 	assignedAt: string | null;
 	completedAt: string | null;
 	completedBy: 'auto' | 'manual' | null;
+	attemptId: string | null;
+	attemptSubmissionId: string | null;
+	attemptSettledAt: string | null;
+	attemptLinked: boolean;
 	createdAt: string;
 	updatedAt: string;
 }> = [
@@ -215,6 +219,10 @@ const spaceTodos: Array<{
 		assignedAt: null,
 		completedAt: null,
 		completedBy: null,
+		attemptId: null,
+		attemptSubmissionId: null,
+		attemptSettledAt: null,
+		attemptLinked: false,
 		createdAt: ago(60 * 12),
 		updatedAt: ago(60 * 12),
 	},
@@ -240,6 +248,10 @@ const spaceTodos: Array<{
 		assignedAt: null,
 		completedAt: null,
 		completedBy: null,
+		attemptId: null,
+		attemptSubmissionId: null,
+		attemptSettledAt: null,
+		attemptLinked: false,
 		createdAt: ago(60 * 8),
 		updatedAt: ago(60 * 8),
 	},
@@ -265,6 +277,10 @@ const spaceTodos: Array<{
 		assignedAt: ago(45),
 		completedAt: null,
 		completedBy: null,
+		attemptId: 'att-ledger',
+		attemptSubmissionId: 'sub-ledger',
+		attemptSettledAt: null,
+		attemptLinked: true,
 		createdAt: ago(60 * 20),
 		updatedAt: ago(4),
 	},
@@ -290,6 +306,10 @@ const spaceTodos: Array<{
 		assignedAt: ago(60 * 32),
 		completedAt: ago(60 * 30),
 		completedBy: 'auto',
+		attemptId: 'att-webhook',
+		attemptSubmissionId: null,
+		attemptSettledAt: null,
+		attemptLinked: true,
 		createdAt: ago(60 * 40),
 		updatedAt: ago(60 * 30),
 	},
@@ -558,6 +578,10 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 						assignedAt: null,
 						completedAt: null,
 						completedBy: null,
+						attemptId: null,
+						attemptSubmissionId: null,
+						attemptSettledAt: null,
+						attemptLinked: false,
 						createdAt: nowIso,
 						updatedAt: nowIso,
 					};
@@ -567,6 +591,28 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				return;
 			}
 			return json(res, { todos: spaceTodos.filter((item) => item.spaceId === todosSpaceId) });
+		}
+		const reorderSpaceId = path.match(/^\/api\/spaces\/([^/]+)\/todos\/reorder$/)?.[1];
+		if (reorderSpaceId && req.method === 'POST') {
+			readJsonBody((input) => {
+				if (!Array.isArray(input.ids) || !input.ids.every((item) => typeof item === 'string')) {
+					res.statusCode = 400;
+					return json(res, { error: 'ids must be an array of strings' });
+				}
+				const nowIso = new Date().toISOString();
+				input.ids.forEach((id, position) => {
+					const found = spaceTodos.find((item) => item.spaceId === reorderSpaceId && item.id === id);
+					if (found) {
+						found.position = position;
+						found.updatedAt = nowIso;
+					}
+				});
+				const ordered = spaceTodos
+					.filter((item) => item.spaceId === reorderSpaceId)
+					.sort((a, b) => a.position - b.position || b.createdAt.localeCompare(a.createdAt));
+				json(res, { todos: ordered });
+			});
+			return;
 		}
 		const todoAssignMatch = path.match(/^\/api\/spaces\/([^/]+)\/todos\/([^/]+)\/assign$/);
 		if (todoAssignMatch && req.method === 'POST') {
@@ -585,12 +631,16 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 					res.statusCode = 404;
 					return json(res, { error: 'Not found' });
 				}
-				if (todo.status !== 'open' && !(input.retry === true && todo.status === 'triaging' && todo.threadIds.length === 0)) {
+				if (todo.status !== 'open' && !(input.retry === true && todo.status === 'triaging' && !todo.attemptLinked && todo.attemptSettledAt !== null)) {
 					res.statusCode = 409;
 					return json(res, { error: 'This to-do is already assigned or completed' });
 				}
 				todo.assignedAt = new Date().toISOString();
 				todo.updatedAt = todo.assignedAt;
+				todo.attemptId = `att-${Date.now()}`;
+				todo.attemptSubmissionId = null;
+				todo.attemptSettledAt = null;
+				todo.attemptLinked = false;
 				if (input.target === 'coordinator') {
 					todo.status = 'triaging';
 					todo.assigneeKind = 'coordinator';
@@ -603,6 +653,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				if (!todo.threadIds.includes(threadId)) todo.threadIds.push(threadId);
 				todo.status = 'in_progress';
 				todo.assigneeKind = 'thread';
+				todo.attemptLinked = true;
 				return json(res, { todo });
 			});
 			return;

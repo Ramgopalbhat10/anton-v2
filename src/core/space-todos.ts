@@ -49,6 +49,10 @@ export type SpaceTodo = {
 	assignedAt: string | null;
 	completedAt: string | null;
 	completedBy: SpaceTodoCompletedBy | null;
+	attemptId: string | null;
+	attemptSubmissionId: string | null;
+	attemptSettledAt: string | null;
+	attemptLinked: boolean;
 	createdAt: string;
 	updatedAt: string;
 };
@@ -69,6 +73,7 @@ const unescapeXml = (value: string) => value.replace(/&lt;/g, '<').replace(/&gt;
 
 export type TodoAssignMeta = {
 	id: string;
+	attempt: string;
 	title: string;
 	priority?: TodoPriority | null;
 	repo?: string | null;
@@ -82,7 +87,7 @@ export type TodoAssignMeta = {
 
 /** Message sent to the coordinator when the user assigns a todo to it to start right away. */
 export function todoAssignMessage(meta: TodoAssignMeta): string {
-	const attrs: string[] = [`id="${escapeAttr(meta.id)}"`, `title="${escapeAttr(meta.title)}"`];
+	const attrs: string[] = [`id="${escapeAttr(meta.id)}"`, `attempt="${escapeAttr(meta.attempt)}"`, `title="${escapeAttr(meta.title)}"`];
 	if (meta.priority) attrs.push(`priority="${escapeAttr(meta.priority)}"`);
 	if (meta.repo) attrs.push(`repo="${escapeAttr(meta.repo)}"`);
 	if (meta.tags?.length) attrs.push(`tags="${escapeAttr(meta.tags.join(', '))}"`);
@@ -100,6 +105,7 @@ export function todoAssignMessage(meta: TodoAssignMeta): string {
 
 export type ParsedTodoAssign = {
 	id: string;
+	attempt: string | null;
 	title: string;
 	priority: TodoPriority | null;
 	repo: string | null;
@@ -118,6 +124,7 @@ export function parseTodoAssign(text: string): ParsedTodoAssign | null {
 	const splitList = (value?: string) => (value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []);
 	return {
 		id: attrs.id ?? '',
+		attempt: attrs.attempt || null,
 		title: attrs.title ?? 'To-do',
 		priority,
 		repo: attrs.repo || null,
@@ -130,21 +137,23 @@ export function parseTodoAssign(text: string): ParsedTodoAssign | null {
 }
 
 /**
- * Only an authenticated <todo-assign> delivery for this exact coordinator-assigned item may authorize quoted text;
- * a model-supplied todo_id alone only links work after the user-message quote check passes.
+ * Only an authenticated <todo-assign> delivery matching the current active coordinator assignment attempt may authorize
+ * quoted text, and only from the immutable decoded assignment payload (never from later live edits to the to-do row).
  */
 export function quoteSourceForTodo(
 	userText: string,
 	assignedTodo: ParsedTodoAssign | null,
-	linkedTodo: Pick<SpaceTodo, 'id' | 'title' | 'description' | 'status' | 'assigneeKind' | 'assignedAt'> | null,
+	linkedTodo: Pick<SpaceTodo, 'id' | 'status' | 'assigneeKind' | 'assignedAt' | 'attemptId'> | null,
 ): string {
 	const authenticatedAssign = Boolean(
 		assignedTodo &&
 			linkedTodo &&
 			assignedTodo.id === linkedTodo.id &&
+			assignedTodo.attempt &&
+			linkedTodo.attemptId === assignedTodo.attempt &&
 			linkedTodo.assigneeKind === 'coordinator' &&
 			linkedTodo.assignedAt !== null &&
 			(linkedTodo.status === 'triaging' || linkedTodo.status === 'in_progress'),
 	);
-	return authenticatedAssign && linkedTodo ? [userText, linkedTodo.title, linkedTodo.description].filter(Boolean).join('\n') : userText;
+	return authenticatedAssign && assignedTodo ? [userText, assignedTodo.title, assignedTodo.body].filter(Boolean).join('\n') : userText;
 }
