@@ -75,6 +75,8 @@ setAgentDelivery(async (id, text) => {
 });
 setAgentDelivery(async (id, text, images) => {
 	if (failCoordinator) throw new Error('coordinator unreachable');
+	// Thread reports go out on a timer a second after a thread starts, so one can land in a later test; none is checked here.
+	if (text.startsWith('<thread-reports>')) return;
 	toCoordinator.push({ id, text, images });
 }, 'coordinator');
 
