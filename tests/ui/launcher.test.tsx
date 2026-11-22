@@ -154,7 +154,9 @@ describe('new task composer', () => {
 		expect(screen.getByRole('button', { name: 'No repository' })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'main' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Plan' })).toBeNull();
-		expect(screen.getByLabelText('How a chat runs')).toBeTruthy();
+		expect(screen.queryByLabelText('How a task runs')).toBeNull();
+		expect(screen.queryByLabelText('How a chat runs')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Research a topic on the web' })).toBeTruthy();
 		await userEvent.type(screen.getByRole('textbox'), 'What is new in React 19?');
 		await userEvent.click(screen.getByRole('button', { name: 'Start chat' }));
 		await waitFor(() =>

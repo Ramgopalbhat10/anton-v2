@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, ListChecks, type IconComponent, MessageSquare, Plus, Settings, Sparkle, SquareTerminal, TriangleAlert } from '@/lib/icons';
-import { type CSSProperties, useState } from 'react';
+import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, type IconComponent, MessageSquare, Plus, Settings, TriangleAlert } from '@/lib/icons';
+import { useState } from 'react';
 import { PlanToggle } from '@/components/composer/composer';
 import { HomeDashboard, homeSummary } from '@/components/pages/home-dashboard';
 import { SetupCard } from '@/components/pages/setup-card';
@@ -138,45 +138,6 @@ export function AddRepo({ onAdded, onCancel }: { onAdded: (project: Project) => 
 			) : null}
 			{add.isError ? <p className="m-0 text-small text-(--bad)">{add.error.message}</p> : null}
 		</form>
-	);
-}
-
-type Stage = { title: string; note: string; icon: IconComponent };
-
-function Route({ repo, branch, planMode }: { repo?: string; branch: string; planMode: boolean }) {
-	const stages: Stage[] = [
-		{ title: planMode ? 'Plans' : 'Reads', note: repo ?? 'the repository', icon: planMode ? ListChecks : BookOpen },
-		{ title: 'Branches', note: `off ${branch || 'main'}`, icon: GitBranch },
-		{ title: 'Sandbox', note: 'when it edits', icon: SquareTerminal },
-		{ title: 'Pull request', note: 'for your review', icon: GitPullRequest },
-	];
-	return <RouteLine label="How a task runs" stages={stages} />;
-}
-
-function ChatRoute() {
-	const stages: Stage[] = [
-		{ title: 'Asks', note: 'no repository', icon: MessageSquare },
-		{ title: 'Browses', note: 'the web', icon: Globe },
-		{ title: 'Scratch', note: 'when it runs code', icon: SquareTerminal },
-		{ title: 'Answers', note: 'in the chat', icon: Sparkle },
-	];
-	return <RouteLine label="How a chat runs" stages={stages} />;
-}
-
-function RouteLine({ label, stages }: { label: string; stages: Stage[] }) {
-	return (
-		<ol aria-label={label} className="m-0 flex max-w-full list-none flex-wrap items-center gap-x-1 gap-y-1 px-1 text-small">
-			{stages.map((stage, index) => (
-				<li key={stage.title} className="flex items-center gap-1">
-					{index > 0 ? <span aria-hidden className="mx-1 h-px w-4 bg-(--line-strong)" /> : null}
-					<span className="route-caption inline-flex items-center gap-1.5 text-(--text-3)" data-first={index === 0 || undefined} style={{ '--stage': index } as CSSProperties}>
-						<Icon icon={stage.icon} size={12} />
-						<span>{stage.title}</span>
-					</span>
-					<span className="hidden text-(--text-4) sm:inline">{stage.note}</span>
-				</li>
-			))}
-		</ol>
 	);
 }
 
@@ -362,7 +323,6 @@ export function Launcher() {
 							/>
 						) : null}
 						{prompt.trim() || needsSetup ? null : <Starters chat={chat} onPick={setPrompt} />}
-						{needsSetup ? null : chat ? <ChatRoute /> : <Route repo={project?.repoFullName} branch={chosenBranch} planMode={planMode} />}
 					</div>
 
 					<HomeDashboard />
