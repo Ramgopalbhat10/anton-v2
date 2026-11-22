@@ -17,6 +17,7 @@ import { uniqueUploadNames } from '../../../core/upload-name';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
 
+/** Thread states: threads move into these on their own, so only To do creates work. */
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
 	{ id: 'needs', label: 'Needs you', glyph: 'waiting', kinds: ['waiting', 'failed'] },
 	{ id: 'working', label: 'Working', glyph: 'working', kinds: ['working', 'queued'] },
@@ -295,8 +296,6 @@ export function ProjectBoard({
 								<Glyph kind={column.glyph} size={12} />
 								<span className="truncate text-body font-medium text-(--text)">{column.label}</span>
 								<span className="in-num text-small text-(--text-3)">{items.length}</span>
-								<span className="flex-1" />
-								<IconBtn icon={Plus} size="xs" label={`New thread for ${column.label}`} onClick={onNewThread} />
 							</header>
 							<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
 								{items.map((thread) => (
