@@ -164,10 +164,15 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	updatedAt: ago(30),
 });
 const todo = (id: string, title: string, description: string, patch: Record<string, unknown> = {}) => ({
-	id, spaceId: 'space-billing', title, description, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+	id, spaceId: 'space-billing', title, description, attachments: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
-	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.'),
+	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
+		attachments: [
+			{ name: 'plan-change.png', path: 'plan-change.png', kind: 'PNG image', size: 184_320 },
+			{ name: 'proration-rules.md', path: 'proration-rules.md', kind: 'Markdown', size: 2_150 },
+		],
+	}),
 	todo('todo-tax', 'Show tax on invoices', 'Per line, with the rate used.', { status: 'in_progress', assignee: 'coordinator' }),
 	todo('todo-ledger', 'Ledger schema', '', { status: 'done', threads: 1, completedAt: ago(60) }),
 ];
