@@ -263,6 +263,39 @@ test('reports reach the coordinator once per change of state, batched', async ()
 	assert.ok((await getSessionRecord(done.id))?.resolvedAt);
 });
 
+test('each review round that pushes commits is reported, though the automatic review has the thread working again', async () => {
+	const space = await spaces.createSpace({ name: 'Review rounds', repoIds: [api.id] });
+	const thread = await spaces.startThread(space.id, { title: 'Rate limits', brief: 'Add rate limits' });
+	await reports.flushReports();
+	const mine = () => toCoordinator.filter((sent) => sent.id === space.id);
+	const sentBefore = mine().length;
+	const pr = 'https://github.com/acme/api/pull/9';
+	await updateSession(thread.id, { prUrl: pr, pushedSha: 'sha-1', pullRequestJson: JSON.stringify({ url: pr, state: 'open', checks: 'pending', runs: [] }) });
+	// The reviewer runs on the same thread, starting as the reply settles and before its batch goes.
+	const reviewing = (submissionId: string) => recordAgentEvent({ type: 'submission_running', instanceId: thread.id, submissionId });
+	const reviewed = (submissionId: string) => recordAgentEvent({ type: 'submission_settled', instanceId: thread.id, submissionId });
+
+	await reports.threadFinished(thread.id, 'Opened the pull request.');
+	reviewing('review-1');
+	await reports.flushReports();
+	assert.equal(mine().length, sentBefore + 1);
+	assert.match(mine().at(-1)!.text, /state="review" pr="#9 open, checks pending">Opened the pull request\./);
+	reviewed('review-1');
+
+	await updateSession(thread.id, { pushedSha: 'sha-2' });
+	await reports.threadFinished(thread.id, 'Addressed the 3 review comments.');
+	reviewing('review-2');
+	await reports.flushReports();
+	assert.equal(mine().length, sentBefore + 2);
+	assert.match(mine().at(-1)!.text, /state="review"[^>]*>Addressed the 3 review comments\./);
+	reviewed('review-2');
+
+	// A reply that pushed nothing new, in the same state, is not news.
+	await reports.threadFinished(thread.id, 'Nothing left to change.');
+	await reports.flushReports();
+	assert.equal(mine().length, sentBefore + 2);
+});
+
 test('the coordinator reads the project, its threads and what they ask', async () => {
 	const space = await spaces.createSpace({ name: 'State', goal: 'Keep it green', repoIds: [api.id], instructions: 'Small PRs.' });
 	const thread = await spaces.startThread(space.id, { title: 'Fix CI', brief: 'Make the build pass' });
