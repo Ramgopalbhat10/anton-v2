@@ -30,9 +30,9 @@ test('what the agent does between whole steps: thinking, writing a file as it st
 	recordAgentNow({ type: 'tool_start', ...main, toolCallId: 'c1', toolName: 'write', args: { path: 'outputs/nourish/app.js' }, timestamp: '2026-10-15T07:00:31.000Z' });
 	assert.deepEqual(agentNow('task-1'), { what: 'running', tool: 'write', detail: 'outputs/nourish/app.js', chars: 0, since: '2026-10-15T07:00:31.000Z' });
 
-	// A subagent's events, or the reviewer's, are not the coding agent's.
+	// A subagent's events are not the coding agent's, nor are another agent's on the same instance.
 	recordAgentNow({ type: 'turn_request', instanceId: 'task-1', taskId: 'sub-1', purpose: 'agent' });
-	recordAgentNow({ type: 'turn_request', instanceId: 'task-1', agentName: 'reviewer', purpose: 'agent' });
+	recordAgentNow({ type: 'turn_request', instanceId: 'task-1', agentName: 'Coordinator', purpose: 'agent' });
 	assert.equal(agentNow('task-1')?.what, 'running');
 
 	recordAgentNow({ type: 'tool', ...main, toolCallId: 'c1', toolName: 'write', timestamp: '2026-10-15T07:00:32.000Z' });
@@ -99,4 +99,32 @@ test('a tool call is named by its file, the first line of its command, or its su
 	assert.equal(detailOf('apply_patch', { input: '*** Begin Patch\n*** Update File: src/app.ts\n@@\n-a\n+b\n*** End Patch' }), 'src/app.ts');
 	assert.equal(detailOf('apply_patch', undefined, '{"input":"*** Begin Patch\\n*** Add File: ./docs/new.md\\n+# New'), 'docs/new.md');
 	assert.equal(detailOf('apply_patch', undefined, '{"input":"*** Begin Patch\\n*** Add File: docs/ne'), null);
+});
+
+test("the Reviewer's steps, once the reply has ended, are the task's line under its own name, and the coding agent's come first", async () => {
+	const told: Array<{ now: { what: string; by?: string } | null }> = [];
+	const stop = onChange((change) => change.kind === 'now' && change.id === 'task-9' && told.push(change as never));
+	const coder = { instanceId: 'task-9', agentName: 'Coder' };
+	const reviewer = { instanceId: 'task-9', agentName: 'Reviewer' };
+	recordAgentNow({ type: 'turn_request', ...coder, purpose: 'agent' });
+	recordAgentNow({ type: 'submission_settled', ...coder });
+
+	recordAgentNow({ type: 'turn_request', ...reviewer, purpose: 'agent', timestamp: '2026-11-22T12:00:00.000Z' });
+	recordAgentNow({ type: 'tool_start', ...reviewer, toolCallId: 'r1', toolName: 'bash', args: { command: 'npm test' }, timestamp: '2026-11-22T12:00:05.000Z' });
+	assert.deepEqual(agentNow('task-9'), { what: 'running', tool: 'bash', detail: 'npm test', chars: 0, since: '2026-11-22T12:00:05.000Z', by: 'reviewer' });
+	await wait(300);
+	assert.equal(told.at(-1)?.now?.by, 'reviewer');
+
+	// A message sent during the review starts the coding agent, whose step is the one shown.
+	recordAgentNow({ type: 'turn_request', ...coder, purpose: 'agent' });
+	assert.equal(agentNow('task-9')?.by, undefined);
+	assert.equal(agentNow('task-9')?.what, 'thinking');
+	recordAgentNow({ type: 'submission_settled', ...coder });
+	assert.equal(agentNow('task-9')?.by, 'reviewer', "the Reviewer's step shows again when the reply ends");
+
+	recordAgentNow({ type: 'submission_settled', ...reviewer });
+	assert.equal(agentNow('task-9'), null);
+	await wait(300);
+	assert.equal(told.at(-1)?.now, null);
+	stop();
 });

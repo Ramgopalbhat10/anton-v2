@@ -321,12 +321,14 @@ const CALLING = new Set<ThreadState>(['waiting', 'review', 'landing']);
 
 export type ThreadNow = { text: string; done: number; total: number };
 
-/** The todo step in hand, else what its agent does this moment, else its brief; null when it is not working. Both follow the agent through live-updates.ts. */
+/** The Reviewer's step while it reads the pull request, else the todo step in hand, else what its agent does this moment, else its brief; null when it is not working. Both follow the agent through live-updates.ts. */
 export function useThreadNow(thread: Session): ThreadNow | null {
 	const working = stateOf(thread) === 'working';
 	const todos = useQuery({ ...taskQueries.todos(thread.id), staleTime: Infinity, enabled: working });
 	const now = useQuery({ ...taskQueries.now(thread.id), enabled: working }).data?.now ?? null;
 	if (!working) return null;
+	// The Reviewer runs once the reply and its todo list are done.
+	if (now?.by === 'reviewer') return { text: nowText(now, 'replying'), done: 0, total: 0 };
 	const list = todos.data?.list?.todos ?? [];
 	const step = list.find((todo) => todo.status === 'in_progress') ?? list.find((todo) => todo.status === 'pending');
 	if (step) return { text: step.content, done: list.filter((todo) => todo.status === 'completed').length, total: list.length };

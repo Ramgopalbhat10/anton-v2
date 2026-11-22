@@ -53,3 +53,17 @@ describe('background jobs in the thread', () => {
 		expect(sentence('some_new_tool', {})).toBe('Called some_new_tool');
 	});
 });
+
+describe("the Reviewer's line", () => {
+	it('reads as reviewing the pull request, with the step it is on, never as the reply wrapping up', () => {
+		const review = (what: string, tool: string | null, detail: string | null = null) => nowText({ what, tool, detail, since: '', chars: 0, by: 'reviewer' } as never, 'finishing');
+		expect(review('thinking', null)).toBe('Reviewing the pull request · Thinking');
+		expect(review('running', 'bash', 'npm test')).toBe('Reviewing the pull request · Running a command');
+		expect(review('running', 'read', 'src/app.ts')).toBe('Reviewing the pull request · Reading app.ts');
+		expect(review('writing', 'post_review')).toBe('Reviewing the pull request · Writing the review');
+		expect(review('running', 'post_review')).toBe('Reviewing the pull request · Posting the review');
+		expect(review('finishing', null)).toBe('Reviewing the pull request');
+		expect(review('replying', null)).toBe('Reviewing the pull request');
+		expect(nowText(null, 'finishing')).toBe('Wrapping up');
+	});
+});

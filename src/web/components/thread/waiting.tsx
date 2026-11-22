@@ -43,9 +43,10 @@ export function NowLabel() {
 /** The thread shows a step only once it is whole, so without this a file being written or a long think reads as nothing happening. */
 function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyPhase; quiet: boolean }) {
 	const heard = useNow(sessionId);
+	const reviewing = heard.now?.by === 'reviewer';
 	// Text is written only into a reply still being written; once the reply is whole, the agent is wrapping up whatever was last heard.
-	const { now, took } = heard.now?.what === 'replying' && phase !== 'replying' ? { now: null, took: 0 } : heard;
-	if (quiet && now?.what === 'replying') return null;
+	const { now, took } = !reviewing && heard.now?.what === 'replying' && phase !== 'replying' ? { now: null, took: 0 } : heard;
+	if (quiet && !reviewing && now?.what === 'replying') return null;
 	return (
 		<div className="flex min-w-0 items-center gap-2 text-body text-(--text-2)">
 			<Spinner size={13} />
@@ -59,11 +60,13 @@ function NowLine({ sessionId, phase, quiet }: { sessionId: string; phase: ReplyP
 	);
 }
 
-/** While a subagent runs, a waiting message is read only when it finishes, so this says so and lets you stop it. Otherwise it says what the agent is doing, unless the steps card or streaming text already does. */
+/** While a subagent runs, a waiting message is read only when it finishes, so this says so and lets you stop it. Otherwise it says what the agent or the Reviewer is doing, unless the steps card or streaming text already does. */
 export const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }: { sessionId: string; queued: boolean; phase: ReplyPhase; tail: Block['kind'] | null }) {
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
-	if (!queued || !running.length) return tail === 'steps' ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
+	// The Reviewer starts after the reply has ended, so no steps card or streaming text of the reply says what it does.
+	const reviewing = useQuery(taskQueries.now(sessionId)).data?.now?.by === 'reviewer';
+	if (!queued || !running.length) return tail === 'steps' && !reviewing ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (

@@ -346,6 +346,17 @@ describe('Thread', () => {
 		expect(screen.queryByText('23s')).toBeNull();
 	});
 
+	it('says the pull request is being reviewed, not that the reply wraps up, while the Reviewer runs after it', async () => {
+		api.now.mockResolvedValue({ now: { what: 'running', tool: 'bash', detail: 'npm test', chars: 0, by: 'reviewer', since: new Date(Date.now() - 41_000).toISOString() } });
+		const done = { ...assistant('a1', [{ type: 'text', text: 'Opened the pull request.' }]), metadata: { usage: { inputTokens: 1, outputTokens: 1, cost: 0 } } };
+		show(agent([user('u1', 'Fix the export button.'), done], { status: 'streaming' }));
+		await waitFor(() => expect(api.now).toHaveBeenCalled());
+		await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+		expect(screen.getByText('Reviewing the pull request · Running a command')).toBeTruthy();
+		expect(screen.queryByText('Wrapping up')).toBeNull();
+		expect(screen.getByText('41s')).toBeTruthy();
+	});
+
 	it('keeps the line at the foot when the agent works on after its text with no card to say so', async () => {
 		api.now.mockResolvedValue({ now: { what: 'writing', tool: 'bash', since: new Date().toISOString() } });
 		show(agent([user('u1', 'Build it'), assistant('a1', [tool('bash', { command: 'ls' }, { output: 'x' }), { type: 'text', text: 'Now the tests.' }])], { status: 'streaming' }));
