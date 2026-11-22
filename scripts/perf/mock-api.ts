@@ -255,6 +255,8 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 	}, 100).unref();
 
 	const attachments = new Map<string, { bytes: Buffer; type: string }>();
+	// The Billing to-do's screenshot, as its Library holds it.
+	attachments.set('plan-change.png', { bytes: readFileSync(join(root, 'src/web/public/icons/icon-192.png')), type: 'image/png' });
 	const json = (res: ServerResponse, body: unknown) => {
 		res.setHeader('content-type', 'application/json');
 		res.end(JSON.stringify(body));
@@ -293,6 +295,11 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				setTimeout(() => json(res, { name, path: name, size: bytes.length, kind, text: null, cut: null }), stored ? 0 : 1200);
 			});
 			return;
+		}
+		const libraryFile = /^\/api\/spaces\/[^/]+\/file$/.test(path) && req.method === 'GET' ? attachments.get(url.searchParams.get('path') ?? '') : undefined;
+		if (libraryFile) {
+			res.writeHead(200, { 'content-type': libraryFile.type });
+			return void res.end(libraryFile.bytes);
 		}
 		if (stored) {
 			const file = attachments.get(decodeURIComponent(stored));

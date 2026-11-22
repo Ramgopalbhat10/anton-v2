@@ -217,23 +217,32 @@ export function useAttachments({ imagesAsFiles = false, overflowImagesAsFiles = 
 	};
 }
 
+/** A picture's thumbnail, waiting to be sent or saved already. */
+export function ImageThumb({ src, name, onRemove }: { src: string; name: string; onRemove?: () => void }) {
+	return (
+		<div title={name} className="relative size-14 overflow-hidden rounded-control border border-(--line)">
+			<img src={src} alt={name} className="size-full object-cover" />
+			{onRemove ? (
+				<button
+					type="button"
+					aria-label={`Remove ${name}`}
+					onClick={onRemove}
+					className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-control bg-(--bg-scrim) text-(--text)"
+				>
+					<Icon icon={X} size={10} />
+				</button>
+			) : null}
+		</div>
+	);
+}
+
 export function AttachmentTray({ attachments, className }: { attachments: Attachments; className?: string }) {
 	const { images, files, reading, removeImage, removeFile } = attachments;
 	if (images.length === 0 && files.length === 0 && reading === 0) return null;
 	return (
 		<div className={cn('flex flex-wrap items-center gap-1.5', className)}>
 			{images.map((image) => (
-				<div key={image.id} className="relative size-14 overflow-hidden rounded-control border border-(--line)">
-					<img src={image.preview} alt={image.filename} className="size-full object-cover" />
-					<button
-						type="button"
-						aria-label={`Remove ${image.filename}`}
-						onClick={() => removeImage(image.id)}
-						className="absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-control bg-(--bg-scrim) text-(--text)"
-					>
-						<Icon icon={X} size={10} />
-					</button>
-				</div>
+				<ImageThumb key={image.id} src={image.preview} name={image.filename} onRemove={() => removeImage(image.id)} />
 			))}
 			{/* Shown only if reading takes long enough to notice, so a quick paste never blinks a placeholder. */}
 			{Array.from({ length: reading }, (_, index) => (

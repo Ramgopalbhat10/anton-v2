@@ -182,6 +182,9 @@ describe('the To do column on the project board', () => {
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 
 		await userEvent.click(within(column).getAllByRole('button', { name: /Fix the toolbar/ })[0]!);
+		// A saved picture shows as its thumbnail from the Library, a document as its chip.
+		expect((await screen.findByRole('img', { name: 'toolbar.png' })).getAttribute('src')).toBe('/api/spaces/space_1/file?path=toolbar.png');
+		expect(screen.queryByRole('img', { name: 'notes.md' })).toBeNull();
 		await userEvent.click(await screen.findByRole('button', { name: 'Remove notes.md' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() =>

@@ -3,7 +3,7 @@ import { Dialog } from 'radix-ui';
 import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Trash2, Waypoints, X } from '@/lib/icons';
 import { type FormEvent, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
-import { AttachButton, AttachmentTray, FileChip, fileSize, useAttachments } from '@/components/composer/attachments';
+import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
@@ -11,7 +11,7 @@ import { AREA } from '@/components/settings/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
-import type { Space, SpaceTodo, TodoAttachment } from '@/lib/api/spaces';
+import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@/lib/api/spaces';
 import { imageFile } from '@/lib/attachments';
 import { uniqueUploadNames } from '../../../core/upload-name';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
@@ -67,6 +67,9 @@ const waiting = (todo: SpaceTodo) => todo.status === 'open' || (todo.status === 
 const CARD = 'rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)]';
 
 /** Screenshots and files go to the project's Library on save, as a message's do, and travel with the brief the to-do starts. */
+/** Pictures the browser can draw show as their thumbnail, read back from the Library. */
+const isPicture = (file: TodoAttachment) => /\.(png|jpe?g|gif|webp)$/i.test(file.path);
+
 async function uploaded(spaceId: string, attachments: ReturnType<typeof useAttachments>, taken: string[]): Promise<TodoAttachment[]> {
 	const uploads = [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)];
 	const names = uniqueUploadNames([...taken, ...uploads.map((file) => file.name)]).slice(taken.length);
@@ -116,14 +119,20 @@ function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTo
 								placeholder="Details and what done looks like (optional). Paste or drop screenshots here."
 								className={`${AREA} text-body leading-[19px]`}
 							/>
-							{kept.length ? (
+							{kept.length || attachments.count || attachments.reading ? (
+								// Saved files and new ones in one row; the tray's own row dissolves into it.
 								<div className="flex flex-wrap items-center gap-1.5">
-									{kept.map((file) => (
-										<FileChip key={file.path} name={file.name} note={`${file.kind} · ${fileSize(file.size)}`} onRemove={() => setKept((files) => files.filter((other) => other.path !== file.path))} />
-									))}
+									{kept.map((file) => {
+										const remove = () => setKept((files) => files.filter((other) => other.path !== file.path));
+										return isPicture(file) ? (
+											<ImageThumb key={file.path} src={spaceFileUrl(spaceId, file.path)} name={file.name} onRemove={remove} />
+										) : (
+											<FileChip key={file.path} name={file.name} note={`${file.kind} · ${fileSize(file.size)}`} onRemove={remove} />
+										);
+									})}
+									<AttachmentTray attachments={attachments} className="contents" />
 								</div>
 							) : null}
-							<AttachmentTray attachments={attachments} />
 							{limit ? <span className="text-small text-(--bad)">{limit}</span> : attachments.notice ? <span className="text-small text-(--warn)">{attachments.notice}</span> : null}
 						</div>
 						<footer className="flex items-center gap-2 border-t border-(--line) px-4 py-2.5">
