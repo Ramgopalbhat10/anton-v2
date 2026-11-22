@@ -57,12 +57,15 @@ const todos = await import('../src/services/projects/todos.ts');
 const { stateBlock } = await import('../src/services/projects/coordinator.ts');
 const sessions = await import('../src/services/tasks/sessions.ts');
 const { spaceRoutes } = await import('../src/routes/spaces.ts');
+const { attachToProject } = await import('../src/services/artifacts/attachments.ts');
+const { splitAttachments } = await import('../src/core/attachments.ts');
+const { removeSpaceFile } = await import('../src/services/projects/space-files.ts');
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
 
 const toThreads: Array<{ id: string; text: string }> = [];
-const toCoordinator: Array<{ id: string; text: string }> = [];
+const toCoordinator: Array<{ id: string; text: string; images?: Array<{ filename?: string; mimeType: string }> }> = [];
 let failCoordinator = false;
 
 setAgentDelivery(async (id, text) => {
@@ -70,9 +73,9 @@ setAgentDelivery(async (id, text) => {
 	recordAgentEvent({ type: 'submission_running', instanceId: id, submissionId: `sub-${toThreads.length}` });
 	recordAgentEvent({ type: 'submission_settled', instanceId: id, submissionId: `sub-${toThreads.length}` });
 });
-setAgentDelivery(async (id, text) => {
+setAgentDelivery(async (id, text, images) => {
 	if (failCoordinator) throw new Error('coordinator unreachable');
-	toCoordinator.push({ id, text });
+	toCoordinator.push({ id, text, images });
 }, 'coordinator');
 
 beforeEach(() => {
@@ -171,4 +174,58 @@ test('the to-do routes validate their input', async () => {
 	assert.equal((await call('POST', `/api/spaces/${space.id}/todos/${id}/start`, { target: 'coordinator' })).status, 200);
 	assert.equal((await call('DELETE', `/api/spaces/${space.id}/todos/${id}`)).status, 200);
 	assert.equal(((await (await call('GET', `/api/spaces/${space.id}/todos`)).json()) as { todos: unknown[] }).todos.length, 0);
+});
+
+test("a to-do's screenshots and files are kept in the project's Library and go with the brief it starts, images as pictures", async () => {
+	const space = await spaces.createSpace({ name: 'Todo files', repoIds: [apiRepo.id] });
+	await spaces.editSpace(space.id, { coordinatorModel: 'openrouter/test/strong' });
+	const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+	const shot = await attachToProject(space.id, 'broken-button.png', png, 'image/png');
+	const log = await attachToProject(space.id, 'console.txt', new TextEncoder().encode('TypeError: export is not a function'), 'text/plain');
+	const ref = ({ name, path, kind, size }: typeof shot) => ({ name, path, kind, size });
+
+	await assert.rejects(() => todos.createTodo(space.id, { title: 'Nope', attachments: [{ name: 'x.png', path: 'not-uploaded.png', kind: 'PNG image', size: 1 }] }), /not in the project's files/);
+	const item = await todos.createTodo(space.id, { title: 'Fix the export button', description: 'It does nothing on Safari.', attachments: [ref(shot), ref(log), ref(shot)] });
+	assert.deepEqual(
+		item.attachments.map((file) => [file.path, file.size]),
+		[
+			['broken-button.png', png.length],
+			['console.txt', 35],
+		],
+		'each once, at the size the Library has',
+	);
+	assert.match(await stateBlock(space.id), /"Fix the export button" · open · files: broken-button\.png, console\.txt/);
+
+	const { thread } = await todos.startTodo(space.id, item.id, 'thread');
+	// The brief reaches the thread behind the answer.
+	for (let tries = 0; tries < 100 && !toThreads.some((sent) => sent.id === thread!.id); tries++) await new Promise((resolve) => setTimeout(resolve, 20));
+	const brief = toThreads.find((sent) => sent.id === thread!.id)!.text;
+	const sent = splitAttachments(brief);
+	assert.equal(sent.text, 'Fix the export button\n\nIt does nothing on Safari.');
+	assert.deepEqual(
+		sent.files.map((file) => [file.path, file.place]),
+		[
+			['broken-button.png', 'project'],
+			['console.txt', 'project'],
+		],
+	);
+	assert.match(brief, /TypeError: export is not a function/, "a text file's words go with it");
+
+	// One deleted from the Library since is left out; the coordinator, whose model sees, gets the screenshot as a picture.
+	const second = await todos.createTodo(space.id, { title: 'Restyle the toolbar', attachments: [ref(shot), ref(log)] });
+	await removeSpaceFile(space.id, 'console.txt');
+	await todos.startTodo(space.id, second.id, 'coordinator');
+	assert.equal(toCoordinator.length, 1);
+	assert.ok(toCoordinator[0].text.startsWith(todoStartMessage(second)));
+	assert.deepEqual(
+		splitAttachments(toCoordinator[0].text).files.map((file) => file.path),
+		['broken-button.png'],
+	);
+	assert.deepEqual(
+		toCoordinator[0].images?.map((image) => [image.filename, image.mimeType]),
+		[['broken-button.png', 'image/png']],
+	);
+
+	const edited = await todos.editTodo(space.id, second.id, { attachments: [] });
+	assert.deepEqual(edited.attachments, []);
 });

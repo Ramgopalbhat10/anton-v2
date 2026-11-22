@@ -2,11 +2,18 @@
 export const SPACE_TODO_STATUSES = ['open', 'in_progress', 'done'] as const;
 export type SpaceTodoStatus = (typeof SPACE_TODO_STATUSES)[number];
 
+/** A file in the project's Library, attached when the to-do was written: it goes with the brief the to-do starts, an image as a picture. */
+export type TodoAttachment = { name: string; path: string; kind: string; size: number };
+
+/** As many as a message from the project chat carries to a thread. */
+export const MAX_TODO_ATTACHMENTS = 10;
+
 export type SpaceTodo = {
 	id: string;
 	spaceId: string;
 	title: string;
 	description: string;
+	attachments: TodoAttachment[];
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;

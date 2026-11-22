@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { announce } from '../core/changes.ts';
-import { SPACE_TODO_STATUSES, type SpaceTodo, type SpaceTodoStatus } from '../core/space-todos.ts';
+import { SPACE_TODO_STATUSES, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../core/space-todos.ts';
 import { appDb } from './client.ts';
 
 type Row = Record<string, unknown>;
@@ -11,6 +11,18 @@ const SELECT = `SELECT t.*,
 	(SELECT COUNT(*) FROM space_todo_threads l INNER JOIN sessions s ON s.id = l.session_id WHERE l.todo_id = t.id AND s.resolved_at IS NULL) AS open_threads
 	FROM space_todos t`;
 
+function attachmentsOf(json: unknown): TodoAttachment[] {
+	try {
+		const list: unknown = JSON.parse(String(json ?? '[]'));
+		if (!Array.isArray(list)) return [];
+		return list.flatMap((item: Record<string, unknown>) =>
+			item && typeof item.path === 'string' && typeof item.name === 'string' ? [{ name: item.name, path: item.path, kind: String(item.kind ?? ''), size: Number(item.size ?? 0) }] : [],
+		);
+	} catch {
+		return [];
+	}
+}
+
 function toTodo(row: Row): SpaceTodo {
 	const status = String(row.status);
 	const assignee = row.assignee == null ? null : String(row.assignee);
@@ -19,6 +31,7 @@ function toTodo(row: Row): SpaceTodo {
 		spaceId: String(row.space_id),
 		title: String(row.title),
 		description: String(row.description ?? ''),
+		attachments: attachmentsOf(row.attachments_json),
 		status: (SPACE_TODO_STATUSES as readonly string[]).includes(status) ? (status as SpaceTodoStatus) : 'open',
 		assignee: assignee === 'coordinator' || assignee === 'thread' ? assignee : null,
 		createdBy: row.created_by === 'coordinator' ? 'coordinator' : 'user',
@@ -60,19 +73,19 @@ export async function getSpaceTodo(id: string): Promise<SpaceTodo | null> {
 	return row ? toTodo(row) : null;
 }
 
-export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
+export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; attachments?: TodoAttachment[]; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
 	const db = await appDb();
 	const id = `todo_${randomUUID()}`;
 	const now = new Date().toISOString();
 	await db.execute({
-		sql: 'INSERT INTO space_todos (id, space_id, title, description, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-		args: [id, input.spaceId, input.title, input.description, input.createdBy, now, now],
+		sql: 'INSERT INTO space_todos (id, space_id, title, description, attachments_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+		args: [id, input.spaceId, input.title, input.description, JSON.stringify(input.attachments ?? []), input.createdBy, now, now],
 	});
 	announce({ kind: 'space', id: input.spaceId, what: 'todos' });
 	return (await getSpaceTodo(id))!;
 }
 
-const COLUMNS = { title: 'title', description: 'description', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
+const COLUMNS = { title: 'title', description: 'description', attachments: 'attachments_json', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
 
 export type SpaceTodoUpdate = Partial<Pick<SpaceTodo, keyof typeof COLUMNS>>;
 
@@ -82,7 +95,7 @@ export async function updateSpaceTodo(id: string, update: SpaceTodoUpdate, { qui
 	const db = await appDb();
 	await db.execute({
 		sql: `UPDATE space_todos SET ${entries.map(([, column]) => `${column} = ?, `).join('')}updated_at = ? WHERE id = ?`,
-		args: [...entries.map(([key]) => update[key as keyof SpaceTodoUpdate] ?? null), new Date().toISOString(), id],
+		args: [...entries.map(([key]) => (key === 'attachments' ? JSON.stringify(update.attachments ?? []) : (update[key as Exclude<keyof SpaceTodoUpdate, 'attachments'>] ?? null))), new Date().toISOString(), id],
 	});
 	const todo = await getSpaceTodo(id);
 	if (todo && !quiet) announce({ kind: 'space', id: todo.spaceId, what: 'todos' });

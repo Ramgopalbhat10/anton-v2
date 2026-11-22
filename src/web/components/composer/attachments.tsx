@@ -25,7 +25,7 @@ export function fileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FileChip({ name, note, title, uploading, onRemove }: { name: string; note: string; title?: string; uploading?: boolean; onRemove?: () => void }) {
+export function FileChip({ name, note, title, uploading, onRemove }: { name: string; note: string; title?: string; uploading?: boolean; onRemove?: () => void }) {
 	return (
 		<div title={title ?? name} className="flex h-9 max-w-[240px] items-center gap-2 rounded-control border border-(--line) bg-(--bg-raised) pr-1 pl-2">
 			{uploading ? (

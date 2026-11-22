@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog } from 'radix-ui';
-import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Pencil, Play, Plus, RotateCcw, Trash2, Waypoints, X } from '@/lib/icons';
+import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Trash2, Waypoints, X } from '@/lib/icons';
 import { type FormEvent, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
+import { AttachButton, AttachmentTray, FileChip, fileSize, useAttachments } from '@/components/composer/attachments';
 import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
@@ -10,7 +11,10 @@ import { AREA } from '@/components/settings/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
-import type { Space, SpaceTodo } from '@/lib/api/spaces';
+import type { Space, SpaceTodo, TodoAttachment } from '@/lib/api/spaces';
+import { imageFile } from '@/lib/attachments';
+import { uniqueUploadNames } from '../../../core/upload-name';
+import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
 
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
@@ -62,23 +66,40 @@ const waiting = (todo: SpaceTodo) => todo.status === 'open' || (todo.status === 
 
 const CARD = 'rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)]';
 
+/** Screenshots and files go to the project's Library on save, as a message's do, and travel with the brief the to-do starts. */
+async function uploaded(spaceId: string, attachments: ReturnType<typeof useAttachments>, taken: string[]): Promise<TodoAttachment[]> {
+	const uploads = [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)];
+	const names = uniqueUploadNames([...taken, ...uploads.map((file) => file.name)]).slice(taken.length);
+	const named = uploads.map((file, index) => (file.name === names[index] ? file : new File([file], names[index]!, { type: file.type, lastModified: file.lastModified })));
+	const attached = await Promise.all(named.map((file) => api.attachToProject(spaceId, file)));
+	return attached.map(({ name, path, kind, size }) => ({ name, path, kind, size }));
+}
+
 function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTodo | null; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
+	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
+	const attachments = useAttachments({ overflowImagesAsFiles: true });
+	const over = kept.length + attachments.count - MAX_TODO_ATTACHMENTS;
+	const limit = over > 0 ? `Remove ${over} file${over === 1 ? '' : 's'} (up to ${MAX_TODO_ATTACHMENTS} per to-do).` : attachments.limitError;
 	const save = useMutation({
-		mutationFn: () => (todo ? api.editSpaceTodo(spaceId, todo.id, { title, description }) : api.createSpaceTodo(spaceId, { title, description })),
+		mutationFn: async () => {
+			const files = [...kept, ...(await uploaded(spaceId, attachments, kept.map((file) => file.name)))];
+			return todo ? api.editSpaceTodo(spaceId, todo.id, { title, description, attachments: files }) : api.createSpaceTodo(spaceId, { title, description, attachments: files });
+		},
 		onSuccess: onClose,
 	});
+	const ready = Boolean(title.trim()) && !limit && attachments.reading === 0 && !save.isPending;
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
-		if (title.trim()) save.mutate();
+		if (ready) save.mutate();
 	};
 	return (
 		<Dialog.Root open onOpenChange={(open) => !open && onClose()}>
 			<Dialog.Portal>
 				<Dialog.Overlay className="fixed inset-0 z-40 bg-(--bg-scrim)" />
 				<Dialog.Content aria-describedby={undefined} className="in-pop in-pop--modal fixed top-[10vh] left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-[520px] -translate-x-1/2 flex-col overflow-hidden">
-					<form onSubmit={submit} className="flex flex-col">
+					<form onSubmit={submit} className="flex flex-col" {...attachments.dropZone}>
 						<header className="flex items-center gap-2 border-b border-(--line) px-4 py-3">
 							<Icon icon={ListTodo} size={14} className="text-(--text-3)" />
 							<Dialog.Title className="flex-1 text-body-lg font-medium">{todo ? 'Edit to-do' : 'New to-do'}</Dialog.Title>
@@ -86,14 +107,32 @@ function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTo
 						</header>
 						<div className="flex flex-col gap-3 px-4 py-3.5">
 							<input autoFocus aria-label="Title" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="What needs doing" className={`${FIELD} h-9`} />
-							<textarea aria-label="Description" value={description} onChange={(event) => setDescription(event.target.value)} rows={5} placeholder="Details and what done looks like (optional)" className={`${AREA} text-body leading-[19px]`} />
+							<textarea
+								aria-label="Description"
+								value={description}
+								onChange={(event) => setDescription(event.target.value)}
+								onPaste={attachments.onPaste}
+								rows={5}
+								placeholder="Details and what done looks like (optional). Paste or drop screenshots here."
+								className={`${AREA} text-body leading-[19px]`}
+							/>
+							{kept.length ? (
+								<div className="flex flex-wrap items-center gap-1.5">
+									{kept.map((file) => (
+										<FileChip key={file.path} name={file.name} note={`${file.kind} · ${fileSize(file.size)}`} onRemove={() => setKept((files) => files.filter((other) => other.path !== file.path))} />
+									))}
+								</div>
+							) : null}
+							<AttachmentTray attachments={attachments} />
+							{limit ? <span className="text-small text-(--bad)">{limit}</span> : attachments.notice ? <span className="text-small text-(--warn)">{attachments.notice}</span> : null}
 						</div>
 						<footer className="flex items-center gap-2 border-t border-(--line) px-4 py-2.5">
+							<AttachButton attachments={attachments} label="Attach screenshots or files" />
 							{save.isError ? <span className="min-w-0 flex-1 text-small text-(--bad)">{save.error.message}</span> : <span className="flex-1" />}
 							<Btn size="sm" variant="ghost" onClick={onClose}>
 								Cancel
 							</Btn>
-							<Btn type="submit" size="sm" variant="primary" disabled={!title.trim() || save.isPending}>
+							<Btn type="submit" size="sm" variant="primary" disabled={!ready}>
 								{todo ? 'Save' : 'Add to-do'}
 							</Btn>
 						</footer>
@@ -126,6 +165,12 @@ function TodoCard({ spaceId, todo, onEdit, onOpenCoordinator }: { spaceId: strin
 				<button type="button" onClick={onEdit} className="flex min-w-0 flex-1 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
 					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
 					{todo.description ? <span className="line-clamp-2 text-small leading-[16px] text-(--text-3)">{todo.description}</span> : null}
+					{todo.attachments.length ? (
+						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={todo.attachments.map((file) => file.name).join('\n')}>
+							<Icon icon={Paperclip} size={11} className="shrink-0" />
+							<span className="min-w-0 truncate">{todo.attachments.length === 1 ? todo.attachments[0]!.name : `${todo.attachments.length} files`}</span>
+						</span>
+					) : null}
 				</button>
 				<Menu>
 					<MenuTrigger asChild>

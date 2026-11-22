@@ -14,6 +14,7 @@ import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { splitAttachments, withAttachments } from '../core/attachments.ts';
 import { quotedFrom, threadBrief } from '../core/briefs.ts';
+import type { SpaceTodo } from '../core/space-todos.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -59,6 +60,9 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 	return withAttachments(message, await Promise.all(names.map((name) => projectAttachment(spaceId, name))), 'project');
 }
 
+/** A to-do's own files go to the thread that works on it, beside any the coordinator names. */
+const withTodoFiles = (todo: SpaceTodo | null, listed?: string[]) => (todo?.attachments.length ? [...new Set([...(listed ?? []), ...todo.attachments.map((file) => file.path)])] : listed);
+
 function useCoordinatorTools(spaceId: string) {
 	const delivery = useDelivery();
 	const answering = delivery.kind === 'user' ? delivery.body : '';
@@ -88,7 +92,7 @@ function useCoordinatorTools(spaceId: string) {
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
 				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
-				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, data.files, answering), repo: data.repo }, { wait: false });
+				const started = await startThread(spaceId, { title: data.title, brief: await withFiles(spaceId, brief, withTodoFiles(todo, data.files), answering), repo: data.repo }, { wait: false });
 				if (todo) await linkTodoToThread(spaceId, todo.id, started.id);
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
@@ -123,7 +127,7 @@ function useCoordinatorTools(spaceId: string) {
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
 				const todo = data.todo_id ? await findTodo(spaceId, data.todo_id) : null;
-				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, data.files, answering));
+				await nudgeThread(spaceId, target.id, await withFiles(spaceId, data.message, withTodoFiles(todo, data.files), answering));
 				if (todo) await linkTodoToThread(spaceId, todo.id, target.id);
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
 			},

@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => ({ id: todoId, ...change })),
 	deleteSpaceTodo: vi.fn(async () => undefined),
 	startSpaceTodo: vi.fn(async () => ({ todo: { id: 'todo_open', status: 'in_progress' } })),
+	attachToProject: vi.fn(async (_spaceId: string, file: File) => ({ name: file.name, path: file.name, kind: 'Text', size: file.size, text: 'hello', cut: null })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
@@ -51,6 +52,7 @@ const makeTodo = (patch: Partial<SpaceTodo>): SpaceTodo => ({
 	spaceId: 'space_1',
 	title: 'Fix OAuth redirect',
 	description: 'Preserve return URL after login.',
+	attachments: [],
 	status: 'open',
 	assignee: null,
 	createdBy: 'user',
@@ -134,7 +136,7 @@ describe('the To do column on the project board', () => {
 		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
 		await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), 'For the new CLI');
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
-		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI' }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [] }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
@@ -144,6 +146,52 @@ describe('the To do column on the project board', () => {
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start a thread' }));
 		await waitFor(() => expect(api.startSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', 'thread'));
+	});
+
+	it("attaches files to a to-do in the project's Library, shows them on its card, and lets an edit drop one", async () => {
+		renderWithRouter(() => (
+			<ProjectBoard
+				space={space}
+				threads={threads}
+				todos={[
+					makeTodo({
+						id: 'todo_files',
+						title: 'Fix the toolbar',
+						attachments: [
+							{ name: 'toolbar.png', path: 'toolbar.png', kind: 'PNG image', size: 2048 },
+							{ name: 'notes.md', path: 'notes.md', kind: 'Markdown', size: 120 },
+						],
+					}),
+				]}
+				onNewThread={() => undefined}
+				onOpenCoordinator={() => undefined}
+			/>
+		));
+		const column = await screen.findByRole('region', { name: 'To do' });
+		expect(within(column).getByText('2 files')).toBeTruthy();
+
+		await userEvent.click(within(column).getByRole('button', { name: 'New to-do' }));
+		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Read the log');
+		const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+		await userEvent.upload(picker, new File(['hello'], 'crash.log', { type: 'text/plain' }));
+		expect(await screen.findByText('crash.log')).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+		await waitFor(() =>
+			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }] }),
+		);
+		expect(api.attachToProject).toHaveBeenCalledTimes(1);
+
+		await userEvent.click(within(column).getAllByRole('button', { name: /Fix the toolbar/ })[0]!);
+		await userEvent.click(await screen.findByRole('button', { name: 'Remove notes.md' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() =>
+			expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_files', {
+				title: 'Fix the toolbar',
+				description: 'Preserve return URL after login.',
+				attachments: [{ name: 'toolbar.png', path: 'toolbar.png', kind: 'PNG image', size: 2048 }],
+			}),
+		);
+		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 	});
 
 	it('offers a to-do on an empty project', async () => {

@@ -1,12 +1,12 @@
 import type { AttachedFile } from '../../../core/attachments';
-import type { SpaceTodo } from '../../../core/space-todos';
+import type { SpaceTodo, TodoAttachment } from '../../../core/space-todos';
 import { json, post, request } from './http';
 import type { Reasoning } from './plans';
 import type { Automation, AutomationInput } from './projects';
 import type { Session } from './sessions';
 import type { HelperAgent } from './settings';
 
-export type { SpaceTodo };
+export type { SpaceTodo, TodoAttachment };
 
 /** In the order a project lists its threads. */
 export const THREAD_STATES = ['waiting', 'working', 'queued', 'review', 'landing', 'idle', 'resolved'] as const;
@@ -64,8 +64,8 @@ export const spacesApi = {
 	startThread: (id: string, input: ThreadInput) => post<Session>(`/api/spaces/${id}/threads`, input),
 	nudgeThread: (id: string, threadId: string, text: string) => post<Session>(`/api/spaces/${id}/threads/${threadId}/nudge`, { text }),
 	spaceTodos: (id: string) => json<{ todos: SpaceTodo[] }>(`/api/spaces/${id}/todos`),
-	createSpaceTodo: (id: string, input: { title: string; description?: string }) => post<SpaceTodo>(`/api/spaces/${id}/todos`, input),
-	editSpaceTodo: (id: string, todoId: string, change: { title?: string; description?: string; status?: 'open' | 'done' }) =>
+	createSpaceTodo: (id: string, input: { title: string; description?: string; attachments?: TodoAttachment[] }) => post<SpaceTodo>(`/api/spaces/${id}/todos`, input),
+	editSpaceTodo: (id: string, todoId: string, change: { title?: string; description?: string; attachments?: TodoAttachment[]; status?: 'open' | 'done' }) =>
 		json<SpaceTodo>(`/api/spaces/${id}/todos/${todoId}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSpaceTodo: async (id: string, todoId: string) => void (await request(`/api/spaces/${id}/todos/${todoId}`, { method: 'DELETE' })),
 	startSpaceTodo: (id: string, todoId: string, target: 'thread' | 'coordinator') => post<{ todo: SpaceTodo; thread?: Session }>(`/api/spaces/${id}/todos/${todoId}/start`, { target }),
