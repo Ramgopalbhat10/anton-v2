@@ -181,6 +181,8 @@ export async function deleteSpaceRecord(id: string): Promise<void> {
 			// Routines without a repository only start threads of this project, so they go with it.
 			{ sql: "DELETE FROM automations WHERE space_id = ? AND project_id = ''", args: [id] },
 			{ sql: 'UPDATE automations SET space_id = NULL WHERE space_id = ?', args: [id] },
+			{ sql: 'DELETE FROM space_todo_threads WHERE todo_id IN (SELECT id FROM space_todos WHERE space_id = ?)', args: [id] },
+			{ sql: 'DELETE FROM space_todos WHERE space_id = ?', args: [id] },
 			{ sql: 'DELETE FROM space_repos WHERE space_id = ?', args: [id] },
 			{ sql: 'DELETE FROM spaces WHERE id = ?', args: [id] },
 		],

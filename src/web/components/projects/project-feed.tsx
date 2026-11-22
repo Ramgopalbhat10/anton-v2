@@ -2,7 +2,7 @@ import { unrouted } from '../../../core/model-route';
 import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAgentResult } from '@flue/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUp, Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, Plus, Send, Square, Waypoints } from '@/lib/icons';
+import { ArrowUp, Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, ListTodo, Plus, Send, Square, Waypoints } from '@/lib/icons';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerPlus } from '@/components/composer/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/composer/attachments';
@@ -338,6 +338,8 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 			return <ActionRow icon={Square} failed={failed}>Stopped {target?.title ?? 'a thread'}</ActionRow>;
 		case 'add_repo':
 			return <ActionRow icon={FolderGit2} failed={failed}>Added {field(part.input, 'repo')}</ActionRow>;
+		case 'create_todo':
+			return <ActionRow icon={ListTodo} failed={failed}>Added to-do “{field(part.input, 'title')}”</ActionRow>;
 		default:
 			return null;
 	}

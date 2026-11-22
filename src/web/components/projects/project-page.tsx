@@ -13,7 +13,7 @@ import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/she
 import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/kit/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { useOlderTurns, useWindowedClient } from '@/lib/conversation-window';
-import { readThreadPanels, saveThreadPanels, useSpace, useThreads } from '@/lib/spaces';
+import { readThreadPanels, saveThreadPanels, useSpace, useSpaceTodos, useThreads } from '@/lib/spaces';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/thread/starting-task';
 import { usePaneSlide } from '@/components/workspace/workspace-pane';
@@ -76,6 +76,7 @@ export function ProjectPage() {
 	const navigate = useNavigate();
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
+	const { todos } = useSpaceTodos(spaceId);
 	const path = `/api/agents/coordinator/${spaceId}`;
 	const client = useWindowedClient(path);
 	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
@@ -212,7 +213,7 @@ export function ProjectPage() {
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					{saved.view === 'board' ? (
-						<ProjectBoard threads={threads} onNewThread={startThread} />
+						<ProjectBoard space={data} threads={threads} todos={todos} onNewThread={startThread} onOpenCoordinator={() => changeDock({ open: true })} />
 					) : (
 						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}

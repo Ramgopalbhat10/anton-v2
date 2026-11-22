@@ -11,7 +11,7 @@ type Change =
 	| { kind: 'connectors' }
 	| { kind: 'models' }
 	| { kind: 'spaces' }
-	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' }
+	| { kind: 'space'; id: string; what: 'threads' | 'files' | 'settings' | 'todos' }
 	| { kind: 'automations' }
 	| { kind: 'notifications' }
 	| { kind: 'projects' }
@@ -43,11 +43,13 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
-	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['artifacts'], ['reviews']];
+	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['space-todos'], ['artifacts'], ['reviews']];
 	if (change.kind === 'spaces') return [['spaces'], ['space']];
 	if (change.kind === 'space' && change.what === 'files') return [['space-files', change.id]];
+	if (change.kind === 'space' && change.what === 'todos') return [['space-todos', change.id]];
 	if (change.kind === 'space' && change.what === 'settings') return [['spaces'], ['space', change.id], ['space-automations', change.id]];
-	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id]];
+	// A to-do's state follows its threads, so a change to them can move it.
+	if (change.kind === 'space') return [['spaces'], ['space', change.id], ['sessions'], ['space-usage', change.id], ['space-todos', change.id]];
 	if (change.kind === 'task' && change.what === 'browser') return [['browser', change.id]];
 	if (change.kind === 'task' && change.what === 'computer') return [['computer', change.id]];
 	if (change.kind === 'task' && change.what === 'subagents') return [['subagents', change.id]];
@@ -130,6 +132,7 @@ export const LIVE_KEYS: ReadonlySet<string> = new Set([
 	'session',
 	'spaces',
 	'space',
+	'space-todos',
 	'space-usage',
 	'budget',
 	'usage',

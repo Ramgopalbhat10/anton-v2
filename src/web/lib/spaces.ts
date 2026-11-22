@@ -4,7 +4,7 @@ import type { Tone } from '@/components/kit/instrument';
 import { useCallback, useMemo } from 'react';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
-import { type Space, THREAD_STATES, type ThreadState } from '@/lib/api/spaces';
+import { type Space, type SpaceTodo, THREAD_STATES, type ThreadState } from '@/lib/api/spaces';
 import { threadState } from '../../core/thread-state';
 
 export function useSpaces() {
@@ -19,6 +19,13 @@ export function useSpaceName(id: string | null | undefined): string | undefined 
 
 export function useSpace(id: string) {
 	return useQuery({ queryKey: ['space', id], queryFn: () => api.space(id), refetchInterval: SAFETY_NET_MS });
+}
+
+const NO_TODOS: SpaceTodo[] = [];
+
+export function useSpaceTodos(spaceId: string) {
+	const query = useQuery({ queryKey: ['space-todos', spaceId], queryFn: () => api.spaceTodos(spaceId), refetchInterval: SAFETY_NET_MS });
+	return { todos: query.data?.todos ?? NO_TODOS, isPending: query.isPending, isError: query.isError };
 }
 
 const NO_THREADS: Session[] = [];

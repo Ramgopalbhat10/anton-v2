@@ -163,6 +163,15 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	createdAt: ago(60 * 24 * createdDaysAgo),
 	updatedAt: ago(30),
 });
+const todo = (id: string, title: string, description: string, patch: Record<string, unknown> = {}) => ({
+	id, spaceId: 'space-billing', title, description, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+});
+const billingTodos = [
+	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.'),
+	todo('todo-tax', 'Show tax on invoices', 'Per line, with the rate used.', { status: 'in_progress', assignee: 'coordinator' }),
+	todo('todo-ledger', 'Ledger schema', '', { status: 'done', threads: 1, completedAt: ago(60) }),
+];
+
 const spaces = [
 	space('space-billing', 'Billing v2', 'Ship billing v2: invoices, proration, and the settings page.', 'active', ['p-billing'], [{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-billing'), 12),
 	space('space-docs', 'Docs refresh', 'Refresh the docs for the new CLI and tighten the voice.', 'active', [], [], spaceThreads.filter((item) => item.spaceId === 'space-docs'), 30),
@@ -350,6 +359,8 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		const todosOf = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
+		if (todosOf) return json(res, { todos: todosOf === 'space-billing' ? billingTodos : [] });
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
 		if (spaceId) {
 			const found = spaces.find((item) => item.id === spaceId);
