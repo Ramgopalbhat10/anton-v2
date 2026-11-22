@@ -156,7 +156,10 @@ function ThreadRow({ thread, active, repos, compact, onNavigate }: { thread: Ses
 					<span
 						role="img"
 						aria-label={note.text}
-						className={cn('relative size-1.5 shrink-0 rounded-full', note.tone === 'danger' ? 'bg-(--bad)' : 'bg-(--warn)')}
+						className={cn(
+							'relative size-1.5 shrink-0 rounded-full',
+							note.tone === 'danger' ? 'bg-(--bad)' : note.tone === 'conflict' ? 'bg-(--conflict)' : 'bg-(--warn)',
+						)}
 					/>
 				) : null}
 			</Link>

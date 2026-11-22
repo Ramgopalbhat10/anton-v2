@@ -16,6 +16,7 @@ export const TONE: Record<Tone, string> = {
 	attention: 'text-(--warn)',
 	success: 'text-(--ok)',
 	warning: 'text-(--warn)',
+	conflict: 'text-(--conflict)',
 	danger: 'text-(--bad)',
 	muted: 'text-(--text-3)',
 };

@@ -23,6 +23,26 @@ describe('Task notes', () => {
 		expect(needsYou(done)).toBe(false);
 		expect(needsYou(session({ asking: 'What would you like next?' }))).toBe(true);
 	});
+
+	it('flags merge conflicts on an open pull request even when approved and checks pass', () => {
+		const conflicted = session({
+			prUrl: 'https://github.com/acme/demo/pull/12',
+			pullRequest: { state: 'open', checks: 'passed', approved: true, conflicts: true, runs: [] },
+		});
+		expect(taskNote(conflicted)).toEqual({ text: 'Merge conflicts on #12', tone: 'conflict', attention: true, pullRequest: true });
+
+		const both = session({
+			prUrl: 'https://github.com/acme/demo/pull/12',
+			pullRequest: { state: 'open', checks: 'failed', conflicts: true, runs: [] },
+		});
+		expect(taskNote(both)).toEqual({ text: 'Checks failing and merge conflicts on #12', tone: 'danger', attention: true, pullRequest: true });
+
+		const merged = session({
+			prUrl: 'https://github.com/acme/demo/pull/12',
+			pullRequest: { state: 'merged', checks: 'passed', conflicts: true, runs: [] },
+		});
+		expect(taskNote(merged)?.attention ?? false).toBe(false);
+	});
 });
 
 describe('Task status', () => {

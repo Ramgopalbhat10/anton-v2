@@ -411,7 +411,7 @@ const TaskRow = memo(function TaskRow({ session, place, view, active, onNavigate
 									aria-label={note.text}
 									className={cn(
 										'size-1.5 shrink-0 rounded-full group-focus-within:hidden group-hover:hidden group-data-open:hidden',
-										note.tone === 'danger' ? 'bg-(--bad)' : 'bg-(--warn)',
+										note.tone === 'danger' ? 'bg-(--bad)' : note.tone === 'conflict' ? 'bg-(--conflict)' : 'bg-(--warn)',
 									)}
 								/>
 							) : null}

@@ -228,6 +228,13 @@ describe('sidebar', () => {
 	});
 
 	it('shows only titles in compact view', async () => {
+		const conflicted = session({
+			id: 'conflicted',
+			title: 'Conflicted PR',
+			prUrl: 'https://github.com/acme/demo/pull/9',
+			pullRequest: { state: 'open', checks: 'passed', approved: true, conflicts: true, runs: [] },
+		});
+		api.sessions.mockResolvedValue({ sessions: [...tasks, conflicted] });
 		open();
 		await screen.findByText('Busy task');
 		expect(within(row('New merged')).getByRole('link', { name: /#12/ })).toBeTruthy();
@@ -238,6 +245,8 @@ describe('sidebar', () => {
 		await userEvent.keyboard('{Escape}');
 		expect(within(row('New merged')).queryByRole('link', { name: /#12/ })).toBeNull();
 		expect(within(row('Red checks')).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+		const conflictDot = within(row('Conflicted PR')).getByRole('img', { name: 'Merge conflicts on #9' });
+		expect(conflictDot.className).toContain('bg-(--conflict)');
 	});
 
 	it('syncs compact view between the homepage sidebar and the project sidebar', async () => {

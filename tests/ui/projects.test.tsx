@@ -771,13 +771,21 @@ describe('threads', () => {
 			prUrl: 'https://github.com/acme/demo/pull/7',
 			pullRequest: { state: 'open', checks: 'failed', runs: [] },
 		});
-		api.sessions.mockResolvedValue({ sessions: [...threads, failing] });
+		const conflicted = thread({
+			id: 'conflict',
+			title: 'Resolve landing conflict',
+			threadState: 'landing',
+			prUrl: 'https://github.com/acme/demo/pull/9',
+			pullRequest: { state: 'open', checks: 'passed', approved: true, conflicts: true, runs: [] },
+		});
+		api.sessions.mockResolvedValue({ sessions: [...threads, failing, conflicted] });
 		withRouter(() => <ProjectSidebarBody spaceId="space_1" onNavigate={() => {}} />);
 		await screen.findByText('Pick a name');
 
 		const prRow = () => screen.getByRole('link', { name: /Add the endpoint/ });
 		const waitingRow = () => screen.getByRole('link', { name: /Pick a name/ });
 		const failingRow = () => screen.getByRole('link', { name: /Fix failing checks/ });
+		const conflictRow = () => screen.getByRole('link', { name: /Resolve landing conflict/ });
 
 		expect(within(prRow()).getByLabelText('Pull request #12 open · checks pass')).toBeTruthy();
 		expect(within(waitingRow()).getByText('Billing or invoices?')).toBeTruthy();
@@ -795,6 +803,8 @@ describe('threads', () => {
 		expect(within(waitingRow()).queryByText('Billing or invoices?')).toBeNull();
 		expect(within(waitingRow()).getByRole('img', { name: 'Waiting on you' })).toBeTruthy();
 		expect(within(failingRow()).getByRole('img', { name: 'Checks failing on #7' })).toBeTruthy();
+		const conflictDot = within(conflictRow()).getByRole('img', { name: 'Merge conflicts on #9' });
+		expect(conflictDot.className).toContain('bg-(--conflict)');
 
 		// Clearing active filters leaves compact view enabled.
 		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
