@@ -57,5 +57,5 @@ Flue calls the model once per step; the Agent SDK runs a whole loop and calls to
 
 - Policy can change; surface whatever the SDK reports rather than guess.
 - Replacing Claude Code's system prompt entirely is a gray area, so it is appended to.
-- Latency: a process per conversation and a pause per tool call; measure before making it a default.
+- Latency: a process per conversation and a pause per tool call; measure before making it a default. Anton's read-only tools (`read`, `grep`, `glob` and the snapshot's three) are marked `readOnlyHint`, since Claude Code calls an MCP tool alongside others only when it is; Flue has already run them all when it asks.
 - The SDK bundles a native `claude` per platform; the deploy target's `npm ci` must install the linux-x64 one.

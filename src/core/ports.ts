@@ -8,6 +8,8 @@ export type ExecOptions = {
 	stdin?: Uint8Array;
 	timeoutMs?: number;
 	signal?: AbortSignal;
+	/** Run without a login shell (`bash -c`): for commands that need only the base tools, such as reading a file. */
+	plain?: boolean;
 };
 
 export type ExecResult = {

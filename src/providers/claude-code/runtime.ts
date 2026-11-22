@@ -37,6 +37,8 @@ const GATEWAY = 'claude-code';
 /** Claude Code names Anton's tools `mcp__anton__<tool>`. */
 const SERVER = 'anton';
 const TOOL_PREFIX = `mcp__${SERVER}__`;
+/** Anton's tools that only read: Flue has run every call of a step by the time Claude Code asks for their results. */
+const READ_ONLY_TOOLS = new Set(['read', 'grep', 'glob', 'read_file', 'search_code', 'list_files']);
 /** Claude Code stamps each tools/call with the tool_use block it came from, which pairs the call with its result. */
 const TOOL_USE_ID_META = 'claudecode/toolUseId';
 const STATUS_TTL_MS = 5 * 60_000;
@@ -418,6 +420,8 @@ function toolServer(options: RuntimeConversationOptions) {
 			inputSchema: { ...tool.inputSchema, type: 'object' as const },
 			// Every tool up front: Claude Code has no tool search here to find a deferred one.
 			_meta: { 'anthropic/alwaysLoad': true },
+			// Claude Code calls an MCP tool alongside others only when it is marked read-only; the rest wait on each other.
+			...(READ_ONLY_TOOLS.has(tool.name) ? { annotations: { readOnlyHint: true } } : {}),
 		})),
 	}));
 	server.server.setRequestHandler(CallToolRequestSchema, async (request) => {

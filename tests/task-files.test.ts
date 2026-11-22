@@ -130,6 +130,39 @@ test('a path outside the repository is read from the machine, and another reposi
 	assert.equal(machineCalls, before + 1, 'another repository never needs the machine');
 });
 
+test('one read takes several files with more, each read as a lone read would be, the same from either side', async () => {
+	const { taskTools, MAX_READ_FILES } = await import('../src/flue/task-sandbox.ts');
+	const sight = { sees: async () => false, describe: async () => '' };
+	const readTool = (deps: typeof noMachine | typeof inMachine) => {
+		const taskFiles = {
+			read: (input: Parameters<typeof files.readTaskFile>[1]) => files.readTaskFile(id, input, deps),
+			bytes: (file: string, repo?: string) => files.taskFileBytes(id, file, repo, deps),
+			grep: (input: Parameters<typeof files.grepTask>[1]) => files.grepTask(id, input, deps),
+			glob: (input: Parameters<typeof files.globTask>[1]) => files.globTask(id, input, deps),
+		};
+		const tools = taskTools(taskFiles, sight)({ cwd: root, resolvePath: (file: string) => path.posix.resolve(root, file), readFile: async () => '' } as never, { subagents: {} } as never);
+		const tool = tools.find((candidate) => candidate.name === 'read')!;
+		return async (params: object) => {
+			const result = await tool.execute('call', params as never);
+			return result.content.map((part) => (part.type === 'text' ? part.text : `[${part.type}]`)).join('|');
+		};
+	};
+	for (const deps of [noMachine, inMachine]) {
+		const read = readTool(deps);
+		const lone = async (file: string, offset?: number, limit?: number) => files.readTaskFile(id, { path: path.posix.resolve(root, file), offset, limit }, deps);
+		// A read without more is exactly the lone read.
+		assert.equal(await read({ path: 'README.md' }), await lone('README.md'));
+		const both = await read({ path: 'README.md', more: [{ path: 'src/long.txt', offset: 10, limit: 3 }, { path: 'missing.ts' }] });
+		assert.equal(both, `==> README.md <==\n${await lone('README.md')}\n\n==> src/long.txt <==\n${await lone('src/long.txt', 10, 3)}\n\n==> missing.ts <==\n${await lone('missing.ts')}`);
+		assert.match(both, /missing\.ts does not exist/);
+		const many = await read({ path: 'README.md', more: Array.from({ length: MAX_READ_FILES + 1 }, () => ({ path: 'src/app.ts' })) });
+		assert.equal(many.match(/^==> /gm)?.length, MAX_READ_FILES);
+		assert.match(many, /2 more files were left out: one read takes up to 8\. Read them in another call\.$/);
+		// An image keeps its own part among the files' text.
+		assert.equal(await read({ path: 'README.md', more: [{ path: 'logo.png' }] }), `==> README.md <==\n${await lone('README.md')}\n\n==> logo.png <==\nlogo.png is an image, and your model cannot see images, so a vision model described it:\n\n`);
+	}
+});
+
 test('an image comes back as its bytes from either side', async () => {
 	assert.deepEqual(Buffer.from(await files.taskFileBytes(id, 'logo.png', undefined, noMachine)), PNG);
 	assert.deepEqual(Buffer.from(await files.taskFileBytes(id, 'logo.png', undefined, inMachine)), PNG);

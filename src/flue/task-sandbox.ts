@@ -42,12 +42,27 @@ const REPO = Type.Optional(Type.String({ description: "Another GitHub repository
 /** Files of activated skills the runtime serves itself (Flue's packaged-skill overlay). */
 const PACKAGED = '/.flue/packaged-skills/';
 
+/** Files one read may take: its path and as many more. */
+export const MAX_READ_FILES = 8;
+
 const ReadParams = Type.Object({
 	path: Type.String({ description: 'Path from the repository root, or absolute' }),
 	offset: Type.Optional(Type.Number({ description: 'First line to show' })),
 	limit: Type.Optional(Type.Number({ description: `Lines to show (default ${READ_LINES}, at most ${MAX_READ_LINES})` })),
 	repo: REPO,
+	more: Type.Optional(
+		Type.Array(
+			Type.Object({
+				path: Type.String(),
+				offset: Type.Optional(Type.Number()),
+				limit: Type.Optional(Type.Number()),
+			}),
+			{ description: `Other files to read in the same call, each with its own offset and limit (up to ${MAX_READ_FILES - 1})` },
+		),
+	),
 });
+
+type ReadEntry = { path: string; offset?: number; limit?: number };
 
 const GrepParams = Type.Object({
 	pattern: Type.String({ description: 'Regular expression' }),
@@ -65,13 +80,17 @@ const GlobParams = Type.Object({
 	repo: REPO,
 });
 
+const READ_MORE = 'To read several files you already know you need, pass the others as more: one call, read at once, each under a ==> path <== line.';
+
 const READ_DESCRIPTION: Record<ToolProfile, string> = {
 	edit:
 		"Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of edit's oldText). " +
-		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself.',
+		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself. ' +
+		READ_MORE,
 	patch:
 		'Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of a patch). ' +
-		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself.',
+		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself. ' +
+		READ_MORE,
 };
 
 const whole = (value: unknown, min: number, max: number) => (typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.floor(value))) : undefined);
@@ -88,13 +107,37 @@ export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProf
 			parameters: ReadParams,
 			async execute(_toolCallId, params, signal) {
 				signal?.throwIfAborted();
-				const input = params as ReadInput;
-				const offset = whole(input.offset, 1, Number.MAX_SAFE_INTEGER);
-				const limit = whole(input.limit, 1, MAX_READ_LINES);
-				if (!input.repo && input.path.startsWith(PACKAGED)) return { content: [text(numberedLines(await sandbox.readFile(input.path), offset, limit))], details: { path: input.path } };
-				const mimeType = imageType(input.path);
-				if (mimeType) return imageResult(input.path, await files.bytes(at(input.path, input.repo) as string, input.repo), mimeType, sight);
-				return { content: [text(await files.read({ path: at(input.path, input.repo) as string, offset, limit, repo: input.repo }))], details: { path: input.path } };
+				const input = params as ReadInput & { more?: ReadEntry[] };
+				const one = async (entry: ReadEntry): Promise<Awaited<ReturnType<Tool['execute']>>> => {
+					const offset = whole(entry.offset, 1, Number.MAX_SAFE_INTEGER);
+					const limit = whole(entry.limit, 1, MAX_READ_LINES);
+					if (!input.repo && entry.path.startsWith(PACKAGED)) return { content: [text(numberedLines(await sandbox.readFile(entry.path), offset, limit))], details: { path: entry.path } };
+					const mimeType = imageType(entry.path);
+					if (mimeType) return imageResult(entry.path, await files.bytes(at(entry.path, input.repo) as string, input.repo), mimeType, sight);
+					return { content: [text(await files.read({ path: at(entry.path, input.repo) as string, offset, limit, repo: input.repo }))], details: { path: entry.path } };
+				};
+				const more = (Array.isArray(input.more) ? input.more : []).filter((entry) => typeof entry?.path === 'string' && entry.path);
+				// One file reads exactly as it did before `more`, so its result and the conversation's bytes stay the same.
+				if (!more.length) return one(input);
+				const entries = [input, ...more];
+				const taken = entries.slice(0, MAX_READ_FILES);
+				// Each file is read on its own, as a lone read would be, and a failure stays with its file.
+				const results = await Promise.all(
+					taken.map((entry) =>
+						one(entry).catch((error: unknown) => ({ content: [text(`Could not read it: ${error instanceof Error ? error.message : String(error)}`)], details: { path: entry.path } })),
+					),
+				);
+				const parts = results.flatMap((result, index) => [text(`${index ? '\n' : ''}==> ${taken[index].path} <==`), ...result.content]);
+				const left = entries.length - taken.length;
+				if (left) parts.push(text(`\n${left} more ${left === 1 ? 'file was' : 'files were'} left out: one read takes up to ${MAX_READ_FILES}. Read ${left === 1 ? 'it' : 'them'} in another call.`));
+				// The text comes as one part, as a lone read's does; an image keeps a part of its own.
+				const content: typeof parts = [];
+				for (const part of parts) {
+					const last = content.at(-1);
+					if (part.type === 'text' && last?.type === 'text') content[content.length - 1] = text(`${last.text}\n${part.text}`);
+					else content.push(part);
+				}
+				return { content, details: { path: input.path, paths: taken.map((entry) => entry.path) } };
 			},
 		};
 		const grep: Tool = {

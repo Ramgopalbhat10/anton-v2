@@ -158,7 +158,8 @@ const READ_HINT =
 const TASK_READ_HINT =
 	'Read and search with read, grep and glob, not cat, sed or rg in bash. Read progressively: search before you open files, then read the part you need (a range of lines, one section of a long doc) rather than whole large files, since a long result is cut and everything you read is sent again with every later step. ' +
 	"Treat a repository's AGENTS.md as an index: read the doc it links for the area you are changing, not every doc. " +
-	'Every step sends the whole conversation again, so a step of one small search costs as much as a step of five: make the reads, searches and commands you already know you need as calls in the same step, not one per step.';
+	'Every step sends the whole conversation again, so a step of one small search costs as much as a step of five: make the reads, searches and commands you already know you need as calls in the same step, not one per step. ' +
+	'When a search shows several files you need, read them (or the ranges you need) in one read, the rest as more, rather than one file per step.';
 
 const taskStartHint = (change: string) =>
 	'read, grep and glob need no sandbox: until your first command or file change they show the repository as this task started, and after it the sandbox. ' +
