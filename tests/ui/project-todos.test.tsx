@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useSpaceTodos } from '@/lib/spaces';
 import { session } from './render';
 
 const api = vi.hoisted(() => ({
-	createSpaceTodo: vi.fn(async (_spaceId: string, input: { title: string }) => ({ id: 'todo_new', title: input.title })),
-	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => ({ id: todoId, ...change })),
+	spaceTodos: vi.fn(async (_spaceId: string) => ({ todos: [] as SpaceTodo[] })),
+	createSpaceTodo: vi.fn(async (_spaceId: string, input: { title: string }) => makeTodo({ id: 'todo_new', title: input.title })),
+	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => makeTodo({ id: todoId, ...change })),
 	deleteSpaceTodo: vi.fn(async () => undefined),
 	startSpaceTodo: vi.fn(async () => ({ todo: { id: 'todo_open', status: 'in_progress' } })),
 	attachToProject: vi.fn(async (_spaceId: string, file: File) => ({ name: file.name, path: file.name, kind: 'Text', size: file.size, text: 'hello', cut: null })),
@@ -47,7 +49,8 @@ const space: Space = {
 	updatedAt: '2026-10-03T00:00:00Z',
 };
 
-const makeTodo = (patch: Partial<SpaceTodo>): SpaceTodo => ({
+function makeTodo(patch: Partial<SpaceTodo>): SpaceTodo {
+	return {
 	id: 'todo_1',
 	spaceId: 'space_1',
 	title: 'Fix OAuth redirect',
@@ -61,7 +64,8 @@ const makeTodo = (patch: Partial<SpaceTodo>): SpaceTodo => ({
 	updatedAt: '2026-10-02T00:00:00Z',
 	completedAt: null,
 	...patch,
-});
+	};
+}
 
 const threads: Session[] = [
 	session({
@@ -96,6 +100,7 @@ function renderWithRouter(ui: () => ReactNode) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	api.spaceTodos.mockResolvedValue({ todos: [] });
 });
 
 describe('the To do column on the project board', () => {
@@ -205,6 +210,87 @@ describe('the To do column on the project board', () => {
 			}),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
+	});
+
+	describe('saves in the background', () => {
+		/** The board as the project page draws it: from the to-do list the server keeps. */
+		function LiveBoard() {
+			const { todos } = useSpaceTodos('space_1');
+			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} />;
+		}
+		const later = <T,>() => {
+			let resolve!: (value: T) => void;
+			let reject!: (error: Error) => void;
+			const promise = new Promise<T>((yes, no) => {
+				resolve = yes;
+				reject = no;
+			});
+			return { promise, resolve, reject };
+		};
+
+		it('shows a new to-do the moment it is added, then the saved one in its place, once', async () => {
+			const saved = makeTodo({ id: 'todo_new', title: 'Write the docs', description: '' });
+			const create = later<SpaceTodo>();
+			api.createSpaceTodo.mockReturnValueOnce(create.promise);
+			renderWithRouter(() => <LiveBoard />);
+			const column = await screen.findByRole('region', { name: 'To do' });
+			await userEvent.click(within(column).getByRole('button', { name: 'New to-do' }));
+			await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
+			await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+
+			// The dialog is gone and the card is up while the server has not answered.
+			expect(screen.queryByRole('dialog')).toBeNull();
+			expect(within(column).getByText('Write the docs')).toBeTruthy();
+			expect(within(column).getByText('Saving…')).toBeTruthy();
+
+			api.spaceTodos.mockResolvedValue({ todos: [saved] });
+			create.resolve(saved);
+			await waitFor(() => expect(within(column).queryByText('Saving…')).toBeNull());
+			expect(within(column).getAllByText('Write the docs')).toHaveLength(1);
+			expect(within(column).getByRole('button', { name: 'Actions for Write the docs' }).hasAttribute('disabled')).toBe(false);
+		});
+
+		it('keeps a to-do the server refused, and saves it on Retry', async () => {
+			api.createSpaceTodo.mockRejectedValueOnce(new Error('Network down'));
+			renderWithRouter(() => <LiveBoard />);
+			const column = await screen.findByRole('region', { name: 'To do' });
+			await userEvent.click(within(column).getByRole('button', { name: 'New to-do' }));
+			await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Flaky one');
+			await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+
+			expect(await within(column).findByText(/Not saved: Network down/)).toBeTruthy();
+			await userEvent.click(within(column).getByRole('button', { name: 'Retry' }));
+			await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledTimes(2));
+			await waitFor(() => expect(within(column).queryByRole('alert')).toBeNull());
+			expect(within(column).getByText('Flaky one')).toBeTruthy();
+		});
+
+		it('marks done and deletes at once, and puts a card back when the server refuses', async () => {
+			api.spaceTodos.mockResolvedValue({ todos: [makeTodo({ id: 'todo_a', title: 'First' }), makeTodo({ id: 'todo_b', title: 'Second' })] });
+			const done = later<SpaceTodo>();
+			api.editSpaceTodo.mockReturnValueOnce(done.promise);
+			api.deleteSpaceTodo.mockRejectedValueOnce(new Error('Locked'));
+			renderWithRouter(() => <LiveBoard />);
+			const column = await screen.findByRole('region', { name: 'To do' });
+			await within(column).findByText('First');
+
+			await userEvent.click(within(column).getByRole('button', { name: 'Actions for First' }));
+			await userEvent.click(await screen.findByRole('menuitem', { name: 'Mark done' }));
+			expect(within(column).queryByText('First')).toBeNull();
+			expect(within(column).getByText('1 done')).toBeTruthy();
+			expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_a', { status: 'done' });
+
+			await userEvent.click(within(column).getByRole('button', { name: 'Actions for Second' }));
+			await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+			// Gone at once, then back with the reason when the delete fails.
+			expect(await within(column).findByText(/Change not saved: Locked/)).toBeTruthy();
+			expect(within(column).getByText('Second')).toBeTruthy();
+
+			api.spaceTodos.mockResolvedValue({ todos: [makeTodo({ id: 'todo_a', title: 'First', status: 'done' }), makeTodo({ id: 'todo_b', title: 'Second' })] });
+			done.resolve(makeTodo({ id: 'todo_a', title: 'First', status: 'done', updatedAt: '2026-10-04T00:00:00Z' }));
+			await waitFor(() => expect(within(column).getByText('1 done')).toBeTruthy());
+			expect(within(column).queryByText('First')).toBeNull();
+		});
 	});
 
 	it('offers a to-do on an empty project', async () => {

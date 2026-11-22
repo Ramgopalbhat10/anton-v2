@@ -13,9 +13,9 @@ import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
 import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@/lib/api/spaces';
 import { imageFile } from '@/lib/attachments';
-import { uniqueUploadNames } from '../../../core/upload-name';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
+import { type TodoDraft, type TodoSaves, useTodoSaves } from './todo-saves';
 
 /** Thread states: threads move into these on their own, so only To do creates work. */
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
@@ -71,32 +71,20 @@ const CARD = 'rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line)
 /** Pictures the browser can draw show as their thumbnail, read back from the Library. */
 const isPicture = (file: TodoAttachment) => /\.(png|jpe?g|gif|webp)$/i.test(file.path);
 
-async function uploaded(spaceId: string, attachments: ReturnType<typeof useAttachments>, taken: string[]): Promise<TodoAttachment[]> {
-	const uploads = [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)];
-	const names = uniqueUploadNames([...taken, ...uploads.map((file) => file.name)]).slice(taken.length);
-	const named = uploads.map((file, index) => (file.name === names[index] ? file : new File([file], names[index]!, { type: file.type, lastModified: file.lastModified })));
-	const attached = await Promise.all(named.map((file) => api.attachToProject(spaceId, file)));
-	return attached.map(({ name, path, kind, size }) => ({ name, path, kind, size }));
-}
-
-function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTodo | null; onClose: () => void }) {
+/** Saving closes the dialog at once: the board shows the to-do and saves it, files and all, in the background. */
+function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
 	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
 	const attachments = useAttachments({ overflowImagesAsFiles: true });
 	const over = kept.length + attachments.count - MAX_TODO_ATTACHMENTS;
 	const limit = over > 0 ? `Remove ${over} file${over === 1 ? '' : 's'} (up to ${MAX_TODO_ATTACHMENTS} per to-do).` : attachments.limitError;
-	const save = useMutation({
-		mutationFn: async () => {
-			const files = [...kept, ...(await uploaded(spaceId, attachments, kept.map((file) => file.name)))];
-			return todo ? api.editSpaceTodo(spaceId, todo.id, { title, description, attachments: files }) : api.createSpaceTodo(spaceId, { title, description, attachments: files });
-		},
-		onSuccess: onClose,
-	});
-	const ready = Boolean(title.trim()) && !limit && attachments.reading === 0 && !save.isPending;
+	const ready = Boolean(title.trim()) && !limit && attachments.reading === 0;
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
-		if (ready) save.mutate();
+		if (!ready) return;
+		onSave({ title, description, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
+		onClose();
 	};
 	return (
 		<Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -138,7 +126,7 @@ function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTo
 						</div>
 						<footer className="flex items-center gap-2 border-t border-(--line) px-4 py-2.5">
 							<AttachButton attachments={attachments} label="Attach screenshots or files" />
-							{save.isError ? <span className="min-w-0 flex-1 text-small text-(--bad)">{save.error.message}</span> : <span className="flex-1" />}
+							<span className="flex-1" />
 							<Btn size="sm" variant="ghost" onClick={onClose}>
 								Cancel
 							</Btn>
@@ -153,10 +141,13 @@ function TodoDialog({ spaceId, todo, onClose }: { spaceId: string; todo: SpaceTo
 	);
 }
 
-function TodoCard({ spaceId, todo, onEdit, onOpenCoordinator }: { spaceId: string; todo: SpaceTodo; onEdit: () => void; onOpenCoordinator: () => void }) {
+function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator }: { spaceId: string; todo: SpaceTodo; saves: TodoSaves; onEdit: () => void; onOpenCoordinator: () => void }) {
 	const queryClient = useQueryClient();
 	const openThread = useOpenThread();
 	const refresh = () => queryClient.invalidateQueries({ queryKey: ['space-todos', spaceId] });
+	const save = saves.stateOf(todo);
+	// Not on the server yet, or a change to it still on the way: starting or editing it now would work from the old one.
+	const unsaved = Boolean(save?.pending || save?.saving);
 	const start = useMutation({
 		mutationFn: (target: 'thread' | 'coordinator') => api.startSpaceTodo(spaceId, todo.id, target),
 		onSuccess: (result, target) => {
@@ -165,14 +156,11 @@ function TodoCard({ spaceId, todo, onEdit, onOpenCoordinator }: { spaceId: strin
 			else if (target === 'coordinator') onOpenCoordinator();
 		},
 	});
-	const edit = useMutation({ mutationFn: (status: 'open' | 'done') => api.editSpaceTodo(spaceId, todo.id, { status }), onSuccess: refresh });
-	const remove = useMutation({ mutationFn: () => api.deleteSpaceTodo(spaceId, todo.id), onSuccess: refresh });
-	const failed = start.error ?? edit.error ?? remove.error;
 	const withCoordinator = todo.status === 'in_progress';
 	return (
-		<article aria-label={todo.title} className={`flex min-w-0 flex-col gap-1.5 p-2.5 ${CARD}`}>
+		<article aria-label={todo.title} aria-busy={save?.saving || undefined} className={`flex min-w-0 flex-col gap-1.5 p-2.5 ${CARD}`}>
 			<div className="flex min-w-0 items-start gap-1">
-				<button type="button" onClick={onEdit} className="flex min-w-0 flex-1 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
+				<button type="button" onClick={onEdit} disabled={unsaved} className="flex min-w-0 flex-1 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
 					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
 					{todo.description ? <span className="line-clamp-2 text-small leading-[16px] text-(--text-3)">{todo.description}</span> : null}
 					{todo.attachments.length ? (
@@ -184,31 +172,31 @@ function TodoCard({ spaceId, todo, onEdit, onOpenCoordinator }: { spaceId: strin
 				</button>
 				<Menu>
 					<MenuTrigger asChild>
-						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={start.isPending} />
+						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={start.isPending || save?.pending} />
 					</MenuTrigger>
 					<MenuContent align="end">
 						{withCoordinator ? (
-							<MenuItem icon={RotateCcw} onSelect={() => edit.mutate('open')}>
+							<MenuItem icon={RotateCcw} onSelect={() => saves.setStatus(todo, 'open')}>
 								Move back to To do
 							</MenuItem>
 						) : (
 							<>
-								<MenuItem icon={Play} onSelect={() => start.mutate('thread')}>
+								<MenuItem icon={Play} disabled={unsaved} onSelect={() => start.mutate('thread')}>
 									Start a thread
 								</MenuItem>
-								<MenuItem icon={Waypoints} onSelect={() => start.mutate('coordinator')}>
+								<MenuItem icon={Waypoints} disabled={unsaved} onSelect={() => start.mutate('coordinator')}>
 									Hand to the coordinator
 								</MenuItem>
 							</>
 						)}
-						<MenuItem icon={Pencil} onSelect={onEdit}>
+						<MenuItem icon={Pencil} disabled={unsaved} onSelect={onEdit}>
 							Edit
 						</MenuItem>
-						<MenuItem icon={CircleCheck} onSelect={() => edit.mutate('done')}>
+						<MenuItem icon={CircleCheck} onSelect={() => saves.setStatus(todo, 'done')}>
 							Mark done
 						</MenuItem>
 						<MenuSeparator />
-						<MenuItem icon={Trash2} onSelect={() => remove.mutate()}>
+						<MenuItem icon={Trash2} onSelect={() => saves.remove(todo)}>
 							Delete
 						</MenuItem>
 					</MenuContent>
@@ -220,12 +208,28 @@ function TodoCard({ spaceId, todo, onEdit, onOpenCoordinator }: { spaceId: strin
 					{start.isPending ? 'Starting…' : 'With the coordinator'}
 				</button>
 			) : null}
-			{failed ? <span className="text-small text-(--bad)">{failed.message}</span> : null}
+			{save?.error ? (
+				<span role="alert" className="flex flex-wrap items-center gap-x-2 text-small text-(--bad)">
+					<span className="min-w-0">
+						{save.pending ? 'Not saved' : 'Change not saved'}: {save.error}
+					</span>
+					<button type="button" onClick={save.retry} className="font-medium outline-none hover:underline focus-visible:underline">
+						Retry
+					</button>
+					<button type="button" onClick={save.dismiss} className="text-(--text-3) outline-none hover:underline focus-visible:underline">
+						{save.pending ? 'Discard' : 'Dismiss'}
+					</button>
+				</span>
+			) : save?.pending ? (
+				<span className="text-small text-(--text-3)">Saving…</span>
+			) : null}
+			{start.error ? <span className="text-small text-(--bad)">{start.error.message}</span> : null}
 		</article>
 	);
 }
 
-function TodoColumn({ spaceId, todos, onOpenCoordinator }: { spaceId: string; todos: SpaceTodo[]; onOpenCoordinator: () => void }) {
+function TodoColumn({ spaceId, saves, onOpenCoordinator }: { spaceId: string; saves: TodoSaves; onOpenCoordinator: () => void }) {
+	const todos = saves.todos;
 	const [editing, setEditing] = useState<SpaceTodo | 'new' | null>(null);
 	const shown = todos.filter(waiting);
 	const done = todos.filter((todo) => todo.status === 'done').length;
@@ -240,7 +244,7 @@ function TodoColumn({ spaceId, todos, onOpenCoordinator }: { spaceId: string; to
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
 				{shown.map((todo) => (
-					<TodoCard key={todo.id} spaceId={spaceId} todo={todo} onEdit={() => setEditing(todo)} onOpenCoordinator={onOpenCoordinator} />
+					<TodoCard key={todo.id} spaceId={spaceId} todo={todo} saves={saves} onEdit={() => setEditing(todo)} onOpenCoordinator={onOpenCoordinator} />
 				))}
 				{shown.length === 0 ? (
 					<button type="button" onClick={() => setEditing('new')} className="rounded-card px-2.5 py-2 text-left text-small text-(--text-3) shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
@@ -249,7 +253,14 @@ function TodoColumn({ spaceId, todos, onOpenCoordinator }: { spaceId: string; to
 				) : null}
 				{done ? <span className="px-1 text-small text-(--text-3)">{done} done</span> : null}
 			</div>
-			{editing ? <TodoDialog spaceId={spaceId} todo={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
+			{editing ? (
+				<TodoDialog
+					spaceId={spaceId}
+					todo={editing === 'new' ? null : editing}
+					onSave={(draft) => (editing === 'new' ? saves.create(draft) : saves.edit(editing, draft))}
+					onClose={() => setEditing(null)}
+				/>
+			) : null}
 		</section>
 	);
 }
@@ -268,7 +279,8 @@ export function ProjectBoard({
 	onOpenCoordinator: () => void;
 }) {
 	const [adding, setAdding] = useState(false);
-	if (threads.length === 0 && todos.length === 0) {
+	const saves = useTodoSaves(space.id, todos);
+	if (threads.length === 0 && saves.todos.length === 0) {
 		return (
 			<div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-3 p-6 text-center">
 				<p className="m-0 max-w-[380px] text-body text-(--text-3)">No threads yet. Ask the coordinator to split the goal into threads, start one yourself, or note work to start later.</p>
@@ -280,14 +292,14 @@ export function ProjectBoard({
 						New to-do
 					</Btn>
 				</div>
-				{adding ? <TodoDialog spaceId={space.id} todo={null} onClose={() => setAdding(false)} /> : null}
+				{adding ? <TodoDialog spaceId={space.id} todo={null} onSave={saves.create} onClose={() => setAdding(false)} /> : null}
 			</div>
 		);
 	}
 	return (
 		<div className="h-full overflow-auto p-4">
 			<div className="grid h-full grid-flow-col auto-cols-[minmax(184px,1fr)] gap-3">
-				<TodoColumn spaceId={space.id} todos={todos} onOpenCoordinator={onOpenCoordinator} />
+				<TodoColumn spaceId={space.id} saves={saves} onOpenCoordinator={onOpenCoordinator} />
 				{COLUMNS.map((column) => {
 					const items = columnThreads(threads, column.kinds);
 					return (
