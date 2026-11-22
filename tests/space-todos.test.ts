@@ -52,6 +52,7 @@ const spaces = await import('../src/services/projects/spaces.ts');
 const todos = await import('../src/services/projects/todos.ts');
 const { stateBlock } = await import('../src/services/projects/coordinator.ts');
 const sessions = await import('../src/services/tasks/sessions.ts');
+const { spaceRoutes } = await import('../src/routes/spaces.ts');
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
@@ -258,4 +259,53 @@ test('todoBrief and todoAssignMessage formatting helpers', () => {
 	const parsed = parseTodoAssign(msg);
 	assert.equal(parsed?.title, 'Ship "v2" & <clean>');
 	assert.equal(parsed?.body, 'Line 1 & <tag>');
+});
+
+test('HTTP routes for space todos handle CRUD, reorder, and assignment', async () => {
+	const space = await spaces.createSpace({ name: 'HTTP Todos', repoIds: [apiRepo.id] });
+	const jsonReq = (method: string, url: string, body?: unknown) =>
+		spaceRoutes.request(url, {
+			method,
+			headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+			body: body !== undefined ? JSON.stringify(body) : undefined,
+		});
+
+	const createdRes = await jsonReq('POST', `/api/spaces/${space.id}/todos`, {
+		title: 'Ship search filters',
+		description: 'Add tag and priority filters.',
+		priority: 'high',
+		tags: ['ui'],
+	});
+	assert.equal(createdRes.status, 200);
+	const created = (await createdRes.json()) as { id: string; status: string };
+	assert.equal(created.status, 'open');
+
+	const secondRes = await jsonReq('POST', `/api/spaces/${space.id}/todos`, { title: 'Second item' });
+	const second = (await secondRes.json()) as { id: string };
+
+	const reorderRes = await jsonReq('POST', `/api/spaces/${space.id}/todos/reorder`, { ids: [second.id, created.id] });
+	assert.equal(reorderRes.status, 200);
+	const reordered = (await reorderRes.json()) as { todos: Array<{ id: string }> };
+	assert.deepEqual(
+		reordered.todos.map((item) => item.id),
+		[second.id, created.id],
+	);
+
+	const patchRes = await jsonReq('PATCH', `/api/spaces/${space.id}/todos/${created.id}`, { priority: 'urgent' });
+	assert.equal(patchRes.status, 200);
+	assert.equal(((await patchRes.json()) as { priority: string }).priority, 'urgent');
+
+	const assignRes = await jsonReq('POST', `/api/spaces/${space.id}/todos/${created.id}/assign`, { target: 'coordinator' });
+	assert.equal(assignRes.status, 200);
+	assert.equal(((await assignRes.json()) as { todo: { status: string } }).todo.status, 'triaging');
+
+	const delRes = await jsonReq('DELETE', `/api/spaces/${space.id}/todos/${second.id}`);
+	assert.equal(delRes.status, 200);
+
+	const listRes = await jsonReq('GET', `/api/spaces/${space.id}/todos`);
+	const listed = (await listRes.json()) as { todos: Array<{ id: string }> };
+	assert.deepEqual(
+		listed.todos.map((item) => item.id),
+		[created.id],
+	);
 });

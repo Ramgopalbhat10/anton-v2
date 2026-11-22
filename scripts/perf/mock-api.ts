@@ -582,6 +582,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (path === '/api/storage') return json(res, { objects: 1284, bytes: 412_000_000, lastCleanup: { at: ago(60 * 9), removed: 37, freedBytes: 18_400_000 } });
 		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
 		if (path === '/api/artifacts') return json(res, { artifacts });
+		if (path === '/api/outputs') return json(res, { outputs: {} });
 		if (path === '/api/settings/sandbox') return json(res, { settings: { cpu: 2, memoryMiB: 4096, idleMinutes: 15, lifetimeHours: 8, region: null, allowedDomains: ['registry.npmjs.org'], baseImage: null, warmImageDays: 7 }, defaultBaseImage: 'node:22-bookworm', provider: 'modal' });
 		if (path === '/api/settings/guardrails') return json(res, { hideSecrets: true });
 		if (path === '/api/secrets') return json(res, { shared: ['NPM_TOKEN', 'SENTRY_DSN'], repos: [{ projectId: 'p-billing', repo: 'acme/billing-api', names: ['STRIPE_KEY'] }] });

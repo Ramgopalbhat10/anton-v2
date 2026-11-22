@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar, FolderGit2, ListTodo, MessageSquare, Plus, Tag, Workflow } from '@/lib/icons';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type DragEvent, type FormEvent, useMemo, useState } from 'react';
 import { Chip, Status } from '@/components/kit/instrument';
 import { Btn, Icon, IconBtn } from '@/components/kit/signal';
 import { PrStatus } from '@/components/marks/pr-status';
@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import { repoShort, type Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
+import { cn } from '@/lib/utils';
 import { PRIORITY_RANK, TODO_NO_REPO } from '../../../core/space-todos';
 
 const THREAD_COLUMNS: Array<{ id: 'needs' | 'working' | 'review' | 'done'; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
@@ -28,23 +29,32 @@ function columnThreads(threads: Session[], kinds: GlyphKind[]): Session[] {
 	return threads.filter((thread) => kinds.includes(glyphKind(thread))).sort((a, b) => rank(a) - rank(b) || threadActiveAt(b).localeCompare(threadActiveAt(a)));
 }
 
+const TODO_DRAG_MIME = 'application/x-anton-todo';
+
 function TodoBoardCard({
 	space,
 	todo,
 	threads,
 	onEdit,
 	onOpenCoordinator,
+	onDragStart,
+	onDragEnd,
 }: {
 	space: Space;
 	todo: SpaceTodo;
 	threads: Session[];
 	onEdit: () => void;
 	onOpenCoordinator?: () => void;
+	onDragStart?: (event: DragEvent<HTMLElement>) => void;
+	onDragEnd?: () => void;
 }) {
 	const repo = repoLabelFor(space, todo.projectId);
 	return (
 		<article
 			aria-label={todo.title}
+			draggable={space.state !== 'archived'}
+			onDragStart={onDragStart}
+			onDragEnd={onDragEnd}
 			className="flex min-w-0 flex-col gap-2 rounded-card bg-(--bg-surface) p-2.5 text-left shadow-[inset_0_0_0_1px_var(--line),var(--sh-1)] transition-shadow duration-(--t-fast) hover:shadow-[inset_0_0_0_1px_var(--line-strong),var(--sh-1)]"
 		>
 			<button
@@ -218,8 +228,20 @@ export function ProjectBoard({
 	onNewThread: () => void;
 	onOpenCoordinator?: () => void;
 }) {
+	const queryClient = useQueryClient();
 	const [addingInColumn, setAddingInColumn] = useState(false);
 	const [editing, setEditing] = useState<{ mode: 'edit'; todo: SpaceTodo } | { mode: 'new'; title: string } | null>(null);
+	const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
+	const [dropWorking, setDropWorking] = useState(false);
+
+	const startDroppedTodo = useMutation({
+		mutationFn: (todoId: string) => api.assignSpaceTodo(space.id, todoId, { target: 'new-thread' }),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ['space-todos', space.id] });
+			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
+			void queryClient.invalidateQueries({ queryKey: ['space', space.id] });
+		},
+	});
 
 	const openTodos = useMemo(
 		() =>
@@ -294,6 +316,15 @@ export function ProjectBoard({
 								threads={threads}
 								onEdit={() => setEditing({ mode: 'edit', todo })}
 								onOpenCoordinator={onOpenCoordinator}
+								onDragStart={(event) => {
+									event.dataTransfer.setData(TODO_DRAG_MIME, todo.id);
+									event.dataTransfer.effectAllowed = 'move';
+									setDraggingTodoId(todo.id);
+								}}
+								onDragEnd={() => {
+									setDraggingTodoId(null);
+									setDropWorking(false);
+								}}
 							/>
 						))}
 					</div>
@@ -304,8 +335,44 @@ export function ProjectBoard({
 					const triagingHere =
 						(column.id === 'working' && coordinatorBusy) || (column.id === 'needs' && !coordinatorBusy) ? triagingTodos : [];
 					const total = items.length + triagingHere.length;
+					const canDropHere = column.id === 'working' && space.state !== 'archived';
 					return (
-						<section key={column.id} aria-label={column.label} className="flex min-h-0 min-w-0 flex-col gap-1.5">
+						<section
+							key={column.id}
+							aria-label={column.label}
+							onDragOver={
+								canDropHere
+									? (event) => {
+											if (!draggingTodoId && !event.dataTransfer.types.includes(TODO_DRAG_MIME)) return;
+											event.preventDefault();
+											event.dataTransfer.dropEffect = 'move';
+											if (!dropWorking) setDropWorking(true);
+										}
+									: undefined
+							}
+							onDragLeave={
+								canDropHere
+									? (event) => {
+											if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropWorking(false);
+										}
+									: undefined
+							}
+							onDrop={
+								canDropHere
+									? (event) => {
+											event.preventDefault();
+											const droppedId = event.dataTransfer.getData(TODO_DRAG_MIME) || draggingTodoId;
+											setDropWorking(false);
+											setDraggingTodoId(null);
+											if (droppedId) startDroppedTodo.mutate(droppedId);
+										}
+									: undefined
+							}
+							className={cn(
+								'flex min-h-0 min-w-0 flex-col gap-1.5 rounded-card transition-colors duration-(--t-fast)',
+								canDropHere && dropWorking && 'bg-(--accent-soft) p-1.5 shadow-[inset_0_0_0_1px_var(--accent-line)]',
+							)}
+						>
 							<header className="flex h-7 shrink-0 items-center gap-1.5 px-1">
 								<Glyph kind={column.glyph} size={12} />
 								<span className="truncate text-body font-medium text-(--text)">{column.label}</span>

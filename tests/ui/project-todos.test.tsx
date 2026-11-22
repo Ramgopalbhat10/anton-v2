@@ -173,6 +173,10 @@ describe('ProjectBoard with To do column', () => {
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Send to coordinator' }));
 		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', { target: 'coordinator' }));
 		expect(onOpenCoordinator).toHaveBeenCalledTimes(1);
+
+		await userEvent.click(within(todoCol).getByRole('button', { name: 'Assign Ship dark mode' }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start new thread' }));
+		await waitFor(() => expect(api.assignSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', { target: 'new-thread' }));
 	});
 });
 
