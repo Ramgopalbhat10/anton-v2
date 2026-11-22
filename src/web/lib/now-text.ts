@@ -12,8 +12,22 @@ function written(chars: number): string {
 /** Where the reply stands, for the line when Anton has not heard what the agent does: not begun, being written, or written and wrapping up. */
 export type ReplyPhase = 'starting' | 'replying' | 'finishing';
 
+const REVIEWING = 'Reviewing the pull request';
+
+/** The Reviewer's step under its own heading: it runs after the reply has ended, so its steps are never the coding agent's. */
+function reviewText(now: AgentNow): string {
+	if (now.what === 'finishing' || now.what === 'replying') return REVIEWING;
+	if (now.tool === 'post_review') return `${REVIEWING} · ${now.what === 'writing' ? 'Writing the review' : 'Posting the review'}`;
+	return `${REVIEWING} · ${stepText(now)}`;
+}
+
 export function nowText(now: AgentNow | null, phase: ReplyPhase): string {
+	if (now?.by === 'reviewer') return reviewText(now);
 	if (!now) return phase === 'replying' ? 'Working' : phase === 'finishing' ? 'Wrapping up' : 'Preparing the response';
+	return stepText(now);
+}
+
+function stepText(now: AgentNow): string {
 	const file = now.detail ? baseName(now.detail) : null;
 	const agent = now.detail ? `the ${now.detail} agent` : 'a subagent';
 	switch (now.what) {

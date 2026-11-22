@@ -20,6 +20,8 @@ type NowEvent = {
 };
 
 type Live = {
+	id: string;
+	who: Who;
 	now: AgentNow | null;
 	running: Map<string, { tool: string; detail: string | null; since: string }>;
 	writing: Map<string, { tool: string; head: string; chars: number }>;
@@ -37,11 +39,23 @@ const HEAD_CHARS = 2000;
 /** The runtime's name for an agent's main conversation; a subagent's task gets a session of its own. */
 const MAIN_SESSION = 'default';
 
-const isMain = (event: NowEvent) =>
-	Boolean(event.instanceId) && !event.taskId && (event.session === undefined || event.session === MAIN_SESSION) && (!event.agentName || /^coder$/i.test(event.agentName));
+/** The coding agent, or the Reviewer, which runs on the task's own instance after its pull request opens or updates. */
+type Who = 'coder' | 'reviewer';
 
+function whoOf(event: NowEvent): Who | null {
+	if (!event.instanceId || event.taskId || (event.session !== undefined && event.session !== MAIN_SESSION)) return null;
+	if (!event.agentName || /^coder$/i.test(event.agentName)) return 'coder';
+	return /^reviewer$/i.test(event.agentName) ? 'reviewer' : null;
+}
+
+const keyOf = (id: string, who: Who) => (who === 'coder' ? id : `${id}\n${who}`);
+
+/** The coding agent's step when it has one, else the Reviewer's. */
 export function agentNow(id: string): AgentNow | null {
-	return tasks.get(id)?.now ?? null;
+	const coder = tasks.get(id)?.now;
+	if (coder) return coder;
+	const reviewer = tasks.get(keyOf(id, 'reviewer'))?.now;
+	return reviewer ? { ...reviewer, by: 'reviewer' } : null;
 }
 
 function inputField(input: unknown, head: string, key: string): string | null {
@@ -70,11 +84,12 @@ export function detailOf(tool: string, input: unknown, head = ''): string | null
 	return url ?? null;
 }
 
-function liveOf(id: string): Live {
-	let live = tasks.get(id);
+function liveOf(id: string, who: Who): Live {
+	const key = keyOf(id, who);
+	let live = tasks.get(key);
 	if (!live) {
-		live = { now: null, running: new Map(), writing: new Map(), timer: null, said: '' };
-		tasks.set(id, live);
+		live = { id, who, now: null, running: new Map(), writing: new Map(), timer: null, said: '' };
+		tasks.set(key, live);
 	}
 	return live;
 }
@@ -90,10 +105,12 @@ function afterTool(live: Live, at: string): void {
 	else set(live, { what: 'thinking', tool: null, detail: null, chars: 0 }, at);
 }
 
-const keyOf = (now: AgentNow | null) => (now ? `${now.what}\n${now.tool}\n${now.detail}\n${now.since}` : '');
+const said = (now: AgentNow | null) => (now ? `${now.by}\n${now.what}\n${now.tool}\n${now.detail}\n${now.since}` : '');
 
-function say(id: string, live: Live): void {
-	const changed = keyOf(live.now) !== live.said;
+/** What is announced is the task's whole line, so either agent's change sends it. */
+function say(live: Live): void {
+	const { id } = live;
+	const changed = said(agentNow(id)) !== live.said;
 	if (live.timer) {
 		// A change already waiting goes out with whatever is latest by then; growth gives way to a change.
 		if (live.timer.settling || !changed) return;
@@ -102,9 +119,11 @@ function say(id: string, live: Live): void {
 	const handle = setTimeout(
 		() => {
 			live.timer = null;
-			live.said = keyOf(live.now);
-			announce({ kind: 'now', id, now: live.now });
-			if (!live.now && tasks.get(id) === live) tasks.delete(id);
+			const now = agentNow(id);
+			live.said = said(now);
+			announce({ kind: 'now', id, now });
+			const key = keyOf(id, live.who);
+			if (!live.now && tasks.get(key) === live) tasks.delete(key);
 		},
 		changed ? SETTLE_MS : GROWTH_MS,
 	);
@@ -113,10 +132,10 @@ function say(id: string, live: Live): void {
 
 /** Runs in the event observer; never throws. */
 export function recordAgentNow(event: NowEvent): void {
-	if (!isMain(event)) return;
-	const id = event.instanceId!;
+	const who = whoOf(event);
+	if (!who) return;
 	const at = event.timestamp ?? new Date().toISOString();
-	const live = liveOf(id);
+	const live = liveOf(event.instanceId!, who);
 	switch (event.type) {
 		case 'turn_request':
 			live.writing.clear();
@@ -170,5 +189,5 @@ export function recordAgentNow(event: NowEvent): void {
 		default:
 			return;
 	}
-	say(id, live);
+	say(live);
 }

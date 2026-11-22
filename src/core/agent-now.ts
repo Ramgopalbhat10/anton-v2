@@ -6,4 +6,6 @@ export type AgentNow = {
 	/** While writing: the input received so far, in characters. */
 	chars: number;
 	since: string;
+	/** Set while the Reviewer reads the task's pull request, which keeps the thread working after its reply has ended. */
+	by?: 'reviewer';
 };
