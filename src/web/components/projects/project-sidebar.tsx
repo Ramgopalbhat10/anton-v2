@@ -1,10 +1,10 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ChevronRight, ChevronsUpDown, LayoutGrid, ListFilter, Plus, Search, Settings, Waypoints, X } from '@/lib/icons';
 import { type ReactNode, useEffect, useState } from 'react';
-import { PrStatus } from '@/components/marks/pr-status';
+import { PrStatus, prTone } from '@/components/marks/pr-status';
 import { ProjectIcon } from '@/components/marks/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, SectionLabel } from '@/components/kit/signal';
-import { FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
+import { CompactViewItem, FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { TaskPeek } from '@/components/shell/task-peek';
 import { ThreadStateIcon } from '@/components/projects/thread-card';
 import { Glyph } from '@/components/marks/thread-glyph';
@@ -13,7 +13,7 @@ import type { Space, ThreadState } from '@/lib/api/spaces';
 import { when } from '@/lib/format';
 import { groupByState, STATE_LOOK, threadActiveAt, useSpaces, useThreads } from '@/lib/spaces';
 import { openProjectSettings } from '@/lib/project-settings-modal';
-import { DEFAULT_VIEW, FACET_KEYS, type FacetKey, filterCount, matches, type TaskView, toggleIn } from '@/lib/task-view';
+import { DEFAULT_VIEW, FACET_KEYS, type FacetKey, filterCount, matches, readView, saveView, taskNote, type TaskView, toggleIn } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 
 export function SpaceMark({ space, size = 24, className }: { space: Pick<Space, 'name' | 'icon'>; size?: number; className?: string }) {
@@ -124,8 +124,9 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 	);
 }
 
-function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; active: boolean; repos: number; onNavigate: () => void }) {
+function ThreadRow({ thread, active, repos, compact, onNavigate }: { thread: Session; active: boolean; repos: number; compact: boolean; onNavigate: () => void }) {
 	const state = thread.threadState ?? 'idle';
+	const note = taskNote(thread);
 	return (
 		<TaskPeek session={thread} disabled={false}>
 			<Link
@@ -133,21 +134,45 @@ function ThreadRow({ thread, active, repos, onNavigate }: { thread: Session; act
 				params={{ spaceId: thread.spaceId ?? '', threadId: thread.id }}
 				onClick={onNavigate}
 				aria-current={active ? 'page' : undefined}
-				className={cn(ROW, 'h-10', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
+				className={cn(ROW, compact ? 'h-7' : 'h-10', active && 'text-(--text)', state === 'working' && 'text-(--text)')}
 			>
 				{active ? <span aria-hidden className="absolute inset-0 rounded-control bg-(--bg-active)" /> : null}
-				<span className="relative inline-flex shrink-0 self-start pt-1">
+				<span className={cn('relative inline-flex shrink-0', !compact && 'self-start pt-1')}>
 					<ThreadStateIcon thread={thread} size={14} />
 				</span>
 				<span className="relative flex min-w-0 flex-1 flex-col gap-px">
 					<span className="truncate text-body">{thread.title}</span>
-					<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
-						<PrStatus thread={thread} />
-						<span className="min-w-0 truncate">
-						{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), when(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+					{compact ? null : (
+						<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
+							<PrStatus thread={thread} />
+							<span className="min-w-0 truncate">
+								{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), when(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+							</span>
 						</span>
-					</span>
+					)}
 				</span>
+				{/* Compact rows have no line for what waits on you, so a dot says it. */}
+				{compact && note?.attention ? (
+					<span
+						role="img"
+						aria-label={note.text}
+						className={cn(
+							'relative size-1.5 shrink-0 rounded-full',
+							note.tone === 'conflict' || (note.pullRequest && note.tone === 'danger')
+								? undefined
+								: note.tone === 'danger'
+									? 'bg-(--bad)'
+									: 'bg-(--warn)',
+						)}
+						style={
+							note.tone === 'conflict'
+								? { background: prTone('conflicts') }
+								: note.pullRequest && note.tone === 'danger'
+									? { background: prTone('failing') }
+									: undefined
+						}
+					/>
+				) : null}
 			</Link>
 		</TaskPeek>
 	);
@@ -162,6 +187,8 @@ function ThreadsToolbar({
 	filters,
 	onToggle,
 	onClear,
+	compact,
+	onToggleCompact,
 	query,
 	onQuery,
 }: {
@@ -170,6 +197,8 @@ function ThreadsToolbar({
 	filters: TaskView['filters'];
 	onToggle: (key: FacetKey, value: string) => void;
 	onClear: () => void;
+	compact: boolean;
+	onToggleCompact: () => void;
 	query: string;
 	onQuery: (next: string) => void;
 }) {
@@ -189,6 +218,8 @@ function ThreadsToolbar({
 				</MenuTrigger>
 				<MenuContent side="right" align="start" sideOffset={6} className="w-[224px]">
 					<FacetSubmenus filters={filters} onToggle={onToggle} tasks={threads} keys={THREAD_FACETS} />
+					<MenuSeparator />
+					<CompactViewItem compact={compact} onToggle={onToggleCompact} />
 					<MenuSeparator />
 					<MenuItem icon={X} disabled={active === 0} onSelect={onClear}>
 						Clear filters
@@ -220,7 +251,7 @@ function ThreadsToolbar({
 	);
 }
 
-function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: ThreadState; threads: Session[]; activeId?: string; repos: number; onNavigate: () => void }) {
+function StateGroup({ state, threads, activeId, repos, compact, onNavigate }: { state: ThreadState; threads: Session[]; activeId?: string; repos: number; compact: boolean; onNavigate: () => void }) {
 	const [open, setOpen] = useState(state !== 'resolved' || threads.some((thread) => thread.id === activeId));
 	const active = threads.some((thread) => thread.id === activeId);
 	useEffect(() => { if (active) setOpen(true); }, [active, activeId]);
@@ -236,7 +267,7 @@ function StateGroup({ state, threads, activeId, repos, onNavigate }: { state: Th
 			{open ? (
 				<div className="flex flex-col gap-px">
 					{threads.map((thread) => (
-						<ThreadRow key={thread.id} thread={thread} active={thread.id === activeId} repos={repos} onNavigate={onNavigate} />
+						<ThreadRow key={thread.id} thread={thread} active={thread.id === activeId} repos={repos} compact={compact} onNavigate={onNavigate} />
 					))}
 				</div>
 			) : null}
@@ -298,12 +329,36 @@ export function ProjectSwitcher({ spaceId, collapsed = false, onNavigate }: { sp
 	);
 }
 
-export function ProjectSidebarBody({ spaceId, threadId, collapsed = false, onNavigate }: { spaceId: string; threadId?: string; collapsed?: boolean; onNavigate: () => void }) {
+export function ProjectSidebarBody({
+	spaceId,
+	threadId,
+	collapsed = false,
+	compact: controlledCompact,
+	onCompactChange,
+	onNavigate,
+}: {
+	spaceId: string;
+	threadId?: string;
+	collapsed?: boolean;
+	compact?: boolean;
+	onCompactChange?: (compact: boolean) => void;
+	onNavigate: () => void;
+}) {
 	const spaces = useSpaces();
 	const { threads } = useThreads(spaceId);
 	const space = spaces.data?.spaces.find((item) => item.id === spaceId);
 	// Each project keeps its own filters while the page is open; a search is for the project in front of you.
 	const [filtersBy, setFiltersBy] = useState<Record<string, TaskView['filters']>>({});
+	const [localCompact, setLocalCompact] = useState(() => readView().compact);
+	const compact = controlledCompact ?? localCompact;
+	const toggleCompact = () => {
+		const next = !compact;
+		if (onCompactChange) onCompactChange(next);
+		else {
+			setLocalCompact(next);
+			saveView({ ...readView(), compact: next });
+		}
+	};
 	const [query, setQuery] = useState('');
 	useEffect(() => setQuery(''), [spaceId]);
 	const filters = filtersBy[spaceId] ?? DEFAULT_VIEW.filters;
@@ -340,12 +395,14 @@ export function ProjectSidebarBody({ spaceId, threadId, collapsed = false, onNav
 							filters={filters}
 							onToggle={(key, value) => setFilters(toggleIn(filters, key, value))}
 							onClear={() => setFilters(DEFAULT_VIEW.filters)}
+							compact={compact}
+							onToggleCompact={toggleCompact}
 							query={query}
 							onQuery={setQuery}
 						/>
 					) : null}
 					{groups.map((group) => (
-						<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} onNavigate={onNavigate} />
+						<StateGroup key={group.state} state={group.state} threads={group.threads} activeId={threadId} repos={space?.repos.length ?? 1} compact={compact} onNavigate={onNavigate} />
 					))}
 					{threads.length === 0 ? (
 						<div className="px-2 pt-2 text-small text-(--text-4)">Threads the coordinator or you start show here, by state.</div>

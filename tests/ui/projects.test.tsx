@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
 import type { Space } from '@/lib/api/spaces';
+import { prTone } from '@/components/marks/pr-status';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { session } from './render';
 
@@ -140,6 +141,7 @@ describe('threads', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		localStorage.clear();
 		api.sessions.mockResolvedValue({ sessions: threads });
 		api.spaces.mockResolvedValue({ spaces: [space] });
 	});
@@ -763,6 +765,69 @@ describe('threads', () => {
 		expect(screen.getByRole('link', { name: /Coordinator/ }).getAttribute('aria-current')).toBe('page');
 	});
 
+	it('toggles compact view from the project sidebar filter menu and keeps attention cues', async () => {
+		const failing = thread({
+			id: 'red',
+			title: 'Fix failing checks',
+			threadState: 'waiting',
+			prUrl: 'https://github.com/acme/demo/pull/7',
+			pullRequest: { state: 'open', checks: 'failed', runs: [] },
+		});
+		const conflicted = thread({
+			id: 'conflict',
+			title: 'Resolve landing conflict',
+			threadState: 'landing',
+			prUrl: 'https://github.com/acme/demo/pull/9',
+			pullRequest: { state: 'open', checks: 'passed', approved: true, conflicts: true, runs: [] },
+		});
+		api.sessions.mockResolvedValue({ sessions: [...threads, failing, conflicted] });
+		withRouter(() => <ProjectSidebarBody spaceId="space_1" onNavigate={() => {}} />);
+		await screen.findByText('Pick a name');
+
+		const prRow = () => screen.getByRole('link', { name: /Add the endpoint/ });
+		const waitingRow = () => screen.getByRole('link', { name: /Pick a name/ });
+		const failingRow = () => screen.getByRole('link', { name: /Fix failing checks/ });
+		const conflictRow = () => screen.getByRole('link', { name: /Resolve landing conflict/ });
+
+		expect(within(prRow()).getByLabelText('Pull request #12 open · checks pass')).toBeTruthy();
+		expect(within(waitingRow()).getByText('Billing or invoices?')).toBeTruthy();
+
+		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
+		const toggle = screen.getByRole('menuitemcheckbox', { name: 'Compact view' });
+		expect(toggle.getAttribute('aria-checked')).toBe('false');
+		await userEvent.click(toggle);
+		// Clicking keeps the filter menu open, matching the homepage sidebar view menu.
+		expect(screen.getByRole('menuitemcheckbox', { name: 'Compact view' }).getAttribute('aria-checked')).toBe('true');
+		expect(JSON.parse(localStorage.getItem('anton.sidebarView') ?? '{}')).toMatchObject({ compact: true });
+		await userEvent.keyboard('{Escape}');
+
+		expect(within(prRow()).queryByLabelText('Pull request #12 open · checks pass')).toBeNull();
+		expect(within(waitingRow()).queryByText('Billing or invoices?')).toBeNull();
+		expect(within(waitingRow()).getByRole('img', { name: 'Waiting on you' })).toBeTruthy();
+		const failingDot = within(failingRow()).getByRole('img', { name: 'Checks failing on #7' });
+		expect(failingDot.style.background).toBe(prTone('failing'));
+		const conflictDot = within(conflictRow()).getByRole('img', { name: 'Merge conflicts on #9' });
+		expect(conflictDot.style.background).toBe(prTone('conflicts'));
+
+		// Clearing active filters leaves compact view enabled.
+		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /Pull request/ }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: /Open/ }));
+		await userEvent.keyboard('{Escape}');
+		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Clear filters' }));
+		expect(within(prRow()).queryByLabelText('Pull request #12 open · checks pass')).toBeNull();
+		expect(JSON.parse(localStorage.getItem('anton.sidebarView') ?? '{}')).toMatchObject({ compact: true });
+
+		// Toggling compact view back off restores subtitles and persists the preference.
+		await userEvent.click(screen.getByRole('button', { name: 'Filter threads' }));
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Compact view' }));
+		await userEvent.keyboard('{Escape}');
+		expect(within(prRow()).getByLabelText('Pull request #12 open · checks pass')).toBeTruthy();
+		expect(within(waitingRow()).getByText('Billing or invoices?')).toBeTruthy();
+		expect(JSON.parse(localStorage.getItem('anton.sidebarView') ?? '{}')).toMatchObject({ compact: false });
+	});
+
 	it('switches projects from one line whose menu also leads back out, closing the phone sheet', async () => {
 		const onNavigate = vi.fn();
 		withRouter(() => <ProjectSwitcher spaceId="space_1" collapsed onNavigate={onNavigate} />);
@@ -848,6 +913,7 @@ describe('threads', () => {
 describe('project overview numbers', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		localStorage.clear();
 		api.sessions.mockResolvedValue({ sessions: threads });
 		api.spaces.mockResolvedValue({ spaces: [space] });
 	});

@@ -1,7 +1,8 @@
-import { CalendarDays, CircleDot, Cpu, FolderGit2, GitPullRequest, type IconComponent, Server, X } from '@/lib/icons';
+import { CalendarDays, CircleDot, Cpu, FolderGit2, GitPullRequest, type IconComponent, Rows2, Server, X } from '@/lib/icons';
 import { Icon, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger } from '@/components/kit/signal';
 import type { Session } from '@/lib/api/sessions';
 import { FACET_KEYS, FACETS, type FacetKey, optionLabel, type TaskView } from '@/lib/task-view';
+import { cn } from '@/lib/utils';
 
 type Filters = TaskView['filters'];
 
@@ -38,6 +39,27 @@ export function FacetSubmenus({ filters, onToggle, tasks, keys = FACET_KEYS }: {
 			</MenuSub>
 		);
 	});
+}
+
+export function CompactViewItem({ compact, onToggle }: { compact: boolean; onToggle: () => void }) {
+	return (
+		<MenuItem
+			icon={Rows2}
+			role="menuitemcheckbox"
+			aria-checked={compact}
+			onSelect={(event) => {
+				event.preventDefault();
+				onToggle();
+			}}
+			hint={
+				<span aria-hidden className={cn('relative inline-flex h-3.5 w-6 rounded-full align-middle', compact ? 'bg-(--accent)' : 'bg-(--track)')}>
+					<span className={cn('absolute top-0.5 size-2.5 rounded-full bg-white transition-transform', compact ? 'translate-x-3' : 'translate-x-0.5')} />
+				</span>
+			}
+		>
+			Compact view
+		</MenuItem>
+	);
 }
 
 export function FilterChips({ filters, onToggle, tasks }: { filters: Filters; onToggle: (key: FacetKey, value: string) => void; tasks: Session[] }) {
