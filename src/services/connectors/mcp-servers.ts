@@ -6,17 +6,22 @@ import { logProblem } from '../../core/log.ts';
 import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, signInView } from './mcp-sign-in.ts';
 import { type McpTool, serverTools } from './mcp-tools.ts';
 
-// A server's token stays here and in the agent's connections, never in a view.
+// A server's token and custom header values stay here and in the agent's connections, never in a view.
 
 const MAX_SERVERS = 30;
 
-/** Never a token. */
-export type McpServerView = Omit<InstalledMcpServer, 'auth'> & { hasAuth: boolean; signIn: McpSignInView };
+/** Never a token or custom header values. */
+export type McpServerView = Omit<InstalledMcpServer, 'auth' | 'headers'> & { hasAuth: boolean; headerNames: string[]; signIn: McpSignInView };
 
-const present = async ({ auth, ...server }: InstalledMcpServer): Promise<McpServerView> => ({ ...server, hasAuth: Boolean(auth), signIn: await signInView(server.name) });
+const present = async ({ auth, headers, ...server }: InstalledMcpServer): Promise<McpServerView> => ({
+	...server,
+	hasAuth: Boolean(auth),
+	headerNames: Object.keys(headers ?? {}).sort((a, b) => a.localeCompare(b)),
+	signIn: await signInView(server.name),
+});
 
-/** A token left out (or null) keeps the stored one, and an empty one removes it. */
-export type McpServerInput = Omit<McpServer, 'auth'> & { auth?: string | null };
+/** A token left out (or null) keeps the stored one, and an empty one removes it. In `headers`, null keeps a stored value and omitting a key removes it. */
+export type McpServerInput = Omit<McpServer, 'auth' | 'headers'> & { auth?: string | null; headers?: Record<string, string | null> };
 
 export async function mcpServersView(): Promise<McpServerView[]> {
 	return Promise.all((await listMcpServers()).map(present));
@@ -58,20 +63,38 @@ async function existing(name: string): Promise<InstalledMcpServer> {
 
 const originOf = (url: string) => (URL.canParse(url) ? new URL(url).origin : url);
 
+function mergeHeaders(stored: Record<string, string>, change: Record<string, string | null> | undefined, sameHost: boolean): Record<string, string> {
+	if (change === undefined) return sameHost ? stored : {};
+	const seen = new Set<string>();
+	const next: Record<string, string> = {};
+	for (const [rawKey, value] of Object.entries(change)) {
+		const key = rawKey.trim();
+		if (!key) continue;
+		const lower = key.toLowerCase();
+		if (seen.has(lower)) throw new InvalidInputError(`Header ${key} is listed more than once.`);
+		seen.add(lower);
+		const resolved = value === null ? (sameHost ? stored[key] : undefined) : value;
+		if (resolved !== undefined) next[key] = resolved;
+	}
+	return next;
+}
+
 export async function addMcpServer(input: McpServerInput): Promise<McpServerView[]> {
 	if (await getMcpServer(input.name)) throw new ConflictError(`An MCP server is already named ${input.name}`);
 	if ((await listMcpServers()).length >= MAX_SERVERS) throw new InvalidInputError(`Anton keeps up to ${MAX_SERVERS} MCP servers`);
-	await saveMcpServer({ name: input.name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth: input.auth || null });
+	const headers = mergeHeaders({}, input.headers, false);
+	await saveMcpServer({ name: input.name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth: input.auth || null, headers });
 	announce({ kind: 'connectors' });
 	return mcpServersView();
 }
 
-/** Its token stays only with the host it was given for, so pointing it at a new host never sends it there. */
+/** Its token and custom headers stay only with the host they were given for, so pointing it at a new host never sends them there. */
 export async function updateMcpServer(name: string, input: Omit<McpServerInput, 'name'>): Promise<McpServerView[]> {
 	const current = await existing(name);
 	const sameHost = originOf(current.url) === originOf(input.url);
 	const auth = input.auth === '' ? null : (input.auth ?? (sameHost ? current.auth : null));
-	await saveMcpServer({ name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth });
+	const headers = mergeHeaders(current.headers ?? {}, input.headers, sameHost);
+	await saveMcpServer({ name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth, headers });
 	// A sign-in is for the server it was made with; another address signs in afresh.
 	if (current.url !== input.url) await forgetMcpSignIn(name);
 	announce({ kind: 'connectors' });

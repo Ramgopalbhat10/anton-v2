@@ -195,6 +195,8 @@ export const migrations: string[][] = [
 	],
 	// 47: screenshots and files attached to a to-do, kept in the project's Library.
 	[`ALTER TABLE space_todos ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'`],
+	// 48: custom HTTP headers sent with requests to an MCP server, kept apart from its view.
+	[`ALTER TABLE mcp_servers ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

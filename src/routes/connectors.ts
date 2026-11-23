@@ -60,13 +60,46 @@ app.get('/api/connectors/:account/callback', async (c) => {
 	}
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
+const MAX_AUTH_LENGTH = 32_000;
+const NO_CTRL = /^[^\r\n\0]*$/;
+const HEADER_NAME = v.pipe(
+	v.string(),
+	v.trim(),
+	v.regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/, 'Header names must be valid HTTP header names'),
+	v.check((name) => !/^(host|content-length|transfer-encoding|connection)$/i.test(name), 'That HTTP header cannot be overridden'),
+);
+const HEADER_VALUE = v.pipe(
+	v.string(),
+	v.trim(),
+	v.maxLength(MAX_AUTH_LENGTH, `Header values must be at most ${MAX_AUTH_LENGTH} characters`),
+	v.regex(NO_CTRL, 'Header values cannot contain line breaks'),
+);
+const MCP_HEADERS = v.pipe(
+	v.record(HEADER_NAME, v.nullable(HEADER_VALUE)),
+	v.check((record) => Object.keys(record).length <= 30, 'Up to 30 custom headers are allowed'),
+	v.check((record) => new Set(Object.keys(record).map((key) => key.trim().toLowerCase())).size === Object.keys(record).length, 'Each header needs its own name'),
+);
 const MCP_SERVER = v.object({
 	url: v.pipe(v.string(), v.trim(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
-	auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
+	auth: v.optional(
+		v.nullable(
+			v.pipe(
+				v.string(),
+				v.trim(),
+				v.maxLength(MAX_AUTH_LENGTH, `Tokens must be at most ${MAX_AUTH_LENGTH} characters`),
+				v.regex(NO_CTRL, 'Tokens cannot contain line breaks'),
+			),
+		),
+	),
+	headers: v.optional(MCP_HEADERS),
 	tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
 	codeMode: v.optional(v.boolean()),
 });
-const SERVER_NAME = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _'));
+const SERVER_NAME = v.pipe(
+	v.string(),
+	v.trim(),
+	v.regex(/^[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?$/, 'Server names use letters, digits, spaces, - and _'),
+);
 app.post('/api/mcp-servers', async (c) => {
 	const input = await body(c, v.object({ ...MCP_SERVER.entries, name: SERVER_NAME }));
 	return c.json({ mcpServers: await addMcpServer(input) });

@@ -1800,7 +1800,7 @@ test('MCP server tokens are kept on save and never shown', async () => {
 	const saved = await addMcpServer({ name: 'docs', url: 'https://mcp.example.test', auth: 'secret-token', tools: [] });
 	assert.deepEqual(
 		saved.map(({ addedAt: _, ...server }) => server),
-		[{ name: 'docs', url: 'https://mcp.example.test', tools: [], enabled: true, hasAuth: true, signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } }],
+		[{ name: 'docs', url: 'https://mcp.example.test', tools: [], enabled: true, hasAuth: true, headerNames: [], signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } }],
 	);
 	assert.ok(!JSON.stringify(await mcpServersView()).includes('secret-token'));
 	await assert.rejects(addMcpServer({ name: 'docs', url: 'https://other.example.test', tools: [] }), /already named docs/);
@@ -1819,6 +1819,121 @@ test('MCP server tokens are kept on save and never shown', async () => {
 	assert.equal((await mcpServersView()).find((server) => server.name === 'docs')?.enabled, false, 'but stays added');
 	await removeMcpServer('docs');
 	assert.deepEqual(await mcpServersView(), []);
+});
+
+test('custom MCP servers allow capital letters, long tokens (>4000 chars), and custom headers', async () => {
+	const { connectorRoutes } = await import('../src/routes/connectors.ts');
+	const { serverTools, resetMcpToolsForTests } = await import('../src/services/connectors/mcp-tools.ts');
+	const longToken = 'A'.repeat(5500);
+	const longHeader = 'B'.repeat(5500);
+
+	// Route validation accepts uppercase letters, spaces, 5500-char tokens, and custom headers.
+	const created = await connectorRoutes.request('/api/mcp-servers', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			name: 'AWS CLI',
+			url: 'https://aws-mcp.us-east-1.api.aws/mcp',
+			auth: longToken,
+			headers: { 'X-API-Key': 'secret-key', 'X-Amz-Security-Token': longHeader },
+			tools: [],
+		}),
+	});
+	assert.equal(created.status, 200);
+	const createdBody = (await created.json()) as { mcpServers: Array<{ name: string; hasAuth: boolean; headerNames: string[] }> };
+	const awsView = createdBody.mcpServers.find((server) => server.name === 'AWS CLI');
+	assert.ok(awsView);
+	assert.equal(awsView.hasAuth, true);
+	assert.deepEqual(awsView.headerNames, ['X-Amz-Security-Token', 'X-API-Key']);
+	assert.ok(!JSON.stringify(createdBody).includes('secret-key'), 'custom header values never appear in the view');
+	assert.ok(!JSON.stringify(createdBody).includes(longToken), 'tokens never appear in the view');
+	assert.ok(!JSON.stringify(createdBody).includes(longHeader), 'long header values never appear in the view');
+
+	// Verify stored token and headers stay on the same host, drop on host change, and update/remove cleanly.
+	const stored = async () => (await enabledMcpServers()).find((server) => server.name === 'AWS CLI')!;
+	assert.equal((await stored()).auth, longToken);
+	assert.deepEqual((await stored()).headers, { 'X-API-Key': 'secret-key', 'X-Amz-Security-Token': longHeader });
+
+	// Keeping stored header via null, adding a new one, removing X-Amz-Security-Token by omitting it.
+	const updated = await connectorRoutes.request(`/api/mcp-servers/${encodeURIComponent('AWS CLI')}`, {
+		method: 'PUT',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			url: 'https://aws-mcp.us-east-1.api.aws/mcp/v2',
+			auth: null,
+			headers: { 'X-API-Key': null, 'X-Region': 'us-east-1' },
+			tools: [],
+		}),
+	});
+	assert.equal(updated.status, 200);
+	assert.equal((await stored()).auth, longToken);
+	assert.deepEqual((await stored()).headers, { 'X-API-Key': 'secret-key', 'X-Region': 'us-east-1' });
+
+	// Moving to another host drops stored token and stored headers unless newly provided.
+	await updateMcpServer('AWS CLI', { url: 'https://other-host.example.test/mcp', auth: null, headers: { 'X-API-Key': null }, tools: [] });
+	assert.equal((await stored()).auth, null);
+	assert.equal((await stored()).headers, undefined);
+
+	// Rejects invalid headers (CRLF injection, forbidden Host, duplicate case-insensitive names) and oversized tokens (>32000).
+	const badInputs = [
+		{ name: 'BadToken', url: 'https://example.test/mcp', auth: 'x'.repeat(32_001), tools: [] },
+		{ name: 'BadHeader', url: 'https://example.test/mcp', headers: { Host: 'evil.test' }, tools: [] },
+		{ name: 'BadCrlf', url: 'https://example.test/mcp', headers: { 'X-Test': 'a\r\nb' }, tools: [] },
+		{ name: 'DupHeader', url: 'https://example.test/mcp', headers: { 'X-Key': '1', 'x-key': '2' }, tools: [] },
+	];
+	for (const payload of badInputs) {
+		const response = await connectorRoutes.request('/api/mcp-servers', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+		assert.notEqual(response.status, 200, `rejects invalid payload ${payload.name}`);
+	}
+
+	// Verify custom headers are actually sent on HTTP MCP requests (and custom Authorization overrides Bearer).
+	const seenHeaders: Array<Record<string, string | string[] | undefined>> = [];
+	const http = createServer((req, res) => {
+		seenHeaders.push({ ...req.headers });
+		const chunks: Buffer[] = [];
+		req.on('data', (chunk) => chunks.push(chunk));
+		req.on('end', () => {
+			const msg = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as { id?: number; method?: string };
+			const reply = (result: unknown) => {
+				res.writeHead(200, { 'content-type': 'application/json' });
+				res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
+			};
+			if (msg.method === 'initialize') return reply({ protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'aws', version: '1' } });
+			if (msg.method === 'tools/list') return reply({ tools: [{ name: 'describe', description: 'Describe resources', inputSchema: { type: 'object', properties: {} } }] });
+			res.writeHead(202).end();
+		});
+	});
+	await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+	try {
+		const url = `http://127.0.0.1:${(http.address() as AddressInfo).port}/mcp`;
+		const tools = await serverTools({
+			name: 'AWS',
+			url,
+			auth: 'bearer-tok',
+			headers: { 'X-Custom-Key': 'my-key', 'X-Region': 'us-east-1' },
+			tools: [],
+		});
+		assert.deepEqual(tools.map((t) => t.name), ['describe']);
+		assert.ok(seenHeaders.some((h) => h.authorization === 'Bearer bearer-tok' && h['x-custom-key'] === 'my-key' && h['x-region'] === 'us-east-1'));
+
+		seenHeaders.length = 0;
+		await serverTools({
+			name: 'AWS',
+			url,
+			auth: 'bearer-tok',
+			headers: { Authorization: 'AWS4-HMAC-SHA256 sig' },
+			tools: [],
+		});
+		assert.ok(seenHeaders.some((h) => h.authorization === 'AWS4-HMAC-SHA256 sig'));
+	} finally {
+		await removeMcpServer('AWS CLI').catch(() => undefined);
+		await resetMcpToolsForTests();
+		await new Promise((resolve) => http.close(resolve));
+	}
 });
 
 test('stopping a task stops its working agent', async () => {

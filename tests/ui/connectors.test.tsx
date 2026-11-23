@@ -68,7 +68,7 @@ const gmail = (patch: Partial<ConnectorsView['mailboxes'][number]> = {}): Connec
 	...patch,
 });
 const NO_SIGN_IN = { state: 'none', since: null, problem: null, clientId: null, pastedClient: false } as const;
-const tracker = { name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, signIn: NO_SIGN_IN, enabled: true, addedAt: '2026-10-17T00:00:00Z' };
+const tracker = { name: 'tracker', url: 'https://tracker.example.test/mcp', tools: [], hasAuth: true, headerNames: [], signIn: NO_SIGN_IN, enabled: true, addedAt: '2026-10-17T00:00:00Z' };
 const linear = { ...tracker, name: 'linear', url: 'https://mcp.linear.app/mcp', hasAuth: false };
 const composioView = (accounts: ConnectorsView['composio']['accounts'] = [], configured = false): ConnectorsView['composio'] => ({ configured, keyFromEnv: false, accounts });
 const slackAccount = (patch: Partial<ConnectorsView['composio']['accounts'][number]> = {}): ConnectorsView['composio']['accounts'][number] => ({
@@ -200,6 +200,96 @@ describe('Settings › Connectors', () => {
 		await waitFor(() =>
 			expect(api.addMcpServer).toHaveBeenCalledWith({ name: 'docs', url: 'https://docs.example.test/mcp', auth: '', tools: ['search', 'fetch'], codeMode: false }),
 		);
+	});
+
+	it('adds a custom server with capital letters, a >4000 char token, and custom headers using labelled fields', async () => {
+		const longToken = 'T'.repeat(5500);
+		api.addMcpServer.mockResolvedValue({
+			mcpServers: [{ ...tracker, name: 'AWS', url: 'https://aws-mcp.us-east-1.api.aws/mcp', hasAuth: true, headerNames: ['X-API-Key', 'X-Region'] }],
+		});
+		open({ accounts: [], mailboxes: [], mcpServers: [] }, '/settings/connectors/view?add=custom');
+		const nameInput = await screen.findByLabelText('Server name');
+		const urlInput = screen.getByLabelText('Server URL');
+		const tokenInput = screen.getByLabelText('Bearer token');
+		expect(screen.getByLabelText('Tools')).toBeTruthy();
+		expect(screen.getByText('Custom headers')).toBeTruthy();
+
+		fireEvent.change(nameInput, { target: { value: 'AWS' } });
+		fireEvent.change(urlInput, { target: { value: 'https://aws-mcp.us-east-1.api.aws/mcp' } });
+		fireEvent.change(tokenInput, { target: { value: longToken } });
+
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		fireEvent.change(screen.getByLabelText('Header name'), { target: { value: 'X-API-Key' } });
+		fireEvent.change(screen.getByLabelText('Value for X-API-Key'), { target: { value: 'secret-1' } });
+
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		const nameInputs = screen.getAllByLabelText('Header name');
+		fireEvent.change(nameInputs[1], { target: { value: 'X-Region' } });
+		fireEvent.change(screen.getByLabelText('Value for X-Region'), { target: { value: 'us-east-1' } });
+
+		fireEvent.click(screen.getByRole('button', { name: 'Add server' }));
+		await waitFor(() =>
+			expect(api.addMcpServer).toHaveBeenCalledWith({
+				name: 'AWS',
+				url: 'https://aws-mcp.us-east-1.api.aws/mcp',
+				auth: longToken,
+				headers: { 'X-API-Key': 'secret-1', 'X-Region': 'us-east-1' },
+				tools: [],
+			}),
+		);
+	});
+
+	it('edits stored custom headers and lets you keep, replace, remove, or add headers and clear the saved token', async () => {
+		const aws = {
+			...tracker,
+			name: 'AWS',
+			url: 'https://aws-mcp.us-east-1.api.aws/mcp',
+			hasAuth: true,
+			headerNames: ['X-API-Key', 'X-Old'],
+		};
+		api.mcpServerTools.mockResolvedValue({ tools: [] });
+		api.updateMcpServer.mockResolvedValue({ mcpServers: [{ ...aws, hasAuth: false, headerNames: ['X-API-Key', 'X-Region'] }] });
+		open({ accounts: [], mailboxes: [], mcpServers: [aws] }, '/settings/connectors/view?c=mcp:AWS');
+		expect(await screen.findByText('X-API-Key, X-Old')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: 'Edit address and token' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Remove saved token' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Remove header X-Old' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		const headerNames = screen.getAllByLabelText('Header name');
+		fireEvent.change(headerNames[1], { target: { value: 'X-Region' } });
+		fireEvent.change(screen.getByLabelText('Value for X-Region'), { target: { value: 'us-east-1' } });
+
+		fireEvent.click(screen.getByRole('button', { name: 'Save server' }));
+		await waitFor(() =>
+			expect(api.updateMcpServer).toHaveBeenCalledWith({
+				name: 'AWS',
+				url: 'https://aws-mcp.us-east-1.api.aws/mcp',
+				auth: '',
+				headers: { 'X-API-Key': null, 'X-Region': 'us-east-1' },
+				tools: [],
+			}),
+		);
+	});
+
+	it('rejects duplicate header names or incomplete custom headers in the form', async () => {
+		open({ accounts: [], mailboxes: [], mcpServers: [] }, '/settings/connectors/view?add=custom');
+		fireEvent.change(await screen.findByLabelText('Server name'), { target: { value: 'AWS' } });
+		fireEvent.change(screen.getByLabelText('Server URL'), { target: { value: 'https://aws-mcp.us-east-1.api.aws/mcp' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		fireEvent.change(screen.getByLabelText('Header name'), { target: { value: 'X-Key' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Add server' }));
+		expect(await screen.findByText('Enter a value for header X-Key.')).toBeTruthy();
+		expect(api.addMcpServer).not.toHaveBeenCalled();
+
+		fireEvent.change(screen.getByLabelText('Value for X-Key'), { target: { value: 'one' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		const headerNames = screen.getAllByLabelText('Header name');
+		fireEvent.change(headerNames[1], { target: { value: 'x-key' } });
+		fireEvent.change(screen.getByLabelText('Value for x-key'), { target: { value: 'two' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Add server' }));
+		expect(await screen.findByText('Each header needs its own name.')).toBeTruthy();
+		expect(api.addMcpServer).not.toHaveBeenCalled();
 	});
 
 	it('draws each server as the product its address belongs to, else as an MCP server', async () => {

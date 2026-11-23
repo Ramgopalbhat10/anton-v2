@@ -4,10 +4,12 @@ import { appDb } from './client.ts';
 type Row = Record<string, unknown>;
 
 function toServer(row: Row): InstalledMcpServer {
+	const headers = row.headers_json ? (JSON.parse(String(row.headers_json)) as Record<string, string>) : {};
 	return {
 		name: String(row.name),
 		url: String(row.url),
 		auth: row.auth == null ? null : String(row.auth),
+		...(Object.keys(headers).length ? { headers } : {}),
 		tools: JSON.parse(String(row.tools_json)) as string[],
 		...(Number(row.code_mode) === 0 ? { codeMode: false } : {}),
 		enabled: Number(row.enabled) === 1,
@@ -29,9 +31,9 @@ export async function getMcpServer(name: string): Promise<InstalledMcpServer | n
 export async function saveMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>): Promise<void> {
 	const db = await appDb();
 	await db.execute({
-		sql: `INSERT INTO mcp_servers (name, url, auth, tools_json, code_mode, enabled, added_at) VALUES (?, ?, ?, ?, ?, 1, ?)
-			ON CONFLICT(name) DO UPDATE SET url = excluded.url, auth = excluded.auth, tools_json = excluded.tools_json, code_mode = excluded.code_mode`,
-		args: [server.name, server.url, server.auth, JSON.stringify(server.tools), server.codeMode === false ? 0 : 1, new Date().toISOString()],
+		sql: `INSERT INTO mcp_servers (name, url, auth, headers_json, tools_json, code_mode, enabled, added_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+			ON CONFLICT(name) DO UPDATE SET url = excluded.url, auth = excluded.auth, headers_json = excluded.headers_json, tools_json = excluded.tools_json, code_mode = excluded.code_mode`,
+		args: [server.name, server.url, server.auth, JSON.stringify(server.headers ?? {}), JSON.stringify(server.tools), server.codeMode === false ? 0 : 1, new Date().toISOString()],
 	});
 }
 

@@ -26,8 +26,25 @@ type Connection = { client: Promise<Client>; idle: ReturnType<typeof setTimeout>
 const connections = new Map<string, Connection>();
 const listings = new Map<string, Listing>();
 
-/** The token never leaves this module's memory. */
-const connectionKey = (server: McpServer) => `${server.url}\n${server.auth ?? ''}`;
+const headerKey = (headers?: Record<string, string>) =>
+	headers
+		? Object.entries(headers)
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([name, value]) => `${name}:${value}`)
+				.join('\n')
+		: '';
+/** The token and custom headers never leave this module's memory. */
+const connectionKey = (server: McpServer) => `${server.url}\n${server.auth ?? ''}\n${headerKey(server.headers)}`;
+
+function serverHeaders(server: McpServer): Record<string, string> | undefined {
+	const headers: Record<string, string> = {};
+	if (server.auth) headers.Authorization = `Bearer ${server.auth}`;
+	for (const [name, value] of Object.entries(server.headers ?? {})) {
+		if (name.toLowerCase() === 'authorization') delete headers.Authorization;
+		headers[name] = value;
+	}
+	return Object.keys(headers).length ? headers : undefined;
+}
 /** A listing also depends on the tools the repo allows. */
 const listingKey = (server: McpServer) => `${connectionKey(server)}\n${server.tools.join(',')}`;
 
@@ -54,7 +71,7 @@ async function withClient<T>(server: McpServer, use: (client: Client) => Promise
 	if (!entry) {
 		const client = (async () => {
 			const next = new Client({ name: 'anton', version: '1' });
-			const headers = server.auth ? { Authorization: `Bearer ${server.auth}` } : undefined;
+			const headers = serverHeaders(server);
 			await next.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }), { signal: AbortSignal.timeout(CONNECT_MS) });
 			return next;
 		})();
