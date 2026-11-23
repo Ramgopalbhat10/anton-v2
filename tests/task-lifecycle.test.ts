@@ -1860,17 +1860,38 @@ test('custom MCP servers allow capital letters, long tokens (>4000 chars), and c
 	assert.ok(!JSON.stringify(createdBody).includes(longToken), 'tokens never appear in the view');
 	assert.ok(!JSON.stringify(createdBody).includes(longHeader), 'long header values never appear in the view');
 
-	// Rejects new names that collide with an existing server after tool-namespace normalization.
-	for (const colliding of ['AWS-CLI', 'AWS_CLI']) {
+	// Rejects new names that collide with or overlap an existing server at the __ tool-namespace boundary.
+	for (const colliding of ['AWS-CLI', 'AWS_CLI', 'AWS CLI  extra']) {
 		const res = await api.request('/api/mcp-servers', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ name: colliding, url: 'https://other.example.test/mcp', tools: [] }),
 		});
-		assert.equal(res.status, 409, `rejects colliding normalized name ${colliding}`);
+		assert.equal(res.status, 409, `rejects colliding/overlapping normalized name ${colliding}`);
 		const errBody = (await res.json()) as { error: string };
 		assert.match(errBody.error, /tool namespace/);
 	}
+
+	// Both directions of __-boundary overlap are rejected (short then long, and long then short), while single-_ distinct names coexist.
+	await addMcpServer({ name: 'aws', url: 'https://aws.example.test/mcp', tools: [] });
+	await assert.rejects(addMcpServer({ name: 'aws  cli', url: 'https://aws2.example.test/mcp', tools: [] }), /overlapping tool namespace/);
+	await addMcpServer({ name: 'aws_cli', url: 'https://aws3.example.test/mcp', tools: [] });
+	await removeMcpServer('aws');
+	await removeMcpServer('aws_cli');
+	await addMcpServer({ name: 'aws  cli', url: 'https://aws2.example.test/mcp', tools: [] });
+	await assert.rejects(addMcpServer({ name: 'aws', url: 'https://aws.example.test/mcp', tools: [] }), /overlapping tool namespace/);
+	await removeMcpServer('aws  cli');
+
+	// Concurrent adds with colliding namespaces are serialized atomically: exactly one succeeds and one is rejected.
+	const concurrent = await Promise.allSettled([
+		addMcpServer({ name: 'Race CLI', url: 'https://race1.example.test/mcp', tools: [] }),
+		addMcpServer({ name: 'Race-CLI', url: 'https://race2.example.test/mcp', tools: [] }),
+	]);
+	assert.equal(concurrent.filter((r) => r.status === 'fulfilled').length, 1, 'exactly one concurrent conflicting add succeeds');
+	assert.equal(concurrent.filter((r) => r.status === 'rejected').length, 1, 'the other concurrent conflicting add is rejected');
+	const raceWinner = (await mcpServersView()).filter((s) => s.name === 'Race CLI' || s.name === 'Race-CLI');
+	assert.equal(raceWinner.length, 1);
+	await removeMcpServer(raceWinner[0].name);
 
 	// Verify stored token and headers stay on the same host, retain case-insensitively on null, drop on host change, and update/remove cleanly.
 	const stored = async () => (await enabledMcpServers()).find((server) => server.name === 'AWS CLI')!;
@@ -1911,10 +1932,17 @@ test('custom MCP servers allow capital letters, long tokens (>4000 chars), and c
 	assert.equal((await stored()).auth, null);
 	assert.equal((await stored()).headers, undefined);
 
-	// Rejects invalid headers (CRLF injection, forbidden Host, duplicate case-insensitive names, whitespace-padded duplicates, smart quotes/control chars) and oversized tokens (>32000), without echoing credentials.
+	// Rejects invalid headers (CRLF injection, forbidden HTTP/MCP transport headers, duplicates, whitespace-padded names, smart quotes/control chars) and oversized tokens (>32000), without echoing credentials.
 	const badInputs: Array<{ payload: Record<string, unknown>; secret?: string }> = [
 		{ payload: { name: 'BadToken', url: 'https://example.test/mcp', auth: 'x'.repeat(32_001), tools: [] } },
 		{ payload: { name: 'BadHeader', url: 'https://example.test/mcp', headers: { Host: 'evil.test' }, tools: [] } },
+		{ payload: { name: 'BadMcpSession', url: 'https://example.test/mcp', headers: { 'MCP-Session-Id': 'sess-1' }, tools: [] } },
+		{ payload: { name: 'BadMcpProto', url: 'https://example.test/mcp', headers: { 'Mcp-Protocol-Version': '2025-03-26' }, tools: [] } },
+		{ payload: { name: 'BadMcpMethod', url: 'https://example.test/mcp', headers: { 'Mcp-Method': 'tools/list' }, tools: [] } },
+		{ payload: { name: 'BadMcpName', url: 'https://example.test/mcp', headers: { 'Mcp-Name': 'x' }, tools: [] } },
+		{ payload: { name: 'BadLastEvent', url: 'https://example.test/mcp', headers: { 'Last-Event-ID': '1' }, tools: [] } },
+		{ payload: { name: 'BadContentType', url: 'https://example.test/mcp', headers: { 'Content-Type': 'text/plain' }, tools: [] } },
+		{ payload: { name: 'BadAccept', url: 'https://example.test/mcp', headers: { Accept: 'text/plain' }, tools: [] } },
 		{ payload: { name: 'BadCrlf', url: 'https://example.test/mcp', headers: { 'X-Test': 'a\r\nb' }, tools: [] } },
 		{ payload: { name: 'DupHeader', url: 'https://example.test/mcp', headers: { 'X-Key': '1', 'x-key': '2' }, tools: [] } },
 		{ payload: { name: 'PadDup', url: 'https://example.test/mcp', headers: { 'X-Key': '1', ' X-Key ': '2' }, tools: [] } },
@@ -1933,6 +1961,15 @@ test('custom MCP servers allow capital letters, long tokens (>4000 chars), and c
 		const text = await response.text();
 		if (secret) assert.ok(!text.includes(secret), `error for ${String(payload.name)} must not echo the credential`);
 	}
+
+	// Custom Authorization header override remains allowed by route validation.
+	const withAuth = await api.request('/api/mcp-servers', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ name: 'AuthOverride', url: 'https://auth.example.test/mcp', headers: { Authorization: 'ApiKey k1' }, tools: [] }),
+	});
+	assert.equal(withAuth.status, 200);
+	await removeMcpServer('AuthOverride');
 
 	// Verify custom headers are sent on HTTP MCP requests, custom Authorization overrides Bearer, same-origin redirects work, and off-origin redirects never receive headers.
 	const seenHeaders: Array<Record<string, string | string[] | undefined>> = [];

@@ -64,6 +64,7 @@ function toInput(draft: Draft, editing: McpServer | null): McpServerInput {
 
 function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; onDone: () => void; onSaved?: (name: string) => void }) {
 	const id = useId();
+	const queryClient = useQueryClient();
 	const [draft, setDraft] = useState(() => toDraft(editing ?? undefined));
 	const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
 	const updateHeader = (index: number, patch: Partial<HeaderRow>) =>
@@ -76,7 +77,13 @@ function ServerForm({ editing, onDone, onSaved }: { editing: McpServer | null; o
 			className="flex flex-col gap-4 rounded-control border border-(--line) p-4"
 			onSubmit={(event) => {
 				event.preventDefault();
-				save.mutate(undefined, { onSuccess: () => (onSaved ? onSaved(draft.name.trim()) : onDone()) });
+				save.mutate(undefined, {
+					onSuccess: () => {
+						if (editing) void queryClient.invalidateQueries({ queryKey: ['mcp-tools', editing.name] });
+						if (onSaved) onSaved(draft.name.trim());
+						else onDone();
+					},
+				});
 			}}
 		>
 			<div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -263,9 +270,15 @@ function ServerTools({ name }: { name: string }) {
 }
 
 function SignOut({ name }: { name: string }) {
+	const queryClient = useQueryClient();
 	const signOut = useConnectorMutation(() => api.signOutMcpServer(name));
 	return (
-		<Btn size="sm" variant="ghost" disabled={signOut.isPending} onClick={() => signOut.mutate(undefined)}>
+		<Btn
+			size="sm"
+			variant="ghost"
+			disabled={signOut.isPending}
+			onClick={() => signOut.mutate(undefined, { onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['mcp-tools', name] }) })}
+		>
 			{signOut.isPending ? 'Signing out…' : 'Sign out'}
 		</Btn>
 	);

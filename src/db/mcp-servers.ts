@@ -1,5 +1,11 @@
+import { ConflictError, InvalidInputError } from '../core/errors.ts';
 import type { InstalledMcpServer } from '../core/types.ts';
 import { appDb } from './client.ts';
+
+/** Matches mcpToolName's server segment normalization so two servers never share or shadow a tool namespace. */
+export const normalizeMcpServerName = (name: string) => name.replace(/[^\w]/g, '_');
+
+const namespacesOverlap = (a: string, b: string) => a === b || a.startsWith(`${b}__`) || b.startsWith(`${a}__`);
 
 type Row = Record<string, unknown>;
 
@@ -26,6 +32,47 @@ export async function getMcpServer(name: string): Promise<InstalledMcpServer | n
 	const db = await appDb();
 	const row = (await db.execute({ sql: 'SELECT * FROM mcp_servers WHERE name = ?', args: [name] })).rows[0];
 	return row ? toServer(row) : null;
+}
+
+/** Atomically checks name uniqueness, __-boundary tool-namespace overlaps, and the server cap in a single SQL statement. */
+export async function insertMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>, maxServers: number): Promise<void> {
+	const db = await appDb();
+	const normalized = normalizeMcpServerName(server.name);
+	// Single statement executes atomically under SQLite's write lock on both file and :memory: databases.
+	const existingNs = `replace(replace(name, '-', '_'), ' ', '_')`;
+	const inserted = await db.execute({
+		sql: `INSERT INTO mcp_servers (name, url, auth, headers_json, tools_json, code_mode, enabled, added_at)
+			SELECT ?, ?, ?, ?, ?, ?, 1, ?
+			WHERE NOT EXISTS (
+				SELECT 1 FROM mcp_servers
+				WHERE name = ?
+					OR ${existingNs} = ?
+					OR substr(${existingNs}, 1, length(?) + 2) = (? || '__')
+					OR substr(?, 1, length(${existingNs}) + 2) = (${existingNs} || '__')
+			)
+			AND (SELECT COUNT(*) FROM mcp_servers) < ?`,
+		args: [
+			server.name,
+			server.url,
+			server.auth,
+			JSON.stringify(server.headers ?? {}),
+			JSON.stringify(server.tools),
+			server.codeMode === false ? 0 : 1,
+			new Date().toISOString(),
+			server.name,
+			normalized,
+			normalized,
+			normalized,
+			normalized,
+			maxServers,
+		],
+	});
+	if (inserted.rowsAffected === 1) return;
+	const names = (await db.execute('SELECT name FROM mcp_servers')).rows.map((row) => String(row.name));
+	if (names.includes(server.name)) throw new ConflictError(`An MCP server is already named ${server.name}`);
+	const colliding = names.find((existing) => namespacesOverlap(normalizeMcpServerName(existing), normalized));
+	if (colliding) throw new ConflictError(`An MCP server named ${colliding} already uses an overlapping tool namespace (${normalized})`);
+	throw new InvalidInputError(`Anton keeps up to ${maxServers} MCP servers`);
 }
 
 export async function saveMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>): Promise<void> {

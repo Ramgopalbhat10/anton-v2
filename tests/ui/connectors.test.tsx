@@ -292,6 +292,23 @@ describe('Settings › Connectors', () => {
 		expect(api.addMcpServer).not.toHaveBeenCalled();
 	});
 
+	it('refetches Tools after editing a server so a fixed header clears a previous auth error', async () => {
+		const aws = { ...tracker, name: 'AWS', url: 'https://aws-mcp.us-east-1.api.aws/mcp', hasAuth: false, headerNames: [] };
+		api.mcpServerTools.mockRejectedValueOnce(new Error('401 Unauthorized')).mockResolvedValueOnce({ tools: [{ name: 'describe', description: 'Describe resources' }] });
+		api.updateMcpServer.mockResolvedValue({ mcpServers: [{ ...aws, headerNames: ['X-API-Key'] }] });
+		open({ accounts: [], mailboxes: [], mcpServers: [aws] }, '/settings/connectors/view?c=mcp:AWS');
+		expect(await screen.findByText('401 Unauthorized')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: 'Edit address and token' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+		fireEvent.change(screen.getByLabelText('Header name'), { target: { value: 'X-API-Key' } });
+		fireEvent.change(screen.getByLabelText('Value for X-API-Key'), { target: { value: 'fixed-key' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Save server' }));
+
+		expect(await screen.findByText('describe')).toBeTruthy();
+		expect(screen.queryByText('401 Unauthorized')).toBeNull();
+	});
+
 	it('shows custom Authorization header as active even when an earlier OAuth sign-in expired', async () => {
 		const overridden = {
 			...linear,

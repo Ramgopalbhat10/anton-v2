@@ -1,7 +1,7 @@
 import { announce } from '../../core/changes.ts';
-import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
+import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import type { InstalledMcpServer, McpServer } from '../../core/types.ts';
-import { deleteMcpServer, getMcpServer, listMcpServers, saveMcpServer, setMcpServerEnabled } from '../../db/mcp-servers.ts';
+import { deleteMcpServer, getMcpServer, insertMcpServer, listMcpServers, saveMcpServer, setMcpServerEnabled } from '../../db/mcp-servers.ts';
 import { logProblem } from '../../core/log.ts';
 import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, signInView } from './mcp-sign-in.ts';
 import { type McpTool, serverTools } from './mcp-tools.ts';
@@ -29,9 +29,6 @@ export async function mcpServersView(): Promise<McpServerView[]> {
 
 const hasCustomAuthHeader = (headers?: Record<string, string>) =>
 	Boolean(headers && Object.keys(headers).some((name) => name.toLowerCase() === 'authorization'));
-
-/** Matches mcpToolName's server segment normalization so two servers never share one tool namespace. */
-const normalizeServerName = (name: string) => name.replace(/[^\w]/g, '_');
 
 /** A custom Authorization header wins over OAuth; otherwise a signed-in server's token, renewed if it must be, stands in for a pasted one. */
 async function connectable({ enabled: _, addedAt: __, ...server }: InstalledMcpServer): Promise<McpServer> {
@@ -88,14 +85,8 @@ function mergeHeaders(stored: Record<string, string>, change: Record<string, str
 }
 
 export async function addMcpServer(input: McpServerInput): Promise<McpServerView[]> {
-	const existingServers = await listMcpServers();
-	if (existingServers.some((server) => server.name === input.name)) throw new ConflictError(`An MCP server is already named ${input.name}`);
-	const normalized = normalizeServerName(input.name);
-	const colliding = existingServers.find((server) => normalizeServerName(server.name) === normalized);
-	if (colliding) throw new ConflictError(`An MCP server named ${colliding.name} already uses the same tool namespace (${normalized})`);
-	if (existingServers.length >= MAX_SERVERS) throw new InvalidInputError(`Anton keeps up to ${MAX_SERVERS} MCP servers`);
 	const headers = mergeHeaders({}, input.headers, false);
-	await saveMcpServer({ name: input.name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth: input.auth || null, headers });
+	await insertMcpServer({ name: input.name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth: input.auth || null, headers }, MAX_SERVERS);
 	announce({ kind: 'connectors' });
 	return mcpServersView();
 }

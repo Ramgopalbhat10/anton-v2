@@ -63,10 +63,24 @@ app.get('/api/connectors/:account/callback', async (c) => {
 const MAX_AUTH_LENGTH = 32_000;
 // RFC 9110 / Fetch ByteString header values: HTAB, printable ASCII, or obs-text (0x80-0xFF); rejects control chars and Unicode > U+00FF (e.g. smart quotes).
 const WIRE_HEADER_VALUE = /^[\t\x20-\x7E\x80-\xFF]*$/;
+// HTTP framing and Streamable HTTP MCP transport-owned headers that custom headers must not override (Authorization is intentionally allowed).
+const FORBIDDEN_HEADER_NAMES = new Set([
+	'host',
+	'content-length',
+	'transfer-encoding',
+	'connection',
+	'content-type',
+	'accept',
+	'last-event-id',
+	'mcp-session-id',
+	'mcp-protocol-version',
+	'mcp-method',
+	'mcp-name',
+]);
 const HEADER_NAME = v.pipe(
 	v.string('Header names must be text'),
 	v.regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/, 'Header names must be valid HTTP header names'),
-	v.check((name) => !/^(host|content-length|transfer-encoding|connection)$/i.test(name), 'That HTTP header cannot be overridden'),
+	v.check((name) => !FORBIDDEN_HEADER_NAMES.has(name.toLowerCase()), 'That HTTP or MCP transport header cannot be overridden'),
 );
 const HEADER_VALUE = v.pipe(
 	v.string('Header values must be text'),
