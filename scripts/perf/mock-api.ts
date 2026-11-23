@@ -12,7 +12,7 @@ import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
 import { mockSetup } from './mock-setup.ts';
-import { viewerArtifacts } from '../ui/artifact-fixture.ts';
+import { viewerArtifacts, viewerPdfPath } from '../ui/artifact-fixture.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
 
@@ -205,6 +205,7 @@ const artifact = (sessionId: string, task: { title: string; spaceId: string | nu
 });
 const billing = { title: 'Expose invoices over the API', spaceId: 'space-billing', chat: false };
 const artifacts = [
+	artifact(SESSION_ID, { title: session.title, spaceId: null, chat: false }, viewerPdfPath, 'resume-final-expanded.pdf', viewerArtifacts.get(viewerPdfPath)!.body.length, 0.1),
 	artifact('th-api', billing, 'renders/invoice-dashboard.html', 'Invoice dashboard', 84_000, 0.2),
 	artifact('th-schema', { title: 'Migrate the ledger schema', spaceId: 'space-billing', chat: false }, 'reports/migration-plan.md', 'Migration plan', 12_400, 0.8),
 	artifact('th-invoices', billing, 'charts/revenue-by-plan.png', 'Revenue by plan', 220_000, 1.4),

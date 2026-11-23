@@ -18,9 +18,11 @@ for (const [index, object] of objects.entries()) {
 const xref = pdf.length;
 pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
 
+export const viewerPdfPath = 'reports/resume-final-expanded.pdf';
+
 export const viewerArtifacts = new Map([
 	[`images/${'long-filename-'.repeat(12)}preview.svg`, { type: 'image/svg+xml', body: image }],
-	['reports/resume-final-expanded.pdf', { type: 'application/pdf', body: pdf }],
+	[viewerPdfPath, { type: 'application/pdf', body: pdf }],
 	['reports/layout-report.md', { type: 'text/markdown', body: text }],
 	['scripts/layout-fixture.js', { type: 'text/javascript', body: code }],
 ]);
