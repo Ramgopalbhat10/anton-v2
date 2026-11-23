@@ -425,7 +425,7 @@ describe('An email the agent asks to send', () => {
 		decidedAt: null,
 	};
 
-	it('shows the email as it will go, and sends it only on Send, telling the agent', async () => {
+	it('shows the email as it will go, and sends it only on Send, leaving the agent to the server', async () => {
 		api.mailApprovals.mockResolvedValue({ approvals: [approval] });
 		const sent: MailApproval = { ...approval, state: 'sent', decidedAt: '2026-10-17T10:42:00Z' };
 		api.decideMail.mockImplementation(async () => {
@@ -435,7 +435,7 @@ describe('An email the agent asks to send', () => {
 		const reply = vi.fn();
 		renderWithQueries(
 			<ReplyActions.Provider value={{ send: reply, busy: false }}>
-				<MailSendCard sessionId="s1" approvalId="mail_1" place={{ latest: true, answer: null }} />
+				<MailSendCard sessionId="s1" approvalId="mail_1" />
 			</ReplyActions.Provider>,
 		);
 		const card = await screen.findByRole('region', { name: 'Email to send' });
@@ -444,13 +444,13 @@ describe('An email the agent asks to send', () => {
 		expect(api.decideMail).not.toHaveBeenCalled();
 		fireEvent.click(within(card).getByRole('button', { name: 'Send' }));
 		await waitFor(() => expect(api.decideMail).toHaveBeenCalledWith('s1', 'mail_1', true));
-		await waitFor(() => expect(reply).toHaveBeenCalledWith('I sent the email "Re: Invoice".'));
 		expect(await within(card).findByText(/Sent/)).toBeTruthy();
+		expect(reply).not.toHaveBeenCalled();
 	});
 
 	it("says it was not sent after Don't send", async () => {
 		api.mailApprovals.mockResolvedValue({ approvals: [{ ...approval, state: 'declined' }] });
-		renderWithQueries(<MailSendCard sessionId="s1" approvalId="mail_1" place={{ latest: false, answer: "Don't send" }} />);
+		renderWithQueries(<MailSendCard sessionId="s1" approvalId="mail_1" />);
 		expect(await screen.findByText('Not sent')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 	});
@@ -561,7 +561,7 @@ describe('A connector call the agent asks to run', () => {
 		decidedAt: null,
 	};
 
-	it('shows the call with its arguments, and runs it only on Run, telling the agent', async () => {
+	it('shows the call with its arguments, runs it only on Run, then folds to one line with the result inside', async () => {
 		api.toolApprovals.mockResolvedValue({ approvals: [approval] });
 		const done: ToolApproval = { ...approval, state: 'done', result: '{"ok":true}', decidedAt: '2026-10-17T10:42:00Z' };
 		api.decideToolApproval.mockImplementation(async () => {
@@ -571,24 +571,39 @@ describe('A connector call the agent asks to run', () => {
 		const reply = vi.fn();
 		renderWithQueries(
 			<ReplyActions.Provider value={{ send: reply, busy: false }}>
-				<ToolApprovalCard sessionId="s1" approvalId="tool_1" place={{ latest: true, answer: null }} />
+				<ToolApprovalCard sessionId="s1" approvalId="tool_1" />
 			</ReplyActions.Provider>,
 		);
 		const card = await screen.findByRole('region', { name: 'Tool call to run' });
-		expect(within(card).getByText('composio__slack__send_message')).toBeTruthy();
+		expect(within(card).getByText('Run this on Slack?')).toBeTruthy();
+		expect(within(card).getByText('send_message')).toBeTruthy();
 		expect(within(card).getByText(/channel: #general/)).toBeTruthy();
 		expect(api.decideToolApproval).not.toHaveBeenCalled();
 		fireEvent.click(within(card).getByRole('button', { name: 'Run' }));
 		await waitFor(() => expect(api.decideToolApproval).toHaveBeenCalledWith('s1', 'tool_1', true));
-		await waitFor(() => expect(reply).toHaveBeenCalledWith('I ran composio__slack__send_message.'));
-		expect(await within(card).findByText(/Ran/)).toBeTruthy();
-		expect(within(card).getByText('{"ok":true}')).toBeTruthy();
+		const row = await screen.findByRole('region', { name: 'Tool call' });
+		const toggle = within(row).getByRole('button', { name: /Ran send_message on Slack/ });
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		expect(within(row).queryByText('{"ok":true}')).toBeNull();
+		fireEvent.click(toggle);
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(within(row).getByText('{"ok":true}')).toBeTruthy();
+		expect(within(row).getByText(/channel: #general/)).toBeTruthy();
+		// The server tells the agent, wherever the card is and whether or not the agent is working.
+		expect(reply).not.toHaveBeenCalled();
 	});
 
 	it("says it was not run after Don't run", async () => {
 		api.toolApprovals.mockResolvedValue({ approvals: [{ ...approval, state: 'declined' }] });
-		renderWithQueries(<ToolApprovalCard sessionId="s1" approvalId="tool_1" place={{ latest: false, answer: "Don't run" }} />);
+		renderWithQueries(<ToolApprovalCard sessionId="s1" approvalId="tool_1" />);
 		expect(await screen.findByText('Not run')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
+	});
+
+	it('shows why a run failed when opened', async () => {
+		api.toolApprovals.mockResolvedValue({ approvals: [{ ...approval, state: 'failed', error: 'channel_not_found' }] });
+		renderWithQueries(<ToolApprovalCard sessionId="s1" approvalId="tool_1" />);
+		fireEvent.click(await screen.findByRole('button', { name: /Failed to run send_message/ }));
+		expect(screen.getByText('channel_not_found')).toBeTruthy();
 	});
 });

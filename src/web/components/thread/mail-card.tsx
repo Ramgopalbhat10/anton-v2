@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Send, X } from '@/lib/icons';
-import { memo, useContext } from 'react';
+import { memo } from 'react';
 import { GMAIL, MarkTile } from '@/components/marks/brand-marks';
-import { ReplyActions, type ReplyPlace } from '@/components/thread/reply-cards';
 import { Btn, Icon, Spinner } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import type { MailApproval } from '@/lib/api/notify';
@@ -28,20 +27,17 @@ function Row({ label, value }: { label: string; value: string }) {
 	);
 }
 
-/** Send sends it from Anton's server, never from the agent, and the agent hears of it as your next message. */
-export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId, place }: { sessionId: string; approvalId: string; place: ReplyPlace }) {
-	const { send: reply, busy } = useContext(ReplyActions);
+/** Send sends it from Anton's server, never from the agent, and the server tells the agent the answer. */
+export const MailSendCard = memo(function MailSendCard({ sessionId, approvalId }: { sessionId: string; approvalId: string }) {
 	const queryClient = useQueryClient();
 	const approvals = useQuery(taskQueries.mail(sessionId));
 	const approval = approvals.data?.approvals.find((item) => item.id === approvalId);
 	const decide = useMutation({
 		mutationFn: (send: boolean) => api.decideMail(sessionId, approvalId, send),
-		onSuccess: (next, send) => {
+		onSuccess: (next) => {
 			queryClient.setQueryData<{ approvals: MailApproval[] }>(['mail', sessionId], (current) =>
 				current ? { approvals: current.approvals.map((item) => (item.id === next.id ? next : item)) } : current,
 			);
-			// The agent waits for an answer; one already working hears of it when it next reads the thread.
-			if (place.latest && !busy) reply(send ? `I sent the email "${next.subject}".` : `Don't send the email "${next.subject}".`);
 		},
 		onSettled: () => void queryClient.invalidateQueries({ queryKey: ['mail', sessionId] }),
 	});

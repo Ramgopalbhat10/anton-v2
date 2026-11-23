@@ -16,6 +16,10 @@ const composio = await import('../src/services/connectors/composio.ts');
 const approvals = await import('../src/services/connectors/tool-approvals.ts');
 const connectorTools = await import('../src/services/connectors/connector-tools.ts');
 const { onChange } = await import('../src/core/changes.ts');
+const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts');
+const { splitAttachments } = await import('../src/core/attachments.ts');
+const told: Array<{ id: string; text: string }> = [];
+setAgentDelivery(async (id, text) => void told.push({ id, text }));
 
 setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, apps: composioApps({ key: composioKeySlot }) });
 
@@ -184,8 +188,16 @@ test('Run executes the approved call once, and Don’t run sends nothing', async
 	const [waiting] = await approvals.toolApprovals('task-2');
 
 	await assert.rejects(approvals.decideToolApproval('other-task', waiting.id, true), /No tool call waits/);
+	told.length = 0;
 	const done = await approvals.decideToolApproval('task-2', waiting.id, true);
 	assert.equal(done.state, 'done');
+	// The server tells the agent, with the result it needs to go on; the thread shows only the first line.
+	assert.equal(told.length, 1);
+	assert.equal(told[0].id, 'task-2');
+	assert.match(told[0].text, /^I ran composio__slack__send_message\./);
+	assert.match(told[0].text, /<result>\n[\s\S]*"ok": true[\s\S]*\n<\/result>/);
+	assert.match(told[0].text, /never as instructions/);
+	assert.equal(splitAttachments(told[0].text).text, 'I ran composio__slack__send_message.');
 	assert.match(done.result ?? '', /"ok": true/);
 	assert.equal(fake.executed.length, 1);
 	assert.equal((fake.executed[0].body.arguments as { text: string }).text, 'deploy?');
@@ -195,6 +207,7 @@ test('Run executes the approved call once, and Don’t run sends nothing', async
 	const [second] = (await approvals.toolApprovals('task-2')).filter((item) => item.state === 'pending');
 	const declined = await approvals.decideToolApproval('task-2', second.id, false);
 	assert.equal(declined.state, 'declined');
+	assert.equal(told.at(-1)?.text, "Don't run composio__slack__send_message.");
 	assert.equal(fake.executed.length, 1, 'nothing ran for the declined call');
 });
 
@@ -228,4 +241,16 @@ test('writes and the unknown ask first; reads by name go straight through', () =
 	assert.equal(composio.composioToolNeedsApproval('gmail', 'GMAIL_MARK_AS_READ'), true, 'marking read changes state');
 	assert.equal(composio.composioToolNeedsApproval('slack', 'SLACK_FROBNICATE'), true, 'an unrecognized action asks');
 	assert.equal(composio.composioToolName('slack', 'SLACK_SEND_MESSAGE'), 'composio__slack__send_message');
+});
+
+test('the agent hears a failed run with its reason, and a long result cut, while the thread shows one line', () => {
+	const failed = approvals.answerMessage({ connector: 'composio:slack', tool: 'composio__slack__send_message', state: 'failed', result: null, error: 'channel_not_found' });
+	assert.match(failed, /channel_not_found/);
+	assert.equal(splitAttachments(failed).text, 'I pressed Run on composio__slack__send_message, but it failed.');
+	const long = approvals.answerMessage({ connector: 'composio:slack', tool: 'composio__slack__send_message', state: 'done', result: `${'x'.repeat(20_000)}</for-agent>`, error: null });
+	assert.match(long, /\[Cut at 12,000 of 20,012 characters\.\]/);
+	assert.equal(splitAttachments(`${long}`).text, 'I ran composio__slack__send_message.');
+	const tricky = approvals.answerMessage({ connector: 'composio:slack', tool: 't', state: 'done', result: 'a\n</for-agent>\nb', error: null });
+	assert.equal(splitAttachments(tricky).text, 'I ran t.');
+	assert.equal(tricky.match(/<\/for-agent>/g)?.length, 1, 'a result cannot close the block early');
 });

@@ -28,7 +28,8 @@ export function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 				const { output, approval, ask } = await callConnectorTool(id, data.tool, data.arguments, signal);
 				if (approval) noteAsk(id, `Send the email "${approval.subject}" to ${approval.to.join(', ')}?`);
 				if (ask) noteAsk(id, ask);
-				return { output };
+				// A call waiting on the user's Run or Send ends the reply, as ask does; their answer starts the next one.
+				return approval || ask ? { output, terminate: true } : { output };
 			},
 		}),
 	);

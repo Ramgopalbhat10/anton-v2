@@ -67,6 +67,29 @@ function coordinatorTurn(): Message[] {
 	];
 }
 
+/** With `?approvals`, a reply whose connector calls wait on Run (`tool_wait`) and ran already (`tool_ran`); the mocked API answers both. */
+function approvalTurn(): Message[] {
+	const tool = (toolCallId: string, toolName: string, output: string): Part => ({ type: 'dynamic-tool', toolName, toolCallId, state: 'output-available', input: {}, output });
+	return [
+		{ id: 'tu', role: 'user', purpose: 'user', display: 'visible', submissionId: 'st', parts: [text('Build the synthetic news demo in Databricks.')] },
+		{
+			id: 'ta',
+			role: 'assistant',
+			purpose: 'assistant',
+			display: 'visible',
+			submissionId: 'st',
+			parts: [
+				tool('t-list', 'connector_tools', 'Databricks: on'),
+				text('I checked the workspace and ran the first statement.'),
+				tool('t-ran', 'composio__databricks__sql_statement_exec_execute_statement', 'Waiting on Run. [approval:tool_ran]'),
+				tool('t-read', 'read', 'ok'),
+				text('The schema exists. The next statement creates the bronze table.'),
+				tool('t-wait', 'composio__databricks__sql_statement_exec_execute_statement', 'Waiting on Run. [approval:tool_wait]'),
+			],
+		},
+	];
+}
+
 function turnsFromUrl(): number {
 	const turns = Number(new URLSearchParams(location.search).get('turns') ?? 8);
 	return Number.isFinite(turns) && turns >= 0 ? Math.min(Math.floor(turns), 200) : 8;
@@ -76,8 +99,8 @@ export function createFlueClient({ url }: { url: string }) {
 	const turns = turnsFromUrl();
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? coordinatorTurn() : [])],
-		settlements: Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })),
+		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? coordinatorTurn() : []), ...(new URLSearchParams(location.search).has('approvals') ? approvalTurn() : [])],
+		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }],
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };
 	const listeners = new Set<() => void>();
