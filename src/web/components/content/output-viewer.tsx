@@ -179,7 +179,7 @@ export function OutputPreview({ item, code = false, title }: { item: ViewerItem;
 				<HtmlFrame sessionId={sessionId} path={path} title={title ?? nameOf(path)} fill />
 			</div>
 		);
-	if (code || (isText(path) && !readable && kindOf(path) !== 'table')) return <Source sessionId={sessionId} path={path} />;
+	if (code || (isText(path) && !readable && kindOf(path) !== 'table')) return <Source sessionId={sessionId} path={path} fill />;
 	if (isMarkdown(path))
 		return (
 			<div className="mx-auto max-w-[760px] px-5 py-6">
@@ -314,8 +314,10 @@ function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean 
 				event.stopPropagation();
 				if (marking) setMarking(false);
 				else closeViewer();
-			} else if (!marking && event.key === 'ArrowLeft') stepViewer(-1);
-			else if (!marking && event.key === 'ArrowRight') stepViewer(1);
+			} else if (!marking && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+				if (event.target instanceof Element && event.target.closest('.sg-source-scroll')) return;
+				stepViewer(event.key === 'ArrowLeft' ? -1 : 1);
+			}
 		};
 		window.addEventListener('keydown', onKey, true);
 		return () => window.removeEventListener('keydown', onKey, true);
@@ -326,7 +328,7 @@ function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean 
 			aria-label={`Viewing ${nameOf(item.path)}`}
 			className={cn(
 				'@container/viewer flex min-h-0 min-w-0 flex-col overflow-hidden bg-(--bg-panel)',
-				docked ? 'flex-1' : 'sg-viewer-sheet fixed z-40 rounded-card shadow-(--sh-2) duration-200 animate-in fade-in-0 slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]',
+				docked ? 'sg-viewer-docked flex-1' : 'sg-viewer-sheet fixed z-40 rounded-card shadow-(--sh-2) motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]',
 			)}
 		>
 			<header className="flex h-11 min-w-0 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-3 @min-[480px]/viewer:gap-2">

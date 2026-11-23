@@ -11,7 +11,9 @@ import { session } from './render';
 
 const picture = { sessionId: 's1', path: `images/${'long-filename-'.repeat(15)}.png` };
 const document = { sessionId: 's1', path: 'reports/resume.pdf' };
-const items = [picture, document];
+const source = { sessionId: 's1', path: 'scripts/example.js' };
+const sourceText = 'const first = 1;\r\n\r\n\tconst third = 3;\r\n';
+const items = [picture, document, source];
 const terminal = vi.hoisted(() => ({ connect: vi.fn(), close: vi.fn(), dispose: vi.fn() }));
 
 vi.mock('@flue/react', () => ({ useFlueAgent: () => ({ messages: [], settlements: [], status: 'idle', historyReady: true, refresh: vi.fn(), sendMessage: vi.fn() }) }));
@@ -51,6 +53,7 @@ async function mount(initiallyOpen: boolean, mobile = false, active: PanelName |
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
 	client.setQueryData(['session', 's1'], session({ repo: '', projectId: null }));
 	client.setQueryData(['outputs', 's1'], { outputs: items.map((item) => ({ path: item.path, size: 1, mtimeMs: 1 })) });
+	client.setQueryData(['output', 's1', source.path], sourceText);
 	client.setQueryData(['changes', 's1', 'unpushed'], { source: 'saved', patch: '' });
 	client.setQueryData(['health'], { providers: { sandbox: 'local' } });
 	render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
@@ -58,6 +61,23 @@ async function mount(initiallyOpen: boolean, mobile = false, active: PanelName |
 }
 
 describe('artifact viewer layout', () => {
+	it('opens source in the sliding workspace with a separate, keyboard-scrollable line gutter', async () => {
+		await mount(false);
+		fireEvent.click(screen.getByTitle(`Open ${source.path}`));
+		const viewer = await screen.findByRole('complementary', { name: 'Viewing example.js' });
+		expect(viewer.closest('.sg-workspace')?.getAttribute('data-slide')).toBe('in');
+		const scroll = within(viewer).getByRole('region', { name: 'Source code' });
+		expect(scroll.tabIndex).toBe(0);
+		expect(scroll.querySelector('[aria-hidden="true"]')?.textContent).toBe('1\n2\n3\n4');
+		expect(scroll.querySelector('code')?.textContent).toBe(sourceText.replaceAll('\r\n', '\n'));
+		await waitFor(() => expect(scroll.querySelector('code span')).not.toBeNull());
+		expect(scroll.querySelector('code')?.textContent).toBe(sourceText.replaceAll('\r\n', '\n'));
+		fireEvent.keyDown(scroll, { key: 'ArrowLeft' });
+		expect(screen.getByRole('complementary', { name: 'Viewing example.js' })).toBe(viewer);
+		fireEvent.keyDown(scroll, { key: 'Escape' });
+		expect(screen.queryByRole('complementary')).toBeNull();
+	});
+
 	it('does not connect a saved Terminal when only an artifact opens a closed workspace', async () => {
 		await mount(false, false, 'Terminal');
 		// Resolve the real lazy panel module, so an accidental mount cannot escape the connection assertion.

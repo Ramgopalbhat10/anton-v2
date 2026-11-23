@@ -81,11 +81,11 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 	other: () => <EmptyLine className="px-3 py-2.5">No preview for this file type. Download it to open it.</EmptyLine>,
 };
 
-export function Source({ sessionId, path }: { sessionId: string; path: string }) {
-	return <SourceAt place={taskPlace(sessionId, path)} />;
+export function Source({ sessionId, path, fill }: { sessionId: string; path: string; fill?: boolean }) {
+	return <SourceAt place={taskPlace(sessionId, path)} fill={fill} />;
 }
 
-export function SourceAt({ place }: { place: Place }) {
+export function SourceAt({ place, fill }: { place: Place; fill?: boolean }) {
 	const language = place.path.split('.').pop()?.toLowerCase() ?? 'txt';
-	return <TextAt place={place} render={(text) => <CodeBlock code={text} language={language} className="mb-0! rounded-none! border-0!" />} />;
+	return <TextAt place={place} render={(text) => <CodeBlock code={text} language={language} source className={fill ? 'h-full' : undefined} />} />;
 }
