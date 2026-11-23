@@ -6,6 +6,18 @@ import { ChatNavigation, chatTurns } from '@/components/thread/chat-navigation';
 
 const row = (id: string, role: 'user' | 'assistant', text: string) => ({ message: { id, role, parts: [{ type: 'text', text }] } }) as ThreadRow;
 
+function mockRailBounds(buttons: HTMLElement[], height: number) {
+	const list = buttons[0].parentElement!;
+	list.parentElement!.getBoundingClientRect = list.getBoundingClientRect = () => new DOMRect(0, 100, 40, height);
+	buttons.forEach((button, index) => {
+		button.getBoundingClientRect = () => new DOMRect(0, 104 + index * 12 - list.scrollTop, 40, 12);
+	});
+	return (top: number) => {
+		list.scrollTop = top;
+		fireEvent.scroll(list);
+	};
+}
+
 describe('chat navigation', () => {
 	it('previews only the bounded input in two lines and navigates', () => {
 		const rows = [row('u1', 'user', 'Question ' + 'x'.repeat(220)), row('a1', 'assistant', 'A private response'), row('u2', 'user', 'Next')];
@@ -16,6 +28,7 @@ describe('chat navigation', () => {
 		render(<ChatNavigation rows={rows} onNavigate={navigate} />);
 		const first = screen.getByRole('button', { name: /Go to input 1/ });
 		const second = screen.getByRole('button', { name: /Go to input 2/ });
+		mockRailBounds([first, second], 32);
 		fireEvent.focus(first);
 		expect(screen.getByRole('tooltip').textContent).toBe(turns[0].input);
 		expect(screen.getByRole('tooltip').firstElementChild?.className).toContain('line-clamp-2');
@@ -27,28 +40,30 @@ describe('chat navigation', () => {
 	});
 
 	it('keeps the preview beside its item when the rail scrolls', () => {
-		const rows = [row('u1', 'user', 'First'), row('u2', 'user', 'Second')];
+		const rows = Array.from({ length: 6 }, (_, index) => row(`u${index}`, 'user', `Message ${index}`));
 		render(<ChatNavigation rows={rows} onNavigate={vi.fn()} />);
-		const nav = screen.getByRole('navigation', { name: 'Chat navigation' });
-		const first = screen.getByRole('button', { name: /Go to input 1/ });
-		const second = screen.getByRole('button', { name: /Go to input 2/ });
-		const list = first.parentElement!;
-		nav.getBoundingClientRect = list.getBoundingClientRect = () => new DOMRect(0, 100, 40, 60);
-		first.getBoundingClientRect = () => new DOMRect(0, 128 - list.scrollTop, 40, 12);
-		second.getBoundingClientRect = () => new DOMRect(0, 140 - list.scrollTop, 40, 12);
+		const buttons = screen.getAllByRole('button', { name: /Go to input/ });
+		const [first, second, , fourth] = buttons;
+		const scroll = mockRailBounds(buttons, 40);
 
 		fireEvent.mouseEnter(first);
 		const tooltip = screen.getByRole('tooltip');
-		expect(tooltip.style.top).toBe('34px');
+		expect(tooltip.style.top).toBe('10px');
 		fireEvent.mouseEnter(second);
-		expect(tooltip.style.top).toBe('46px');
+		expect(tooltip.style.top).toBe('22px');
 		expect(second.getAttribute('aria-describedby')).toBe(tooltip.id);
 
-		list.scrollTop = 24;
-		fireEvent.scroll(list);
-		expect(tooltip.style.top).toBe('22px');
-		list.scrollTop = 56;
-		fireEvent.scroll(list);
+		scroll(12);
+		expect(tooltip.style.top).toBe('10px');
+		scroll(27);
+		expect(tooltip.style.visibility).toBe('');
+		scroll(28);
+		expect(tooltip.style.visibility).toBe('hidden');
+
+		fireEvent.focus(fourth);
+		scroll(1);
+		expect(tooltip.style.visibility).toBe('');
+		scroll(0);
 		expect(tooltip.style.visibility).toBe('hidden');
 	});
 

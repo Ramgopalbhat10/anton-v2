@@ -50,7 +50,7 @@ export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }:
 			const item = button.getBoundingClientRect();
 			const viewport = scroller.getBoundingClientRect();
 			tooltip.style.top = `${item.top + item.height / 2 - nav.getBoundingClientRect().top}px`;
-			tooltip.style.visibility = item.bottom < viewport.top || item.top > viewport.bottom ? 'hidden' : '';
+			tooltip.style.visibility = item.bottom <= viewport.top || item.top >= viewport.bottom ? 'hidden' : '';
 		};
 		place();
 		scroller.addEventListener('scroll', place);
