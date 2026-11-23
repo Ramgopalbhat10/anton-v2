@@ -40,7 +40,7 @@ export function staleFor(change: Exclude<Change, { kind: 'now' }>): QueryKey[] {
 	if (change.kind === 'notifications') return [['notifications']];
 	if (change.kind === 'projects') return [['projects']];
 	if (change.kind === 'general') return [['general-settings']];
-	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets']];
+	if (change.kind === 'connectors') return [['connectors'], ['connections'], ['sealed-secrets'], ['mcp-tools']];
 	if (change.kind === 'automations') return [['automations'], ['space-automations']];
 	// Projects count their threads by state, and Reviews lists tasks by their pull request, so a change to any task can move them.
 	if (change.kind === 'sessions') return [['sessions'], ['budget'], ['usage'], ['compute'], ['spaces'], ['space'], ['space-todos'], ['artifacts'], ['reviews']];

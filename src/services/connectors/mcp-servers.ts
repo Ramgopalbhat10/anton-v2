@@ -1,7 +1,7 @@
 import { announce } from '../../core/changes.ts';
-import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
+import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import type { InstalledMcpServer, McpServer } from '../../core/types.ts';
-import { deleteMcpServer, getMcpServer, insertMcpServer, listMcpServers, saveMcpServer, setMcpServerEnabled } from '../../db/mcp-servers.ts';
+import { deleteMcpServer, getMcpServer, insertMcpServer, listMcpServers, setMcpServerEnabled, updateMcpServerRow } from '../../db/mcp-servers.ts';
 import { logProblem } from '../../core/log.ts';
 import { forgetMcpSignIn, mcpAccessToken, McpSignInNeeded, type McpSignInView, signInView } from './mcp-sign-in.ts';
 import { type McpTool, serverTools } from './mcp-tools.ts';
@@ -97,7 +97,11 @@ export async function updateMcpServer(name: string, input: Omit<McpServerInput, 
 	const sameHost = originOf(current.url) === originOf(input.url);
 	const auth = input.auth === '' ? null : (input.auth ?? (sameHost ? current.auth : null));
 	const headers = mergeHeaders(current.headers ?? {}, input.headers, sameHost);
-	await saveMcpServer({ name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth, headers });
+	const updated = await updateMcpServerRow({ name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth, headers }, current.addedAt);
+	if (!updated) {
+		if (await getMcpServer(name)) throw new ConflictError(`MCP server ${name} was replaced while editing`);
+		throw new NotFoundError(`No MCP server is named ${name}`);
+	}
 	// A sign-in is for the server it was made with; another address signs in afresh.
 	if (current.url !== input.url) await forgetMcpSignIn(name);
 	announce({ kind: 'connectors' });

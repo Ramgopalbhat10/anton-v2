@@ -5,7 +5,11 @@ import { appDb } from './client.ts';
 /** Matches mcpToolName's server segment normalization so two servers never share or shadow a tool namespace. */
 export const normalizeMcpServerName = (name: string) => name.replace(/[^\w]/g, '_');
 
-const namespacesOverlap = (a: string, b: string) => a === b || a.startsWith(`${b}__`) || b.startsWith(`${a}__`);
+const namespacesOverlap = (a: string, b: string) => {
+	const prefixA = `${a}__`;
+	const prefixB = `${b}__`;
+	return prefixA.startsWith(prefixB) || prefixB.startsWith(prefixA);
+};
 
 type Row = Record<string, unknown>;
 
@@ -34,21 +38,21 @@ export async function getMcpServer(name: string): Promise<InstalledMcpServer | n
 	return row ? toServer(row) : null;
 }
 
-/** Atomically checks name uniqueness, __-boundary tool-namespace overlaps, and the server cap in a single SQL statement. */
+/** Atomically checks name uniqueness, complete-prefix tool-namespace overlaps (including trailing __), and the server cap in a single SQL statement. */
 export async function insertMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>, maxServers: number): Promise<void> {
 	const db = await appDb();
 	const normalized = normalizeMcpServerName(server.name);
+	const prefix = `${normalized}__`;
 	// Single statement executes atomically under SQLite's write lock on both file and :memory: databases.
-	const existingNs = `replace(replace(name, '-', '_'), ' ', '_')`;
+	const existingPrefix = `(replace(replace(name, '-', '_'), ' ', '_') || '__')`;
 	const inserted = await db.execute({
 		sql: `INSERT INTO mcp_servers (name, url, auth, headers_json, tools_json, code_mode, enabled, added_at)
 			SELECT ?, ?, ?, ?, ?, ?, 1, ?
 			WHERE NOT EXISTS (
 				SELECT 1 FROM mcp_servers
 				WHERE name = ?
-					OR ${existingNs} = ?
-					OR substr(${existingNs}, 1, length(?) + 2) = (? || '__')
-					OR substr(?, 1, length(${existingNs}) + 2) = (${existingNs} || '__')
+					OR substr(${existingPrefix}, 1, length(?)) = ?
+					OR substr(?, 1, length(${existingPrefix})) = ${existingPrefix}
 			)
 			AND (SELECT COUNT(*) FROM mcp_servers) < ?`,
 		args: [
@@ -60,10 +64,9 @@ export async function insertMcpServer(server: Omit<InstalledMcpServer, 'enabled'
 			server.codeMode === false ? 0 : 1,
 			new Date().toISOString(),
 			server.name,
-			normalized,
-			normalized,
-			normalized,
-			normalized,
+			prefix,
+			prefix,
+			prefix,
 			maxServers,
 		],
 	});
@@ -75,13 +78,14 @@ export async function insertMcpServer(server: Omit<InstalledMcpServer, 'enabled'
 	throw new InvalidInputError(`Anton keeps up to ${maxServers} MCP servers`);
 }
 
-export async function saveMcpServer(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>): Promise<void> {
+/** Update-only: never recreates a deleted server or overwrites a replacement inserted concurrently. */
+export async function updateMcpServerRow(server: Omit<InstalledMcpServer, 'enabled' | 'addedAt'>, expectedAddedAt: string): Promise<boolean> {
 	const db = await appDb();
-	await db.execute({
-		sql: `INSERT INTO mcp_servers (name, url, auth, headers_json, tools_json, code_mode, enabled, added_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-			ON CONFLICT(name) DO UPDATE SET url = excluded.url, auth = excluded.auth, headers_json = excluded.headers_json, tools_json = excluded.tools_json, code_mode = excluded.code_mode`,
-		args: [server.name, server.url, server.auth, JSON.stringify(server.headers ?? {}), JSON.stringify(server.tools), server.codeMode === false ? 0 : 1, new Date().toISOString()],
+	const updated = await db.execute({
+		sql: `UPDATE mcp_servers SET url = ?, auth = ?, headers_json = ?, tools_json = ?, code_mode = ? WHERE name = ? AND added_at = ?`,
+		args: [server.url, server.auth, JSON.stringify(server.headers ?? {}), JSON.stringify(server.tools), server.codeMode === false ? 0 : 1, server.name, expectedAddedAt],
 	});
+	return updated.rowsAffected === 1;
 }
 
 export async function setMcpServerEnabled(name: string, enabled: boolean): Promise<void> {
