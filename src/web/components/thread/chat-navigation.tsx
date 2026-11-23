@@ -1,4 +1,4 @@
-import { memo, useId, useRef, useState } from 'react';
+import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import { splitAttachments } from '../../../core/attachments';
 import { messageText, type ThreadRow } from '@/lib/joined';
 
@@ -28,20 +28,46 @@ function sameInputs(before: ThreadRow[], after: ThreadRow[]): boolean {
 
 /** Drawn again only when your messages change, not on each chunk of a reply. */
 export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }: Props) {
-	const [active, setActive] = useState<string | null>(null);
+	const [active, setActive] = useState<{ id: string; button: HTMLButtonElement } | null>(null);
 	const [open, setOpen] = useState(false);
 	const previewId = useId();
 	const handle = useRef<HTMLButtonElement>(null);
+	const rail = useRef<HTMLElement>(null);
+	const list = useRef<HTMLDivElement>(null);
+	const card = useRef<HTMLDivElement>(null);
 	const turns = chatTurns(rows);
-	const selected = turns.find((turn) => turn.id === active);
+	const selectedIndex = turns.findIndex((turn) => turn.id === active?.id);
+	const selected = turns[selectedIndex];
+
+	useLayoutEffect(() => {
+		const nav = rail.current;
+		const scroller = list.current;
+		const tooltip = card.current;
+		if (!active || !nav || !scroller || !tooltip) return;
+		const button = active.button;
+		// Keep the card outside the scrollport so it can extend into the conversation without being clipped.
+		const place = () => {
+			const item = button.getBoundingClientRect();
+			const viewport = scroller.getBoundingClientRect();
+			tooltip.style.top = `${item.top + item.height / 2 - nav.getBoundingClientRect().top}px`;
+			tooltip.style.visibility = item.bottom <= viewport.top || item.top >= viewport.bottom ? 'hidden' : '';
+		};
+		place();
+		scroller.addEventListener('scroll', place);
+		const resize = new ResizeObserver(place);
+		resize.observe(scroller);
+		resize.observe(button);
+		return () => { scroller.removeEventListener('scroll', place); resize.disconnect(); };
+	}, [active, selectedIndex]);
+
 	if (!turns.length) return null;
 	return (
-		<nav aria-label="Chat navigation" className="group/nav absolute right-0 top-1/2 z-20 flex -translate-y-1/2 items-center"
+		<nav ref={rail} aria-label="Chat navigation" className="group/nav absolute right-0 top-1/2 z-20 flex -translate-y-1/2 items-center"
 			onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) setActive(null); }}
 			onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setActive(null); } }}
 			onKeyDown={(event) => { if (event.key === 'Escape') { setActive(null); setOpen(false); handle.current?.focus(); } }}>
 			{selected ? (
-				<div id={previewId} role="tooltip" className="in-pop absolute right-full w-[min(280px,65vw)] p-3 text-small leading-[18px]">
+				<div ref={card} id={previewId} role="tooltip" className="in-pop absolute right-full w-[min(280px,65vw)] -translate-y-1/2 p-3 text-small leading-[18px]">
 					<div className="line-clamp-2 break-words font-semibold text-(--text)">{selected.input}</div>
 				</div>
 			) : null}
@@ -50,11 +76,11 @@ export const ChatNavigation = memo(function ChatNavigation({ rows, onNavigate }:
 				className={`absolute right-0 ${open ? '-top-10' : ''} flex h-10 w-4 items-center justify-center rounded-l-control text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus) [@media(hover:hover)]:group-hover/nav:pointer-events-none [@media(hover:hover)]:group-hover/nav:opacity-0 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100`}>
 				<span aria-hidden="true">⋮</span>
 			</button>
-			<div className={`flex max-h-[50vh] flex-col overflow-x-hidden overflow-y-auto py-1 transition-[opacity,width] duration-200 motion-reduce:transition-none [@media(hover:hover)]:group-hover/nav:w-10 [@media(hover:hover)]:group-hover/nav:opacity-100 [@media(hover:hover)]:group-hover/nav:pointer-events-auto ${open ? 'w-10 opacity-100' : 'pointer-events-none w-5 opacity-0'}`}>
+			<div ref={list} className={`flex max-h-[50vh] flex-col overflow-x-hidden overflow-y-auto py-1 transition-[opacity,width] duration-200 motion-reduce:transition-none [@media(hover:hover)]:group-hover/nav:w-10 [@media(hover:hover)]:group-hover/nav:opacity-100 [@media(hover:hover)]:group-hover/nav:pointer-events-auto ${open ? 'w-10 opacity-100' : 'pointer-events-none w-5 opacity-0'}`}>
 				{turns.map((turn, index) => (
-					<button key={turn.id} type="button" tabIndex={open ? 0 : -1} aria-label={`Go to input ${index + 1}: ${turn.input}`} aria-describedby={active === turn.id ? previewId : undefined}
-						onMouseEnter={() => setActive(turn.id)}
-						onFocus={() => setActive(turn.id)} onBlur={() => setActive((current) => current === turn.id ? null : current)}
+					<button key={turn.id} type="button" tabIndex={open ? 0 : -1} aria-label={`Go to input ${index + 1}: ${turn.input}`} aria-describedby={active?.id === turn.id ? previewId : undefined}
+						onMouseEnter={(event) => setActive({ id: turn.id, button: event.currentTarget })}
+						onFocus={(event) => setActive({ id: turn.id, button: event.currentTarget })} onBlur={() => setActive((current) => current?.id === turn.id ? null : current)}
 						onClick={(event) => { onNavigate(turn.id); setOpen(false); setActive(null); if (event.detail === 0) handle.current?.focus(); else event.currentTarget.blur(); }}
 						className="group flex h-3 w-10 shrink-0 items-center justify-end rounded-inner outline-none focus-visible:shadow-(--focus)">
 						<span className="h-[3px] w-4 rounded-full bg-(--text-3) transition-[width,background-color] duration-200 group-hover:w-8 group-hover:bg-(--accent) group-focus-visible:w-8 group-focus-visible:bg-(--accent) motion-reduce:transition-none" />
