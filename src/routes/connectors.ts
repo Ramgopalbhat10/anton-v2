@@ -60,13 +60,60 @@ app.get('/api/connectors/:account/callback', async (c) => {
 	}
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
+const MAX_AUTH_LENGTH = 32_000;
+// RFC 9110 / Fetch ByteString header values: HTAB, printable ASCII, or obs-text (0x80-0xFF); rejects control chars and Unicode > U+00FF (e.g. smart quotes).
+const WIRE_HEADER_VALUE = /^[\t\x20-\x7E\x80-\xFF]*$/;
+// HTTP framing and Streamable HTTP MCP transport-owned headers that custom headers must not override (Authorization is intentionally allowed).
+const FORBIDDEN_HEADER_NAMES = new Set([
+	'host',
+	'content-length',
+	'transfer-encoding',
+	'connection',
+	'content-type',
+	'accept',
+	'last-event-id',
+	'mcp-session-id',
+	'mcp-protocol-version',
+	'mcp-method',
+	'mcp-name',
+]);
+const HEADER_NAME = v.pipe(
+	v.string('Header names must be text'),
+	v.regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/, 'Header names must be valid HTTP header names'),
+	v.check((name) => !FORBIDDEN_HEADER_NAMES.has(name.toLowerCase()), 'That HTTP or MCP transport header cannot be overridden'),
+);
+const HEADER_VALUE = v.pipe(
+	v.string('Header values must be text'),
+	v.trim(),
+	v.maxLength(MAX_AUTH_LENGTH, `Header values must be at most ${MAX_AUTH_LENGTH} characters`),
+	v.regex(WIRE_HEADER_VALUE, 'Header values must use valid HTTP header characters (no line breaks or non-Latin-1 characters)'),
+);
+const MCP_HEADERS = v.pipe(
+	v.record(HEADER_NAME, v.nullable(HEADER_VALUE)),
+	v.check((record) => Object.keys(record).length <= 30, 'Up to 30 custom headers are allowed'),
+	v.check((record) => new Set(Object.keys(record).map((key) => key.toLowerCase())).size === Object.keys(record).length, 'Each header needs its own name'),
+);
 const MCP_SERVER = v.object({
 	url: v.pipe(v.string(), v.trim(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
-	auth: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000)))),
+	auth: v.optional(
+		v.nullable(
+			v.pipe(
+				v.string('Tokens must be text'),
+				v.trim(),
+				v.maxLength(MAX_AUTH_LENGTH, `Tokens must be at most ${MAX_AUTH_LENGTH} characters`),
+				v.regex(WIRE_HEADER_VALUE, 'Tokens must use valid HTTP header characters (no line breaks or non-Latin-1 characters)'),
+			),
+		),
+	),
+	headers: v.optional(MCP_HEADERS),
 	tools: v.pipe(v.array(v.pipe(v.string(), v.maxLength(100))), v.maxLength(50)),
 	codeMode: v.optional(v.boolean()),
 });
-const SERVER_NAME = v.pipe(v.string(), v.regex(/^[a-z0-9_-]{1,32}$/, 'Server names use lowercase letters, digits, - and _'));
+const SERVER_NAME = v.pipe(
+	v.string(),
+	v.trim(),
+	v.regex(/^[A-Za-z0-9_-](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?$/, 'Server names use letters, digits, spaces, - and _'),
+);
 app.post('/api/mcp-servers', async (c) => {
 	const input = await body(c, v.object({ ...MCP_SERVER.entries, name: SERVER_NAME }));
 	return c.json({ mcpServers: await addMcpServer(input) });

@@ -97,6 +97,10 @@ describe('changing pages while the event stream is up', () => {
 		...(['state', 'usage', 'files', 'browser', 'computer', 'subagents', 'todos', 'scripts', 'joins', 'mail', 'approvals', 'pr-metadata', 'settled'] as const).map((what) => ({ kind: 'task', id: 't', what })),
 	] as Parameters<typeof staleFor>[0][];
 
+	it('marks mcp-tools stale on connector change events so open detail views refresh', () => {
+		expect(staleFor({ kind: 'connectors' })).toContainEqual(['mcp-tools']);
+	});
+
 	it('keeps only reads that some server event marks stale', () => {
 		const marked = new Set(kinds.flatMap((change) => staleFor(change).map((key) => String(key[0]))));
 		for (const key of LIVE_KEYS) expect(marked, key).toContain(key);

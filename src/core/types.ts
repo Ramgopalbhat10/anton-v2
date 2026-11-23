@@ -12,8 +12,8 @@ export type Project = {
 	memory: string;
 } & ProjectSettings;
 
-/** `auth` is sent as a Bearer token; `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script. */
-export type McpServer = { name: string; url: string; auth: string | null; tools: string[]; codeMode?: boolean };
+/** `auth` is sent as a Bearer token; `headers` are extra HTTP headers sent with requests; `codeMode: false` keeps its tools in the agent's tool list rather than only in run_script. */
+export type McpServer = { name: string; url: string; auth: string | null; headers?: Record<string, string>; tools: string[]; codeMode?: boolean };
 
 export const HELPER_AGENTS = ['explorer', 'tester', 'browser', 'computer', 'reviewer'] as const;
 export type HelperAgent = (typeof HELPER_AGENTS)[number];

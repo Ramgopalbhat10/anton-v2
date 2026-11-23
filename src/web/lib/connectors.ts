@@ -21,15 +21,16 @@ export function connectorItems(view: ConnectorsView | undefined): ConnectorItem[
 		const state: ConnectorState = !mailbox.options.enabled ? 'off' : account.problem ? 'needs-sign-in' : 'on';
 		return [{ key: connectorKey.mailbox(mailbox.id), kind: 'mailbox', name: mailbox.name, state, mailbox, account }];
 	});
-	const servers = view.mcpServers.map(
-		(server): ConnectorItem => ({
+	const servers = view.mcpServers.map((server): ConnectorItem => {
+		const hasAuthHeader = (server.headerNames ?? []).some((name) => name.toLowerCase() === 'authorization');
+		return {
 			key: connectorKey.mcp(server.name),
 			kind: 'mcp',
 			name: server.name,
-			state: !server.enabled ? 'off' : server.signIn.state === 'needed' ? 'needs-sign-in' : 'on',
+			state: !server.enabled ? 'off' : !hasAuthHeader && server.signIn.state === 'needed' ? 'needs-sign-in' : 'on',
 			server,
-		}),
-	);
+		};
+	});
 	const composio = view.composio.accounts.map((account): ConnectorItem => {
 		const state: ConnectorState = !account.enabled ? 'off' : !view.composio.configured || account.status !== 'active' ? 'needs-sign-in' : 'on';
 		return { key: connectorKey.composio(account.toolkit), kind: 'composio', name: account.name, state, account };

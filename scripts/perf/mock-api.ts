@@ -262,6 +262,17 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		res.end(JSON.stringify(body));
 	};
 
+	const mcpServers: Array<{
+		name: string;
+		url: string;
+		tools: string[];
+		hasAuth: boolean;
+		headerNames: string[];
+		signIn: { state: 'none'; since: null; problem: null; clientId: null; pastedClient: false };
+		codeMode?: boolean;
+		enabled: boolean;
+		addedAt: string;
+	}> = [];
 	const handle = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
 		const url = new URL(req.url ?? '/', 'http://local');
 		let path = url.pathname;
@@ -388,7 +399,68 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (path === `${task}/pulls/12/diff`) return json(res, { patch });
 		if (/^\/api\/projects\/[^/]+\/branches$/.test(path)) return json(res, { branches: ['main'] });
 		if (path === '/api/storage') return json(res, { objects: 1284, bytes: 412_000_000, lastCleanup: { at: ago(60 * 9), removed: 37, freedBytes: 18_400_000 } });
-		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } });
+		if (path === '/api/connectors') return json(res, { accounts: [], mailboxes: [], mcpServers, composio: { configured: false, keyFromEnv: false, accounts: [] } });
+		if (path === '/api/mcp-servers' && req.method === 'POST') {
+			const chunks: Buffer[] = [];
+			req.on('data', (chunk: Buffer) => chunks.push(chunk));
+			req.on('end', () => {
+				const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+					name?: string;
+					url?: string;
+					auth?: string | null;
+					headers?: Record<string, string | null>;
+					tools?: string[];
+					codeMode?: boolean;
+				};
+				const name = String(body.name ?? '').trim();
+				const headerNames = Object.keys(body.headers ?? {}).sort((a, b) => a.localeCompare(b));
+				mcpServers.push({
+					name,
+					url: String(body.url ?? ''),
+					tools: body.tools ?? [],
+					hasAuth: Boolean(body.auth),
+					headerNames,
+					signIn: { state: 'none', since: null, problem: null, clientId: null, pastedClient: false },
+					...(body.codeMode === false ? { codeMode: false } : {}),
+					enabled: true,
+					addedAt: new Date().toISOString(),
+				});
+				json(res, { mcpServers });
+			});
+			return;
+		}
+		const mcpTools = path.match(/^\/api\/mcp-servers\/([^/]+)\/tools$/);
+		if (mcpTools) return json(res, { tools: [] });
+		const mcpOne = path.match(/^\/api\/mcp-servers\/([^/]+)$/);
+		if (mcpOne && req.method === 'PUT') {
+			const name = decodeURIComponent(mcpOne[1]);
+			const chunks: Buffer[] = [];
+			req.on('data', (chunk: Buffer) => chunks.push(chunk));
+			req.on('end', () => {
+				const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+					url?: string;
+					auth?: string | null;
+					headers?: Record<string, string | null>;
+					tools?: string[];
+					codeMode?: boolean;
+				};
+				const at = mcpServers.findIndex((item) => item.name === name);
+				if (at >= 0) {
+					const current = mcpServers[at];
+					const headerNames = body.headers !== undefined ? Object.keys(body.headers).sort((a, b) => a.localeCompare(b)) : current.headerNames;
+					mcpServers[at] = {
+						...current,
+						url: body.url ?? current.url,
+						tools: body.tools ?? current.tools,
+						hasAuth: body.auth === '' ? false : body.auth ? true : current.hasAuth,
+						headerNames,
+						codeMode: body.codeMode,
+					};
+				}
+				json(res, { mcpServers });
+			});
+			return;
+		}
 		if (path === '/api/artifacts') return json(res, { artifacts });
 		if (path === '/api/settings/sandbox') return json(res, { settings: { cpu: 2, memoryMiB: 4096, idleMinutes: 15, lifetimeHours: 8, region: null, allowedDomains: ['registry.npmjs.org'], baseImage: null, warmImageDays: 7 }, defaultBaseImage: 'node:22-bookworm', provider: 'modal' });
 		if (path === '/api/settings/guardrails') return json(res, { hideSecrets: true });

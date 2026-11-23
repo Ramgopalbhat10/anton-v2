@@ -10,6 +10,51 @@ const CONNECT_MS = 15_000;
 const IDLE_MS = 5 * 60_000;
 const LIST_MS = 10 * 60_000;
 const FAILED_MS = 60_000;
+const MAX_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/** Never follows a redirect to another origin, so tokens and custom headers stay on the configured server's origin. */
+function sameOriginFetch(expectedUrl: URL): typeof fetch {
+	const expectedOrigin = expectedUrl.origin;
+	return async (input, init) => {
+		let currentUrl = input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url;
+		let currentInit: RequestInit = { ...init, redirect: 'manual' };
+		let currentInput: string | URL | Request = input;
+		for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+			const parsed = new URL(currentUrl);
+			if (parsed.origin !== expectedOrigin) {
+				throw new Error(`MCP server request refused: ${parsed.origin} does not match ${expectedOrigin}`);
+			}
+			const response = await fetch(currentInput, currentInit);
+			if (!REDIRECT_STATUSES.has(response.status)) return response;
+			const location = response.headers.get('location');
+			if (!location) return response;
+			const next = new URL(location, parsed);
+			if (next.origin !== expectedOrigin) {
+				void response.body?.cancel();
+				throw new Error(`MCP server redirected to a different origin (${next.origin}); credentials are not sent off-origin`);
+			}
+			if (hop === MAX_REDIRECTS) {
+				void response.body?.cancel();
+				throw new Error('MCP server redirected too many times');
+			}
+			void response.body?.cancel();
+			const method = (currentInit.method ?? (currentInput instanceof Request ? currentInput.method : 'GET')).toUpperCase();
+			const baseHeaders = currentInit.headers ?? (currentInput instanceof Request ? currentInput.headers : undefined);
+			if (response.status === 303 || ((response.status === 301 || response.status === 302) && method === 'POST')) {
+				const headers = new Headers(baseHeaders);
+				headers.delete('content-type');
+				headers.delete('content-length');
+				currentInit = { ...currentInit, method: 'GET', body: undefined, headers, redirect: 'manual' };
+			} else {
+				currentInit = { ...currentInit, method, headers: baseHeaders, redirect: 'manual' };
+			}
+			currentUrl = next.toString();
+			currentInput = currentUrl;
+		}
+		throw new Error('MCP server redirected too many times');
+	};
+}
 
 export type McpTool = { name: string; description?: string; inputSchema?: Record<string, unknown>; outputSchema?: Record<string, unknown> };
 export type McpContent =
@@ -26,8 +71,25 @@ type Connection = { client: Promise<Client>; idle: ReturnType<typeof setTimeout>
 const connections = new Map<string, Connection>();
 const listings = new Map<string, Listing>();
 
-/** The token never leaves this module's memory. */
-const connectionKey = (server: McpServer) => `${server.url}\n${server.auth ?? ''}`;
+const headerKey = (headers?: Record<string, string>) =>
+	headers
+		? Object.entries(headers)
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([name, value]) => `${name}:${value}`)
+				.join('\n')
+		: '';
+/** The token and custom headers never leave this module's memory. */
+const connectionKey = (server: McpServer) => `${server.url}\n${server.auth ?? ''}\n${headerKey(server.headers)}`;
+
+function serverHeaders(server: McpServer): Record<string, string> | undefined {
+	const headers: Record<string, string> = {};
+	if (server.auth) headers.Authorization = `Bearer ${server.auth}`;
+	for (const [name, value] of Object.entries(server.headers ?? {})) {
+		if (name.toLowerCase() === 'authorization') delete headers.Authorization;
+		headers[name] = value;
+	}
+	return Object.keys(headers).length ? headers : undefined;
+}
 /** A listing also depends on the tools the repo allows. */
 const listingKey = (server: McpServer) => `${connectionKey(server)}\n${server.tools.join(',')}`;
 
@@ -54,8 +116,9 @@ async function withClient<T>(server: McpServer, use: (client: Client) => Promise
 	if (!entry) {
 		const client = (async () => {
 			const next = new Client({ name: 'anton', version: '1' });
-			const headers = server.auth ? { Authorization: `Bearer ${server.auth}` } : undefined;
-			await next.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }), { signal: AbortSignal.timeout(CONNECT_MS) });
+			const url = new URL(server.url);
+			const headers = serverHeaders(server);
+			await next.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers }, fetch: sameOriginFetch(url) }), { signal: AbortSignal.timeout(CONNECT_MS) });
 			return next;
 		})();
 		entry = { client, idle: null };

@@ -292,15 +292,28 @@ const CALL_MS = 5 * 60_000;
 
 /** A mailbox's send only asks: the answer carries the approval the thread shows. */
 export async function callConnectorTool(taskId: string, name: string, args: unknown, signal = AbortSignal.timeout(CALL_MS)): Promise<{ output: string; approval?: MailApprovalView; ask?: string }> {
-	for (const connector of await connectorsNow()) {
-		const prefix = connector.kind === 'mcp' ? mcpToolName(connector.id, '') : connector.kind === 'composio' ? `composio__${connector.id}__` : `${connector.id}_`;
-		if (!name.startsWith(prefix)) continue;
-		if (connector.state === 'off') throw new InvalidInputError(`${connector.name} is off: ${OFF}`);
-		if (connector.state === 'needs-sign-in') throw new InvalidInputError(`${connector.name} needs the user to sign in again in Settings › Connectors.`);
+	const matching = (await connectorsNow())
+		.map((connector) => ({
+			connector,
+			prefix: connector.kind === 'mcp' ? mcpToolName(connector.id, '') : connector.kind === 'composio' ? `composio__${connector.id}__` : `${connector.id}_`,
+		}))
+		.filter(({ prefix }) => name.startsWith(prefix))
+		.sort((a, b) => b.prefix.length - a.prefix.length);
+	let blocked: InvalidInputError | null = null;
+	for (const { connector } of matching) {
+		if (connector.state === 'off') {
+			blocked ??= new InvalidInputError(`${connector.name} is off: ${OFF}`);
+			continue;
+		}
+		if (connector.state === 'needs-sign-in') {
+			blocked ??= new InvalidInputError(`${connector.name} needs the user to sign in again in Settings › Connectors.`);
+			continue;
+		}
 		const tool = (await connector.tools()).find((item) => item.name === name);
 		if (!tool) continue;
 		const result = await tool.run(taskId, args, signal);
 		return { ...result, output: redactor(await secretsToHide(taskId))(result.output) };
 	}
+	if (blocked) throw blocked;
 	throw new NotFoundError(`No connector that is on has a tool named ${name}. List them with connector_tools.`);
 }

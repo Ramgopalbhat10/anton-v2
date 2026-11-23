@@ -2,10 +2,10 @@ import { json, post } from './http';
 
 /** `clientId` is a client you pasted for a server that lets no app register itself. */
 export type McpSignIn = { state: 'signed-in' | 'needed' | 'none'; since: string | null; problem: string | null; clientId: string | null; pastedClient: boolean };
-/** Its token is never sent back, only whether it has one. `codeMode: false` keeps run_script's programs from calling it. */
-export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; signIn: McpSignIn; codeMode?: boolean; enabled: boolean; addedAt: string };
-/** A server as saved: a token left null keeps the stored one, and an empty one removes it. */
-export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null };
+/** Its token and custom header values are never sent back, only whether it has a token and its header names. `codeMode: false` keeps run_script's programs from calling it. */
+export type McpServer = { name: string; url: string; tools: string[]; hasAuth: boolean; headerNames?: string[]; signIn: McpSignIn; codeMode?: boolean; enabled: boolean; addedAt: string };
+/** A server as saved: a token left null keeps the stored one, and an empty one removes it. In `headers`, null keeps a stored value and omitting a key removes it. */
+export type McpServerInput = { name: string; url: string; tools: string[]; codeMode?: boolean; auth?: string | null; headers?: Record<string, string | null> };
 
 /** Signed in on your own OAuth client; its secret and tokens never leave the server. */
 export type ConnectorAccount = {
