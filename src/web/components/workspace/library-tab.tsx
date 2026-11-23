@@ -13,7 +13,7 @@ import type { Output } from '@/lib/api/outputs';
 import { age, fileSize } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { refreshBySource, taskQueries } from '@/lib/task-queries';
-import { plain, PREVIEWS, SourceAt, Table, TextAt } from '@/components/content/file-previews';
+import { PdfPreview, plain, PREVIEWS, SourceAt, Table, TextAt } from '@/components/content/file-previews';
 import { type Kind, kindOf, type LibrarySource, nameOf, type Place, PROJECT_FOLDER, spacePlace, taskPlace } from '@/lib/library';
 
 const size = fileSize;
@@ -24,7 +24,7 @@ function PreviewAt({ place, code }: { place: Place; code: boolean }) {
 	if (code || (kind === 'page' && !place.sessionId)) return <SourceAt place={place} />;
 	if (kind === 'page') return PREVIEWS.page({ sessionId: place.sessionId!, path: place.path });
 	if (kind === 'image') return <img src={place.url} alt={place.path} className="block max-w-full" />;
-	if (kind === 'pdf') return <iframe src={place.url} title={place.path} className="block h-[70vh] w-full border-0 bg-white" />;
+	if (kind === 'pdf') return <PdfPreview url={place.url} path={place.path} />;
 	if (kind === 'table') return <TextAt place={place} render={(text) => <Table text={text} separator={/\.tsv$/i.test(place.path) ? '\t' : ','} />} />;
 	if (kind === 'text') return <TextAt place={place} render={plain} />;
 	return PREVIEWS.other({ sessionId: '', path: place.path });
@@ -35,14 +35,15 @@ function Preview({ library, output, onBack }: { library: LibrarySource; output: 
 	const [code, setCode] = useState(false);
 	const place = library.place(output.path);
 	const live = kind === 'page' && Boolean(place.sessionId);
+	const pdf = kind === 'pdf';
 	return (
-		<div className="flex flex-col gap-2">
-			<div className="flex h-8 items-center gap-2">
+		<div className={cn('flex flex-col gap-2', pdf && 'h-full min-h-0')}>
+			<div className="flex h-8 shrink-0 items-center gap-2">
 				<Btn variant="ghost" size="xs" icon={ChevronLeft} onClick={onBack}>
 					Library
 				</Btn>
 			</div>
-			<div className="in-well overflow-hidden bg-(--bg-app)">
+			<div className={cn('in-well overflow-hidden bg-(--bg-app)', pdf && 'grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)]')}>
 				<div className="flex h-9 items-center gap-2 border-b border-(--line) bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1.5 pl-3">
 					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
 					<div className="min-w-0 flex-1 truncate text-small text-(--text)">{output.path}</div>

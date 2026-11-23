@@ -66,6 +66,10 @@ export function Table({ text, separator }: { text: string; separator: string }) 
 	);
 }
 
+export function PdfPreview({ url, path }: { url: string; path: string }) {
+	return <iframe src={url} title={path} className="block h-full w-full border-0 bg-white" />;
+}
+
 export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string }) => ReactNode> = {
 	page: ({ sessionId, path }) => (
 		<div className="p-3">
@@ -73,7 +77,7 @@ export const PREVIEWS: Record<Kind, (props: { sessionId: string; path: string })
 		</div>
 	),
 	image: ({ sessionId, path }) => <img src={outputUrl(sessionId, path)} alt={path} className="block max-w-full" />,
-	pdf: ({ sessionId, path }) => <iframe src={outputUrl(sessionId, path)} title={path} className="block h-[70vh] w-full border-0 bg-white" />,
+	pdf: ({ sessionId, path }) => <PdfPreview url={outputUrl(sessionId, path)} path={path} />,
 	table: ({ sessionId, path }) => (
 		<TextFile sessionId={sessionId} path={path} render={(text) => <Table text={text} separator={/\.tsv$/i.test(path) ? '\t' : ','} />} />
 	),
