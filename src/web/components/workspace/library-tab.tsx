@@ -43,7 +43,7 @@ function Preview({ library, output, onBack }: { library: LibrarySource; output: 
 					Library
 				</Btn>
 			</div>
-			<div className={cn('in-well overflow-hidden bg-(--bg-app)', pdf && 'grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)]')}>
+			<div className={cn('in-well overflow-hidden bg-(--bg-app)', pdf && 'grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)]')}>
 				<div className="flex h-9 items-center gap-2 border-b border-(--line) bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1.5 pl-3">
 					<Icon icon={ICONS[kindOf(output.path)]} size={13} className={KIND_TONE[kindOf(output.path)]} />
 					<div className="min-w-0 flex-1 truncate text-small text-(--text)">{output.path}</div>
