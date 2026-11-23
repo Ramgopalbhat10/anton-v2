@@ -26,6 +26,32 @@ describe('chat navigation', () => {
 		expect(screen.queryByRole('tooltip')).toBeNull();
 	});
 
+	it('keeps the preview beside its item when the rail scrolls', () => {
+		const rows = [row('u1', 'user', 'First'), row('u2', 'user', 'Second')];
+		render(<ChatNavigation rows={rows} onNavigate={vi.fn()} />);
+		const nav = screen.getByRole('navigation', { name: 'Chat navigation' });
+		const first = screen.getByRole('button', { name: /Go to input 1/ });
+		const second = screen.getByRole('button', { name: /Go to input 2/ });
+		const list = first.parentElement!;
+		nav.getBoundingClientRect = list.getBoundingClientRect = () => new DOMRect(0, 100, 40, 60);
+		first.getBoundingClientRect = () => new DOMRect(0, 128 - list.scrollTop, 40, 12);
+		second.getBoundingClientRect = () => new DOMRect(0, 140 - list.scrollTop, 40, 12);
+
+		fireEvent.mouseEnter(first);
+		const tooltip = screen.getByRole('tooltip');
+		expect(tooltip.style.top).toBe('34px');
+		fireEvent.mouseEnter(second);
+		expect(tooltip.style.top).toBe('46px');
+		expect(second.getAttribute('aria-describedby')).toBe(tooltip.id);
+
+		list.scrollTop = 24;
+		fireEvent.scroll(list);
+		expect(tooltip.style.top).toBe('22px');
+		list.scrollTop = 56;
+		fireEvent.scroll(list);
+		expect(tooltip.style.visibility).toBe('hidden');
+	});
+
 	it('lets touch users reveal and dismiss the overlay', () => {
 		render(<ChatNavigation rows={[row('u1', 'user', 'First')]} onNavigate={vi.fn()} />);
 		fireEvent.click(screen.getByRole('button', { name: 'Show chat navigation' }));
