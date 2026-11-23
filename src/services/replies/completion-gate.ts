@@ -10,6 +10,7 @@ import { replyEnding, replyMessages } from './reply-check.ts';
 import { lastSendBack } from './send-backs.ts';
 import { elapsedText, hoursText, replyElapsed } from './reply-clock.ts';
 import { type TodoList, todoReminded, todosFor } from './todos.ts';
+import { endsOnUser } from './asks.ts';
 
 /*
  * Sends back a reply that says requested work is left undone, for a reason other than something only the user can give.
@@ -137,8 +138,7 @@ export async function completionGate(id: string, calls: readonly Call[], context
 	const d = { ...defaults, ...deps };
 	const { chat, workspace, signal } = context;
 	if (signal?.aborted || isIncognitoId(id) || (chat && !workspace)) return null;
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	await loadGate(id);
 	const round = gate(id).round;
 	if (round && round.rounds >= MAX_ROUNDS) return null;

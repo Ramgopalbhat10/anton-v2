@@ -40,10 +40,12 @@ export function withAgentNote(text: string, note: string): string {
 	return `${text}\n\n<for-agent>\n${note.replaceAll('</for-agent>', '<\\/for-agent>')}\n</for-agent>`;
 }
 
+export const withoutAgentNote = (text: string): string => text.replace(FOR_AGENT, '');
+
 export type AttachmentRef = { name: string; path: string; kind: string; size: number; place: AttachmentPlace };
 
 export function splitAttachments(whole: string): { text: string; files: AttachmentRef[] } {
-	const message = whole.replace(FOR_AGENT, '');
+	const message = withoutAgentNote(whole);
 	const files: AttachmentRef[] = [];
 	let first = -1;
 	// One block after another: a tag in a file's own text is inside its block, so it is skipped with it.

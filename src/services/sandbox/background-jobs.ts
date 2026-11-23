@@ -6,6 +6,7 @@ import { repoDir } from '../git/git.ts';
 import { logProblem } from '../../core/log.ts';
 import { secretsToHide } from '../secrets/secrets.ts';
 import { liveMachine, machineFor } from './workspace.ts';
+import { endsOnUser } from '../replies/asks.ts';
 
 /*
  * Background jobs (a suite, a build) run detached in the machine, in a session of their own, their log and exit code under
@@ -482,8 +483,7 @@ type Call = { tool: string };
 export async function jobsGate(id: string, calls: readonly Call[], context: { signal?: AbortSignal } = {}, deps: Partial<Deps> = {}): Promise<string | null> {
 	const d = { ...defaults, ...deps };
 	if (context.signal?.aborted) return null;
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	const own = tasks.get(id);
 	if (!own?.reply.size) return null;
 	const parts: string[] = [];

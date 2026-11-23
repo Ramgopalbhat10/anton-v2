@@ -1,6 +1,6 @@
 import { updateSession } from '../../db/sessions.ts';
 import { isWorking } from '../tasks/activity.ts';
-import { takeAsk, takePlan } from './asks.ts';
+import { endsOnUser, takeAsk, takePlan } from './asks.ts';
 import { decide, hasDecisionModel, yesOf } from '../models/decisions.ts';
 import { changeGate, gate, loadGate, type Said } from './gate-state.ts';
 import { logProblem } from '../../core/log.ts';
@@ -147,8 +147,7 @@ export function stallReminder(id: string, calls: readonly { tool: string }[]): s
 	const { said, nudged } = gate(id);
 	const text = lastWordsOf(said);
 	if (!text || nudged) return null;
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	if (text.length >= SUBSTANCE || text.includes('?') || !ANNOUNCES.test(text)) return null;
 	changeGate(id, (state) => {
 		state.nudged = true;

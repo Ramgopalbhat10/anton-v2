@@ -76,6 +76,14 @@ test('the request is the message that started the reply, not one that joined it'
 	assert.equal(requestFor('j'), 'Fix incognito chat scrolling.');
 });
 
+test('a Run’s answer is its words, not the call’s result the agent reads after them', async () => {
+	const { withAgentNote } = await import('../src/core/attachments.ts');
+	const answer = withAgentNote('I ran composio__slack__send_message.', `<result>\n${'x'.repeat(5_000)}\n</result>`);
+	noteRequest('k', answer);
+	assert.equal(requestFor('k'), 'I ran composio__slack__send_message.');
+	assert.equal(isRequest('k', answer), true);
+});
+
 test('a reply that reached its bound still leaves its change as seen, so the next reply that changes nothing is not reviewed', async () => {
 	asked = [];
 	noteRequest('u', 'Add sortBy(keys) with a --reverse flag.');

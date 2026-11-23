@@ -161,3 +161,31 @@ test('a reply that ends announcing a step it never took is sent back to take it,
 	reply('s', '', { message: { role: 'assistant', content: [] } });
 	assert.equal(stallReminder('s', []), null, 'a reply whose last message had no words is not read from an earlier one');
 });
+
+test('a reply that ends on a connector call waiting on Run is left alone by every check, until the next reply starts', async () => {
+	const { endsOnUser, noteAwaitingRun, startAwaitingRun } = await import('../src/services/replies/asks.ts');
+	const { todoReminder } = await import('../src/services/replies/todos.ts');
+	const { finishReview } = await import('../src/services/replies/finish-review.ts');
+	const { completionGate } = await import('../src/services/replies/completion-gate.ts');
+	const { jobsGate } = await import('../src/services/sandbox/background-jobs.ts');
+	const { checkGate } = await import('../src/services/sandbox/repo-check.ts');
+	const calls = [{ tool: 'update_todos', isError: false }, { tool: 'connector_call', isError: false }];
+	startAwaitingRun('w');
+	assert.equal(endsOnUser('w', calls), false, 'a connector call that ran at once is ordinary work');
+	startStallCheck('w');
+	reply('w', 'I’ll create the schema first.');
+	assert.match(stallReminder('w', calls) ?? '', /Carry on/);
+	noteAwaitingRun('w');
+	startStallCheck('w');
+	reply('w', 'I’ll create the schema first.');
+	assert.equal(endsOnUser('w', calls), true);
+	assert.equal(stallReminder('w', calls), null);
+	assert.equal(await todoReminder('w', calls), null);
+	assert.equal(await finishReview('w', calls), null);
+	assert.equal(await completionGate('w', calls, { chat: false, workspace: true }), null);
+	assert.equal(await jobsGate('w', calls), null);
+	assert.equal(await checkGate('w', calls), null);
+	startAwaitingRun('w');
+	assert.equal(endsOnUser('w', calls), false, 'the next reply starts without it');
+});
+

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { withoutContext } from '../../core/briefs.ts';
+import { withoutAgentNote } from '../../core/attachments.ts';
 import { FILE_CHANGE_TOOLS } from '../../core/tool-profile.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { getProviders } from '../../providers/index.ts';
@@ -11,6 +12,7 @@ import { logProblem } from '../../core/log.ts';
 import { modelFor } from '../tasks/sessions.ts';
 import { recordUsage } from '../models/usage.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
+import { endsOnUser } from './asks.ts';
 
 /*
  * A fresh read of only the request and the diff before the reply ends, listing what the request asks that the change does
@@ -39,8 +41,8 @@ const KEEP_FILES = 500;
 
 // Kept with the task's checks (`gate-state.ts`), so a reply resumed after a restart is reviewed as it would have been.
 
-/** A thread's brief holds the coordinator's background after the user's words; the request is only theirs (`src/core/briefs.ts`). */
-const requestText = (text: string) => withoutContext(text).slice(0, MAX_REQUEST);
+/** A thread's brief holds the coordinator's background after the user's words, and a Run's answer the call's result for the agent; the request is only their words. */
+const requestText = (text: string) => withoutContext(withoutAgentNote(text)).slice(0, MAX_REQUEST);
 
 export function noteRequest(id: string, text: string): void {
 	const request = requestText(text);
@@ -306,8 +308,7 @@ export async function taskPatch(id: string): Promise<string | null> {
  * the reply left as it found it. The change is read at every end that gets here, so the next reply starts from it.
  */
 export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat }): Promise<string | null> {
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	await loadGate(id);
 	const { request, review } = gate(id);
 	if (!request) return null;

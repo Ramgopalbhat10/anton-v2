@@ -1,6 +1,7 @@
 import * as v from 'valibot';
 import { getSessionTodos, setSessionTodos } from '../../db/sessions.ts';
 import { changeGate, gate, loadGate } from './gate-state.ts';
+import { endsOnUser } from './asks.ts';
 
 /** Each list replaces the one before; a status update names only the changed items, by number. */
 
@@ -225,8 +226,7 @@ type Call = { tool: string; isError: boolean };
 export async function todoReminder(id: string, calls: readonly Call[]): Promise<string | null> {
 	await loadGate(id);
 	if (gate(id).reminded || !calls.some((call) => call.tool === 'update_todos' && !call.isError)) return null;
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	const list = await todosFor(id);
 	const open = list?.todos.filter((todo) => todo.status !== 'completed') ?? [];
 	if (!list || open.length === 0) return null;
