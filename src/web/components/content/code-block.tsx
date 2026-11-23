@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Check, Copy } from '@/lib/icons';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { IconBtn } from '@/components/kit/signal';
 import { highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
@@ -47,8 +47,8 @@ function textHash(text: string): string {
 	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-export function CodeBlock({ code, language, className }: { code: string; language?: string; className?: string }) {
-	const text = code.replace(/\n$/, '');
+export function CodeBlock({ code, language, className, source = false }: { code: string; language?: string; className?: string; source?: boolean }) {
+	const text = source ? code.replace(/\r\n?/g, '\n') : code.replace(/\n$/, '');
 	const settled = useSettled(text);
 	const textId = useMemo(() => textHash(settled), [settled]);
 	const colored = useQuery({
@@ -60,12 +60,36 @@ export function CodeBlock({ code, language, className }: { code: string; languag
 	});
 	// Colours for an earlier version of a block still being written would land on the wrong lines.
 	const tokens = settled === text ? (colored.data ?? null) : null;
+	const numbers = useMemo(() => source ? text.split('\n').map((_, index) => index + 1).join('\n') : '', [source, text]);
+	const header = (
+		<div className="flex h-7 shrink-0 items-center gap-2 border-b border-(--line) ps-3 pe-1">
+			<span className="in-caption min-w-0 flex-1 truncate">{language || 'text'}</span>
+			<CopyButton text={source ? code : text} label="Copy code" className="opacity-0 transition-opacity duration-(--t-fast) group-hover/code:opacity-100 focus-visible:opacity-100" />
+		</div>
+	);
+	if (source) {
+		return (
+			<div className={cn('group/code flex min-h-0 min-w-0 flex-col bg-(--bg-app)', className)}>
+				{header}
+				<div role="region" aria-label="Source code" tabIndex={0} dir="ltr" className="sg-source-scroll min-h-0 flex-1 overflow-auto overscroll-contain font-mono text-small leading-[19px] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent-line)">
+					<div className="flex min-w-max">
+						<div aria-hidden="true" className="sticky start-0 min-w-12 shrink-0 border-e border-(--line) bg-(--bg-app) px-2.5 py-2.5 text-end whitespace-pre text-(--text-3) tabular-nums select-none">{numbers}</div>
+						<pre className="m-0 px-3 py-2.5 whitespace-pre text-(--text-2)"><code>
+							{tokens ? tokens.map((line, index) => (
+								<Fragment key={index}>
+									{index > 0 ? '\n' : null}
+									{line.map((token, at) => <span key={at} style={{ color: token.color }}>{token.content}</span>)}
+								</Fragment>
+							)) : text}
+						</code></pre>
+					</div>
+				</div>
+			</div>
+		);
+	}
 	return (
 		<div className={cn('sg-code group/code relative mb-2.5 overflow-hidden p-0 whitespace-normal rounded-card border border-(--line) bg-(--bg-app)', className)}>
-			<div className="flex h-7 items-center gap-2 border-b border-(--line) pr-1 pl-3">
-				<span className="in-caption min-w-0 flex-1 truncate">{language || 'text'}</span>
-				<CopyButton text={text} label="Copy code" className="opacity-0 transition-opacity duration-(--t-fast) group-hover/code:opacity-100 focus-visible:opacity-100" />
-			</div>
+			{header}
 			<pre className="m-0! rounded-none! bg-transparent!">
 				<code>
 					{tokens

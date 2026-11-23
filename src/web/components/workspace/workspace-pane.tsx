@@ -19,14 +19,16 @@ export const PaneSlideContext = createContext<PaneSlide>('still');
 /** Null while closed, so the workspace is unmounted; kept mounted while it slides out. One open when the page first draws does not slide in. */
 export function usePaneSlide(open: boolean): PaneSlide | null {
 	const [slide, setSlide] = useState<PaneSlide | null>(open ? 'still' : null);
-	const last = useRef(open);
-	useEffect(() => {
-		if (last.current === open) return;
-		last.current = open;
+	const [lastOpen, setLastOpen] = useState(open);
+	if (lastOpen !== open) {
+		setLastOpen(open);
 		setSlide(open ? 'in' : 'out');
-		const timer = setTimeout(() => setSlide(open ? 'still' : null), SLIDE_MS);
+	}
+	useEffect(() => {
+		if (slide !== 'in' && slide !== 'out') return;
+		const timer = setTimeout(() => setSlide(slide === 'in' ? 'still' : null), SLIDE_MS);
 		return () => clearTimeout(timer);
-	}, [open]);
+	}, [slide]);
 	return slide;
 }
 
@@ -86,6 +88,7 @@ export function WorkspacePane({ expanded, narrow = false, children }: { expanded
 			data-expanded={expanded}
 			data-compact={compact}
 			data-resizing={resizing}
+			data-narrow={narrow}
 			data-slide={slide}
 			style={{ '--workspace-width': available ? `${width}px` : '46%' } as CSSProperties}
 		>
