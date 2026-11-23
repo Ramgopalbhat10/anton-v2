@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import { createClient } from '@libsql/client';
 import { waitingMessages } from '../src/services/tasks/waiting.ts';
+import { withAgentNote } from '../src/core/attachments.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-waiting-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -27,6 +28,7 @@ test('messages the agent has not read yet are listed in order, and no others', a
 	await add('sub_stopped', key('Coder', 't1'), 'Dropped by a Stop', 'queued', Date.now());
 	await add('sub_other', key('Coder', 't2'), 'Another task', 'queued');
 	await add('sub_review', key('Reviewer', 't1'), 'The reviewer', 'queued');
+	await add('sub_ran', key('Coder', 't4'), withAgentNote('I ran composio__slack__send_message.', '<result>\n{"ok":true}\n</result>'), 'queued');
 	flue.close();
 
 	assert.deepEqual(await waitingMessages('t1', file), [
@@ -34,5 +36,6 @@ test('messages the agent has not read yet are listed in order, and no others', a
 		{ id: 'sub_next', text: 'And check the ports', at: '2026-10-27T02:53:50.000Z' },
 	]);
 	assert.deepEqual(await waitingMessages('t3', file), []);
+	assert.deepEqual((await waitingMessages('t4', file)).map((message) => message.text), ['I ran composio__slack__send_message.'], 'a Run’s result is for the agent alone');
 	assert.deepEqual(await waitingMessages('t1', path.join(dir, 'missing.db')), []);
 });

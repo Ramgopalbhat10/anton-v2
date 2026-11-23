@@ -1,6 +1,6 @@
 import { defineTool, useTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { noteAsk } from '../../../services/replies/asks.ts';
+import { noteAsk, noteAwaitingRun } from '../../../services/replies/asks.ts';
 import { httpRequest } from '../../../services/secrets/http-request.ts';
 import { callConnectorTool, connectorToolsText, type SetUpConnector } from '../../../services/connectors/connector-tools.ts';
 
@@ -28,7 +28,10 @@ export function useConnectorTools(id: string, connectors: SetUpConnector[]) {
 				const { output, approval, ask } = await callConnectorTool(id, data.tool, data.arguments, signal);
 				if (approval) noteAsk(id, `Send the email "${approval.subject}" to ${approval.to.join(', ')}?`);
 				if (ask) noteAsk(id, ask);
-				return { output };
+				if (!approval && !ask) return { output };
+				// A call waiting on the user's Run or Send ends the reply, as ask does; their answer starts the next one.
+				noteAwaitingRun(id);
+				return { output, terminate: true };
 			},
 		}),
 	);

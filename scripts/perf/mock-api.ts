@@ -262,6 +262,14 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		res.end(JSON.stringify(body));
 	};
 
+	// The `?approvals` conversation's connector calls: one ran with a long result, one waits on Run.
+	const longResult = JSON.stringify({ manifest: { chunks: [], format: 'JSON_ARRAY', schema: { column_count: 0, columns: [] }, total_chunk_count: 0, total_row_count: 0, truncated: false }, result: {}, statement_id: '01f1e6ee-4a84-1c09-9e8f-8412cd433acc', status: { state: 'SUCCEEDED' } }, null, 2);
+	const statement = { warehouse_id: '9dd690415eb5faad', wait_timeout: '10s', on_wait_timeout: 'CONTINUE' };
+	const toolApprovals: Array<Record<string, unknown> & { id: string }> = [
+		{ id: 'tool_ran', connector: 'composio:databricks', tool: 'composio__databricks__sql_statement_exec_execute_statement', args: { ...statement, statement: "CREATE SCHEMA workspace.intranet_news_poc COMMENT 'Private ServiceNow news POC'" }, state: 'done', result: longResult, error: null, createdAt: new Date(Date.now() - 600_000).toISOString(), decidedAt: new Date(Date.now() - 540_000).toISOString() },
+		{ id: 'tool_wait', connector: 'composio:databricks', tool: 'composio__databricks__sql_statement_exec_execute_statement', args: { ...statement, statement: 'CREATE TABLE workspace.intranet_news_poc.bronze_news_synthetic\nUSING DELTA\nCOMMENT \'Fictional examples that model portal news publication and audience rules\'' }, state: 'pending', result: null, error: null, createdAt: new Date().toISOString(), decidedAt: null },
+	];
+
 	const mcpServers: Array<{
 		name: string;
 		url: string;
@@ -472,6 +480,19 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (path === '/api/notifications' || path === '/api/notifications/read') return json(res, { notifications, unread: { 'needs-you': 0, replies: 0, done: 0, failures: 0, sandboxes: 0, ...notificationUnread } });
 		if (path === `${task}/waiting`) return json(res, { messages: [] });
 		if (path === `${task}/joins`) return json(res, { joins: [] });
+		if (path === `${task}/tool-approvals`) return json(res, { approvals: toolApprovals });
+		const decided = path.match(new RegExp(`^${task}/tool-approvals/([^/]+)$`));
+		if (decided && req.method === 'POST') {
+			const chunks: Buffer[] = [];
+			req.on('data', (chunk: Buffer) => chunks.push(chunk));
+			req.on('end', () => {
+				const { run } = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as { run?: boolean };
+				const at = toolApprovals.findIndex((item) => item.id === decided[1]);
+				toolApprovals[at] = { ...toolApprovals[at], state: run ? 'done' : 'declined', result: run ? '{\n  "status": { "state": "SUCCEEDED" }\n}' : null, decidedAt: new Date().toISOString() };
+				json(res, toolApprovals[at]);
+			});
+			return;
+		}
 		if (path === `${task}/todos`) return json(res, { list: null });
 		if (path === `${task}/now`) return json(res, { now: null });
 		if (path === '/api/push/presence') return json(res, { ok: true });

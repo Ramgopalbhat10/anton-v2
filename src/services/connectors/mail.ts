@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError } from '../../core/errors.ts';
 import type { MailDraft, MailDraftInput, MailThread, MailThreadSummary } from '../../core/ports.ts';
 import { type ApprovalState, getApproval, insertApproval, listApprovals, type MailApproval, moveApproval } from '../../db/mail-approvals.ts';
 import { accountToken, mailboxAccess, mailboxById } from './connectors.ts';
+import { tellAgent } from './answers.ts';
 
 // Sending is never the agent's: it asks, and only the user's Send in the thread sends the draft as it stood when shown.
 
@@ -80,7 +81,7 @@ export async function requestSend(sessionId: string, connector: string, draftId:
 		approval: present({ ...approval, state: 'pending', decidedAt: null, sentId: null }),
 		output:
 			`The user now sees this email to ${draft.to.join(', ')} with Send and Don't send, and nothing goes until they press Send. ` +
-			`Stop here and wait for their answer; write nothing after this. [approval:${approval.id}]`,
+			`Stop here and wait; write nothing after this. Their answer comes as their next message. [approval:${approval.id}]`,
 	};
 }
 
@@ -115,7 +116,9 @@ export async function decideSend(sessionId: string, approvalId: string, send: bo
 	};
 	if (!send) {
 		if (!(await moveApproval(approvalId, 'pending', 'declined'))) throw new ConflictError('Someone answered this email already.');
-		return finish();
+		const view = await finish();
+		await tellAgent(sessionId, `Don't send the email "${approval.draft.subject}".`);
+		return view;
 	}
 	if (!(await mailboxAccess(approval.connector))?.send) throw new ConflictError('Sending is turned off for this mailbox in Settings › Connectors.');
 	// Held while it goes, so a second press, here or in another tab, cannot send it twice.
@@ -135,5 +138,7 @@ export async function decideSend(sessionId: string, approvalId: string, send: bo
 		await moveApproval(approvalId, 'sending', 'pending');
 		throw error;
 	}
-	return finish();
+	const view = await finish();
+	await tellAgent(sessionId, `I sent the email "${approval.draft.subject}".`);
+	return view;
 }

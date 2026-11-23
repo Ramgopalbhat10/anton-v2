@@ -48,6 +48,7 @@ import { logProblem } from '../../core/log.ts';
 import { recordLatestInput } from '../../services/tasks/latest-input.ts';
 import { noteDelivery } from '../../services/tasks/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../../services/replies/reply-check.ts';
+import { startAwaitingRun } from '../../services/replies/asks.ts';
 import { finishReview, isRequest, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
 import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
 import { takePinned } from '../../services/replies/compaction-pin.ts';
@@ -329,6 +330,7 @@ export function Coder({ id }: AgentProps) {
 			startTrace(id);
 			startTodoReply(id);
 			startStallCheck(id);
+			startAwaitingRun(id);
 			startFinishReview(id);
 			startCompletionGate(id);
 			startJobsGate(id);

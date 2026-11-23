@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createClient } from '@libsql/client';
 import { config } from '../../config.ts';
 import { bodyOf } from './latest-input.ts';
+import { withoutAgentNote } from '../../core/attachments.ts';
 import { logProblem } from '../../core/log.ts';
 
 export type WaitingMessage = { id: string; text: string; at: string };
@@ -20,7 +21,7 @@ export async function waitingMessages(id: string, file = path.join(config.dataDi
 		).rows;
 		return rows.flatMap((row) => {
 			const text = bodyOf(String(row.payload));
-			return text?.trim() ? [{ id: String(row.submission_id), text, at: new Date(Number(row.accepted_at)).toISOString() }] : [];
+			return text?.trim() ? [{ id: String(row.submission_id), text: withoutAgentNote(text), at: new Date(Number(row.accepted_at)).toISOString() }] : [];
 		});
 	} catch (error) {
 		logProblem('warn', 'Could not read the messages waiting for the agent', error, id);

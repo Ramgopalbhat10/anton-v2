@@ -143,13 +143,13 @@ function Reply({ message, live, working, last, answer, segment, showWorkspaceCha
 					)
 				) : block.kind === 'mail' ? (
 					approvalOf(block.part.output) ? (
-						<MailSendCard key={block.part.toolCallId} sessionId={sessionId} approvalId={approvalOf(block.part.output)!} place={place} />
+						<MailSendCard key={block.part.toolCallId} sessionId={sessionId} approvalId={approvalOf(block.part.output)!} />
 					) : (
 						<Drawing key={block.part.toolCallId} what="Preparing the email" />
 					)
 				) : block.kind === 'toolapproval' ? (
 					toolApprovalOf(block.part.output) ? (
-						<ToolApprovalCard key={block.part.toolCallId} sessionId={sessionId} approvalId={toolApprovalOf(block.part.output)!} place={place} />
+						<ToolApprovalCard key={block.part.toolCallId} sessionId={sessionId} approvalId={toolApprovalOf(block.part.output)!} />
 					) : (
 						<Drawing key={block.part.toolCallId} what="Preparing the call" />
 					)

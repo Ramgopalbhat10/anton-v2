@@ -33,9 +33,19 @@ export function withAttachments(text: string, files: AttachedFile[], place: Atta
 	return [text.trim() || attachmentsOnly(files.length), ...files.map((file) => attachmentBlock(file, place))].join('\n\n');
 }
 
+const FOR_AGENT = /\n*<for-agent>\n[\s\S]*\n<\/for-agent>\s*$/;
+
+/** Words for the agent only, such as an approved call's result, after a message's text: the thread shows the text alone. */
+export function withAgentNote(text: string, note: string): string {
+	return `${text}\n\n<for-agent>\n${note.replaceAll('</for-agent>', '<\\/for-agent>')}\n</for-agent>`;
+}
+
+export const withoutAgentNote = (text: string): string => text.replace(FOR_AGENT, '');
+
 export type AttachmentRef = { name: string; path: string; kind: string; size: number; place: AttachmentPlace };
 
-export function splitAttachments(message: string): { text: string; files: AttachmentRef[] } {
+export function splitAttachments(whole: string): { text: string; files: AttachmentRef[] } {
+	const message = withoutAgentNote(whole);
 	const files: AttachmentRef[] = [];
 	let first = -1;
 	// One block after another: a tag in a file's own text is inside its block, so it is skipped with it.

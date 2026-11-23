@@ -13,6 +13,7 @@ import { repoDir } from '../git/git.ts';
 import { logProblem } from '../../core/log.ts';
 import { envFor, secretsToHide } from '../secrets/secrets.ts';
 import { liveMachine } from './workspace.ts';
+import { endsOnUser } from '../replies/asks.ts';
 
 /*
  * The repository's check (a type check or lint the user sets) runs on the machine, if already running, after a quiet
@@ -330,8 +331,7 @@ type Call = { tool: string };
  */
 export async function checkGate(id: string, calls: readonly Call[], context: { signal?: AbortSignal } = {}): Promise<string | null> {
 	if (context.signal?.aborted) return null;
-	const last = calls[calls.length - 1]?.tool;
-	if (last === 'ask' || last === 'propose_plan') return null;
+	if (endsOnUser(id, calls)) return null;
 	const own = tasks.get(id);
 	if (!own) return null;
 	await settle(id, own, context.signal);
