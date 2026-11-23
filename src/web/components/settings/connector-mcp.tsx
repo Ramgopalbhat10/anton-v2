@@ -341,8 +341,8 @@ export function ServerDetail({ server, search }: { server: McpServer; search: Op
 	const item = connectorItems(useConnectors().data).find((each) => each.kind === 'mcp' && each.server.name === server.name) ?? null;
 	const headerNames = server.headerNames ?? [];
 	const hasAuthHeader = headerNames.some((name) => name.toLowerCase() === 'authorization');
-	const signedIn = server.signIn.state === 'signed-in';
-	const needsSignIn = server.signIn.state === 'needed';
+	const signedIn = !hasAuthHeader && server.signIn.state === 'signed-in';
+	const needsSignIn = !hasAuthHeader && server.signIn.state === 'needed';
 	const offerSignIn = !signedIn && !server.hasAuth && !hasAuthHeader;
 	const noRegistration = /register themselves/.test(signIn.error?.message ?? '');
 	const facts: Fact[] = [
@@ -350,12 +350,12 @@ export function ServerDetail({ server, search }: { server: McpServer; search: Op
 		...(entry ? [{ label: 'Category', value: entry.category }] : []),
 		{
 			label: 'Sign-in',
-			value: signedIn
-				? `Signed in${server.signIn.since ? ` since ${since(server.signIn.since)}` : ''}`
-				: server.hasAuth
-					? 'Bearer token'
-					: hasAuthHeader
-						? 'Custom header'
+			value: hasAuthHeader
+				? 'Custom Authorization header'
+				: signedIn
+					? `Signed in${server.signIn.since ? ` since ${since(server.signIn.since)}` : ''}`
+					: server.hasAuth
+						? 'Bearer token'
 						: needsSignIn
 							? 'Needs signing in again'
 							: 'None yet',

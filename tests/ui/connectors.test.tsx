@@ -292,6 +292,25 @@ describe('Settings › Connectors', () => {
 		expect(api.addMcpServer).not.toHaveBeenCalled();
 	});
 
+	it('shows custom Authorization header as active even when an earlier OAuth sign-in expired', async () => {
+		const overridden = {
+			...linear,
+			headerNames: ['Authorization'],
+			signIn: { ...NO_SIGN_IN, state: 'needed' as const, problem: 'The server no longer accepts the sign-in. Sign in again.' },
+		};
+		api.mcpServerTools.mockResolvedValue({ tools: [] });
+		open({ accounts: [], mailboxes: [], mcpServers: [overridden] });
+		const yours = await screen.findByRole('region', { name: 'Your connectors' });
+		expect(within(yours).getByRole('switch', { name: 'Use linear in tasks' })).toBeTruthy();
+		expect(within(yours).queryByText('Needs sign-in')).toBeNull();
+
+		document.body.innerHTML = '';
+		open({ accounts: [], mailboxes: [], mcpServers: [overridden] }, '/settings/connectors/view?c=mcp:linear');
+		expect(await screen.findByText('Custom Authorization header')).toBeTruthy();
+		expect(screen.queryByText('The server no longer accepts the sign-in. Sign in again.')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Sign in again' })).toBeNull();
+	});
+
 	it('draws each server as the product its address belongs to, else as an MCP server', async () => {
 		api.mcpServerTools.mockResolvedValue({ tools: [] });
 		open({ accounts: [], mailboxes: [], mcpServers: [linear, tracker] });

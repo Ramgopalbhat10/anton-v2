@@ -27,8 +27,15 @@ export async function mcpServersView(): Promise<McpServerView[]> {
 	return Promise.all((await listMcpServers()).map(present));
 }
 
-/** A signed-in server's token, renewed if it must be, in place of a pasted one. */
+const hasCustomAuthHeader = (headers?: Record<string, string>) =>
+	Boolean(headers && Object.keys(headers).some((name) => name.toLowerCase() === 'authorization'));
+
+/** Matches mcpToolName's server segment normalization so two servers never share one tool namespace. */
+const normalizeServerName = (name: string) => name.replace(/[^\w]/g, '_');
+
+/** A custom Authorization header wins over OAuth; otherwise a signed-in server's token, renewed if it must be, stands in for a pasted one. */
 async function connectable({ enabled: _, addedAt: __, ...server }: InstalledMcpServer): Promise<McpServer> {
+	if (hasCustomAuthHeader(server.headers)) return server;
 	const token = await mcpAccessToken(server.name, server.url);
 	return token ? { ...server, auth: token } : server;
 }
@@ -65,6 +72,7 @@ const originOf = (url: string) => (URL.canParse(url) ? new URL(url).origin : url
 
 function mergeHeaders(stored: Record<string, string>, change: Record<string, string | null> | undefined, sameHost: boolean): Record<string, string> {
 	if (change === undefined) return sameHost ? stored : {};
+	const storedByLower = new Map(Object.entries(stored).map(([k, v]) => [k.toLowerCase(), v]));
 	const seen = new Set<string>();
 	const next: Record<string, string> = {};
 	for (const [rawKey, value] of Object.entries(change)) {
@@ -73,15 +81,19 @@ function mergeHeaders(stored: Record<string, string>, change: Record<string, str
 		const lower = key.toLowerCase();
 		if (seen.has(lower)) throw new InvalidInputError(`Header ${key} is listed more than once.`);
 		seen.add(lower);
-		const resolved = value === null ? (sameHost ? stored[key] : undefined) : value;
+		const resolved = value === null ? (sameHost ? storedByLower.get(lower) : undefined) : value;
 		if (resolved !== undefined) next[key] = resolved;
 	}
 	return next;
 }
 
 export async function addMcpServer(input: McpServerInput): Promise<McpServerView[]> {
-	if (await getMcpServer(input.name)) throw new ConflictError(`An MCP server is already named ${input.name}`);
-	if ((await listMcpServers()).length >= MAX_SERVERS) throw new InvalidInputError(`Anton keeps up to ${MAX_SERVERS} MCP servers`);
+	const existingServers = await listMcpServers();
+	if (existingServers.some((server) => server.name === input.name)) throw new ConflictError(`An MCP server is already named ${input.name}`);
+	const normalized = normalizeServerName(input.name);
+	const colliding = existingServers.find((server) => normalizeServerName(server.name) === normalized);
+	if (colliding) throw new ConflictError(`An MCP server named ${colliding.name} already uses the same tool namespace (${normalized})`);
+	if (existingServers.length >= MAX_SERVERS) throw new InvalidInputError(`Anton keeps up to ${MAX_SERVERS} MCP servers`);
 	const headers = mergeHeaders({}, input.headers, false);
 	await saveMcpServer({ name: input.name, url: input.url, tools: input.tools, codeMode: input.codeMode, auth: input.auth || null, headers });
 	announce({ kind: 'connectors' });

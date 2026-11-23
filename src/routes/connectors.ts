@@ -61,33 +61,33 @@ app.get('/api/connectors/:account/callback', async (c) => {
 	return c.redirect(`/settings/connectors/view?${back}`);
 });
 const MAX_AUTH_LENGTH = 32_000;
-const NO_CTRL = /^[^\r\n\0]*$/;
+// RFC 9110 / Fetch ByteString header values: HTAB, printable ASCII, or obs-text (0x80-0xFF); rejects control chars and Unicode > U+00FF (e.g. smart quotes).
+const WIRE_HEADER_VALUE = /^[\t\x20-\x7E\x80-\xFF]*$/;
 const HEADER_NAME = v.pipe(
-	v.string(),
-	v.trim(),
+	v.string('Header names must be text'),
 	v.regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/, 'Header names must be valid HTTP header names'),
 	v.check((name) => !/^(host|content-length|transfer-encoding|connection)$/i.test(name), 'That HTTP header cannot be overridden'),
 );
 const HEADER_VALUE = v.pipe(
-	v.string(),
+	v.string('Header values must be text'),
 	v.trim(),
 	v.maxLength(MAX_AUTH_LENGTH, `Header values must be at most ${MAX_AUTH_LENGTH} characters`),
-	v.regex(NO_CTRL, 'Header values cannot contain line breaks'),
+	v.regex(WIRE_HEADER_VALUE, 'Header values must use valid HTTP header characters (no line breaks or non-Latin-1 characters)'),
 );
 const MCP_HEADERS = v.pipe(
 	v.record(HEADER_NAME, v.nullable(HEADER_VALUE)),
 	v.check((record) => Object.keys(record).length <= 30, 'Up to 30 custom headers are allowed'),
-	v.check((record) => new Set(Object.keys(record).map((key) => key.trim().toLowerCase())).size === Object.keys(record).length, 'Each header needs its own name'),
+	v.check((record) => new Set(Object.keys(record).map((key) => key.toLowerCase())).size === Object.keys(record).length, 'Each header needs its own name'),
 );
 const MCP_SERVER = v.object({
 	url: v.pipe(v.string(), v.trim(), v.url(), v.startsWith('https://', 'MCP servers need an https URL'), v.maxLength(500)),
 	auth: v.optional(
 		v.nullable(
 			v.pipe(
-				v.string(),
+				v.string('Tokens must be text'),
 				v.trim(),
 				v.maxLength(MAX_AUTH_LENGTH, `Tokens must be at most ${MAX_AUTH_LENGTH} characters`),
-				v.regex(NO_CTRL, 'Tokens cannot contain line breaks'),
+				v.regex(WIRE_HEADER_VALUE, 'Tokens must use valid HTTP header characters (no line breaks or non-Latin-1 characters)'),
 			),
 		),
 	),
