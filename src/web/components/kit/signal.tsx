@@ -1,7 +1,7 @@
 import type { IconComponent } from '@/lib/icons';
 import { Check, ChevronDown, ChevronRight, Info, Search, X } from '@/lib/icons';
 import { DropdownMenu as MenuPrimitive, Popover } from 'radix-ui';
-import { type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, useEffect, useRef, useState } from 'react';
+import { createContext, type ComponentProps, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, useContext, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
@@ -229,13 +229,17 @@ export function EmptyLine({ children, className }: { children: ReactNode; classN
 export const Menu = MenuPrimitive.Root;
 export const MenuTrigger = MenuPrimitive.Trigger;
 
+/** Floating controls inside a modal must stay within its focus and accessibility boundary. */
+export const FloatingLayerContainer = createContext<HTMLElement | null>(null);
+
 export function MenuContent({
 	className,
 	sideOffset = 4,
 	...props
 }: ComponentProps<typeof MenuPrimitive.Content>) {
+	const container = useContext(FloatingLayerContainer);
 	return (
-		<MenuPrimitive.Portal>
+		<MenuPrimitive.Portal container={container}>
 			<MenuPrimitive.Content
 				sideOffset={sideOffset}
 				className={cn(
@@ -302,8 +306,9 @@ export function MenuSubTrigger({
 }
 
 export function MenuSubContent({ className, ...props }: ComponentProps<typeof MenuPrimitive.SubContent>) {
+	const container = useContext(FloatingLayerContainer);
 	return (
-		<MenuPrimitive.Portal>
+		<MenuPrimitive.Portal container={container}>
 			<MenuPrimitive.SubContent
 				sideOffset={4}
 				collisionPadding={8}

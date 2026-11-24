@@ -6,15 +6,20 @@
  * tool event every 300 ms, the task's state every few seconds).
  */
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
+import * as v from 'valibot';
+import type { SpaceTodo } from '../../src/core/space-todos.ts';
+import { CREATE_TODO, EDIT_TODO } from '../../src/routes/space-todo-input.ts';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
 import { mockSetup } from './mock-setup.ts';
 import { viewerArtifacts, viewerPdfPath } from '../ui/artifact-fixture.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
+const MAX_TODO_BODY_BYTES = 256 * 1024;
 
 function walk(dir: string, out: string[], limit: number) {
 	for (const name of readdirSync(dir)) {
@@ -163,8 +168,8 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	createdAt: ago(60 * 24 * createdDaysAgo),
 	updatedAt: ago(30),
 });
-const todo = (id: string, title: string, description: string, patch: Record<string, unknown> = {}) => ({
-	id, spaceId: 'space-billing', title, description, attachments: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+const todo = (id: string, title: string, description: string, patch: Partial<SpaceTodo> = {}): SpaceTodo => ({
+	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
 	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
@@ -235,6 +240,7 @@ const models = Array.from({ length: 300 }, (_, index) => ({
 }));
 
 export function mockApi({ working = true }: { working?: boolean } = {}): Plugin {
+	const spaceTodos = new Map<string, SpaceTodo[]>([['space-billing', billingTodos.map((item) => ({ ...item }))]]);
 	const tree = paths();
 	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread/thread.tsx src/web/components/thread/subagents.tsx src/web/components/workspace/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
 	const changed = [...patch.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => ({ path: match[1], status: 'M' }));
@@ -392,8 +398,49 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
 		if (/^\/api\/spaces\/[^/]+\/usage$/.test(path)) return json(res, { today: 0, month: 0, byThread: [], byModel: [], daily: [] });
-		const todosOf = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
-		if (todosOf) return json(res, { todos: todosOf === 'space-billing' ? billingTodos : [] });
+		const todosRoute = path.match(/^\/api\/spaces\/([^/]+)\/todos(?:\/([^/]+))?$/);
+		if (todosRoute) {
+			const [, spaceId, todoId] = todosRoute;
+			if (req.method === 'GET' && !todoId) return json(res, { todos: spaceTodos.get(spaceId) ?? [] });
+			if ((req.method === 'POST' && !todoId) || (req.method === 'PATCH' && todoId)) {
+				const chunks: Buffer[] = [];
+				let size = 0;
+				req.on('data', (chunk: Buffer) => {
+					if (res.writableEnded) return;
+					size += chunk.length;
+					if (size > MAX_TODO_BODY_BYTES) {
+						chunks.length = 0;
+						res.statusCode = 413;
+						return json(res, { error: 'To-do request body is too large' });
+					}
+					chunks.push(chunk);
+				});
+				req.on('end', () => {
+					if (res.writableEnded) return;
+					let input: unknown;
+					try {
+						input = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
+					} catch {
+						input = null;
+					}
+					const change = input && typeof input === 'object' && !Array.isArray(input) ? v.safeParse(todoId ? EDIT_TODO : CREATE_TODO, input, { abortEarly: true }) : null;
+					if (!change?.success) {
+						res.statusCode = 400;
+						return json(res, { error: 'Expected a JSON object with valid to-do fields' });
+					}
+					const updatedAt = new Date().toISOString();
+					const todos = spaceTodos.get(spaceId) ?? [];
+					const index = todoId ? todos.findIndex((item) => item.id === todoId) : todos.length;
+					if (index < 0) return void res.writeHead(404).end();
+					const item = todos[index] ?? todo(`todo_${randomUUID()}`, '', '', { spaceId, createdAt: updatedAt });
+					const saved = { ...item, ...change.output, updatedAt };
+					todos[index] = saved;
+					spaceTodos.set(spaceId, todos);
+					json(res, saved);
+				});
+				return;
+			}
+		}
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
 		if (spaceId) {
 			const found = spaces.find((item) => item.id === spaceId);

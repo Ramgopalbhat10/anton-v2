@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Check, ChevronDown, Pin, Search, SlidersHorizontal, X, Zap } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, memo, type PointerEvent, type ReactNode, startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Count, StatusDot } from '@/components/kit/instrument';
-import { EmptyLine, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/kit/signal';
+import { EmptyLine, FloatingLayerContainer, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, Spinner } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import { type ModelChoice, type ModelInfo, type ModelRoute, type Reasoning, REASONING_LEVELS } from '@/lib/api/plans';
 import { RouteBadge, RouteControls } from '@/components/composer/route-menu';
@@ -456,6 +456,8 @@ export const ModelPicker = memo(function ModelPicker({
 	side = 'top',
 	height = 26,
 	only,
+	label = 'Model and reasoning',
+	emptyLabel,
 }: {
 	value: ModelChoice;
 	onChange: (change: Partial<ModelChoice>) => void;
@@ -467,7 +469,11 @@ export const ModelPicker = memo(function ModelPicker({
 	side?: 'top' | 'bottom';
 	height?: 26 | 28;
 	only?: (model: ModelInfo) => boolean;
+	label?: string;
+	/** An intentionally unset choice, not a model waiting for the catalog. */
+	emptyLabel?: string;
 }) {
+	const container = useContext(FloatingLayerContainer);
 	const parsed = parseRouted(storedValue.model);
 	const value = { ...storedValue, model: parsed.model };
 	const route = onRoute ? (taskRoute ?? null) : parsed.route;
@@ -637,15 +643,15 @@ export const ModelPicker = memo(function ModelPicker({
 			<PopoverPrimitive.Trigger asChild>
 				<button
 					type="button"
-					aria-label="Model and reasoning"
+					aria-label={label}
 					title={selected?.subscription ? `${selected.name}, on your ${selected.subscription} plan` : undefined}
 					className={cn(
 						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-control pr-1.5 pl-1.5 font-medium whitespace-nowrap text-(--text-2) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
 						height === 28 ? 'h-7' : 'h-6',
 					)}
 				>
-					{selected ? <ModelMark model={selected} size={16} /> : <Spinner size={12} tone="neutral" />}
-					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : 'Model'}</span>
+					{selected ? <ModelMark model={selected} size={16} /> : !emptyLabel || (models.isPending && value.model) ? <Spinner size={12} tone="neutral" /> : null}
+					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : emptyLabel ? value.model || emptyLabel : 'Model'}</span>
 					{options?.chosen.context ? (
 						<span className="in-num rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2)" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
@@ -663,7 +669,7 @@ export const ModelPicker = memo(function ModelPicker({
 					<Icon icon={ChevronDown} size={12} className="text-(--text-3)" />
 				</button>
 			</PopoverPrimitive.Trigger>
-			<PopoverPrimitive.Portal>
+			<PopoverPrimitive.Portal container={container}>
 				<PopoverPrimitive.Content
 					side={side}
 					align="start"

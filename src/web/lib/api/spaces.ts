@@ -64,8 +64,8 @@ export const spacesApi = {
 	startThread: (id: string, input: ThreadInput) => post<Session>(`/api/spaces/${id}/threads`, input),
 	nudgeThread: (id: string, threadId: string, text: string) => post<Session>(`/api/spaces/${id}/threads/${threadId}/nudge`, { text }),
 	spaceTodos: (id: string) => json<{ todos: SpaceTodo[] }>(`/api/spaces/${id}/todos`),
-	createSpaceTodo: (id: string, input: { title: string; description?: string; attachments?: TodoAttachment[] }) => post<SpaceTodo>(`/api/spaces/${id}/todos`, input),
-	editSpaceTodo: (id: string, todoId: string, change: { title?: string; description?: string; attachments?: TodoAttachment[]; status?: 'open' | 'done' }) =>
+	createSpaceTodo: (id: string, input: { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel'] }) => post<SpaceTodo>(`/api/spaces/${id}/todos`, input),
+	editSpaceTodo: (id: string, todoId: string, change: { title?: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; status?: 'open' | 'done' }) =>
 		json<SpaceTodo>(`/api/spaces/${id}/todos/${todoId}`, { method: 'PATCH', body: JSON.stringify(change) }),
 	deleteSpaceTodo: async (id: string, todoId: string) => void (await request(`/api/spaces/${id}/todos/${todoId}`, { method: 'DELETE' })),
 	startSpaceTodo: (id: string, todoId: string, target: 'thread' | 'coordinator') => post<{ todo: SpaceTodo; thread?: Session; submissionId?: string }>(`/api/spaces/${id}/todos/${todoId}/start`, { target }),

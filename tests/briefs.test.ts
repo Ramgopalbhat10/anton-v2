@@ -42,6 +42,7 @@ test('a thread that does one part of a split ask is held to its part, which the 
 
 test("start_thread checks the request against the user's message", () => {
 	const source = readFileSync(new URL('../src/agents/coordinator.ts', import.meta.url), 'utf8');
-	assert.match(source, /if \(said\.trim\(\) && !data\.approved && !quotedFrom\(data\.request, said\)\)/);
+	assert.match(source, /const source = linked\?\.text \?\? answering;/);
+	assert.match(source, /if \(said\.trim\(\) && \(isHandoff \|\| !data\.approved\) && !quotedFrom\(data\.request, said\)\)/);
 	assert.match(source, /threadBrief\(data\.request, data\.context, data\.part\)/);
 });

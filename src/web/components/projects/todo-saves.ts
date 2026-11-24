@@ -5,7 +5,7 @@ import type { SpaceTodo, TodoAttachment } from '@/lib/api/spaces';
 import { uniqueUploadNames } from '../../../core/upload-name';
 
 /** What the to-do dialog hands over: files already in the Library, and new ones still to upload. */
-export type TodoDraft = { title: string; description: string; kept: TodoAttachment[]; uploads: File[] };
+export type TodoDraft = { title: string; description: string; threadModel: SpaceTodo['threadModel']; kept: TodoAttachment[]; uploads: File[] };
 
 /** How a card stands against the server: still saving, or failed with a way to try again. */
 export type TodoSave = { pending: boolean; saving: boolean; error: string | null; retry?: () => void; dismiss?: () => void };
@@ -23,7 +23,7 @@ export function cacheStartedTodo(queryClient: QueryClient, spaceId: string, todo
 	});
 }
 
-type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'status' | 'assignee' | 'completedAt'>>;
+type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'threadModel' | 'status' | 'assignee' | 'completedAt'>>;
 type Created = { key: string; todo: SpaceTodo; draft: TodoDraft; error: string | null; saved: SpaceTodo | null };
 /** `savedAt` is the server's updatedAt once it has the change; the override gives way when the list has caught up. */
 type Edited = { seq: number; change: Change; hidden: boolean; savedAt: string | null };
@@ -75,7 +75,7 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		void (async () => {
 			try {
 				const attachments = await uploadDraft(spaceId, draft);
-				const todo = await api.createSpaceTodo(spaceId, { title: draft.title, description: draft.description, attachments });
+				const todo = await api.createSpaceTodo(spaceId, { title: draft.title, description: draft.description, attachments, threadModel: draft.threadModel });
 				settle((todos) => (todos.some((other) => other.id === todo.id) ? todos : [...todos, todo]));
 				setCreated((list) => list.map((item) => (item.key === key ? { ...item, saved: todo } : item)));
 			} catch (error) {
@@ -93,6 +93,7 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 			title: draft.title.trim(),
 			description: draft.description.trim(),
 			attachments: shownFiles(draft),
+			threadModel: draft.threadModel,
 			status: 'open',
 			assignee: null,
 			createdBy: 'user',
@@ -122,11 +123,15 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		);
 	};
 
-	const edit = (todo: SpaceTodo, draft: TodoDraft) =>
-		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft) }, async () => {
+	const edit = (todo: SpaceTodo, draft: TodoDraft) => {
+		const before = todo.threadModel;
+		const after = draft.threadModel;
+		const modelChange = before?.model === after?.model && before?.reasoning === after?.reasoning ? {} : { threadModel: after };
+		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft), ...modelChange }, async () => {
 			const attachments = await uploadDraft(spaceId, draft);
-			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments });
+			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments, ...modelChange });
 		});
+	};
 
 	/** Set back to open, a to-do leaves whoever had it, as the server does. */
 	const setStatus = (todo: SpaceTodo, status: 'open' | 'done') =>

@@ -62,7 +62,7 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 const RESOLVED_SHOWN = 5;
 
 const todoLine = (todo: SpaceTodo) =>
-	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
+	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.threadModel ? ` · main thread model: ${todo.threadModel.model}` : ''}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
 
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);

@@ -4,7 +4,8 @@ import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paper
 import { type FormEvent, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
-import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
+import { ModelPicker } from '@/components/composer/model-picker';
+import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
 import { AREA } from '@/components/settings/repo-settings';
@@ -75,6 +76,8 @@ const isPicture = (file: TodoAttachment) => /\.(png|jpe?g|gif|webp)$/i.test(file
 function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
+	const [threadModel, setThreadModel] = useState<SpaceTodo['threadModel']>(todo?.threadModel ?? null);
+	const [dialog, setDialog] = useState<HTMLDivElement | null>(null);
 	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
 	const attachments = useAttachments({ overflowImagesAsFiles: true });
 	const over = kept.length + attachments.count - MAX_TODO_ATTACHMENTS;
@@ -83,21 +86,21 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		if (!ready) return;
-		onSave({ title, description, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
+		onSave({ title, description, threadModel, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
 		onClose();
 	};
 	return (
 		<Dialog.Root open onOpenChange={(open) => !open && onClose()}>
 			<Dialog.Portal>
 				<Dialog.Overlay className="fixed inset-0 z-40 bg-(--bg-scrim)" />
-				<Dialog.Content aria-describedby={undefined} className="in-pop in-pop--modal fixed top-[10vh] left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-[520px] -translate-x-1/2 flex-col overflow-hidden">
-					<form onSubmit={submit} className="flex flex-col" {...attachments.dropZone}>
-						<header className="flex items-center gap-2 border-b border-(--line) px-4 py-3">
+				<Dialog.Content ref={setDialog} aria-describedby={undefined} className="in-pop in-pop--modal fixed inset-x-0 top-[10vh] z-50 mx-auto flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-[520px] flex-col">
+					<form onSubmit={submit} className="flex min-h-0 flex-col" {...attachments.dropZone}>
+						<header className="flex shrink-0 items-center gap-2 border-b border-(--line) px-4 py-3">
 							<Icon icon={ListTodo} size={14} className="text-(--text-3)" />
 							<Dialog.Title className="flex-1 text-body-lg font-medium">{todo ? 'Edit to-do' : 'New to-do'}</Dialog.Title>
 							<IconBtn icon={X} size="sm" label="Close" onClick={onClose} />
 						</header>
-						<div className="flex flex-col gap-3 px-4 py-3.5">
+						<div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5 [&>*]:shrink-0">
 							<input autoFocus aria-label="Title" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="What needs doing" className={`${FIELD} h-9`} />
 							<textarea
 								aria-label="Description"
@@ -108,6 +111,21 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 								placeholder="Details and what done looks like (optional). Paste or drop screenshots here."
 								className={`${AREA} text-body leading-[19px]`}
 							/>
+							<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+								<span className="text-small font-medium text-(--text-2)">Main thread model</span>
+								<div className="flex min-w-0 flex-wrap items-center gap-1">
+									<FloatingLayerContainer.Provider value={dialog}>
+										<ModelPicker
+											label="Main thread model"
+											emptyLabel="Project default"
+											value={threadModel ?? { model: '', reasoning: null }}
+											onChange={(change) => setThreadModel((current) => ({ model: '', reasoning: null, ...current, ...change }))}
+											side="bottom"
+										/>
+									</FloatingLayerContainer.Provider>
+									{threadModel ? <IconBtn icon={RotateCcw} size="xs" label="Use project default" onClick={() => setThreadModel(null)} /> : null}
+								</div>
+							</div>
 							{kept.length || attachments.count || attachments.reading ? (
 								// Saved files and new ones in one row; the tray's own row dissolves into it.
 								<div className="flex flex-wrap items-center gap-1.5">
@@ -124,7 +142,7 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 							) : null}
 							{limit ? <span className="text-small text-(--bad)">{limit}</span> : attachments.notice ? <span className="text-small text-(--warn)">{attachments.notice}</span> : null}
 						</div>
-						<footer className="flex items-center gap-2 border-t border-(--line) px-4 py-2.5">
+						<footer className="flex shrink-0 items-center gap-2 border-t border-(--line) px-4 py-2.5">
 							<AttachButton attachments={attachments} label="Attach screenshots or files" />
 							<span className="flex-1" />
 							<Btn size="sm" variant="ghost" onClick={onClose}>

@@ -1,3 +1,5 @@
+import type { AgentModel } from './types.ts';
+
 /** A project to-do waits in `open`; starting it (a thread, or the coordinator) makes it `in_progress`; its threads resolving make it `done`. */
 export const SPACE_TODO_STATUSES = ['open', 'in_progress', 'done'] as const;
 export type SpaceTodoStatus = (typeof SPACE_TODO_STATUSES)[number];
@@ -7,6 +9,8 @@ export type TodoAttachment = { name: string; path: string; kind: string; size: n
 
 /** As many as a message from the project chat carries to a thread. */
 export const MAX_TODO_ATTACHMENTS = 10;
+export const MAX_TODO_TITLE = 200;
+export const MAX_TODO_DESCRIPTION = 20_000;
 
 export type SpaceTodo = {
 	id: string;
@@ -14,6 +18,7 @@ export type SpaceTodo = {
 	title: string;
 	description: string;
 	attachments: TodoAttachment[];
+	threadModel: AgentModel | null;
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;
@@ -38,6 +43,8 @@ export const shortTodoId = (id: string) => id.replace(/^todo_/, '').slice(0, 8);
 export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>): string {
 	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}`;
 }
+
+export const todoHandoffId = (message: string): string | null => /^Start the project to-do \[todo:([a-f0-9]{8})\]: /.exec(message)?.[1] ?? null;
 
 /** The files the coordinator names for a to-do's thread; naming none sends all of the to-do's, so a to-do split over threads gives each only its part's. */
 export const todoThreadFiles = (todo: Pick<SpaceTodo, 'attachments'> | null, listed?: string[]): string[] | undefined =>
