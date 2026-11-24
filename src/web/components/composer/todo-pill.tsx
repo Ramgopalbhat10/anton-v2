@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronDown } from '@/lib/icons';
+import { Check, ChevronDown, ChevronUp } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { memo, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, type PointerEvent, useEffect, useId, useRef, useState } from 'react';
+import { Disclosure } from '@/components/kit/disclosure';
 import { Icon, Spinner } from '@/components/kit/signal';
 import type { Todo } from '@/lib/api/sessions';
 import { cn } from '@/lib/utils';
@@ -54,14 +55,12 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
 }
 
 function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boolean }) {
-	const details = useRef<HTMLParagraphElement>(null);
 	const [open, setOpen] = useState(false);
-	const [clamped, setClamped] = useState(false);
-	useLayoutEffect(() => {
-		const node = details.current;
-		if (node && !open) setClamped(node.scrollHeight > node.clientHeight + 1);
-	}, [todo.evidence, open]);
+	const detailsId = useId();
 	const current = todo.status === 'in_progress';
+	const title = (
+		<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
+	);
 	return (
 		<li
 			aria-current={current ? 'step' : undefined}
@@ -78,31 +77,41 @@ function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boo
 				<Mark status={todo.status} working={working} />
 			</span>
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
-				{todo.evidence && (
-					// The chevron is the keyboard control; the text is a larger target for the pointer.
-					<p
-						ref={details}
-						onClick={clamped ? () => setOpen(!open) : undefined}
-						className={cn('m-0 text-small leading-[17px] text-pretty break-words text-(--text-3)', !open && 'line-clamp-2', clamped && 'cursor-pointer')}
+				{todo.evidence ? (
+					<button
+						type="button"
+						aria-expanded={open}
+						aria-controls={detailsId}
+						onClick={() => setOpen(!open)}
+						className="flex w-full items-start gap-2 rounded-inner text-left outline-none focus-visible:shadow-(--focus)"
 					>
-						{todo.evidence}
-					</p>
+						{title}
+						<span className="ml-auto mt-0.5 shrink-0 text-(--text-4)">
+							<Icon icon={open ? ChevronUp : ChevronDown} size={13} />
+						</span>
+					</button>
+				) : (
+					title
 				)}
+				{todo.evidence ? (
+					<Disclosure open={open} id={detailsId}>
+						<p className="m-0 text-small leading-[17px] text-pretty break-words text-(--text-3)">{todo.evidence}</p>
+					</Disclosure>
+				) : null}
 			</div>
-			{clamped && (
-				<button
-					type="button"
-					aria-expanded={open}
-					aria-label={open ? 'Hide details' : 'Show details'}
-					onClick={() => setOpen(!open)}
-					className="-my-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-inner text-(--text-4) outline-none group-hover/todo:text-(--text-2) hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
-				>
-					<Icon icon={ChevronDown} size={12} className={cn('transition-transform duration-(--t-fast)', open && 'rotate-180')} />
-				</button>
-			)}
 		</li>
 	);
+}
+
+function todoKey(todo: Todo, index: number, list: Todo[]) {
+	let occurrence = 0;
+	let total = 0;
+	for (let at = 0; at < list.length; at++) {
+		if (list[at].content !== todo.content) continue;
+		total++;
+		if (at < index) occurrence++;
+	}
+	return total === 1 ? todo.content : `${todo.content}#${occurrence}`;
 }
 
 function Items({ list, working }: { list: Todo[]; working: boolean }) {
@@ -120,7 +129,7 @@ function Items({ list, working }: { list: Todo[]; working: boolean }) {
 	return (
 		<ol ref={scroller} className="relative m-0 flex list-none flex-col overflow-y-auto overscroll-contain px-2 pb-2">
 			{list.map((todo, index) => (
-				<Item key={index} todo={todo} working={working} last={index === list.length - 1} />
+				<Item key={todoKey(todo, index, list)} todo={todo} working={working} last={index === list.length - 1} />
 			))}
 		</ol>
 	);
@@ -133,6 +142,16 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 	// Opened by a click, it stays until clicked again or dismissed; opened by hover or focus, it closes as the pointer leaves.
 	const [pinned, setPinned] = useState(false);
 	const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const contentRef = useRef<HTMLDivElement>(null);
+	const focusInsideOnOpen = useRef(false);
+	const restoreFocusOnClose = useRef(false);
+	const suppressFocusOpen = useRef(false);
+	const focusContent = () => {
+		const content = contentRef.current;
+		if (!content) return;
+		const target = content.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? content;
+		target.focus({ preventScroll: true });
+	};
 	const cancelClose = () => {
 		if (closing.current) clearTimeout(closing.current);
 		closing.current = null;
@@ -178,16 +197,29 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 						if (open && pinned) {
 							setOpen(false);
 							setPinned(false);
-						} else {
-							setOpen(true);
-							setPinned(true);
+							return;
 						}
+						if (event.detail === 0) {
+							restoreFocusOnClose.current = true;
+							if (open) focusContent();
+							else focusInsideOnOpen.current = true;
+						} else if (!open) {
+							restoreFocusOnClose.current = false;
+							focusInsideOnOpen.current = false;
+						}
+						setOpen(true);
+						setPinned(true);
 					}}
 					onFocus={(event) => {
+						if (suppressFocusOpen.current) {
+							suppressFocusOpen.current = false;
+							return;
+						}
 						if (event.currentTarget.matches(':focus-visible')) show();
 					}}
-					onBlur={() => {
-						if (!pinned) setOpen(false);
+					onBlur={(event) => {
+						const next = event.relatedTarget;
+						if (!pinned && !(next instanceof Node && contentRef.current?.contains(next))) setOpen(false);
 					}}
 					className="flex h-6 shrink-0 items-center gap-1.5 rounded-control bg-(--bg-surface) pr-2 pl-1.5 text-small font-medium text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none hover:bg-(--bg-raised) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-raised) data-[state=open]:text-(--text)"
 				>
@@ -200,14 +232,30 @@ export const TodoPill = memo(function TodoPill({ sessionId, busy }: { sessionId:
 			</PopoverPrimitive.Trigger>
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Content
+					ref={contentRef}
+					tabIndex={-1}
 					side="top"
 					align="center"
 					sideOffset={6}
 					collisionPadding={12}
 					{...hover}
-					// Hover should not pull focus away from the composer.
-					onOpenAutoFocus={(event) => event.preventDefault()}
-					onCloseAutoFocus={(event) => event.preventDefault()}
+					// Pointer opens must not pull focus away from the composer.
+					onOpenAutoFocus={(event) => {
+						event.preventDefault();
+						if (focusInsideOnOpen.current) focusContent();
+						focusInsideOnOpen.current = false;
+					}}
+					onCloseAutoFocus={(event) => {
+						if (restoreFocusOnClose.current) {
+							restoreFocusOnClose.current = false;
+							suppressFocusOpen.current = true;
+							setTimeout(() => {
+								suppressFocusOpen.current = false;
+							}, 0);
+							return;
+						}
+						event.preventDefault();
+					}}
 					className="z-50 flex max-h-[min(420px,60vh)] w-[min(420px,calc(100vw-24px))] origin-(--radix-popover-content-transform-origin) in-pop flex-col overflow-hidden text-(--text) outline-none"
 				>
 					<header className="flex items-baseline gap-2 px-3.5 pt-3 pb-1.5">

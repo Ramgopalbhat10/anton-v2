@@ -48,42 +48,104 @@ describe('TodoPill', () => {
 		expect(screen.queryByRole('dialog')).toBeNull();
 	});
 
-	it('shows details under each item, clamped with a toggle only when they run long', async () => {
+	it('keeps every detail collapsed until its item asks for it', async () => {
 		const long = 'Typecheck and new UI tests pass; Playwright measured 44px headers with aligned bottom borders and verified long-name truncation.';
-		const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-		Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-			configurable: true,
-			get(this: HTMLElement) {
-				return this.textContent === long && this.classList.contains('line-clamp-2') ? 80 : 0;
-			},
+		setup({
+			...list,
+			todos: [
+				{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
+				{ content: 'Match header heights', status: 'completed', evidence: long },
+				{ content: 'Open a draft PR', status: 'in_progress' },
+			],
 		});
-		try {
-			setup({
-				...list,
-				todos: [
-					{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
-					{ content: 'Match header heights', status: 'completed', evidence: long },
-					{ content: 'Open a draft PR', status: 'in_progress' },
+		await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
+		const popover = await screen.findByRole('dialog');
+		expect(within(popover).queryByText('Read todo-pill.tsx')).toBeNull();
+		expect(within(popover).queryByText(long)).toBeNull();
+		const first = within(popover).getByRole('button', { name: 'Read the UI code' });
+		const second = within(popover).getByRole('button', { name: 'Match header heights' });
+		expect(within(popover).getByText('Open a draft PR').closest('button')).toBeNull();
+		expect(first.getAttribute('aria-expanded')).toBe('false');
+		expect(second.getAttribute('aria-expanded')).toBe('false');
+		await userEvent.click(first);
+		expect(first.getAttribute('aria-expanded')).toBe('true');
+		expect(within(popover).getByText('Read todo-pill.tsx').tagName).toBe('P');
+		expect(within(popover).queryByText(long)).toBeNull();
+		await userEvent.click(second);
+		expect(within(popover).getByText(long).classList.contains('line-clamp-2')).toBe(false);
+		expect(screen.queryByRole('dialog')).not.toBeNull();
+	});
+
+	it('moves keyboard focus into the popover and restores it on Escape', async () => {
+		renderWithQueries(
+			<>
+				<TodoPill sessionId="s1" busy />
+				<input aria-label="Composer" />
+			</>,
+			[
+				[
+					['todos', 's1'],
+					{
+						list: {
+							...list,
+							todos: [
+								{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
+								{ content: 'Measure renders', status: 'in_progress' },
+							],
+						},
+					},
 				],
-			});
-			await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
-			const popover = await screen.findByRole('dialog');
-			expect(within(popover).getByText('Read todo-pill.tsx').tagName).toBe('P');
-			const toggles = within(popover).getAllByRole('button', { name: 'Show details' });
-			expect(toggles).toHaveLength(1);
-			expect(toggles[0].closest('li')?.textContent).toContain('Match header heights');
-			const details = within(popover).getByText(long);
-			expect(details.classList.contains('line-clamp-2')).toBe(true);
-			await userEvent.click(toggles[0]);
-			expect(toggles[0].getAttribute('aria-expanded')).toBe('true');
-			expect(toggles[0].getAttribute('aria-label')).toBe('Hide details');
-			expect(details.classList.contains('line-clamp-2')).toBe(false);
-			await userEvent.click(details);
-			expect(details.classList.contains('line-clamp-2')).toBe(true);
-			expect(screen.queryByRole('dialog')).not.toBeNull();
-		} finally {
-			if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
-		}
+			],
+		);
+		await userEvent.tab();
+		const pill = screen.getByRole('button', { name: /Todos/ });
+		expect(document.activeElement).toBe(pill);
+		await userEvent.keyboard('{Enter}');
+		const popover = await screen.findByRole('dialog');
+		const toggle = within(popover).getByRole('button', { name: 'Read the UI code' });
+		expect(document.activeElement).toBe(toggle);
+		await userEvent.keyboard('{Enter}');
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(within(popover).getByText('Read todo-pill.tsx')).toBeTruthy();
+		await userEvent.keyboard('{Enter}');
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		await userEvent.keyboard('{Escape}');
+		await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(document.activeElement).toBe(pill);
+	});
+
+	it('does not carry an open disclosure to a different todo at the same index', async () => {
+		const { client } = setup({
+			...list,
+			todos: [
+				{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
+				{ content: 'Match header heights', status: 'completed', evidence: 'Measured the composer' },
+			],
+		});
+		await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
+		const popover = await screen.findByRole('dialog');
+		await userEvent.click(within(popover).getByRole('button', { name: 'Read the UI code' }));
+		expect(within(popover).getByText('Read todo-pill.tsx')).toBeTruthy();
+		await act(async () =>
+			client.setQueryData(['todos', 's1'], {
+				list: {
+					...list,
+					todos: [
+						{ content: 'Replacement todo', status: 'completed', evidence: 'Replacement evidence' },
+						{ content: 'Match header heights', status: 'completed', evidence: 'Measured the composer' },
+					],
+				},
+			}),
+		);
+		const updatedPopover = await screen.findByRole('dialog');
+		expect(within(updatedPopover).getByText('Replacement todo')).toBeTruthy();
+		expect(within(updatedPopover).queryByText('Read the UI code')).toBeNull();
+		const [replacement] = within(updatedPopover).getAllByRole('listitem');
+		const toggle = within(replacement).getByRole('button', { name: 'Replacement todo' });
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		expect(within(replacement).queryByText('Replacement evidence')).toBeNull();
+		expect(within(updatedPopover).queryByText('Read todo-pill.tsx')).toBeNull();
 	});
 
 	it('follows a new list as the agent writes it', async () => {
