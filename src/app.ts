@@ -91,7 +91,7 @@ scheduleCleanup();
 const delivered = (text: string, images?: DeliveredImage[]) => (images?.length ? { kind: 'user' as const, body: text, attachments: images } : text);
 setAgentDelivery(async (id, text, images) => void (await dispatch(Coder, { id, message: delivered(text, images) })));
 setAgentDelivery(async (id, text, images) => void (await dispatch(Reviewer, { id, message: delivered(text, images) })), 'reviewer');
-setAgentDelivery(async (id, text, images) => void (await dispatch(Coordinator, { id, message: delivered(text, images) })), 'coordinator');
+setAgentDelivery(async (id, text, images) => (await dispatch(Coordinator, { id, message: delivered(text, images) })).submissionId, 'coordinator');
 // Before anything calls OpenRouter.
 await loadGatewayKey().catch((error: unknown) => logProblem('warn', 'Could not load the OpenRouter key', error));
 await loadComposioKey().catch((error: unknown) => logProblem('warn', 'Could not load the Composio key', error));

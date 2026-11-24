@@ -78,6 +78,7 @@ setAgentDelivery(async (id, text, images) => {
 	// Thread reports go out on a timer a second after a thread starts, so one can land in a later test; none is checked here.
 	if (text.startsWith('<thread-reports>')) return;
 	toCoordinator.push({ id, text, images });
+	return `sub-${toCoordinator.length}`;
 }, 'coordinator');
 
 beforeEach(() => {
@@ -136,7 +137,8 @@ test('a to-do handed to the coordinator is sent as the user’s words, links the
 	assert.equal((await todos.listTodos(space.id))[0].status, 'open', 'a failed hand-over leaves it open');
 	failCoordinator = false;
 
-	const { todo } = await todos.startTodo(space.id, item.id, 'coordinator');
+	const { todo, submissionId } = await todos.startTodo(space.id, item.id, 'coordinator');
+	assert.equal(submissionId, 'sub-1', 'the handoff returns the id of the submission the coordinator accepted');
 	assert.deepEqual([todo.status, todo.assignee, todo.threads], ['in_progress', 'coordinator', 0]);
 	assert.equal(toCoordinator.length, 1);
 	assert.equal(toCoordinator[0].text, todoStartMessage(item));

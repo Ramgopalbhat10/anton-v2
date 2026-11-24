@@ -1,6 +1,7 @@
+import { createFlueClient, type FlueConversationMessage, type FlueConversationSettlement } from '@flue/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,18 +10,27 @@ import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSpaceTodos } from '@/lib/spaces';
 import { session } from './render';
+import { todoStartMessage } from '../../src/core/space-todos';
 
 const api = vi.hoisted(() => ({
 	spaceTodos: vi.fn(async (_spaceId: string) => ({ todos: [] as SpaceTodo[] })),
+	space: vi.fn(async (_spaceId: string) => space),
+	sessions: vi.fn(async () => ({ sessions: threads })),
+	models: vi.fn(async () => ({ models: [], default: '' })),
+	commands: vi.fn(async () => ({ commands: [] })),
+	budget: vi.fn(async () => ({ blocked: null })),
+	storedOutputs: vi.fn(async () => ({ outputs: [] })),
 	createSpaceTodo: vi.fn(async (_spaceId: string, input: { title: string }) => makeTodo({ id: 'todo_new', title: input.title })),
 	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => makeTodo({ id: todoId, ...change })),
 	deleteSpaceTodo: vi.fn(async () => undefined),
-	startSpaceTodo: vi.fn(async () => ({ todo: { id: 'todo_open', status: 'in_progress' } })),
+	startSpaceTodo: vi.fn(async (): Promise<{ todo: SpaceTodo; submissionId?: string }> => ({ todo: makeTodo({ id: 'todo_open', status: 'in_progress' }) })),
 	attachToProject: vi.fn(async (_spaceId: string, file: File) => ({ name: file.name, path: file.name, kind: 'Text', size: file.size, text: 'hello', cut: null })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
+vi.mock('@flue/sdk', async (original) => ({ ...(await original<typeof import('@flue/sdk')>()), createFlueClient: vi.fn() }));
 
 const { ProjectBoard } = await import('@/components/projects/project-board');
+const { ProjectPage } = await import('@/components/projects/project-page');
 
 const space: Space = {
 	id: 'space_1',
@@ -80,13 +90,15 @@ const threads: Session[] = [
 	}),
 ];
 
-function renderWithRouter(ui: () => ReactNode) {
+function renderWithRouter(ui: () => ReactNode, path = '/') {
 	const root = createRootRoute({ component: ui });
 	const tree = root.addChildren([
 		createRoute({ getParentRoute: () => root, path: '/', component: () => null }),
+		createRoute({ getParentRoute: () => root, path: '/projects', component: () => null }),
+		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId', component: ProjectPage }),
 		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/threads/$threadId', component: () => null }),
 	]);
-	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	render(
 		<QueryClientProvider client={client}>
@@ -100,7 +112,74 @@ function renderWithRouter(ui: () => ReactNode) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	localStorage.clear();
 	api.spaceTodos.mockResolvedValue({ todos: [] });
+});
+
+it('opens the coordinator during a delayed handoff, makes failure retryable, and tracks the accepted submission', async () => {
+	const item = makeTodo({ id: 'todo_open', title: 'Backlog item', description: '' });
+	api.spaceTodos.mockResolvedValue({ todos: [item] });
+	localStorage.setItem('anton.project-panel.space_1', JSON.stringify({ open: false, view: 'board' }));
+	let reject!: (error: Error) => void;
+	let accept!: (result: { todo: SpaceTodo; submissionId: string }) => void;
+	api.startSpaceTodo
+		.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }))
+		.mockImplementationOnce(() => new Promise((resolve) => { accept = resolve; }));
+	let onChange = () => {};
+	let snapshot: { phase: 'absent' | 'live'; conversation?: { messages: FlueConversationMessage[]; settlements: FlueConversationSettlement[] } } = { phase: 'absent' };
+	const refresh = vi.fn();
+	vi.mocked(createFlueClient).mockReturnValue({ observe: () => ({
+		getSnapshot: () => snapshot,
+		subscribe: (listener: () => void) => { onChange = listener; return () => {}; },
+		refresh,
+		close: () => {},
+	}) } as never);
+	const publish = (messages: FlueConversationMessage[], settlements: FlueConversationSettlement[] = []) => act(() => {
+		snapshot = { phase: 'live', conversation: { messages, settlements } };
+		onChange();
+	});
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	const actions = await screen.findByRole('button', { name: 'Actions for Backlog item' });
+	expect(screen.queryByRole('button', { name: 'Hide the coordinator' })).toBeNull();
+	await userEvent.click(actions);
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+	expect(await screen.findByRole('button', { name: 'Hide the coordinator' })).toBeTruthy();
+	expect(screen.getByText('Handing “Backlog item” to the coordinator').closest('[role=status]')).toBeTruthy();
+	expect(api.startSpaceTodo).toHaveBeenCalledExactlyOnceWith('space_1', item.id, 'coordinator');
+	expect(actions.hasAttribute('disabled')).toBe(true);
+	await act(() => reject(new Error('Could not connect')));
+	expect(screen.getByRole('alert').textContent).toContain('Could not hand off “Backlog item”: Could not connect');
+	expect(screen.queryByText('Handing “Backlog item” to the coordinator')).toBeNull();
+	await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+	expect(screen.getByText('Handing “Backlog item” to the coordinator')).toBeTruthy();
+	const assigned: SpaceTodo = { ...item, status: 'in_progress', assignee: 'coordinator' };
+	api.spaceTodos.mockResolvedValue({ todos: [assigned] });
+	await act(() => accept({ todo: assigned, submissionId: 'handoff' }));
+	expect(refresh).toHaveBeenCalledTimes(1);
+	expect(screen.getByText('Waiting for the coordinator to pick up “Backlog item”')).toBeTruthy();
+	const brief = todoStartMessage(item);
+	const message: FlueConversationMessage = { id: 'message', role: 'user', purpose: 'user', display: 'visible', submissionId: 'handoff', parts: [{ type: 'text', state: 'done', text: brief }] };
+	await publish([message], [{ submissionId: 'unrelated', outcome: 'completed' }]);
+	expect(screen.queryByText('Waiting for the coordinator to pick up “Backlog item”')).toBeNull();
+	expect(screen.getAllByText(brief)).toHaveLength(1);
+	expect(screen.getByText('The coordinator is reading')).toBeTruthy();
+	const reply: FlueConversationMessage = { id: 'reply', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'handoff', parts: [] };
+	await publish([message, reply]);
+	expect(screen.getByText('The coordinator is thinking')).toBeTruthy();
+	await publish([message, { ...reply, parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'start', state: 'input-available', input: { title: 'Start billing work' } }] }]);
+	expect(screen.getByText('Start billing work')).toBeTruthy();
+	expect(screen.getByText('Starting')).toBeTruthy();
+	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
+	await publish([message, { ...reply, parts: [
+		{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'start', state: 'output-available', input: { title: 'Start billing work' }, output: 'Started [id:thread_1]' },
+		{ type: 'text', state: 'done', text: 'Done for now.' },
+	] }], [{ submissionId: 'handoff', outcome: 'completed' }]);
+	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
+	expect(dock.getByRole('article', { name: 'Add invoices table' })).toBeTruthy();
+	expect(dock.queryByText('Starting')).toBeNull();
+	expect(screen.getByText('Done for now.')).toBeTruthy();
+	expect(screen.queryByRole('button', { name: 'Stop the coordinator' })).toBeNull();
+	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
 });
 
 describe('the To do column on the project board', () => {
@@ -118,6 +197,7 @@ describe('the To do column on the project board', () => {
 				]}
 				onNewThread={() => undefined}
 				onOpenCoordinator={onOpenCoordinator}
+				onHandTodo={() => undefined}
 			/>
 		));
 		const column = await screen.findByRole('region', { name: 'To do' });
@@ -131,7 +211,7 @@ describe('the To do column on the project board', () => {
 	});
 
 	it('creates work only from To do; the thread-state columns have no add button', async () => {
-		renderWithRouter(() => <ProjectBoard space={space} threads={threads} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} />);
+		renderWithRouter(() => <ProjectBoard space={space} threads={threads} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />);
 		const todo = await screen.findByRole('region', { name: 'To do' });
 		expect(within(todo).getByRole('button', { name: 'New to-do' })).toBeTruthy();
 		for (const name of ['Needs you', 'Working', 'Ready for review', 'Done']) {
@@ -141,9 +221,9 @@ describe('the To do column on the project board', () => {
 	});
 
 	it('adds a to-do, and starts one as a thread or hands it to the coordinator', async () => {
-		const onOpenCoordinator = vi.fn();
+		const onHandTodo = vi.fn();
 		renderWithRouter(() => (
-			<ProjectBoard space={space} threads={threads} todos={[makeTodo({ id: 'todo_open', title: 'Backlog item' })]} onNewThread={() => undefined} onOpenCoordinator={onOpenCoordinator} />
+			<ProjectBoard space={space} threads={threads} todos={[makeTodo({ id: 'todo_open', title: 'Backlog item' })]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={onHandTodo} />
 		));
 		const column = await screen.findByRole('region', { name: 'To do' });
 
@@ -155,8 +235,7 @@ describe('the To do column on the project board', () => {
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
-		await waitFor(() => expect(api.startSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', 'coordinator'));
-		await waitFor(() => expect(onOpenCoordinator).toHaveBeenCalledTimes(1));
+		expect(onHandTodo).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 'todo_open', title: 'Backlog item' }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start a thread' }));
@@ -180,6 +259,7 @@ describe('the To do column on the project board', () => {
 				]}
 				onNewThread={() => undefined}
 				onOpenCoordinator={() => undefined}
+				onHandTodo={() => undefined}
 			/>
 		));
 		const column = await screen.findByRole('region', { name: 'To do' });
@@ -216,7 +296,7 @@ describe('the To do column on the project board', () => {
 		/** The board as the project page draws it: from the to-do list the server keeps. */
 		function LiveBoard() {
 			const { todos } = useSpaceTodos('space_1');
-			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} />;
+			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />;
 		}
 		const later = <T,>() => {
 			let resolve!: (value: T) => void;
@@ -294,7 +374,7 @@ describe('the To do column on the project board', () => {
 	});
 
 	it('offers a to-do on an empty project', async () => {
-		renderWithRouter(() => <ProjectBoard space={space} threads={[]} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} />);
+		renderWithRouter(() => <ProjectBoard space={space} threads={[]} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
 		expect(await screen.findByRole('textbox', { name: 'Title' })).toBeTruthy();
 	});

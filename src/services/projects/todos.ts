@@ -104,7 +104,7 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 }
 
 /** Starts an open to-do: a thread of its own with it as the brief, or the coordinator, which may split it over several. Its files go along as a message's would, images as pictures. */
-export async function startTodo(spaceId: string, todoId: string, target: 'thread' | 'coordinator'): Promise<{ todo: SpaceTodo; thread?: Session }> {
+export async function startTodo(spaceId: string, todoId: string, target: 'thread' | 'coordinator'): Promise<{ todo: SpaceTodo; thread?: Session; submissionId?: string }> {
 	const todo = await existingTodo(spaceId, todoId);
 	if (todo.status !== 'open') throw new ConflictError('This to-do is already started or done');
 	const files = await attachedFiles(spaceId, todo);
@@ -118,12 +118,10 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	const space = await existingSpace(spaceId);
 	const { images, note } = await projectPictures(spaceId, spaceId, message, await coordinatorModel(space));
 	await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: 'coordinator' });
-	try {
-		await sendToAgent(spaceId, note ? `${message}\n\n${note}` : message, 'coordinator', images);
-	} catch (error) {
+	const submissionId = await sendToAgent(spaceId, note ? `${message}\n\n${note}` : message, 'coordinator', images).catch(async (error: unknown) => {
 		await updateSpaceTodo(todo.id, { status: 'open', assignee: null });
 		throw error;
-	}
+	});
 	await touchSpace(spaceId);
-	return { todo: (await getSpaceTodo(todo.id))! };
+	return { todo: (await getSpaceTodo(todo.id))!, submissionId };
 }

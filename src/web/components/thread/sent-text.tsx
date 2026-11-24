@@ -70,10 +70,10 @@ export function SentText({ text, className }: { text: string; className?: string
 	);
 }
 
-/** A message you sent whose files are still on their way: it shows at once, where it will stay, and goes once the files are in. Its pictures and files show as they will once sent. */
-export type PendingSend = { text: string; attaching: string; pictures?: SentPicture[]; files?: { name: string; size: number }[] };
+/** A message shows at once while it is prepared. Its pictures and files show as they will once sent. */
+export type PendingSend = { text: string; attaching?: string; pictures?: SentPicture[]; files?: { name: string; size: number }[] };
 
-/** What a composer says of a message with files: on its way (`PendingSend`), sent now and shown by the conversation (`'sent'`), or neither. */
+/** What a composer says of a message: on its way (`PendingSend`), shown by the conversation (`'sent'`), or neither. */
 export type PendingChange = PendingSend | 'sent' | null;
 
 /** The id the runtime's client gives a message this page sent, which it keeps once the conversation lists it. */
@@ -109,17 +109,18 @@ export const placeholders = (taken: { images: ImageAttachment[]; files: FileAtta
 export function PendingMessage({ pending }: { pending: PendingSend }) {
 	const pictures = pending.pictures ?? [];
 	const files = pending.files ?? [];
+	const label = pending.attaching ? `Attaching ${pending.attaching}` : 'Preparing message';
 	return (
 		<div className="in-sent flex flex-col items-end gap-1.5" aria-busy="true">
 			<SentImages pictures={pictures} uploading />
 			<UploadingFiles files={files} />
 			{pending.text ? <SentText text={pending.text} className="max-w-[min(520px,100%)]" /> : null}
 			{pictures.length || files.length ? (
-				<span className="sr-only">Attaching {pending.attaching}</span>
+				<span className="sr-only">{label}</span>
 			) : (
 				<div className="flex items-center gap-1.5 text-small text-(--text-3)">
 					<Spinner size={11} tone="neutral" />
-					Attaching {pending.attaching}
+					{label}
 				</div>
 			)}
 		</div>
