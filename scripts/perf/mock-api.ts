@@ -6,10 +6,12 @@
  * tool event every 300 ms, the task's state every few seconds).
  */
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
+import type { SpaceTodo } from '../../src/core/space-todos.ts';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
 import { mockSetup } from './mock-setup.ts';
 import { viewerArtifacts, viewerPdfPath } from '../ui/artifact-fixture.ts';
@@ -163,8 +165,8 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	createdAt: ago(60 * 24 * createdDaysAgo),
 	updatedAt: ago(30),
 });
-const todo = (id: string, title: string, description: string, patch: Record<string, unknown> = {}) => ({
-	id, spaceId: 'space-billing', title, description, attachments: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+const todo = (id: string, title: string, description: string, patch: Partial<SpaceTodo> = {}): SpaceTodo => ({
+	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
 	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
@@ -235,6 +237,7 @@ const models = Array.from({ length: 300 }, (_, index) => ({
 }));
 
 export function mockApi({ working = true }: { working?: boolean } = {}): Plugin {
+	const spaceTodos = new Map<string, SpaceTodo[]>([['space-billing', billingTodos.map((item) => ({ ...item }))]]);
 	const tree = paths();
 	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread/thread.tsx src/web/components/thread/subagents.tsx src/web/components/workspace/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
 	const changed = [...patch.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => ({ path: match[1], status: 'M' }));
@@ -392,8 +395,27 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
 		if (/^\/api\/spaces\/[^/]+\/usage$/.test(path)) return json(res, { today: 0, month: 0, byThread: [], byModel: [], daily: [] });
-		const todosOf = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
-		if (todosOf) return json(res, { todos: todosOf === 'space-billing' ? billingTodos : [] });
+		const todosRoute = path.match(/^\/api\/spaces\/([^/]+)\/todos(?:\/([^/]+))?$/);
+		if (todosRoute) {
+			const [, spaceId, todoId] = todosRoute;
+			const todos = spaceTodos.get(spaceId) ?? [];
+			if (req.method === 'GET' && !todoId) return json(res, { todos });
+			if ((req.method === 'POST' && !todoId) || (req.method === 'PATCH' && todoId)) {
+				const chunks: Buffer[] = [];
+				req.on('data', (chunk: Buffer) => chunks.push(chunk));
+				req.on('end', () => {
+					const change = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Partial<SpaceTodo>;
+					const updatedAt = new Date().toISOString();
+					const item = todoId ? todos.find((item) => item.id === todoId) : todo(`todo_${randomUUID()}`, '', '', { spaceId, createdAt: updatedAt });
+					if (!item) return void res.writeHead(404).end();
+					Object.assign(item, change, { updatedAt });
+					if (!todoId) todos.push(item);
+					spaceTodos.set(spaceId, todos);
+					json(res, item);
+				});
+				return;
+			}
+		}
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
 		if (spaceId) {
 			const found = spaces.find((item) => item.id === spaceId);

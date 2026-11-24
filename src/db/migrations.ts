@@ -197,6 +197,8 @@ export const migrations: string[][] = [
 	[`ALTER TABLE space_todos ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'`],
 	// 48: custom HTTP headers sent with requests to an MCP server, kept apart from its view.
 	[`ALTER TABLE mcp_servers ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'`],
+	// 49: a to-do's main thread model, including its route and reasoning if chosen.
+	[`ALTER TABLE space_todos ADD COLUMN thread_model_json TEXT`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

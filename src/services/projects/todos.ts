@@ -6,9 +6,10 @@ import { getSpace, touchSpace } from '../../db/spaces.ts';
 import { deleteSpaceTodoRecord, getSpaceTodo, insertSpaceTodo, linkTodoThreadRecord, listSpaceTodos, updateSpaceTodo } from '../../db/space-todos.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
 import { projectAttachment, projectPictures } from '../artifacts/attachments.ts';
+import { findModel } from '../models/models.ts';
 import { coordinatorModel } from './coordinator.ts';
 import { listSpaceFiles } from './space-files.ts';
-import { startThread } from './spaces.ts';
+import { nudgeThread, startThread, type ThreadInput } from './spaces.ts';
 import { threadStarted } from './thread-reports.ts';
 
 export const MAX_TODO_TITLE = 200;
@@ -69,24 +70,33 @@ export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo>
 	return found;
 }
 
-export async function createTodo(spaceId: string, input: { title: string; description?: string; attachments?: TodoAttachment[]; createdBy?: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
+type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel'] };
+
+async function checkThreadModel(choice: SpaceTodo['threadModel'] | undefined): Promise<void> {
+	if (choice && !(await findModel(choice.model))) throw new InvalidInputError(`Unknown model: ${choice.model}`);
+}
+
+export async function createTodo(spaceId: string, input: TodoFields & { createdBy?: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
 	await existingSpace(spaceId);
 	const description = (input.description ?? '').trim();
 	if (description.length > MAX_TODO_DESCRIPTION) throw new InvalidInputError('The description is too long');
 	const attachments = await libraryFiles(spaceId, input.attachments ?? []);
-	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, createdBy: input.createdBy ?? 'user' });
+	await checkThreadModel(input.threadModel);
+	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, threadModel: input.threadModel, createdBy: input.createdBy ?? 'user' });
 	await touchSpace(spaceId);
 	return todo;
 }
 
 /** Set back to open, a to-do leaves whoever had it; marked done, it keeps them. */
-export async function editTodo(spaceId: string, todoId: string, change: { title?: string; description?: string; attachments?: TodoAttachment[]; status?: SpaceTodoStatus }): Promise<SpaceTodo> {
+export async function editTodo(spaceId: string, todoId: string, change: Partial<TodoFields> & { status?: SpaceTodoStatus }): Promise<SpaceTodo> {
 	await existingTodo(spaceId, todoId);
 	const attachments = change.attachments === undefined ? undefined : await libraryFiles(spaceId, change.attachments);
+	await checkThreadModel(change.threadModel);
 	return (await updateSpaceTodo(todoId, {
 		...(change.title !== undefined ? { title: cleanTitle(change.title) } : {}),
 		...(change.description !== undefined ? { description: change.description.trim() } : {}),
 		...(attachments !== undefined ? { attachments } : {}),
+		...(change.threadModel !== undefined ? { threadModel: change.threadModel } : {}),
 		...(change.status === 'open' ? { status: 'open', assignee: null, completedAt: null } : {}),
 		...(change.status === 'done' ? { status: 'done', completedAt: new Date().toISOString() } : {}),
 	}))!;
@@ -103,6 +113,23 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 	return (await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: todo.assignee ?? 'thread', completedAt: null }))!;
 }
 
+/** A handoff identifies the to-do even when the coordinator omits or miscopies the tool's todo_id. */
+export async function coordinatorTodo(spaceId: string, delivery: string, ref?: string): Promise<SpaceTodo | null> {
+	const todoId = /^Start the project to-do \[todo:([a-f0-9]{8})\]: /.exec(delivery)?.[1] ?? ref;
+	return todoId ? findTodo(spaceId, todoId) : null;
+}
+
+export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning'>): Promise<{ todo: SpaceTodo; thread: Session }> {
+	const thread = await startThread(todo.spaceId, { ...input, model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined }, { wait: false });
+	return { thread, todo: await linkTodoToThread(todo.spaceId, todo.id, thread.id) };
+}
+
+export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string): Promise<void> {
+	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
+	await nudgeThread(todo.spaceId, threadId, message);
+	await linkTodoToThread(todo.spaceId, todo.id, threadId);
+}
+
 /** Starts an open to-do: a thread of its own with it as the brief, or the coordinator, which may split it over several. Its files go along as a message's would, images as pictures. */
 export async function startTodo(spaceId: string, todoId: string, target: 'thread' | 'coordinator'): Promise<{ todo: SpaceTodo; thread?: Session; submissionId?: string }> {
 	const todo = await existingTodo(spaceId, todoId);
@@ -110,9 +137,9 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	const files = await attachedFiles(spaceId, todo);
 	if (target === 'thread') {
 		const brief = withAttachments(todoBrief(todo), files, 'project');
-		const thread = await startThread(spaceId, { title: todo.title.slice(0, 80), brief }, { wait: false });
-		await threadStarted(thread.id, { by: 'you', brief });
-		return { todo: await linkTodoToThread(spaceId, todo.id, thread.id), thread };
+		const started = await startTodoThread(todo, { title: todo.title.slice(0, 80), brief });
+		await threadStarted(started.thread.id, { by: 'you', brief });
+		return started;
 	}
 	const message = withAttachments(todoStartMessage(todo), files, 'project');
 	const space = await existingSpace(spaceId);

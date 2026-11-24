@@ -109,14 +109,15 @@ const TODO_ATTACHMENTS = v.pipe(
 	v.array(v.object({ name: v.pipe(v.string(), v.minLength(1), v.maxLength(300)), path: v.pipe(v.string(), v.minLength(1), v.maxLength(1000)), kind: v.pipe(v.string(), v.maxLength(100)), size: v.number() })),
 	v.maxLength(MAX_TODO_ATTACHMENTS),
 );
+const TODO_FIELDS = { description: v.optional(TODO_DESCRIPTION), attachments: v.optional(TODO_ATTACHMENTS), threadModel: v.optional(AGENT_MODEL) };
 
 app.get('/api/spaces/:id/todos', async (c) => c.json({ todos: await listTodos(c.req.param('id')) }));
 app.post('/api/spaces/:id/todos', async (c) => {
-	const input = await body(c, v.object({ title: TODO_TITLE, description: v.optional(TODO_DESCRIPTION), attachments: v.optional(TODO_ATTACHMENTS) }));
+	const input = await body(c, v.object({ ...TODO_FIELDS, title: TODO_TITLE }));
 	return c.json(await createTodo(c.req.param('id'), input));
 });
 app.patch('/api/spaces/:id/todos/:todoId', async (c) => {
-	const change = await body(c, v.object({ title: v.optional(TODO_TITLE), description: v.optional(TODO_DESCRIPTION), attachments: v.optional(TODO_ATTACHMENTS), status: v.optional(v.picklist(['open', 'done'])) }));
+	const change = await body(c, v.object({ ...TODO_FIELDS, title: v.optional(TODO_TITLE), status: v.optional(v.picklist(['open', 'done'])) }));
 	return c.json(await editTodo(c.req.param('id'), c.req.param('todoId'), change));
 });
 app.delete('/api/spaces/:id/todos/:todoId', async (c) => {

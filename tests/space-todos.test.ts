@@ -6,7 +6,7 @@ import { after, beforeEach, test } from 'node:test';
 import { createClient } from '@libsql/client';
 import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
-import { todoStartMessage, todoThreadFiles } from '../src/core/space-todos.ts';
+import { todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-space-todos-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -42,7 +42,7 @@ const model = (id: string, vision = false): ModelInfo => ({
 });
 const fakeCatalog: ModelCatalog = {
 	name: 'fake',
-	list: async () => [model('openrouter/test/cheap', false), model('openrouter/test/strong', true)],
+	list: async () => [model('openrouter/test/cheap'), model('openrouter/test/strong', true), model('openrouter/test/default')],
 };
 
 const { useDatabase } = await import('../src/db/client.ts');
@@ -54,7 +54,9 @@ const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts
 const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 const spaces = await import('../src/services/projects/spaces.ts');
 const todos = await import('../src/services/projects/todos.ts');
-const { stateBlock } = await import('../src/services/projects/coordinator.ts');
+const { coordinatorBrief, stateBlock } = await import('../src/services/projects/coordinator.ts');
+const { generalSettings } = await import('../src/services/models/general.ts');
+const { migrate } = await import('../src/db/migrations.ts');
 const sessions = await import('../src/services/tasks/sessions.ts');
 const { spaceRoutes } = await import('../src/routes/spaces.ts');
 const { attachToProject } = await import('../src/services/artifacts/attachments.ts');
@@ -178,6 +180,77 @@ test('the to-do routes validate their input', async () => {
 	assert.equal((await call('POST', `/api/spaces/${space.id}/todos/${id}/start`, { target: 'coordinator' })).status, 200);
 	assert.equal((await call('DELETE', `/api/spaces/${space.id}/todos/${id}`)).status, 200);
 	assert.equal(((await (await call('GET', `/api/spaces/${space.id}/todos`)).json()) as { todos: unknown[] }).todos.length, 0);
+});
+
+test('the model migration leaves pre-existing to-dos on the project default', async () => {
+	const db = createClient({ url: ':memory:' });
+	try {
+		await migrate(db, 48);
+		await db.execute("INSERT INTO space_todos (id, space_id, title, created_at, updated_at) VALUES ('legacy', 'project', 'Legacy to-do', '', '')");
+		await migrate(db);
+		assert.equal((await db.execute("SELECT thread_model_json FROM space_todos WHERE id = 'legacy'")).rows[0]?.thread_model_json, null);
+	} finally {
+		db.close();
+	}
+});
+
+test('a to-do model is round-tripped on create and edit, kept on unrelated edits, and cleared with null', async () => {
+	const space = await spaces.createSpace({ name: 'Todo API models' });
+	const url = `/api/spaces/${space.id}/todos`;
+	const call = async <T = SpaceTodo>(method: string, tail: string, payload?: unknown): Promise<T> => {
+		const response = await spaceRoutes.request(`${url}${tail}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+		assert.equal(response.status, 200);
+		return response.json() as Promise<T>;
+	};
+	const choice = { model: 'openrouter/test/cheap#sort=latency', reasoning: 'low' } as const;
+	const item = await call('POST', '', { title: 'Tune the API', threadModel: choice });
+	assert.deepEqual(item.threadModel, choice);
+	const tail = `/${item.id}`;
+	assert.deepEqual((await call('PATCH', tail, { description: 'One endpoint at a time.' })).threadModel, choice);
+	const changed = { model: 'openrouter/test/strong', reasoning: null };
+	assert.deepEqual((await call('PATCH', tail, { threadModel: changed })).threadModel, changed);
+	await assert.rejects(() => todos.editTodo(space.id, item.id, { threadModel: { model: 'openrouter/test/missing', reasoning: null } }), /Unknown model/);
+	assert.deepEqual((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, changed);
+	assert.equal((await call('PATCH', tail, { threadModel: null })).threadModel, null);
+	assert.equal((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, null);
+});
+
+test('direct and coordinator to-dos keep distinct models, even in the queue, without changing any defaults or existing threads', async () => {
+	const space = await spaces.createSpace({ name: 'Todo thread models', repoIds: [apiRepo.id], maxParallel: 5 });
+	const defaults = { coordinatorModel: 'openrouter/test/cheap', coordinatorReasoning: 'low', threadModel: 'openrouter/test/default', threadReasoning: 'low' } as const;
+	await spaces.editSpace(space.id, defaults);
+	const general = await generalSettings();
+	const existing = await spaces.startThread(space.id, { title: 'Existing thread', brief: 'Continue as before' });
+	await spaces.editSpace(space.id, { state: 'paused' });
+	const direct = await todos.createTodo(space.id, { title: 'Small fix', threadModel: { model: 'openrouter/test/cheap#sort=latency', reasoning: null } });
+	const handed = await todos.createTodo(space.id, { title: 'Large split task', threadModel: { model: 'openrouter/test/strong', reasoning: 'low' } });
+	const inherited = await todos.createTodo(space.id, { title: 'Use defaults' });
+	const [directResult] = await Promise.all([todos.startTodo(space.id, direct.id, 'thread'), todos.startTodo(space.id, handed.id, 'coordinator')]);
+	assert.deepEqual([coordinatorBrief(space.id).model, coordinatorBrief(space.id).reasoning], [defaults.coordinatorModel, defaults.coordinatorReasoning]);
+	const delivery = toCoordinator[0].text;
+	assert.match(await stateBlock(space.id), /"Large split task" · started, no thread yet · main thread model: openrouter\/test\/strong/);
+	const taken = await todos.coordinatorTodo(space.id, delivery);
+	assert.equal(taken?.id, handed.id, 'the saved handoff identifies the to-do without a tool argument');
+	assert.equal((await todos.coordinatorTodo(space.id, delivery, direct.id))?.id, handed.id, 'a wrong tool argument cannot pick another model');
+	assert.equal(await todos.coordinatorTodo(space.id, 'A regular project message'), null);
+	assert.equal((await todos.coordinatorTodo(space.id, 'A regular project message', handed.id))?.id, handed.id);
+	await assert.rejects(() => todos.messageTodoThread(taken!, existing.id, 'Wrong thread'), /Use start_thread/);
+	assert.equal(toThreads.some((entry) => entry.text === 'Wrong thread'), false);
+	const first = await todos.startTodoThread(taken!, { title: 'Part one', brief: 'Start the first part' });
+	const second = await todos.startTodoThread(taken!, { title: 'Part two', brief: 'Start the second part' });
+	assert.equal(second.todo.threads, 2);
+	const fallback = (await todos.startTodo(space.id, inherited.id, 'thread')).thread!;
+	for (const thread of [directResult.thread!, first.thread, second.thread, fallback]) assert.equal(thread.threadState, 'queued');
+	assert.deepEqual([directResult.thread!.model, directResult.thread!.reasoning, directResult.thread!.route], ['openrouter/test/cheap', null, { sort: 'latency' }]);
+	for (const { thread } of [first, second]) assert.deepEqual([thread.model, thread.reasoning], ['openrouter/test/strong', 'low']);
+	assert.deepEqual([fallback.model, fallback.reasoning], [defaults.threadModel, defaults.threadReasoning]);
+	const resumed = await spaces.editSpace(space.id, { state: 'active' });
+	assert.deepEqual(sessions.agentModelFor(directResult.thread!.id), { model: 'openrouter/test/cheap#sort=latency', reasoning: 'high', route: { sort: 'latency' } });
+	assert.deepEqual(sessions.agentModelFor(first.thread.id), { model: 'openrouter/test/strong', reasoning: 'low' });
+	assert.deepEqual(sessions.agentModelFor(second.thread.id), { model: 'openrouter/test/strong', reasoning: 'low' });
+	assert.deepEqual(sessions.agentModelFor(existing.id), { model: defaults.threadModel, reasoning: defaults.threadReasoning });
+	for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) assert.equal(resumed[key], defaults[key]);
+	assert.deepEqual(await generalSettings(), general);
 });
 
 test("a to-do's screenshots and files are kept in the project's Library and go with the brief it starts, images as pictures", async () => {

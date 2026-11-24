@@ -1,3 +1,5 @@
+import type { AgentModel } from './types.ts';
+
 /** A project to-do waits in `open`; starting it (a thread, or the coordinator) makes it `in_progress`; its threads resolving make it `done`. */
 export const SPACE_TODO_STATUSES = ['open', 'in_progress', 'done'] as const;
 export type SpaceTodoStatus = (typeof SPACE_TODO_STATUSES)[number];
@@ -14,6 +16,7 @@ export type SpaceTodo = {
 	title: string;
 	description: string;
 	attachments: TodoAttachment[];
+	threadModel: AgentModel | null;
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;

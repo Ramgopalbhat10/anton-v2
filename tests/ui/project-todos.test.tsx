@@ -7,6 +7,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
+import type { ModelInfo } from '@/lib/api/plans';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSpaceTodos } from '@/lib/spaces';
 import { useTodoSaves } from '@/components/projects/todo-saves';
@@ -17,12 +18,13 @@ const api = vi.hoisted(() => ({
 	spaceTodos: vi.fn(async (_spaceId: string) => ({ todos: [] as SpaceTodo[] })),
 	space: vi.fn(async (_spaceId: string) => space),
 	sessions: vi.fn(async () => ({ sessions: threads })),
-	models: vi.fn(async () => ({ models: [], default: '' })),
+	models: vi.fn(async () => ({ models: [] as ModelInfo[], default: '' })),
+	subscriptions: vi.fn(async () => ({ subscriptions: [] })),
 	commands: vi.fn(async () => ({ commands: [] })),
 	budget: vi.fn(async () => ({ blocked: null })),
 	spaceUsage: vi.fn(async () => ({ today: 0, month: 0, byThread: [], byModel: [], daily: [] })),
 	storedOutputs: vi.fn(async () => ({ outputs: [] })),
-	createSpaceTodo: vi.fn(async (_spaceId: string, input: { title: string }) => makeTodo({ id: 'todo_new', title: input.title })),
+	createSpaceTodo: vi.fn(async (_spaceId: string, input: Pick<SpaceTodo, 'title' | 'threadModel'>) => makeTodo({ id: 'todo_new', ...input })),
 	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => makeTodo({ id: todoId, ...change })),
 	deleteSpaceTodo: vi.fn(async () => undefined),
 	startSpaceTodo: vi.fn(async (): Promise<{ todo: SpaceTodo; submissionId?: string }> => ({ todo: makeTodo({ id: 'todo_open', status: 'in_progress' }) })),
@@ -71,8 +73,9 @@ function makeTodo(patch: Partial<SpaceTodo>): SpaceTodo {
 	id: 'todo_1',
 	spaceId: 'space_1',
 	title: 'Fix OAuth redirect',
-	description: 'Preserve return URL after login.',
-	attachments: [],
+		description: 'Preserve return URL after login.',
+		attachments: [],
+		threadModel: null,
 	status: 'open',
 	assignee: null,
 	createdBy: 'user',
@@ -310,7 +313,7 @@ it('disables dock retry through attachment upload and editing, retries the saved
 	expect(retryButton.hasAttribute('disabled')).toBe(true);
 	const attachment = { name: 'details.txt', path: 'details.txt', kind: 'Text', size: 7 };
 	await act(() => upload.resolve({ ...attachment, text: 'Updated', cut: null }));
-	expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Revised brief', description: item.description, attachments: [attachment] });
+	expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Revised brief', description: item.description, attachments: [attachment], threadModel: null });
 	expect(retryButton.hasAttribute('disabled')).toBe(true);
 	const saved = { ...item, title: 'Revised brief', updatedAt: '2026-10-04T00:00:00Z', attachments: [attachment] };
 	api.spaceTodos.mockResolvedValue({ todos: [saved] });
@@ -374,7 +377,7 @@ describe('the To do column on the project board', () => {
 		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
 		await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), 'For the new CLI');
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
-		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [] }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
@@ -415,7 +418,7 @@ describe('the To do column on the project board', () => {
 		expect(await screen.findByText('crash.log')).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
 		await waitFor(() =>
-			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }] }),
+			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null }),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 
@@ -430,6 +433,7 @@ describe('the To do column on the project board', () => {
 				title: 'Fix the toolbar',
 				description: 'Preserve return URL after login.',
 				attachments: [{ name: 'toolbar.png', path: 'toolbar.png', kind: 'PNG image', size: 2048 }],
+				threadModel: null,
 			}),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
@@ -441,6 +445,30 @@ describe('the To do column on the project board', () => {
 			const { todos } = useSpaceTodos('space_1');
 			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />;
 		}
+		it('sets a model and effort when adding a to-do, then reopens and clears the saved choice', async () => {
+			const model: ModelInfo = { id: 'openrouter/test/model', name: 'Compact model', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: false, reasoning: ['low', 'high'], defaultReasoning: 'high' };
+			api.models.mockResolvedValueOnce({ models: [model], default: model.id });
+			renderWithRouter(() => <LiveBoard />);
+			await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
+			await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Pick a model');
+			const trigger = screen.getByRole('button', { name: 'Main thread model' });
+			expect(trigger.textContent).toContain('Project default');
+			await userEvent.click(trigger);
+			await userEvent.click(await screen.findByRole('option', { name: /Compact model/ }));
+			await userEvent.click(screen.getByRole('radio', { name: 'Low' }));
+			await userEvent.keyboard('{Escape}');
+			expect(trigger.textContent).toContain('Compact model');
+			await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+			await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', expect.objectContaining({ threadModel: { model: model.id, reasoning: 'low' } })));
+			await userEvent.click(await screen.findByRole('button', { name: /^Pick a model/ }));
+			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
+			expect(edit.getByRole('button', { name: 'Main thread model' }).textContent).toContain('Compact model');
+			await userEvent.click(edit.getByRole('button', { name: 'Use project default' }));
+			expect(edit.getByRole('button', { name: 'Main thread model' }).textContent).toContain('Project default');
+			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ threadModel: null })));
+		});
+
 		it('shows a new to-do the moment it is added, then the saved one in its place, once', async () => {
 			const saved = makeTodo({ id: 'todo_new', title: 'Write the docs', description: '' });
 			const create = later<SpaceTodo>();
