@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +19,8 @@ const api = vi.hoisted(() => ({
 	startThread: vi.fn(async () => ({ id: 'new' })),
 	attachToProject: vi.fn(),
 	budget: vi.fn(async () => ({ limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null })),
-	commands: vi.fn(async () => ({ commands: [] })),
+	commands: vi.fn(async () => ({ commands: [] as Array<{ name: string; prompt: string }> })),
+	plugins: vi.fn(async () => ({ plugins: [] })),
 	todos: vi.fn(async (_id: string) => ({ list: null as { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>; updatedAt: string } | null })),
 	now: vi.fn(async (_id: string) => ({ now: null })),
 	outputs: vi.fn(async (_id: string) => ({ source: 'saved', at: null, outputs: [] as Array<{ path: string; size: number; mtimeMs: number }> })),
@@ -459,6 +460,22 @@ describe('threads', () => {
 		await waitFor(() => expect(sendMessage).toHaveBeenCalled());
 		expect(api.attachToProject).toHaveBeenCalledWith('space_1', expect.any(File));
 		expect(sendMessage).toHaveBeenCalledWith('Plan this\n\n<attachment name="brief.pdf" path="brief.pdf" kind="PDF" size="4" library="project">\nShip in May.\n</attachment>');
+	});
+
+	it('immediately echoes a command while its definition is loading, then hands the expanded text to Flue', async () => {
+		let loaded!: (result: { commands: Array<{ name: string; prompt: string }> }) => void;
+		api.commands.mockImplementationOnce(() => new Promise((resolve) => { loaded = resolve; }));
+		const sendMessage = vi.fn(async () => undefined);
+		const agent = { messages: [], status: 'idle', historyReady: true, settlements: [], sendMessage, refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
+		const box = await screen.findByRole('textbox', { name: /Tell the coordinator/ });
+		await userEvent.type(box, '/plan invoices{Enter}');
+		const preparing = await screen.findByText('Preparing message');
+		expect(preparing.closest('[aria-busy]')?.textContent).toContain('/plan invoices');
+		expect(sendMessage).not.toHaveBeenCalled();
+		await act(() => loaded({ commands: [{ name: 'plan', prompt: 'Plan $ARGUMENTS' }] }));
+		expect(sendMessage).toHaveBeenCalledExactlyOnceWith('Plan invoices');
+		expect(screen.queryByText('Preparing message')).toBeNull();
 	});
 
 	it('keeps a newer draft and attachments when an earlier coordinator send fails', async () => {

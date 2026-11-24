@@ -391,6 +391,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		if (/^\/api\/spaces\/[^/]+\/usage$/.test(path)) return json(res, { today: 0, month: 0, byThread: [], byModel: [], daily: [] });
 		const todosOf = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
 		if (todosOf) return json(res, { todos: todosOf === 'space-billing' ? billingTodos : [] });
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
@@ -471,6 +472,10 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			return;
 		}
 		if (path === '/api/artifacts') return json(res, { artifacts });
+		if (path === '/api/outputs') {
+			const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
+			return json(res, { outputs: Object.fromEntries(ids.map((id) => [id, artifacts.filter((item) => item.sessionId === id).map(({ path, size, mtimeMs }) => ({ path, size, mtimeMs }))])) });
+		}
 		if (path === '/api/settings/sandbox') return json(res, { settings: { cpu: 2, memoryMiB: 4096, idleMinutes: 15, lifetimeHours: 8, region: null, allowedDomains: ['registry.npmjs.org'], baseImage: null, warmImageDays: 7 }, defaultBaseImage: 'node:22-bookworm', provider: 'modal' });
 		if (path === '/api/settings/guardrails') return json(res, { hideSecrets: true });
 		if (path === '/api/secrets') return json(res, { shared: ['NPM_TOKEN', 'SENTRY_DSN'], repos: [{ projectId: 'p-billing', repo: 'acme/billing-api', names: ['STRIPE_KEY'] }] });

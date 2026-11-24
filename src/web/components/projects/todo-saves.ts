@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import type { SpaceTodo, TodoAttachment } from '@/lib/api/spaces';
@@ -9,6 +9,19 @@ export type TodoDraft = { title: string; description: string; kept: TodoAttachme
 
 /** How a card stands against the server: still saving, or failed with a way to try again. */
 export type TodoSave = { pending: boolean; saving: boolean; error: string | null; retry?: () => void; dismiss?: () => void };
+
+export const todoIsUnsaved = (save: TodoSave | undefined) => Boolean(save?.pending || save?.saving);
+export const canStartTodo = (todo: SpaceTodo, save: TodoSave | undefined) => todo.status === 'open' && !todoIsUnsaved(save);
+export const todoThreadStartKey = (spaceId: string) => ['space-todo-thread-start', spaceId] as const;
+
+/** Neither start button should see the old open status between a successful start and the board's refetch. */
+export function cacheStartedTodo(queryClient: QueryClient, spaceId: string, todo: SpaceTodo | undefined) {
+	if (!todo) return;
+	queryClient.setQueryData<{ todos: SpaceTodo[] }>(['space-todos', spaceId], (previous) => previous && {
+		...previous,
+		todos: previous.todos.map((item) => item.id === todo.id && item.updatedAt <= todo.updatedAt ? todo : item),
+	});
+}
 
 type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'status' | 'assignee' | 'completedAt'>>;
 type Created = { key: string; todo: SpaceTodo; draft: TodoDraft; error: string | null; saved: SpaceTodo | null };
@@ -45,6 +58,10 @@ const without = <T>(record: Record<string, T>, id: string): Record<string, T> =>
  */
 export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 	const queryClient = useQueryClient();
+	const threadStarts = useMutationState({
+		filters: { mutationKey: todoThreadStartKey(spaceId), status: 'pending' },
+		select: (mutation) => mutation.options.mutationKey?.[2],
+	});
 	const [created, setCreated] = useState<Created[]>([]);
 	const [edited, setEdited] = useState<Record<string, Edited>>({});
 	const [failed, setFailed] = useState<Record<string, Failed>>({});
@@ -170,7 +187,7 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		return undefined;
 	};
 
-	return { todos, create, edit, setStatus, remove, stateOf };
+	return { todos, create, edit, setStatus, remove, stateOf, isStartingThread: (id: string) => threadStarts.includes(id) };
 }
 
 export type TodoSaves = ReturnType<typeof useTodoSaves>;

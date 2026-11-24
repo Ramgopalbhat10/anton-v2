@@ -1,13 +1,16 @@
 import { useFlueAgent } from '@flue/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Popover } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { api } from '@/lib/api';
 import type { Space } from '@/lib/api/spaces';
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
-import { ProjectFeed } from '@/components/projects/project-feed';
+import { ProjectFeed, type TodoHandoff } from '@/components/projects/project-feed';
+import { cacheStartedTodo, canStartTodo, todoThreadStartKey, useTodoSaves } from '@/components/projects/todo-saves';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
@@ -298,9 +301,16 @@ export function ProjectPage() {
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
 	const { todos } = useSpaceTodos(spaceId);
+	const todoSaves = useTodoSaves(spaceId, todos);
 	const path = `/api/agents/coordinator/${spaceId}`;
 	const client = useWindowedClient(path);
 	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
+	const queryClient = useQueryClient();
+	const [handoffs, setHandoffs] = useState<TodoHandoff[]>([]);
+	const heading = useRef<HTMLHeadingElement>(null);
+	const hasConversation = useRef(false);
+	hasConversation.current = agent.messages.some((message) => !message.id.startsWith('local:') || Boolean(message.submissionId));
+	const handingOff = useMemo(() => new Set(handoffs.filter((entry) => entry.state !== 'failed').map((entry) => entry.todo.id)), [handoffs]);
 	const [saved, setDock] = useState(() => readDock(spaceId));
 	// On a phone the dock covers the board, so it shows only once you open it here; the saved choice is the wide screen's.
 	const onePane = useOnePane();
@@ -314,7 +324,7 @@ export function ProjectPage() {
 	const [requested, setRequested] = useState(savedDockWidth);
 	const [resizing, setResizing] = useState(false);
 	const asked = useRef(false);
-	const busy = agent.status === 'submitted' || agent.status === 'streaming';
+	const busy = agent.status === 'submitted' || agent.status === 'streaming' || handingOff.size > 0;
 	const models = useModels();
 	const modelName = useModelName();
 	const coordinatorModel = space.data?.coordinatorModel ?? models.data?.default ?? '';
@@ -347,6 +357,50 @@ export function ProjectPage() {
 		},
 		[spaceId, onePane],
 	);
+	const openCoordinator = useCallback(() => changeDock({ open: true }), [changeDock]);
+	const focusCoordinator = useCallback(() => heading.current?.focus({ preventScroll: true }), []);
+	const refreshCoordinator = agent.refresh;
+	const eligibleTodo = (id: string) => {
+		const todo = todoSaves.todos.find((item) => item.id === id);
+		return todo && !handingOff.has(id) && !todoSaves.isStartingThread(id) && canStartTodo(todo, todoSaves.stateOf(todo)) ? todo : undefined;
+	};
+	const handTodo = (id: string, focus = false) => {
+		const todo = eligibleTodo(id);
+		// The board's mutation enters the cache before observers redraw with its pending state.
+		if (!todo || queryClient.isMutating({ mutationKey: [...todoThreadStartKey(spaceId), id], exact: true })) return;
+		if (focus) focusCoordinator();
+		openCoordinator();
+		const update = (next: TodoHandoff | null) => setHandoffs((all) => {
+			const others = all.filter((entry) => entry.todo.id !== todo.id);
+			return next ? [...others, next] : others;
+		});
+		update({ todo, state: 'sending' });
+		const key = ['space-todos', spaceId];
+		void api.startSpaceTodo(spaceId, id, 'coordinator').then(({ todo: savedTodo, submissionId }) => {
+			cacheStartedTodo(queryClient, spaceId, savedTodo);
+			update(submissionId ? { todo, state: 'accepted', submissionId } : null);
+			// The SDK stops observing a conversation that doesn't exist yet. Admission creates it.
+			if (!hasConversation.current) refreshCoordinator();
+		}, (error: unknown) => {
+			update({ todo, state: 'failed', error: error instanceof Error ? error.message : String(error) });
+		}).finally(() => void queryClient.invalidateQueries({ queryKey: key }));
+	};
+
+	const settlements = agent.settlements;
+	useEffect(() => {
+		if (!settlements.length || !handoffs.some((entry) => entry.state === 'accepted' && settlements.some((item) => item.submissionId === entry.submissionId))) return;
+		const byId = new Map(settlements.map((item) => [item.submissionId, item]));
+		setHandoffs((all) => {
+			return all.flatMap((entry): TodoHandoff[] => {
+				const settled = entry.state === 'accepted' ? byId.get(entry.submissionId) : undefined;
+				if (!settled) return [entry];
+				if (settled.outcome === 'completed') return [];
+				const reason = settled.error;
+				const detail = reason && typeof reason === 'object' && 'message' in reason ? reason.message : reason;
+				return [{ todo: entry.todo, state: 'failed', error: typeof detail === 'string' ? detail.trim() : '', settlement: { submissionId: settled.submissionId, outcome: settled.outcome } }];
+			});
+		});
+	}, [settlements, handoffs]);
 
 	// A first message from the New project dialog goes to the coordinator once, then leaves the address.
 	useEffect(() => {
@@ -431,7 +485,7 @@ export function ProjectPage() {
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					{saved.view === 'board' ? (
-						<ProjectBoard space={data} threads={threads} todos={todos} onNewThread={startThread} onOpenCoordinator={() => changeDock({ open: true })} />
+						<ProjectBoard space={data} threads={threads} saves={todoSaves} onNewThread={startThread} onOpenCoordinator={openCoordinator} onHandTodo={handTodo} onHandoffFocus={focusCoordinator} handingOff={handingOff} />
 					) : (
 						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
@@ -444,6 +498,7 @@ export function ProjectPage() {
 			</div>
 			{slide ? (
 			<aside
+				aria-label="Coordinator"
 				className={cn(
 					'min-h-0 min-w-0 flex-col',
 					covers ? cn('flex flex-1', slide === 'out' && 'hidden') : 'sg-project-dock relative flex border-l bg-(--bg-app)',
@@ -496,7 +551,7 @@ export function ProjectPage() {
 				<div className="sg-project-dock-body flex min-h-0 min-w-0 flex-1 flex-col">
 				<div className="flex h-11 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3.5">
 					<Icon icon={Workflow} size={14} className="shrink-0 text-(--text-3)" />
-					<span className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">Coordinator</span>
+					<h2 ref={heading} tabIndex={-1} className="m-0 min-w-0 flex-1 truncate rounded-control text-body font-medium text-(--text) outline-none focus-visible:shadow-(--focus)">Coordinator</h2>
 					{coordinatorName ? (
 						<span className="hidden shrink-0 sm:inline-flex">
 							<Badge>{coordinatorName}</Badge>
@@ -511,7 +566,7 @@ export function ProjectPage() {
 					/>
 					<IconBtn icon={PanelRight} size="sm" label="Hide the coordinator" onClick={() => changeDock({ open: false })} />
 				</div>
-				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} />
+				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} handoffs={handoffs} canRetryHandoff={(id) => Boolean(eligibleTodo(id))} onRetryHandoff={(id) => handTodo(id, true)} />
 				</div>
 			</aside>
 			) : null}

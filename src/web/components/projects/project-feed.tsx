@@ -24,7 +24,7 @@ import { field } from '@/components/thread/tool-describe';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { ModelChoice } from '@/lib/api/plans';
 import type { Session } from '@/lib/api/sessions';
-import type { Space } from '@/lib/api/spaces';
+import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { expandCommand } from '@/lib/completion';
 import type { WindowedAgent } from '@/lib/conversation-window';
 import { OlderTurnsRow } from '@/components/thread/older-turns';
@@ -55,6 +55,14 @@ function outputText(output: unknown): string {
 }
 
 const textOf = (message: FlueConversationMessage) => message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+
+const DISPLAYED_TOOLS = new Set(['start_thread', 'message_thread', 'remember', 'resolve_thread', 'stop_thread', 'add_repo', 'create_todo']);
+const suggestionsIn = (part: ToolPart) => (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
+const shownPart = (part: FlueConversationPart) => part.type === 'text' ? Boolean(part.text.trim())
+	: part.type === 'dynamic-tool' && (part.toolName === 'suggest_threads' ? suggestionsIn(part).length > 0 : DISPLAYED_TOOLS.has(part.toolName));
+
+const livePart = (part: FlueConversationPart) => ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming')
+	|| (part.type === 'dynamic-tool' && part.state === 'input-available');
 
 const threadIdIn = (part: ToolPart) => (part.state === 'output-available' ? (/\[id:([\w-]+)\]/.exec(outputText(part.output))?.[1] ?? null) : null);
 
@@ -316,7 +324,7 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 		case 'start_thread':
 			return <Dispatch parts={[part]} threads={threads} live={live} />;
 		case 'suggest_threads': {
-			const list = (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
+			const list = suggestionsIn(part);
 			return list.length ? <SuggestedThreads space={space} suggestions={list} /> : null;
 		}
 		case 'message_thread':
@@ -397,7 +405,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	threads: Session[];
 	resolveFile: (href: string) => ViewerItem | null;
 }) {
-	const parts = message.parts.filter((part) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool');
+	const parts = message.parts.filter(shownPart);
 	const chips = useMemo(() => threadChips(threads), [threads]);
 	const files = useMemo(() => (live ? [] : linkedFiles(message.parts, resolveFile)), [live, message.parts, resolveFile]);
 	// A drawing on one of them goes to the coordinator, which passes it on.
@@ -420,12 +428,6 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 				),
 			)}
 			<OutputCards items={files} composer={space.id} />
-			{live && parts.length === 0 ? (
-				<div className="flex items-center gap-2 text-small text-(--text-3)">
-					<Spinner size={12} />
-					<span>Thinking</span>
-				</div>
-			) : null}
 		</div>
 		</OutputLinks.Provider>
 	);
@@ -609,7 +611,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 		const drawn = takeFromInbox(space.id).flatMap((item) => (item.kind === 'image' ? [item.image] : []));
 		if (drawn.length) addImages(drawn);
 	}, [inbox, space.id, addImages]);
-	const [sending, setSending] = useState<string | null>(null);
+	const [sending, setSending] = useState(false);
 	const choice = { model: space.coordinatorModel ?? models.data?.default ?? '', reasoning: space.coordinatorReasoning ?? 'low' };
 	const model = models.data?.models.find((item) => item.id === unrouted(choice.model));
 	const blind = attachments.images.length > 0 && model !== undefined && !model.vision;
@@ -637,10 +639,14 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 				onDraft('');
 				setNotice(null);
 				const count = taken.images.length + taken.files.length;
-				const attaching = count === 0 ? null : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`;
-				setSending(attaching);
-				// The message shows in the feed at once; it goes once its files are in the project's Library.
-				if (attaching) onPending({ text, attaching, ...placeholders(taken) });
+				const attaching = count === 0 ? undefined : count === 1 ? (taken.files[0]?.name ?? taken.images[0]!.filename) : `${count} files`;
+				const command = text.startsWith('/');
+				const preparing = Boolean(attaching) || command;
+				// Once prepared, Flue echoes the send itself before waiting for admission.
+				if (preparing) {
+					setSending(true);
+					onPending({ text, attaching, ...placeholders(taken) });
+				}
 				try {
 					// Files go to the project's Library, where the coordinator and every thread read them; the message carries what they say.
 					// Images too: the coordinator sees them with the message, and hands them on to the threads it starts by name.
@@ -650,17 +656,19 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					const attached = await Promise.all(named.map((file) => api.attachToProject(space.id, file)));
 					const images = taken.images.map((image, index) => ({ ...image, filename: names[index]! }));
 					// Saved commands are read only for a message that starts with one, so any other goes out without a round trip.
-					const saved = text.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
+					const saved = command ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }) : { commands: [] };
 					const message = withAttachments(expandCommand(text, saved.commands, true), attached, 'project');
-					if (attaching) onPending('sent');
+					if (preparing) onPending('sent');
 					await (images.length ? send(message, { images: deliveredImages(images) }) : send(message));
 				} catch (error) {
 					onDraft([text, draftRef.current].filter(Boolean).join('\n\n'));
 					attachments.restore(taken);
 					setNotice(`Not sent: ${error instanceof Error ? error.message : String(error)}`);
 				} finally {
-					onPending(null);
-					setSending(null);
+					if (preparing) {
+						onPending(null);
+						setSending(false);
+					}
 				}
 			}}
 		>
@@ -674,7 +682,7 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 					placeholder={busy ? 'Add to what the coordinator is doing' : `Tell the coordinator what ${space.name} needs`}
 				/>
 				{blocked || notice || attachments.limitError ? (
-					<div className="text-small text-(--bad)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
+					<div role={notice ? 'alert' : undefined} className="text-small text-(--bad)">{[blocked ?? notice, attachments.limitError].filter(Boolean).join(' ')}</div>
 				) : blind ? (
 					<div className="text-small text-(--warn)">{`${model?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.`}</div>
 				) : attachments.limitError || attachments.notice || paused ? (
@@ -700,12 +708,31 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	);
 });
 
+export type TodoHandoff = { todo: Pick<SpaceTodo, 'id' | 'title'> } & (
+	| { state: 'sending' }
+	| { state: 'accepted'; submissionId: string }
+	| { state: 'failed'; error: string; settlement?: { submissionId: string; outcome: 'failed' | 'aborted' } }
+);
+const NO_HANDOFFS: TodoHandoff[] = [];
+
+function CoordinatorProgress({ children }: { children: ReactNode }) {
+	return (
+		<div className="flex min-w-0 items-center gap-2 text-small text-(--text-2)">
+			<span aria-hidden className="inline-flex shrink-0"><Spinner size={12} /></span>
+			<span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
+		</div>
+	);
+}
+
 export function ProjectFeed({
 	space,
 	agent,
 	threads,
 	starting = false,
 	onStartingChange: setStarting,
+	handoffs = NO_HANDOFFS,
+	canRetryHandoff,
+	onRetryHandoff,
 }: {
 	space: Space;
 	agent: WindowedAgent;
@@ -713,15 +740,31 @@ export function ProjectFeed({
 	/** The new thread's form shows at the end of the conversation, in view. */
 	starting?: boolean;
 	onStartingChange: (starting: boolean) => void;
+	handoffs?: TodoHandoff[];
+	canRetryHandoff?: (id: string) => boolean;
+	onRetryHandoff?: (id: string) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const [draft, setDraft] = useState('');
-	const busy = agent.status === 'submitted' || agent.status === 'streaming';
+	const busy = agent.status === 'submitted' || agent.status === 'streaming' || handoffs.some((entry) => entry.state === 'accepted');
 	const messages = useMemo(() => agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [agent.messages]);
-	const lastAssistant = messages.findLast((message) => message.role === 'assistant');
+	const last = messages.at(-1);
+	const lastAssistant = messages.findLast((message) => message.role === 'assistant' && !message.settlement);
+	const assistantSettled = lastAssistant?.submissionId && agent.settlements.some((item) => item.submissionId === lastAssistant.submissionId);
+	// A queued or joined user message can be after the assistant message Flue is still updating.
+	const liveAssistant = busy && lastAssistant && !assistantSettled && (lastAssistant === last || lastAssistant.parts.some(livePart)
+		|| (lastAssistant.metadata?.startedAt !== undefined && lastAssistant.metadata.completedAt === undefined && !lastAssistant.metadata.usage)
+		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
+	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
+	const waiting = handoffs.filter((entry) => entry.state === 'sending' || (entry.state === 'accepted' && !messages.some((message) => message.submissionId === entry.submissionId)));
+	let status: string | null = null;
+	if (busy) {
+		if (liveAssistant && !liveAssistant.parts.some(shownPart)) status = 'The coordinator is thinking';
+		else if (!liveAssistant && waiting.length === 0 && last?.role !== 'assistant' && !last?.settlement) status = 'The coordinator is reading';
+	}
 
 	const { following, follow } = useFollowLatest(scroller, { reset: space.id });
 	const sendMessage = agent.sendMessage;
@@ -740,13 +783,13 @@ export function ProjectFeed({
 		[onPending, follow],
 	);
 	useEffect(() => {
-		if (starting) follow();
-	}, [starting, follow]);
+		if (starting || sendingTodo) follow();
+	}, [starting, sendingTodo, follow]);
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-2">
 				<div className="mx-auto flex max-w-[720px] flex-col gap-5">
-					{messages.length === 0 && !busy && agent.historyReady ? <Welcome space={space} onPick={setDraft} /> : null}
+					{messages.length === 0 && !busy && !pending && handoffs.length === 0 && agent.historyReady ? <Welcome space={space} onPick={setDraft} /> : null}
 					<OlderTurnsRow older={agent.older} scroller={scroller} following={following} first={messages[0]?.id ?? null} />
 					{messages.map((message) => {
 						if (message.settlement) {
@@ -764,15 +807,30 @@ export function ProjectFeed({
 							) : (
 								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} />
 							);
-						return <CoordinatorMessage key={message.id} message={message} live={busy && message === lastAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
+						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
-					{busy && messages[messages.length - 1]?.role !== 'assistant' ? (
-						<div className="flex items-center gap-2 text-small text-(--text-2)">
-							<Spinner size={12} />
-							<span>The coordinator is reading</span>
-						</div>
-					) : null}
+					<div role="status" className={status || waiting.length ? 'flex flex-col gap-2' : 'sr-only'}>
+						{waiting.map(({ todo, state }) => (
+							<CoordinatorProgress key={todo.id}>
+								{state === 'sending' ? `Handing “${todo.title}” to the coordinator` : `Waiting for the coordinator to pick up “${todo.title}”`}
+							</CoordinatorProgress>
+						))}
+						{status ? <CoordinatorProgress>{status}</CoordinatorProgress> : null}
+					</div>
+					{handoffs.map((entry) => {
+						if (entry.state !== 'failed') return null;
+						const id = entry.settlement?.submissionId;
+						// Flue terminal advisories can carry their submission id only in the signal attributes.
+						if (id && messages.some((message) => message.settlement && (message.submissionId ?? message.signal?.attributes?.submissionId) === id)) return null;
+						const action = entry.settlement?.outcome === 'aborted' ? 'The coordinator stopped while working on' : entry.settlement ? 'The coordinator failed while working on' : 'Could not hand off';
+						return (
+							<div key={entry.todo.id} className="flex min-w-0 flex-wrap items-center gap-1">
+								<div role="alert" className="min-w-0"><ActionRow icon={CircleAlert} failed>{action} “{entry.todo.title}”{entry.error ? `: ${entry.error}` : '.'}</ActionRow></div>
+								{onRetryHandoff ? <Btn size="sm" variant="ghost" disabled={!canRetryHandoff?.(entry.todo.id)} onClick={() => onRetryHandoff(entry.todo.id)}>Try again</Btn> : null}
+							</div>
+						);
+					})}
 					{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 						<ActionRow icon={CircleAlert} failed>
 							{agent.error?.message ? `The coordinator failed: ${agent.error.message}` : 'The coordinator failed. Send the message again.'}
@@ -780,7 +838,7 @@ export function ProjectFeed({
 					) : null}
 					{starting ? <NewThreadForm space={space} onDone={() => setStarting(false)} /> : null}
 				</div>
-				<JumpToLatest show={!following} live={busy} onJump={follow} />
+				<JumpToLatest show={!following} live={busy || Boolean(sendingTodo) || Boolean(pending)} onJump={follow} />
 			</div>
 			<CoordinatorComposer space={space} busy={busy} send={send} draft={draft} onDraft={setDraft} onNewThread={newThread} onPending={showPending} />
 		</div>
