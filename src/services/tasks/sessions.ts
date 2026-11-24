@@ -181,7 +181,7 @@ async function freshId(id: string): Promise<void> {
 	if ((await getSessionRecord(id)) || (await wasDeleted(id))) throw new ConflictError('A task with that id already exists');
 }
 
-const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
+export const branchFor = (title: string, id: string) => `anton/${slug(title)}-${id.slice(0, 6)}`;
 
 /** A new task holding the task's files on a branch and sandbox of its own; the conversation stays with the original. Its sandbox starts at once when there are files. */
 export async function forkSession(id: string): Promise<Session> {
@@ -272,6 +272,23 @@ async function moveTask(id: string, runOn: RunOn): Promise<void> {
 	await stopSession(id);
 	await updateSession(id, { runOn, machineState: null });
 	invalidateRunning();
+}
+
+/**
+ * For a thread that has changed nothing yet, so the caller checks that and calls this only while its agent is idle. A
+ * machine it has is stopped (its outputs saved); the next start clones the new repository onto a fresh task branch.
+ */
+export async function moveToRepo(id: string, projectId: string): Promise<Session> {
+	const record = await getSessionRecord(id);
+	if (!record) throw new NotFoundError('Session not found');
+	if (isWorking(id)) throw new ConflictError('Wait for the agent to finish, or stop it, before moving the task.');
+	const project = await getProject(projectId);
+	if (!project) throw new NotFoundError('Repository not found');
+	if (record.machineState || (await liveMachine(id))) await stopSession(id);
+	const baseSha = await getProviders().git.resolveRef(project.repoFullName, project.defaultBranch);
+	await updateSession(id, { projectId: project.id, baseBranch: project.defaultBranch, baseSha, branch: branchFor(record.title, id), machineState: null, pushedSha: null });
+	invalidateRunning();
+	return getSession(id);
 }
 
 export async function fallbackModel(id: string): Promise<{ model: string; name: string } | null> {

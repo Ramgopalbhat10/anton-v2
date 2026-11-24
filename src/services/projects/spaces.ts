@@ -1,5 +1,5 @@
 import type { Reasoning } from '../../core/ports.ts';
-import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Session } from '../../core/types.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Project, type Session } from '../../core/types.ts';
 import { announce } from '../../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { THREAD_STATES, type ThreadState } from '../../core/thread-state.ts';
@@ -167,14 +167,24 @@ async function repoFor(space: Space, input: ThreadInput): Promise<string | undef
 		return input.projectId;
 	}
 	if (input.repo?.trim()) {
-		const wanted = input.repo.trim().toLowerCase();
-		if (NO_REPO.has(wanted)) return undefined;
-		const projects = await Promise.all(space.repoIds.map((id) => getProject(id)));
-		const match = projects.find((project) => project && (project.repoFullName.toLowerCase() === wanted || project.repoFullName.split('/').pop()?.toLowerCase() === wanted));
-		if (!match) throw new InvalidInputError(`${input.repo} is not one of this project's repositories`);
-		return match.id;
+		if (NO_REPO.has(input.repo.trim().toLowerCase())) return undefined;
+		return (await findSpaceRepo(space, input.repo)).id;
 	}
 	return space.repoIds[0];
+}
+
+/** The project's repositories, in its order. */
+export async function spaceRepos(space: Pick<Space, 'repoIds'>): Promise<Project[]> {
+	const projects = await Promise.all(space.repoIds.map((id) => getProject(id)));
+	return projects.filter((project): project is Project => project !== null);
+}
+
+/** By owner/name or name alone, ignoring case. */
+export async function findSpaceRepo(space: Pick<Space, 'repoIds'>, ref: string): Promise<Project> {
+	const wanted = ref.trim().toLowerCase();
+	const match = (await spaceRepos(space)).find((project) => project.repoFullName.toLowerCase() === wanted || project.repoFullName.split('/').pop()?.toLowerCase() === wanted);
+	if (!match) throw new InvalidInputError(`${ref} is not one of this project's repositories`);
+	return match;
 }
 
 /** Queued when the project is at its limit or paused. With `wait` false this returns once the thread has its slot, and the brief follows. */

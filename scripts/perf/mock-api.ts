@@ -169,10 +169,11 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	updatedAt: ago(30),
 });
 const todo = (id: string, title: string, description: string, patch: Partial<SpaceTodo> = {}): SpaceTodo => ({
-	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, repos: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
 	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
+		repos: ['p-billing'],
 		attachments: [
 			{ name: 'plan-change.png', path: 'plan-change.png', kind: 'PNG image', size: 184_320 },
 			{ name: 'proration-rules.md', path: 'proration-rules.md', kind: 'Markdown', size: 2_150 },
@@ -183,7 +184,7 @@ const billingTodos = [
 ];
 
 const spaces = [
-	space('space-billing', 'Billing v2', 'Ship billing v2: invoices, proration, and the settings page.', 'active', ['p-billing'], [{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-billing'), 12),
+	space('space-billing', 'Billing v2', 'Ship billing v2: invoices, proration, and the settings page.', 'active', ['p-billing', 'p-billing-web'], [{ id: 'p-billing', repoFullName: 'acme/billing-api', defaultBranch: 'main' }, { id: 'p-billing-web', repoFullName: 'acme/billing-web', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-billing'), 12),
 	space('space-docs', 'Docs refresh', 'Refresh the docs for the new CLI and tighten the voice.', 'active', [], [], spaceThreads.filter((item) => item.spaceId === 'space-docs'), 30),
 	space('space-mobile', 'Mobile app', 'First pass at the mobile app shell and theme.', 'archived', ['p-mobile'], [{ id: 'p-mobile', repoFullName: 'acme/mobile', defaultBranch: 'main' }], spaceThreads.filter((item) => item.spaceId === 'space-mobile'), 60),
 ];

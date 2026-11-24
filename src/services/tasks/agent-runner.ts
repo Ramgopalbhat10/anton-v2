@@ -82,6 +82,12 @@ export function noteWorkspace(id: string): void {
 	workspaces.add(id);
 }
 
+/** A thread moved to another repository reads that repository's memory and starts without a workspace. */
+export function forgetRepoContext(id: string): void {
+	memories.delete(id);
+	workspaces.delete(id);
+}
+
 const chats = new Set<string>();
 
 export function isChat(id: string): boolean {

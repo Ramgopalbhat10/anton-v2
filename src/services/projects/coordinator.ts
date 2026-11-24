@@ -61,8 +61,13 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 
 const RESOLVED_SHOWN = 5;
 
-const todoLine = (todo: SpaceTodo) =>
-	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.threadModel ? ` · main thread model: ${todo.threadModel.model}` : ''}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
+const todoLine = (todo: SpaceTodo, repoNames: Map<string, string>) =>
+	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.threadModel ? ` · main thread model: ${todo.threadModel.model}` : ''}${taggedLine(todo, repoNames)}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
+
+const taggedLine = (todo: SpaceTodo, repoNames: Map<string, string>) => {
+	const names = todo.repos.flatMap((id) => repoNames.get(id) ?? []);
+	return names.length ? ` · repositories: ${names.join(', ')}` : '';
+};
 
 export async function stateBlock(spaceId: string): Promise<string> {
 	const space = await getSpace(spaceId);
@@ -74,6 +79,7 @@ export async function stateBlock(spaceId: string): Promise<string> {
 		listSpaceTodos(spaceId),
 	]);
 	const pending = todos.filter((todo) => todo.status !== 'done');
+	const repoNames = new Map(repos.flatMap((repo) => (repo ? [[repo.id, repo.repoFullName] as const] : [])));
 	const open = threads.filter((thread) => thread.threadState !== 'resolved');
 	const resolved = threads.filter((thread) => thread.threadState === 'resolved').slice(0, RESOLVED_SHOWN);
 	const working = open.filter((thread) => thread.threadState === 'working').length;
@@ -85,7 +91,7 @@ export async function stateBlock(spaceId: string): Promise<string> {
 		`Parallel limit: ${space.maxParallel} threads working at once; now ${working} working, ${queued} queued.`,
 		space.instructions ? `\nProject instructions from the user:\n${space.instructions}` : '',
 		space.memory ? `\nProject memory (notes saved earlier; they may be out of date):\n${space.memory}` : '',
-		...(pending.length ? [`\nTo-dos not done (${pending.length}):`, ...pending.map(todoLine)] : []),
+		...(pending.length ? [`\nTo-dos not done (${pending.length}):`, ...pending.map((todo) => todoLine(todo, repoNames))] : []),
 		`\nThreads, newest first (${open.length} open):`,
 		...(open.length ? open.map(threadLine) : ['- none yet']),
 		...(resolved.length ? [`Recently resolved:`, ...resolved.map(threadLine)] : []),

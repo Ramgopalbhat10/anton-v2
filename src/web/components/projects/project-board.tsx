@@ -5,7 +5,7 @@ import { type FormEvent, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
 import { ModelPicker } from '@/components/composer/model-picker';
-import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
+import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
 import { AREA } from '@/components/settings/repo-settings';
@@ -73,10 +73,54 @@ const CARD = 'rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line)
 const isPicture = (file: TodoAttachment) => /\.(png|jpe?g|gif|webp)$/i.test(file.path);
 
 /** Saving closes the dialog at once: the board shows the to-do and saves it, files and all, in the background. */
-function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
+type Repos = Space['repos'];
+
+const repoName = (repo: Repos[number]) => repo.repoFullName.split('/').pop()!;
+
+/** The to-do's tagged repositories that are still in the project, in the project's order. */
+const taggedRepos = (repos: Repos, tagged: string[]) => repos.filter((repo) => tagged.includes(repo.id));
+
+/** Optional: with none tagged, Anton picks the repository from the to-do's words when a thread starts. */
+function TodoRepoPicker({ repos, value, onChange }: { repos: Repos; value: string[]; onChange: (repos: string[]) => void }) {
+	const chosen = taggedRepos(repos, value);
+	const label = chosen.length === 0 ? 'Anton picks' : chosen.length === 1 ? repoName(chosen[0]!) : `${chosen.length} repositories`;
+	const toggle = (id: string) => onChange(value.includes(id) ? value.filter((other) => other !== id) : repos.map((repo) => repo.id).filter((other) => other === id || value.includes(other)));
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<PickerChip icon={FolderGit2} label={label} aria-label={`Repositories: ${chosen.length ? chosen.map((repo) => repo.repoFullName).join(', ') : 'Anton picks'}`} />
+			</MenuTrigger>
+			<MenuContent align="end" className="max-h-[320px] min-w-[240px] overflow-y-auto">
+				<MenuItem checked={chosen.length === 0} onSelect={() => onChange([])}>
+					Let Anton pick
+				</MenuItem>
+				<MenuSeparator />
+				{repos.map((repo) => (
+					<MenuItem
+						key={repo.id}
+						role="menuitemcheckbox"
+						aria-checked={value.includes(repo.id)}
+						checked={value.includes(repo.id)}
+						onSelect={(event) => {
+							// Several can be tagged, so the menu stays open.
+							event.preventDefault();
+							toggle(repo.id);
+						}}
+					>
+						{repo.repoFullName}
+					</MenuItem>
+				))}
+			</MenuContent>
+		</Menu>
+	);
+}
+
+function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string; repos: Repos; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
 	const [threadModel, setThreadModel] = useState<SpaceTodo['threadModel']>(todo?.threadModel ?? null);
+	// Tags for repositories since removed from the project are dropped on the next save.
+	const [tagged, setTagged] = useState<string[]>(() => taggedRepos(repos, todo?.repos ?? []).map((repo) => repo.id));
 	const [dialog, setDialog] = useState<HTMLDivElement | null>(null);
 	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
 	const attachments = useAttachments({ overflowImagesAsFiles: true });
@@ -86,7 +130,7 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		if (!ready) return;
-		onSave({ title, description, threadModel, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
+		onSave({ title, description, threadModel, repos: tagged, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
 		onClose();
 	};
 	return (
@@ -126,6 +170,14 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 									{threadModel ? <IconBtn icon={RotateCcw} size="xs" label="Use project default" onClick={() => setThreadModel(null)} /> : null}
 								</div>
 							</div>
+							{repos.length > 1 ? (
+								<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+									<span className="text-small font-medium text-(--text-2)">Repositories</span>
+									<FloatingLayerContainer.Provider value={dialog}>
+										<TodoRepoPicker repos={repos} value={tagged} onChange={setTagged} />
+									</FloatingLayerContainer.Provider>
+								</div>
+							) : null}
 							{kept.length || attachments.count || attachments.reading ? (
 								// Saved files and new ones in one row; the tray's own row dissolves into it.
 								<div className="flex flex-wrap items-center gap-1.5">
@@ -165,7 +217,7 @@ type TodoActions = {
 	onHandoffFocus?: () => void;
 };
 
-function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo, onHandoffFocus, handingOff }: TodoActions & { spaceId: string; todo: SpaceTodo; saves: TodoSaves; onEdit: () => void; handingOff: boolean }) {
+function TodoCard({ spaceId, repos, todo, saves, onEdit, onOpenCoordinator, onHandTodo, onHandoffFocus, handingOff }: TodoActions & { spaceId: string; repos: Repos; todo: SpaceTodo; saves: TodoSaves; onEdit: () => void; handingOff: boolean }) {
 	const queryClient = useQueryClient();
 	const openThread = useOpenThread();
 	const focusAfterHandoff = useRef(false);
@@ -185,12 +237,19 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 	const startingThread = start.isPending || saves.isStartingThread(todo.id);
 	const canStart = canStartTodo(todo, save) && !handingOff && !startingThread;
 	const withCoordinator = todo.status === 'in_progress';
+	const tagged = taggedRepos(repos, todo.repos);
 	return (
 		<article aria-label={todo.title} aria-busy={save?.saving || undefined} className={`flex min-w-0 flex-col gap-1.5 p-2.5 ${CARD}`}>
 			<div className="flex min-w-0 items-start gap-1">
 				<button type="button" onClick={onEdit} disabled={unsaved} className="flex min-w-0 flex-1 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
 					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
 					{todo.description ? <span className="line-clamp-2 text-small leading-[16px] text-(--text-3)">{todo.description}</span> : null}
+					{tagged.length ? (
+						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={tagged.map((repo) => repo.repoFullName).join('\n')}>
+							<Icon icon={FolderGit2} size={11} className="shrink-0" />
+							<span className="min-w-0 truncate">{tagged.map(repoName).join(', ')}</span>
+						</span>
+					) : null}
 					{todo.attachments.length ? (
 						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={todo.attachments.map((file) => file.name).join('\n')}>
 							<Icon icon={Paperclip} size={11} className="shrink-0" />
@@ -266,7 +325,7 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 	);
 }
 
-function TodoColumn({ spaceId, saves, handingOff, ...actions }: TodoActions & { spaceId: string; saves: TodoSaves; handingOff?: ReadonlySet<string> }) {
+function TodoColumn({ spaceId, repos, saves, handingOff, ...actions }: TodoActions & { spaceId: string; repos: Repos; saves: TodoSaves; handingOff?: ReadonlySet<string> }) {
 	const todos = saves.todos;
 	const [editing, setEditing] = useState<SpaceTodo | 'new' | null>(null);
 	const shown = todos.filter(waiting);
@@ -282,7 +341,7 @@ function TodoColumn({ spaceId, saves, handingOff, ...actions }: TodoActions & { 
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
 				{shown.map((todo) => (
-					<TodoCard key={todo.id} spaceId={spaceId} todo={todo} saves={saves} onEdit={() => setEditing(todo)} handingOff={handingOff?.has(todo.id) ?? false} {...actions} />
+					<TodoCard key={todo.id} spaceId={spaceId} repos={repos} todo={todo} saves={saves} onEdit={() => setEditing(todo)} handingOff={handingOff?.has(todo.id) ?? false} {...actions} />
 				))}
 				{shown.length === 0 ? (
 					<button type="button" onClick={() => setEditing('new')} className="rounded-card px-2.5 py-2 text-left text-small text-(--text-3) shadow-[inset_0_0_0_1px_var(--line)] outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
@@ -294,6 +353,7 @@ function TodoColumn({ spaceId, saves, handingOff, ...actions }: TodoActions & { 
 			{editing ? (
 				<TodoDialog
 					spaceId={spaceId}
+					repos={repos}
 					todo={editing === 'new' ? null : editing}
 					onSave={(draft) => (editing === 'new' ? saves.create(draft) : saves.edit(editing, draft))}
 					onClose={() => setEditing(null)}
@@ -330,14 +390,14 @@ export function ProjectBoard({
 						New to-do
 					</Btn>
 				</div>
-				{adding ? <TodoDialog spaceId={space.id} todo={null} onSave={saves.create} onClose={() => setAdding(false)} /> : null}
+				{adding ? <TodoDialog spaceId={space.id} repos={space.repos} todo={null} onSave={saves.create} onClose={() => setAdding(false)} /> : null}
 			</div>
 		);
 	}
 	return (
 		<div className="h-full overflow-auto p-4">
 			<div className="grid h-full grid-flow-col auto-cols-[minmax(184px,1fr)] gap-3">
-				<TodoColumn spaceId={space.id} saves={saves} handingOff={handingOff} {...actions} />
+				<TodoColumn spaceId={space.id} repos={space.repos} saves={saves} handingOff={handingOff} {...actions} />
 				{COLUMNS.map((column) => {
 					const items = columnThreads(threads, column.kinds);
 					return (

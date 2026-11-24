@@ -23,6 +23,15 @@ function attachmentsOf(json: unknown): TodoAttachment[] {
 	}
 }
 
+function reposOf(json: unknown): string[] {
+	try {
+		const list: unknown = JSON.parse(String(json ?? '[]'));
+		return Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : [];
+	} catch {
+		return [];
+	}
+}
+
 function toTodo(row: Row): SpaceTodo {
 	const status = String(row.status);
 	const assignee = row.assignee == null ? null : String(row.assignee);
@@ -33,6 +42,7 @@ function toTodo(row: Row): SpaceTodo {
 		description: String(row.description ?? ''),
 		attachments: attachmentsOf(row.attachments_json),
 		threadModel: row.thread_model_json == null ? null : JSON.parse(String(row.thread_model_json)),
+		repos: reposOf(row.repos_json),
 		status: (SPACE_TODO_STATUSES as readonly string[]).includes(status) ? (status as SpaceTodoStatus) : 'open',
 		assignee: assignee === 'coordinator' || assignee === 'thread' ? assignee : null,
 		createdBy: row.created_by === 'coordinator' ? 'coordinator' : 'user',
@@ -76,19 +86,19 @@ export async function getSpaceTodo(id: string): Promise<SpaceTodo | null> {
 
 const modelJson = (choice: SpaceTodo['threadModel'] | undefined) => choice ? JSON.stringify(choice) : null;
 
-export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
+export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[]; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
 	const db = await appDb();
 	const id = `todo_${randomUUID()}`;
 	const now = new Date().toISOString();
 	await db.execute({
-		sql: 'INSERT INTO space_todos (id, space_id, title, description, attachments_json, thread_model_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-		args: [id, input.spaceId, input.title, input.description, JSON.stringify(input.attachments ?? []), modelJson(input.threadModel), input.createdBy, now, now],
+		sql: 'INSERT INTO space_todos (id, space_id, title, description, attachments_json, thread_model_json, repos_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+		args: [id, input.spaceId, input.title, input.description, JSON.stringify(input.attachments ?? []), modelJson(input.threadModel), JSON.stringify(input.repos ?? []), input.createdBy, now, now],
 	});
 	announce({ kind: 'space', id: input.spaceId, what: 'todos' });
 	return (await getSpaceTodo(id))!;
 }
 
-const COLUMNS = { title: 'title', description: 'description', attachments: 'attachments_json', threadModel: 'thread_model_json', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
+const COLUMNS = { title: 'title', description: 'description', attachments: 'attachments_json', threadModel: 'thread_model_json', repos: 'repos_json', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
 
 export type SpaceTodoUpdate = Partial<Pick<SpaceTodo, keyof typeof COLUMNS>>;
 
@@ -101,7 +111,8 @@ export async function updateSpaceTodo(id: string, update: SpaceTodoUpdate, { qui
 		args: [...entries.map(([key]) => {
 			if (key === 'attachments') return JSON.stringify(update.attachments ?? []);
 			if (key === 'threadModel') return modelJson(update.threadModel);
-			return update[key as Exclude<keyof SpaceTodoUpdate, 'attachments' | 'threadModel'>] ?? null;
+			if (key === 'repos') return JSON.stringify(update.repos ?? []);
+			return update[key as Exclude<keyof SpaceTodoUpdate, 'attachments' | 'threadModel' | 'repos'>] ?? null;
 		}), new Date().toISOString(), id],
 	});
 	const todo = await getSpaceTodo(id);
@@ -119,6 +130,13 @@ export async function deleteSpaceTodoRecord(todo: SpaceTodo): Promise<void> {
 		'write',
 	);
 	announce({ kind: 'space', id: todo.spaceId, what: 'todos' });
+}
+
+/** The to-do a thread was started or messaged for, the earliest if several. */
+export async function todoIdOfThread(sessionId: string): Promise<string | null> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT todo_id FROM space_todo_threads WHERE session_id = ? ORDER BY linked_at LIMIT 1', args: [sessionId] });
+	return result.rows[0] ? String(result.rows[0].todo_id) : null;
 }
 
 export async function linkTodoThreadRecord(todoId: string, sessionId: string): Promise<void> {

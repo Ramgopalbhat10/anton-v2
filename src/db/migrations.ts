@@ -199,6 +199,8 @@ export const migrations: string[][] = [
 	[`ALTER TABLE mcp_servers ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'`],
 	// 49: a to-do's main thread model, including its route and reasoning if chosen.
 	[`ALTER TABLE space_todos ADD COLUMN thread_model_json TEXT`],
+	// 50: the project repositories a to-do is tagged with (their ids); none lets Anton pick one when it starts.
+	[`ALTER TABLE space_todos ADD COLUMN repos_json TEXT NOT NULL DEFAULT '[]'`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

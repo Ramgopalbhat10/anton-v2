@@ -76,6 +76,7 @@ function makeTodo(patch: Partial<SpaceTodo>): SpaceTodo {
 		description: 'Preserve return URL after login.',
 		attachments: [],
 		threadModel: null,
+		repos: [],
 	status: 'open',
 	assignee: null,
 	createdBy: 'user',
@@ -377,7 +378,7 @@ describe('the To do column on the project board', () => {
 		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
 		await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), 'For the new CLI');
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
-		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null, repos: [] }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
@@ -418,7 +419,7 @@ describe('the To do column on the project board', () => {
 		expect(await screen.findByText('crash.log')).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
 		await waitFor(() =>
-			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null }),
+			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null, repos: [] }),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 
@@ -493,6 +494,32 @@ describe('the To do column on the project board', () => {
 			expect(edit.getByRole('button', { name: 'Main thread model' }).textContent).toContain('Project default');
 			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
 			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ threadModel: null })));
+		});
+
+		it('tags a to-do with repositories from its chip, shows them on its card, and clears them back to Anton picking', async () => {
+			renderWithRouter(() => <LiveBoard />);
+			await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
+			await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Fix both ends');
+			const chip = screen.getByRole('button', { name: 'Repositories: Anton picks' });
+			expect(chip.textContent).toContain('Anton picks');
+			await userEvent.click(chip);
+			// The menu stays open, so several can be ticked; they keep the project's order.
+			await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'acme/web' }));
+			await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'acme/api' }));
+			expect(screen.getByRole('menuitemcheckbox', { name: 'acme/api' }).getAttribute('aria-checked')).toBe('true');
+			await userEvent.keyboard('{Escape}');
+			expect(screen.getByRole('button', { name: 'Repositories: acme/api, acme/web' }).textContent).toContain('2 repositories');
+			await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+			await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', expect.objectContaining({ title: 'Fix both ends', repos: ['p1', 'p2'] })));
+			const column = await screen.findByRole('region', { name: 'To do' });
+			expect(within(column).getByText('api, web')).toBeTruthy();
+
+			await userEvent.click(await screen.findByRole('button', { name: /^Fix both ends/ }));
+			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
+			await userEvent.click(edit.getByRole('button', { name: 'Repositories: acme/api, acme/web' }));
+			await userEvent.click(await screen.findByRole('menuitem', { name: 'Let Anton pick' }));
+			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ repos: [] })));
 		});
 
 		it('shows a new to-do the moment it is added, then the saved one in its place, once', async () => {
