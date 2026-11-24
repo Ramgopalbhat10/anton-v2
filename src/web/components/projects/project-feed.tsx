@@ -40,6 +40,9 @@ import { JumpToLatest } from '@/components/kit/jump-to-latest';
 import { deliveredImages, imageFile } from '@/lib/attachments';
 import { splitAttachments, withAttachments } from '../../../core/attachments';
 import { uniqueUploadNames } from '../../../core/upload-name';
+import remarkGfm from 'remark-gfm';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 
@@ -125,45 +128,79 @@ function changedReports(message: FlueConversationMessage): Report[] | null {
 	return reports;
 }
 
-/** Which reports each reply answers, and the report messages a reply carries so they draw no line of their own. */
-function answeredReports(messages: FlueConversationMessage[]) {
-	const carried = new Map<string, Report[]>();
-	const folded = new Set<string>();
-	let held: FlueConversationMessage[] = [];
+/**
+ * Which reports each reply answers, and the report messages a reply carries so they draw no line of their own.
+ * A report is answered by its own submission's reply, or by the one it joined; one whose turn failed or was stopped keeps its line.
+ */
+function answeredReports(messages: FlueConversationMessage[], settlements: UseFlueAgentResult['settlements']) {
+	const answeredBy = new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId ?? settlement.submissionId]));
+	const replies = new Map<string, FlueConversationMessage>();
 	for (const message of messages) {
-		if (message.settlement) continue;
-		if (message.role === 'user') {
-			if (changedReports(message)?.length) held.push(message);
-			continue;
-		}
-		if (!held.length || !message.parts.some(shownPart)) continue;
-		carried.set(message.id, held.length === 1 ? changedReports(held[0])! : held.flatMap((entry) => changedReports(entry)!));
-		for (const entry of held) folded.add(entry.id);
-		held = [];
+		if (message.settlement || message.role !== 'assistant' || !message.submissionId || replies.has(message.submissionId) || !message.parts.some(shownPart)) continue;
+		replies.set(message.submissionId, message);
 	}
+	const held = new Map<string, FlueConversationMessage[]>();
+	const folded = new Set<string>();
+	for (const message of messages) {
+		if (message.settlement || !message.submissionId || !changedReports(message)?.length) continue;
+		const reply = replies.get(answeredBy.get(message.submissionId) ?? message.submissionId);
+		if (!reply) continue;
+		held.set(reply.id, [...(held.get(reply.id) ?? []), message]);
+		folded.add(message.id);
+	}
+	const carried = new Map([...held].map(([id, entries]) => [id, entries.length === 1 ? changedReports(entries[0])! : entries.flatMap((entry) => changedReports(entry)!)]));
 	return { carried, folded };
 }
 
 const labelOf = (text: string) => text.replace(/[[\]\\]/g, '\\$&');
 const chipLink = (thread: Session, label = thread.title) => `[${labelOf(label)}](#thread-${thread.id})`;
 
-/** The text with the thread's title, where it first appears outside a link or code, linked so it draws as the thread's chip. */
+const markdown = unified().use(remarkParse).use(remarkGfm);
+
+/** Words a reply writes as prose: links, code and raw HTML stay as they are. */
+const PROSE_ONLY = new Set(['link', 'linkReference', 'image', 'imageReference', 'definition', 'inlineCode', 'code', 'html']);
+
+type MdNode = { type: string; value?: string; url?: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
+
+/** The prose text nodes of the parsed Markdown whose source is their exact words, with where they are in it, and the urls of its links. */
+function readMarkdown(text: string) {
+	const prose: Array<{ value: string; start: number }> = [];
+	const links: string[] = [];
+	const walk = (node: MdNode) => {
+		if (node.type === 'link' && node.url) links.push(node.url);
+		if (PROSE_ONLY.has(node.type)) return;
+		const start = node.position?.start.offset;
+		const end = node.position?.end.offset;
+		// An escape or entity makes the source differ from the words; that node is left alone.
+		if (node.type === 'text' && node.value && start !== undefined && text.slice(start, end) === node.value) prose.push({ value: node.value, start });
+		node.children?.forEach(walk);
+	};
+	walk(markdown.parse(text) as MdNode);
+	return { prose, links };
+}
+
+/** The text with the thread's title, where it first appears in prose (outside links and code), linked so it draws as the thread's chip. */
 function linkTitle(text: string, thread: Session): string | null {
-	const title = thread.title.trim();
+	const title = thread.title.trim().toLowerCase();
 	if (!title) return null;
-	const at = text.toLowerCase().indexOf(title.toLowerCase());
-	if (at < 0) return null;
-	const end = at + title.length;
-	const before = text.slice(0, at);
-	if (text[at - 1] === '[' || text.startsWith('](', end) || (before.match(/`/g)?.length ?? 0) % 2) return null;
-	return `${before}${chipLink(thread, text.slice(at, end))}${text.slice(end)}`;
+	for (const node of readMarkdown(text).prose) {
+		const index = node.value.toLowerCase().indexOf(title);
+		if (index < 0) continue;
+		const at = node.start + index;
+		const end = at + title.length;
+		return `${text.slice(0, at)}${chipLink(thread, text.slice(at, end))}${text.slice(end)}`;
+	}
+	return null;
 }
 
 /** A reply's text blocks with every thread a report it answers covers drawn as a chip in its words: where the words already link or name it, else leading the first block. */
 function chipReports(blocks: Block[], reported: Session[], threads: Session[]): Block[] {
 	const texts = blocks.filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text');
-	if (!texts.length) return blocks;
-	const linked = new Set(texts.flatMap((block) => [...block.text.matchAll(/\]\(#thread-([\w-]+)\)/g)].map((match) => byPrefix(threads, match[1])?.id)));
+	if (!texts.length || !reported.length) return blocks;
+	const linked = new Set(texts.flatMap((block) => readMarkdown(block.text).links.flatMap((url) => {
+		const id = /^#thread-([\w-]+)$/.exec(url)?.[1];
+		return id ? [byPrefix(threads, id)?.id] : [];
+	})));
 	const edited = new Map(texts.map((block) => [block.key, block.text]));
 	const lead: Session[] = [];
 	for (const thread of reported) {
@@ -437,7 +474,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	// A drawing on one of them goes to the coordinator, which passes it on.
 	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
 	const reported = useMemo(() => [...new Set(reports.flatMap((report) => byPrefix(threads, report.id) ?? []))], [reports, threads]);
-	const shown = chipReports(blocks(parts), reported, threads);
+	const shown = useMemo(() => chipReports(blocks(message.parts.filter(shownPart)), reported, threads), [message.parts, reported, threads]);
 	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
@@ -788,7 +825,7 @@ export function ProjectFeed({
 		|| (lastAssistant.metadata?.startedAt !== undefined && lastAssistant.metadata.completedAt === undefined && !lastAssistant.metadata.usage)
 		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
-	const answered = useMemo(() => answeredReports(messages), [messages]);
+	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');

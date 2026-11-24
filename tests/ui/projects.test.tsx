@@ -350,15 +350,15 @@ describe('threads', () => {
 	});
 
 	it('shows thread reports as chips in the reply that answers them, and a line only for one no reply answers yet', async () => {
-		const report = (id: string, title: string, state: string) => ({ id: `r-${id}`, role: 'user', display: 'visible', parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${id}" title="${title}" state="${state}"/>\n</thread-reports>` }] });
-		const reply = (id: string, text: string) => ({ id, role: 'assistant', display: 'visible', parts: [{ type: 'text', text }] });
+		const report = (id: string, title: string, state: string) => ({ id: `r-${id}`, role: 'user', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${id}" title="${title}" state="${state}"/>\n</thread-reports>` }] });
+		const reply = (id: string, text: string) => ({ id: `a-${id}`, role: 'assistant', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text }] });
 		const messages = [
 			report('pr', 'Add the endpoint', 'review'),
-			reply('m1', 'The endpoint now returns invoices.'),
+			reply('pr', 'The endpoint now returns invoices.'),
 			report('runs', 'Add the table', 'working'),
-			reply('m2', 'Work on add the table resumed after the fix.'),
+			reply('runs', 'Work on add the table resumed after the fix.'),
 			report('done', 'Old cleanup', 'resolved'),
-			reply('m3', '[Old cleanup](#thread-done) is merged.'),
+			reply('done', '[Old cleanup](#thread-done) is merged.'),
 			report('asks', 'Pick a name', 'waiting'),
 		];
 		const agent = { messages, status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
@@ -373,6 +373,45 @@ describe('threads', () => {
 		const waiting = screen.getByText(/is waiting on you/).closest('p') as HTMLElement;
 		expect(waiting.textContent).toBe('Pick a name is waiting on you');
 		expect(within(waiting).getByRole('button', { name: 'Pick a name' })).toBeTruthy();
+	});
+
+	it('keeps a report’s line when its turn failed, rather than folding it into the next reply, and folds one joined into a reply there', async () => {
+		const reports = (id: string, threadId: string, title: string, state: string, asks = '') => ({ id, role: 'user', display: 'visible', submissionId: id, parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${threadId}" title="${title}" state="${state}" asks="${asks}"/>\n</thread-reports>` }] });
+		const messages = [
+			reports('s-failed', 'asks', 'Pick a name', 'waiting', 'Billing or invoices?'),
+			{ id: 'm-failed', role: 'assistant', display: 'visible', submissionId: 's-failed', settlement: { outcome: 'failed' }, parts: [{ type: 'text', text: 'The model is unavailable.' }] },
+			{ id: 'u-next', role: 'user', display: 'visible', submissionId: 's-next', parts: [{ type: 'text', text: 'What is running?' }] },
+			reports('s-joined', 'pr', 'Add the endpoint', 'review'),
+			{ id: 'a-next', role: 'assistant', display: 'visible', submissionId: 's-next', parts: [{ type: 'text', text: 'Two threads are working.' }] },
+		];
+		const settlements = [
+			{ submissionId: 's-failed', outcome: 'failed' },
+			{ submissionId: 's-next', outcome: 'completed' },
+			{ submissionId: 's-joined', outcome: 'completed', answeredBySubmissionId: 's-next' },
+		];
+		const agent = { messages, status: 'idle', historyReady: true, settlements, sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const waiting = (await screen.findByText(/is waiting on you/)).closest('p') as HTMLElement;
+		expect(waiting.textContent).toBe('Pick a name is waiting on you: Billing or invoices?');
+		const answer = screen.getByText(/Two threads are working/).closest('p') as HTMLElement;
+		expect(within(answer).queryByRole('button', { name: 'Pick a name' })).toBeNull();
+		expect(within(answer).getByRole('button', { name: 'Add the endpoint' })).toBeTruthy();
+		expect(screen.queryByText(/is ready for review/)).toBeNull();
+	});
+
+	it('leaves a link whose words hold a reported thread’s title as it was, and leads the reply with the chip instead', async () => {
+		const messages = [
+			{ id: 'r', role: 'user', display: 'visible', submissionId: 's', parts: [{ type: 'text', text: '<thread-reports>\n<thread id="pr" title="Add the endpoint" state="review"/>\n</thread-reports>' }] },
+			{ id: 'a', role: 'assistant', display: 'visible', submissionId: 's', parts: [{ type: 'text', text: 'Read the [notes to add the endpoint safely](https://example.com/logs) and `add the endpoint` first.' }] },
+		];
+		const agent = { messages, status: 'idle', historyReady: true, settlements: [{ submissionId: 's', outcome: 'completed' }], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const link = await screen.findByRole('link', { name: 'notes to add the endpoint safely' });
+		expect(link.getAttribute('href')).toBe('https://example.com/logs');
+		const paragraph = link.closest('p') as HTMLElement;
+		expect(paragraph.textContent?.startsWith('Add the endpoint Read the')).toBe(true);
+		expect(paragraph.textContent).not.toContain('https://example.com');
+		expect(within(paragraph).getByText('add the endpoint', { selector: 'code' })).toBeTruthy();
 	});
 
 	it('opens a new thread’s form inside the coordinator’s conversation, which stays in view', async () => {
