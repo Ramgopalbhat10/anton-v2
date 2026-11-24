@@ -100,7 +100,10 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
-			return threadActionResult(`${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}`, todo?.id);
+				return threadActionResult(
+					`${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}`,
+					todo?.id,
+				);
 			},
 		}),
 	);
@@ -136,7 +139,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), linked?.text ?? answering);
 				if (todo) await messageTodoThread(todo, target.id, message);
 				else await nudgeThread(spaceId, target.id, message);
-			return threadActionResult(`Sent to "${target.title}" [id:${target.id}].`, todo?.id);
+				return threadActionResult(`Sent to "${target.title}" [id:${target.id}].`, todo?.id);
 			},
 		}),
 	);
