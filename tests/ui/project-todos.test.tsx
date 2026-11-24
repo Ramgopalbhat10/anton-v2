@@ -1,4 +1,4 @@
-import { createFlueClient, type FlueConversationMessage, type FlueConversationSettlement } from '@flue/sdk';
+import { createFlueClient, type FlueConversationMessage, type FlueConversationPart, type FlueConversationSettlement } from '@flue/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
@@ -222,6 +222,87 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 	expect(screen.getByText('Done for now.')).toBeTruthy();
 	expect(screen.queryByRole('button', { name: 'Stop the coordinator' })).toBeNull();
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
+});
+
+it.each(['explicit', 'inferred'] as const)('keeps a joined to-do and attachment above the right thread action with an %s ID through finish and settlement', async (mode) => {
+	const first = makeTodo({ id: 'todo_aaaaaaaa', title: 'Add invoices to billing', description: '' });
+	const second = makeTodo({ id: 'todo_bbbbbbbb', title: 'Make the invoice preview taller', description: '' });
+	const nextThread = session({ ...threads[0], id: 'thread_2', title: 'Fill the invoice preview' });
+	api.sessions.mockResolvedValueOnce({ sessions: [...threads, nextThread] });
+	api.spaceTodos.mockResolvedValue({ todos: [first, second] });
+	if (mode === 'explicit') api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...first, status: 'in_progress' }, submissionId: 'first' });
+	api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...second, status: 'in_progress' }, submissionId: 'second' });
+	const { publish } = coordinatorConversation();
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	const handOff = async (todo: SpaceTodo) => {
+		await userEvent.click(await screen.findByRole('button', { name: `Actions for ${todo.title}` }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+		await screen.findByText(`Waiting for the coordinator to pick up “${todo.title}”`);
+	};
+	const userMessage = (todo: SpaceTodo, submissionId: string): FlueConversationMessage => ({
+		id: `user-${submissionId}`, role: 'user', purpose: 'user', display: 'visible', submissionId,
+		parts: [{ type: 'text', state: 'done', text: todoStartMessage(todo) }],
+	});
+	const u1 = userMessage(first, 'first');
+	const firstText = mode === 'explicit' ? todoStartMessage(first) : first.title;
+	u1.parts = [{ type: 'text', state: 'done', text: firstText }];
+	const u2 = userMessage(second, 'second');
+	u2.parts.push({ type: 'file', mediaType: 'image/png', filename: 'preview.png', url: '/preview.png' });
+	const reply: FlueConversationMessage = {
+		id: 'reply', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'first',
+		metadata: { startedAt: 42 },
+		parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c1', state: 'output-available', input: mode === 'explicit' ? { todo_id: '[todo:aaaaaaaa]' } : {}, output: 'Started [id:thread_1]' }],
+	};
+	if (mode === 'explicit') await handOff(first);
+	await publish([u1, reply]);
+	await handOff(second);
+	const rejected: FlueConversationPart = {
+		type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'wrong-brief', state: 'output-error',
+		input: { todo_id: second.id, title: 'Start the billing work again', request: first.title }, errorText: 'Request is not the user’s words for this to-do',
+	};
+	const earlierCalls = mode === 'explicit' ? [...reply.parts, rejected] : reply.parts;
+	const tool = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c2', state: 'input-available', input: { ...(mode === 'explicit' ? { todo_id: second.id } : {}), title: nextThread.title } } as const;
+	const resolved = { ...tool, state: 'output-available', output: { output: 'Started [id:thread_2]', todoId: second.id } } as const;
+	await publish([u1, { ...reply, parts: [...earlierCalls, mode === 'explicit' ? tool : resolved] }, u2]);
+	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
+	const brief1 = dock.getByText(firstText);
+	const row1 = dock.getByRole('article', { name: threads[0].title });
+	const brief2 = dock.getByText(todoStartMessage(second));
+	const image = dock.getByRole('button', { name: 'Open preview.png' });
+	const before = (node: Node, other: Node) => expect(node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	before(brief1, row1);
+	before(row1, image);
+	before(image, brief2);
+	before(brief2, dock.getByText(nextThread.title));
+	if (mode === 'explicit') {
+		expect(dock.getByText('Starting')).toBeTruthy();
+		before(dock.getByText('Could not start “Start the billing work again”'), image);
+	}
+
+	const answered: FlueConversationMessage = { ...reply, parts: [...earlierCalls, resolved, { type: 'text', state: 'done', text: 'Both threads are underway.' }] };
+	const assertFinalOrder = () => {
+		const row2 = dock.getByRole('article', { name: nextThread.title });
+		expect(dock.getByText(todoStartMessage(second))).toBe(brief2);
+		before(row1, image);
+		if (mode === 'explicit') before(dock.getByText('Could not start “Start the billing work again”'), image);
+		before(image, brief2);
+		before(brief2, row2);
+		before(row2, dock.getByText('Both threads are underway.'));
+		expect(dock.queryByText('Starting')).toBeNull();
+	};
+	await publish([u1, answered, u2]);
+	assertFinalOrder();
+	const finished = { ...answered, metadata: { ...reply.metadata, completedAt: 84, usage: {} } };
+	await publish([u1, finished, u2]);
+	assertFinalOrder();
+	const hostSettled: FlueConversationSettlement = { submissionId: 'first', outcome: 'completed' };
+	await publish([u1, finished, u2], [hostSettled]);
+	assertFinalOrder();
+	await publish([u1, finished, u2], [
+		hostSettled,
+		{ submissionId: 'second', outcome: 'completed', answeredBySubmissionId: 'first' },
+	]);
+	assertFinalOrder();
 });
 
 it.each([

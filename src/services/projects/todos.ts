@@ -2,7 +2,7 @@ import type { Project, Session } from '../../core/types.ts';
 import { threadBrief } from '../../core/briefs.ts';
 import { type AttachedFile, withAttachments } from '../../core/attachments.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
-import { MAX_TODO_ATTACHMENTS, MAX_TODO_DESCRIPTION, MAX_TODO_TITLE, shortTodoId, todoBrief, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
+import { MAX_TODO_ATTACHMENTS, MAX_TODO_DESCRIPTION, MAX_TODO_TITLE, shortTodoId, todoBrief, todoRef, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
 import { getSpace, touchSpace } from '../../db/spaces.ts';
 import { deleteSpaceTodoRecord, getSpaceTodo, insertSpaceTodo, linkTodoThreadRecord, listSpaceTodos, updateSpaceTodo } from '../../db/space-todos.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
@@ -57,8 +57,6 @@ export async function listTodos(spaceId: string): Promise<SpaceTodo[]> {
 	await existingSpace(spaceId);
 	return listSpaceTodos(spaceId);
 }
-
-const todoRef = (ref: string) => ref.trim().replace(/^\[|\]$/g, '').replace(/^todo:/, '');
 
 /** By its id, the short id the coordinator is shown, or its exact title. */
 export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo> {

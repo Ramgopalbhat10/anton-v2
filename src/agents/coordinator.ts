@@ -49,6 +49,7 @@ const PROPOSE = 'This project is set to propose first: for new work, call sugges
 
 const thread = v.pipe(v.string(), v.minLength(1), v.description('The thread, by the id shown in brackets in the project state'));
 const todoId = v.optional(v.pipe(v.string(), v.description('The project to-do this works on, by the id shown as [todo:…] in the project state')));
+const threadActionResult = (text: string, resolvedTodoId?: string) => ({ output: resolvedTodoId ? { output: text, todoId: resolvedTodoId } : text });
 const files = v.optional(
 	v.pipe(
 		v.array(v.string()),
@@ -99,7 +100,10 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
-				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
+				return threadActionResult(
+					`${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}`,
+					todo?.id,
+				);
 			},
 		}),
 	);
@@ -135,7 +139,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), linked?.text ?? answering);
 				if (todo) await messageTodoThread(todo, target.id, message);
 				else await nudgeThread(spaceId, target.id, message);
-				return { output: `Sent to "${target.title}" [id:${target.id}].` };
+				return threadActionResult(`Sent to "${target.title}" [id:${target.id}].`, todo?.id);
 			},
 		}),
 	);

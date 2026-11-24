@@ -42,6 +42,8 @@ export function todoBrief(todo: Pick<SpaceTodo, 'title' | 'description'>): strin
 /** The short id the coordinator sees in its project state and passes back as todo_id. */
 export const shortTodoId = (id: string) => id.replace(/^todo_/, '').slice(0, 8);
 
+export const todoRef = (ref: string) => ref.trim().replace(/^\[|\]$/g, '').replace(/^todo:/, '');
+
 /** Sent to the coordinator as the user's own message, so the request it quotes for a thread is in it word for word. */
 export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>, repos: string[] = []): string {
 	const tagged = repos.length ? `\n\nRepositories tagged on this to-do: ${repos.join(', ')}.` : '';
