@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight } from '@/lib/icons';
+import { Check, ChevronDown, ChevronUp } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { memo, type PointerEvent, useEffect, useId, useRef, useState } from 'react';
 import { Disclosure } from '@/components/kit/disclosure';
@@ -58,6 +58,9 @@ function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boo
 	const [open, setOpen] = useState(false);
 	const detailsId = useId();
 	const current = todo.status === 'in_progress';
+	const title = (
+		<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
+	);
 	return (
 		<li
 			aria-current={current ? 'step' : undefined}
@@ -74,23 +77,26 @@ function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boo
 				<Mark status={todo.status} working={working} />
 			</span>
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
 				{todo.evidence ? (
-					<div className="flex flex-col">
-						<button
-							type="button"
-							aria-expanded={open}
-							aria-controls={detailsId}
-							onClick={() => setOpen(!open)}
-							className="-mx-1 flex h-5 w-fit items-center gap-1 rounded-inner px-1 text-micro text-(--text-4) outline-none hover:bg-(--bg-active) hover:text-(--text-2) focus-visible:shadow-(--focus)"
-						>
-							<Icon icon={open ? ChevronDown : ChevronRight} size={11} />
-							<span>Details</span>
-						</button>
-						<Disclosure open={open} id={detailsId}>
-							<p className="m-0 mt-0.5 text-small leading-[17px] text-pretty break-words text-(--text-3)">{todo.evidence}</p>
-						</Disclosure>
-					</div>
+					<button
+						type="button"
+						aria-expanded={open}
+						aria-controls={detailsId}
+						onClick={() => setOpen(!open)}
+						className="flex w-full items-start gap-2 rounded-inner text-left outline-none focus-visible:shadow-(--focus)"
+					>
+						{title}
+						<span className="ml-auto mt-0.5 shrink-0 text-(--text-4)">
+							<Icon icon={open ? ChevronUp : ChevronDown} size={13} />
+						</span>
+					</button>
+				) : (
+					title
+				)}
+				{todo.evidence ? (
+					<Disclosure open={open} id={detailsId}>
+						<p className="m-0 text-small leading-[17px] text-pretty break-words text-(--text-3)">{todo.evidence}</p>
+					</Disclosure>
 				) : null}
 			</div>
 		</li>

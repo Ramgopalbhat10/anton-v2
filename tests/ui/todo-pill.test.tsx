@@ -62,15 +62,16 @@ describe('TodoPill', () => {
 		const popover = await screen.findByRole('dialog');
 		expect(within(popover).queryByText('Read todo-pill.tsx')).toBeNull();
 		expect(within(popover).queryByText(long)).toBeNull();
-		const toggles = within(popover).getAllByRole('button', { name: 'Details' });
-		expect(toggles).toHaveLength(2);
-		expect(toggles[0].closest('li')?.textContent).toContain('Read the UI code');
-		expect(toggles[1].closest('li')?.textContent).toContain('Match header heights');
-		await userEvent.click(toggles[0]);
-		expect(toggles[0].getAttribute('aria-expanded')).toBe('true');
+		const first = within(popover).getByRole('button', { name: 'Read the UI code' });
+		const second = within(popover).getByRole('button', { name: 'Match header heights' });
+		expect(within(popover).getByText('Open a draft PR').closest('button')).toBeNull();
+		expect(first.getAttribute('aria-expanded')).toBe('false');
+		expect(second.getAttribute('aria-expanded')).toBe('false');
+		await userEvent.click(first);
+		expect(first.getAttribute('aria-expanded')).toBe('true');
 		expect(within(popover).getByText('Read todo-pill.tsx').tagName).toBe('P');
 		expect(within(popover).queryByText(long)).toBeNull();
-		await userEvent.click(toggles[1]);
+		await userEvent.click(second);
 		expect(within(popover).getByText(long).classList.contains('line-clamp-2')).toBe(false);
 		expect(screen.queryByRole('dialog')).not.toBeNull();
 	});
@@ -101,14 +102,13 @@ describe('TodoPill', () => {
 		expect(document.activeElement).toBe(pill);
 		await userEvent.keyboard('{Enter}');
 		const popover = await screen.findByRole('dialog');
-		const details = within(popover).getAllByRole('button', { name: 'Details' });
-		expect(details).toHaveLength(1);
-		expect(document.activeElement).toBe(details[0]);
+		const toggle = within(popover).getByRole('button', { name: 'Read the UI code' });
+		expect(document.activeElement).toBe(toggle);
 		await userEvent.keyboard('{Enter}');
-		expect(details[0].getAttribute('aria-expanded')).toBe('true');
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
 		expect(within(popover).getByText('Read todo-pill.tsx')).toBeTruthy();
 		await userEvent.keyboard('{Enter}');
-		expect(details[0].getAttribute('aria-expanded')).toBe('false');
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
 		await userEvent.keyboard('{Escape}');
 		await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
 		expect(screen.queryByRole('dialog')).toBeNull();
@@ -125,7 +125,7 @@ describe('TodoPill', () => {
 		});
 		await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
 		const popover = await screen.findByRole('dialog');
-		await userEvent.click(within(popover).getAllByRole('button', { name: 'Details' })[0]);
+		await userEvent.click(within(popover).getByRole('button', { name: 'Read the UI code' }));
 		expect(within(popover).getByText('Read todo-pill.tsx')).toBeTruthy();
 		await act(async () =>
 			client.setQueryData(['todos', 's1'], {
@@ -142,7 +142,7 @@ describe('TodoPill', () => {
 		expect(within(updatedPopover).getByText('Replacement todo')).toBeTruthy();
 		expect(within(updatedPopover).queryByText('Read the UI code')).toBeNull();
 		const [replacement] = within(updatedPopover).getAllByRole('listitem');
-		const toggle = within(replacement).getByRole('button', { name: 'Details' });
+		const toggle = within(replacement).getByRole('button', { name: 'Replacement todo' });
 		expect(toggle.getAttribute('aria-expanded')).toBe('false');
 		expect(within(replacement).queryByText('Replacement evidence')).toBeNull();
 		expect(within(updatedPopover).queryByText('Read todo-pill.tsx')).toBeNull();
