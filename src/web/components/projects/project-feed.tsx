@@ -184,14 +184,16 @@ function readMarkdown(text: string) {
 
 /** The text with the thread's title, where it first appears in prose (outside links and code), linked so it draws as the thread's chip. */
 function linkTitle(text: string, thread: Session): string | null {
-	const title = thread.title.trim().toLowerCase();
+	const title = thread.title.trim();
 	if (!title) return null;
+	// Matched on the original words, never a lowercased copy: lowercasing can change a string's length (İ), and with it every offset after.
+	const pattern = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu');
 	for (const node of readMarkdown(text).prose) {
-		const index = node.value.toLowerCase().indexOf(title);
-		if (index < 0) continue;
-		const at = node.start + index;
-		const end = at + title.length;
-		return `${text.slice(0, at)}${chipLink(thread, text.slice(at, end))}${text.slice(end)}`;
+		const match = pattern.exec(node.value);
+		if (!match) continue;
+		const at = node.start + match.index;
+		const end = at + match[0].length;
+		return `${text.slice(0, at)}${chipLink(thread, match[0])}${text.slice(end)}`;
 	}
 	return null;
 }

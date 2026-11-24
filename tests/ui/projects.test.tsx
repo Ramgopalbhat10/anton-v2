@@ -438,6 +438,19 @@ describe('threads', () => {
 		expect(screen.getByText('That route is live.')).toBeTruthy();
 	});
 
+	it('names a reported thread where its title is, even after words whose lowercase changes length, and leaves the link beside it whole', async () => {
+		const messages = [
+			{ id: 'r', role: 'user', display: 'visible', submissionId: 's', parts: [{ type: 'text', text: '<thread-reports>\n<thread id="pr" title="Add the endpoint" state="review"/>\n</thread-reports>' }] },
+			{ id: 'a', role: 'assistant', display: 'visible', submissionId: 's', parts: [{ type: 'text', text: 'İstanbul and İzmir: add the endpoint [status](https://example.com/status)' }] },
+		];
+		const agent = { messages, status: 'idle', historyReady: true, settlements: [{ submissionId: 's', outcome: 'completed' }], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const chip = await screen.findByRole('button', { name: 'add the endpoint' });
+		const link = screen.getByRole('link', { name: 'status' });
+		expect(link.getAttribute('href')).toBe('https://example.com/status');
+		expect(chip.closest('p')?.textContent).toBe('İstanbul and İzmir: add the endpoint status');
+	});
+
 	it('leaves a link whose words hold a reported thread’s title as it was, and leads the reply with the chip instead', async () => {
 		const messages = [
 			{ id: 'r', role: 'user', display: 'visible', submissionId: 's', parts: [{ type: 'text', text: '<thread-reports>\n<thread id="pr" title="Add the endpoint" state="review"/>\n</thread-reports>' }] },
