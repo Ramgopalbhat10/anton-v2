@@ -261,19 +261,21 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 						>
 							Connectors
 						</MenuSubTrigger>
-						<MenuSubContent className="w-[260px]">
-							<MenuItem icon={Plus} onSelect={() => void navigate({ to: '/settings/$section', params: { section: 'connectors' } })}>
-								Add connector
-							</MenuItem>
-							<MenuItem icon={Settings2} onSelect={() => void navigate({ to: '/settings/$section', params: { section: 'connectors' } })}>
-								Manage connectors
-							</MenuItem>
-							{items.length ? <MenuSeparator /> : null}
-							{items.map((item) => (
-								<ConnectorRow key={item.key} item={item} onPick={pick} />
-							))}
+						<MenuSubContent className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] w-[260px] gap-0 overflow-hidden p-0">
+							<div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+								<MenuItem icon={Plus} onSelect={() => void navigate({ to: '/settings/$section', params: { section: 'connectors' } })}>
+									Add connector
+								</MenuItem>
+								<MenuItem icon={Settings2} onSelect={() => void navigate({ to: '/settings/$section', params: { section: 'connectors' } })}>
+									Manage connectors
+								</MenuItem>
+								{items.length ? <MenuSeparator /> : null}
+								{items.map((item) => (
+									<ConnectorRow key={item.key} item={item} onPick={pick} />
+								))}
+							</div>
 							<MenuSeparator />
-							<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">
+							<p className="m-0 px-2 pt-0.5 pb-1.5 text-micro leading-[15px] text-pretty text-(--text-3)">
 								{problem ?? 'On for every task. Tools load only when a task uses them, so nothing is spent until then.'}
 							</p>
 						</MenuSubContent>
