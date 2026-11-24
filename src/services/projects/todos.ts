@@ -56,9 +56,11 @@ export async function listTodos(spaceId: string): Promise<SpaceTodo[]> {
 	return listSpaceTodos(spaceId);
 }
 
+const todoRef = (ref: string) => ref.trim().replace(/^\[|\]$/g, '').replace(/^todo:/, '');
+
 /** By its id, the short id the coordinator is shown, or its exact title. */
 export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo> {
-	const wanted = ref.trim().replace(/^\[|\]$/g, '').replace(/^todo:/, '');
+	const wanted = todoRef(ref);
 	const todos = await listSpaceTodos(spaceId);
 	const found =
 		todos.find((todo) => todo.id === wanted || shortTodoId(todo.id) === wanted) ??
@@ -112,10 +114,20 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 	return (await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: todo.assignee ?? 'thread', completedAt: null }))!;
 }
 
-/** A handoff identifies the to-do even when the coordinator omits or miscopies the tool's todo_id. */
-export async function coordinatorTodo(spaceId: string, handoffId: string | null, ref?: string): Promise<SpaceTodo | null> {
-	const todoId = handoffId ?? ref;
-	return todoId ? findTodo(spaceId, todoId) : null;
+export type TodoHandoffs = { entries: { id: string; text: string }[]; latestIsHandoff: boolean };
+
+export async function coordinatorTodo(spaceId: string, { entries, latestIsHandoff }: TodoHandoffs, ref?: string): Promise<{ todo: SpaceTodo; text?: string } | null> {
+	const wanted = ref ? todoRef(ref) : null;
+	const fullId = wanted?.startsWith('todo_') ? wanted : null;
+	const infer = entries.length === 1 && latestIsHandoff;
+	const handoff = infer ? entries[0] : entries.find(({ id }) => id === (fullId ? shortTodoId(fullId) : wanted));
+	if (!handoff && entries.length > 1) {
+		throw new InvalidInputError(`This reply has multiple project to-do handoffs. Pass the matching todo_id: ${entries.map(({ id }) => `[todo:${id}]`).join(', ')}.`);
+	}
+	const id = handoff?.id ?? ref;
+	if (!id) return null;
+	const todo = handoff && fullId && !infer ? await existingTodo(spaceId, fullId) : await findTodo(spaceId, id);
+	return { todo, text: handoff?.text };
 }
 
 export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning'>): Promise<{ todo: SpaceTodo; thread: Session }> {

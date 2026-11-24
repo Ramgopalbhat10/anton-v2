@@ -8,7 +8,7 @@ import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
-import { coordinatorTodo, createTodo, messageTodoThread, startTodoThread } from '../services/projects/todos.ts';
+import { coordinatorTodo, createTodo, messageTodoThread, startTodoThread, type TodoHandoffs } from '../services/projects/todos.ts';
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
@@ -38,6 +38,7 @@ const PROMPT = [
 	"When the user asks how a thread is going, read_thread it and say what it is doing now; a thread works its messages in turn, so one stuck on a step for many minutes cannot answer one. Say so, and offer to stop it or start it again.",
 	'Files and images the user attaches are saved in the project Library and arrive after their message as <attachment> blocks (an image is also shown to you, a document comes with its text). A thread sees nothing of this conversation, so whenever its work involves an attached file (a reference image, a spec, a spreadsheet), pass the file names in files with start_thread or message_thread: the thread then gets each one with its brief, an image as a picture.',
 	'A message "Start the project to-do [todo:…]" is the user starting that to-do from the board: start its thread(s) right away (even when the project is set to propose first) with start_thread, or route it to an existing thread with message_thread, passing its todo_id either way. When you split a to-do over several threads, pass each one in files only the to-do files its part needs; a thread you pass no files gets all of them. To save work for later without starting it, use create_todo.',
+	'If several board handoffs arrive together, use the matching todo_id and words from that handoff on each call. Do not combine different to-dos into one thread.',
 	'A to-do with its own main thread model must start with start_thread, not message_thread; its new threads automatically use that model. Ordinary follow-up messages to its running threads need no todo_id.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply. Link a file a thread saved (its reply names it as ../outputs/<path>) by the thread\'s id and that path, as [diagram.png](#thread-1a2b3c4d/outputs/diagram.png): it shows as a card that opens the file.',
@@ -62,7 +63,7 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 }
 
 
-function useCoordinatorTools(spaceId: string, answering: string, handoffId: string | null) {
+function useCoordinatorTools(spaceId: string, answering: string, handoffs: () => TodoHandoffs) {
 	useTool(
 		defineTool({
 			name: 'start_thread',
@@ -81,15 +82,20 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffId: stri
 				files,
 			}),
 			async run({ data }) {
-				const said = splitAttachments(answering).text;
-				if (said.trim() && !data.approved && !quotedFrom(data.request, said))
+				const linked = await coordinatorTodo(spaceId, handoffs(), data.todo_id);
+				const source = linked?.text ?? answering;
+				const said = splitAttachments(source).text;
+				const isHandoff = linked?.text !== undefined;
+				if (said.trim() && (isHandoff || !data.approved) && !quotedFrom(data.request, said))
 					throw new Error(
-						"request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",
+						isHandoff
+							? "request is not the user's words for this to-do: copy it from the handoff with the matching todo_id, and put what you add in context."
+							: "request is not the user's words: copy it exactly from their message (only the part for this thread, joining left-out parts with …), and put what you add in context. If the user approved your own proposal, set approved.",
 					);
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
-				const todo = await coordinatorTodo(spaceId, handoffId, data.todo_id);
-				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), answering), repo: data.repo };
+				const todo = linked?.todo ?? null;
+				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
 				return { output: `${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}` };
@@ -123,8 +129,9 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffId: stri
 			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)), todo_id: todoId, files }),
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
-				const todo = await coordinatorTodo(spaceId, handoffId, data.todo_id);
-				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), answering);
+				const linked = await coordinatorTodo(spaceId, handoffs(), data.todo_id);
+				const todo = linked?.todo ?? null;
+				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), linked?.text ?? answering);
 				if (todo) await messageTodoThread(todo, target.id, message);
 				else await nudgeThread(spaceId, target.id, message);
 				return { output: `Sent to "${target.title}" [id:${target.id}].` };
@@ -221,9 +228,9 @@ export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
 	const delivery = useDelivery();
 	const answering = delivery.kind === 'user' ? delivery.body : '';
-	const handoffId = useProjectState(id, delivery);
+	const handoffs = useProjectState(id, delivery);
 	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: agentCompaction(brief.model) });
-	useCoordinatorTools(id, answering, handoffId);
+	useCoordinatorTools(id, answering, handoffs);
 	useTool(fullResultTool(id));
 	useResponseStart(() => ({ startedAt: Date.now() }));
 	useResponseFinish(({ response, metadata }) => {
@@ -244,13 +251,27 @@ const STATE_NOTE =
 const STATE_EVERY = 10;
 
 /** In the conversation, not the instructions: instructions that changed with every thread's state missed the prompt cache. */
-function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): string | null {
+function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): () => TodoHandoffs {
 	const [, setShown] = usePersistentState<{ body: string; since: number } | null>('project-state', null);
-	const [savedHandoffId, setSavedHandoffId] = usePersistentState<string | null>('todo-handoff', null);
+	const [handoffs, setHandoffs] = usePersistentState<TodoHandoffs>('todo-handoffs', { entries: [], latestIsHandoff: false });
 	const handoffId = delivery.kind === 'user' ? todoHandoffId(delivery.body) : null;
+	let activeHandoffs = handoffs;
+	let startsResponse = false;
+	useResponseStart(() => {
+		startsResponse = true;
+	});
 	useAgentStart(({ append }) => {
-		// The appended state signal takes over useDelivery() for the next render, but does not run this hook itself.
-		if (savedHandoffId !== handoffId) setSavedHandoffId(handoffId);
+		// Reset on the first delivery, not a join or a replay whose delivery hook was already committed.
+		const text = handoffId && delivery.kind === 'user' ? splitAttachments(delivery.body).text : '';
+		setHandoffs((current) => {
+			const entries = startsResponse ? [] : current.entries;
+			// Flue can call the tools from this render before rendering again with the saved state.
+			activeHandoffs = {
+				entries: handoffId ? [...entries.filter(({ id }) => id !== handoffId), { id: handoffId, text }] : entries,
+				latestIsHandoff: Boolean(handoffId),
+			};
+			return activeHandoffs;
+		});
 		const brief = coordinatorBrief(id);
 		const body = `The project now (${new Date().toISOString().slice(0, 10)}):\n${brief.state || `Project: ${brief.name}`}`;
 		setShown((shown) => {
@@ -259,5 +280,5 @@ function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): 
 			return { body, since: 1 };
 		});
 	});
-	return delivery.kind === 'signal' && delivery.type === STATE_SIGNAL ? savedHandoffId : handoffId;
+	return () => activeHandoffs;
 }

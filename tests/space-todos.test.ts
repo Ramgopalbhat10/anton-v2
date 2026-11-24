@@ -10,7 +10,7 @@ import { createClient } from '@libsql/client';
 import * as v from 'valibot';
 import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
-import { todoHandoffId, todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
+import { shortTodoId, todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
 import { CREATE_TODO, EDIT_TODO } from '../src/routes/space-todo-input.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-space-todos-'));
@@ -272,13 +272,15 @@ test('direct and coordinator to-dos keep distinct models, even in the queue, wit
 	const inherited = await todos.createTodo(space.id, { title: 'Use defaults' });
 	const [directResult] = await Promise.all([todos.startTodo(space.id, direct.id, 'thread'), todos.startTodo(space.id, handed.id, 'coordinator')]);
 	assert.deepEqual([coordinatorBrief(space.id).model, coordinatorBrief(space.id).reasoning], [defaults.coordinatorModel, defaults.coordinatorReasoning]);
-	const handoff = todoHandoffId(toCoordinator[0].text);
+	const handoff = { entries: [{ id: shortTodoId(handed.id), text: toCoordinator[0].text }], latestIsHandoff: true };
+	const ordinary = { entries: [], latestIsHandoff: false };
 	assert.match(await stateBlock(space.id), /"Large split task" · started, no thread yet · main thread model: openrouter\/test\/strong/);
-	const taken = await todos.coordinatorTodo(space.id, handoff);
+	const taken = (await todos.coordinatorTodo(space.id, handoff))?.todo;
 	assert.equal(taken?.id, handed.id, 'the saved handoff identifies the to-do without a tool argument');
-	assert.equal((await todos.coordinatorTodo(space.id, handoff, direct.id))?.id, handed.id, 'a wrong tool argument cannot pick another model');
-	assert.equal(await todos.coordinatorTodo(space.id, todoHandoffId('A regular project message')), null);
-	assert.equal((await todos.coordinatorTodo(space.id, null, handed.id))?.id, handed.id);
+	assert.equal((await todos.coordinatorTodo(space.id, handoff, direct.id))?.todo.id, handed.id, 'a wrong tool argument cannot pick another model');
+	assert.equal(await todos.coordinatorTodo(space.id, ordinary), null);
+	assert.equal((await todos.coordinatorTodo(space.id, ordinary, handed.id))?.todo.id, handed.id);
+	assert.equal(await todos.coordinatorTodo(space.id, { ...handoff, latestIsHandoff: false }), null, 'an ordinary delivery that joins need not act on the single earlier handoff');
 	await assert.rejects(() => todos.messageTodoThread(taken!, existing.id, 'Wrong thread'), /Use start_thread/);
 	assert.equal(toThreads.some((entry) => entry.text === 'Wrong thread'), false);
 	const first = await todos.startTodoThread(taken!, { title: 'Part one', brief: 'Start the first part' });
@@ -332,7 +334,7 @@ test('the real coordinator tools keep a board handoff after the project-state si
 		const receipt = await agent.dispatch(toCoordinator[0].text);
 		await agent.read(receipt, {
 			signal: AbortSignal.timeout(5000),
-			onEvent(event) {
+				onEvent(event) {
 				if (event.type === 'tool-output-error' && event.errorText.includes('Use start_thread')) rejectedNudges.push(event.toolCallId);
 			},
 		});
@@ -358,6 +360,89 @@ test('the real coordinator tools keep a board handoff after the project-state si
 		assert.equal((await sessions.listThreads(space.id)).find((thread) => thread.title === 'Unrelated work')?.model, 'openrouter/test/default');
 		assert.equal((await todos.listTodos(space.id)).find((item) => item.id === boardTodo.id)?.threads, 2);
 	} finally {
+		await runtime.stop();
+	}
+});
+
+test('two board handoffs join one coordinator reply before its tools run and each supplies its own model and files', async () => {
+	const { Coordinator } = await import('../src/agents/coordinator.ts');
+	const faux = fauxProvider({ provider: 'joined-coordinator-fixture' });
+	const coordinatorModel = `${faux.provider.id}/${faux.getModel().id}`;
+	catalog = Promise.resolve([...allModels, model(coordinatorModel)]);
+	const space = await spaces.createSpace({ name: 'Joined board handoffs' });
+	const defaults = 'openrouter/test/default';
+	await spaces.editSpace(space.id, { coordinatorModel, threadModel: defaults, state: 'paused' });
+	const existing = await spaces.startThread(space.id, { title: 'Existing thread', brief: 'Leave this thread alone' });
+	const firstFile = await attachToProject(space.id, 'migration.txt', new TextEncoder().encode('Migration requirements'), 'text/plain');
+	const secondFile = await attachToProject(space.id, 'dashboard.txt', new TextEncoder().encode('Dashboard requirements'), 'text/plain');
+	const first = await todos.createTodo(space.id, { title: 'Ship the migration', attachments: [firstFile], threadModel: { model: 'openrouter/test/strong#sort=latency', reasoning: 'high' } });
+	const second = await todos.createTodo(space.id, { title: 'Update the dashboard', attachments: [secondFile], threadModel: { model: 'openrouter/test/cheap', reasoning: 'low' } });
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const runtime = await start({ agents: [Coordinator], providers: [faux.provider] });
+	try {
+		const agent = init(Coordinator, { id: space.id });
+		let bothInContext = false;
+		faux.setResponses([
+			async () => {
+				entered.resolve();
+				await release.promise;
+				return fauxAssistantMessage('Ready for work.');
+			},
+			({ messages }) => {
+				const context = JSON.stringify(messages);
+				bothInContext = [first, second].every((todo) => context.includes(todoStartMessage(todo)));
+				return fauxAssistantMessage([
+					fauxToolCall('start_thread', { title: 'No ID', request: first.title }, { id: 'missing-start-id' }),
+					fauxToolCall('message_thread', { thread: existing.id, message: first.title, todo_id: 'not-a-handoff' }, { id: 'unknown-message-id' }),
+					fauxToolCall('start_thread', { title: 'Crossed IDs', request: first.title, todo_id: second.id, approved: true }, { id: 'wrong-brief' }),
+					fauxToolCall('message_thread', { thread: existing.id, message: first.title, todo_id: first.id }, { id: 'override-message' }),
+					fauxToolCall('start_thread', { title: 'Migration', request: first.title, todo_id: `[todo:${shortTodoId(first.id)}]` }),
+					fauxToolCall('start_thread', { title: 'Dashboard', request: second.title, todo_id: second.id }),
+				], { stopReason: 'toolUse' });
+			},
+			fauxAssistantMessage('Started both to-dos.'),
+		]);
+		await primeCoordinator(space.id);
+		const host = await agent.dispatch('Show what is ready to start.');
+		const signal = AbortSignal.timeout(5000);
+		const answeredBy = new Map<string, string | undefined>();
+		const toolErrors = new Map<string, string>();
+		const reply = agent.read(host, { signal, onEvent(event) {
+			if (event.type === 'submission-settled') answeredBy.set(event.submissionId, event.answeredBySubmissionId);
+			if (event.type === 'tool-output-error') toolErrors.set(event.toolCallId, event.errorText);
+		} });
+		await Promise.race([entered.promise, reply.then(() => { throw new Error('The coordinator settled before its first model call'); })]);
+		const joins = [];
+		for (const todo of [first, second]) {
+			await todos.startTodo(space.id, todo.id, 'coordinator');
+			joins.push(await agent.dispatch(toCoordinator.at(-1)!.text));
+		}
+		release.resolve();
+		await reply;
+		assert.ok(bothInContext, 'both handoffs reached the model before it made any tool calls');
+		for (const join of joins) assert.equal(answeredBy.get(join.submissionId), host.submissionId);
+		assert.match(toolErrors.get('missing-start-id') ?? '', /matching todo_id/);
+		assert.match(toolErrors.get('unknown-message-id') ?? '', /matching todo_id/);
+		assert.match(toolErrors.get('wrong-brief') ?? '', /not the user's words/);
+		assert.match(toolErrors.get('override-message') ?? '', /Use start_thread/);
+		const threads = await sessions.listThreads(space.id);
+		assert.equal(threads.length, 3, 'only the two correctly identified starts created threads');
+		assert.equal(threads.find(({ id }) => id === existing.id)?.brief, 'Leave this thread alone');
+		const migration = threads.find(({ title }) => title === 'Migration')!;
+		const dashboard = threads.find(({ title }) => title === 'Dashboard')!;
+		assert.deepEqual([migration.model, migration.reasoning, migration.route], ['openrouter/test/strong', 'high', { sort: 'latency' }]);
+		assert.deepEqual([dashboard.model, dashboard.reasoning, dashboard.route], ['openrouter/test/cheap', 'low', null]);
+		assert.deepEqual(splitAttachments(migration.brief!).files.map(({ path }) => path), [firstFile.path]);
+		assert.deepEqual(splitAttachments(dashboard.brief!).files.map(({ path }) => path), [secondFile.path]);
+		const byId = new Map((await todos.listTodos(space.id)).map((todo) => [todo.id, todo]));
+		assert.equal(byId.get(first.id)?.threads, 1);
+		assert.equal(byId.get(second.id)?.threads, 1);
+		await sessions.editSession(migration.id, { resolved: true });
+		const settled = new Map((await todos.listTodos(space.id)).map((todo) => [todo.id, todo.status]));
+		assert.deepEqual([settled.get(first.id), settled.get(second.id)], ['done', 'in_progress']);
+	} finally {
+		release.resolve();
 		await runtime.stop();
 	}
 });
