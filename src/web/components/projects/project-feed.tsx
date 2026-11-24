@@ -134,6 +134,8 @@ function changedReports(message: FlueConversationMessage): Report[] | null {
  */
 function answeredReports(messages: FlueConversationMessage[], settlements: UseFlueAgentResult['settlements']) {
 	const answeredBy = new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId ?? settlement.submissionId]));
+	// A failed or stopped turn keeps whatever it streamed as a normal message; that text never relayed the report.
+	const cut = new Set(settlements.flatMap((settlement) => (settlement.outcome === 'completed' ? [] : [settlement.submissionId])));
 	const replies = new Map<string, FlueConversationMessage>();
 	for (const message of messages) {
 		if (message.settlement || message.role !== 'assistant' || !message.submissionId || replies.has(message.submissionId) || !message.parts.some(shownPart)) continue;
@@ -143,8 +145,9 @@ function answeredReports(messages: FlueConversationMessage[], settlements: UseFl
 	const folded = new Set<string>();
 	for (const message of messages) {
 		if (message.settlement || !message.submissionId || !changedReports(message)?.length) continue;
-		const reply = replies.get(answeredBy.get(message.submissionId) ?? message.submissionId);
-		if (!reply) continue;
+		const host = answeredBy.get(message.submissionId) ?? message.submissionId;
+		const reply = replies.get(host);
+		if (!reply || cut.has(message.submissionId) || cut.has(host)) continue;
 		held.set(reply.id, [...(held.get(reply.id) ?? []), message]);
 		folded.add(message.id);
 	}
@@ -193,16 +196,33 @@ function linkTitle(text: string, thread: Session): string | null {
 	return null;
 }
 
-/** A reply's text blocks with every thread a report it answers covers drawn as a chip in its words: where the words already link or name it, else leading the first block. */
-function chipReports(blocks: Block[], reported: Session[], threads: Session[]): Block[] {
+const shapeOf = (text: string) => (markdown.parse(text) as MdNode).children?.map((node) => node.type) ?? [];
+
+/** The text led by the chips in its opening paragraph, or null when that would change how any of it parses (a fence, list, heading or table then keeps its source as it is). */
+function leadWith(source: string, chips: string): string | null {
+	const text = source.replace(/^\n+/, '');
+	const shape = shapeOf(text);
+	if (shape[0] !== 'paragraph' || /^\s/.test(text)) return null;
+	const led = `${chips} ${text}`;
+	const after = (markdown.parse(led) as MdNode).children ?? [];
+	const opening = after[0]?.children ?? [];
+	const same = after.length === shape.length && after.every((node, index) => node.type === shape[index]);
+	return same && opening[0]?.type === 'link' && opening[0].url?.startsWith('#thread-') ? led : null;
+}
+
+/**
+ * A reply's text blocks with every thread a report it answers covers drawn as a chip in its words: where the words already link or name it, else leading its opening paragraph.
+ * `lead` is the threads left to show as chips of their own above its first text, when leading it would change its Markdown.
+ */
+function chipReports(blocks: Block[], reported: Session[], threads: Session[]): { blocks: Block[]; lead: Session[] } {
 	const texts = blocks.filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text');
-	if (!texts.length || !reported.length) return blocks;
+	if (!texts.length || !reported.length) return { blocks, lead: [] };
 	const linked = new Set(texts.flatMap((block) => readMarkdown(block.text).links.flatMap((url) => {
 		const id = /^#thread-([\w-]+)$/.exec(url)?.[1];
 		return id ? [byPrefix(threads, id)?.id] : [];
 	})));
 	const edited = new Map(texts.map((block) => [block.key, block.text]));
-	const lead: Session[] = [];
+	let lead: Session[] = [];
 	for (const thread of reported) {
 		if (linked.has(thread.id)) continue;
 		const named = texts.find((block) => linkTitle(edited.get(block.key)!, thread) !== null);
@@ -211,12 +231,13 @@ function chipReports(blocks: Block[], reported: Session[], threads: Session[]): 
 	}
 	if (lead.length) {
 		const first = texts[0].key;
-		const text = edited.get(first)!.replace(/^\s+/, '');
-		const chips = lead.map((thread) => chipLink(thread)).join(' ');
-		// A list, heading, quote, table or code fence keeps its own line.
-		edited.set(first, /^([#>|*+-]|\d+[.)]|```)/.test(text) ? `${chips}\n\n${text}` : `${chips} ${text}`);
+		const led = leadWith(edited.get(first)!, lead.map((thread) => chipLink(thread)).join(' '));
+		if (led !== null) {
+			edited.set(first, led);
+			lead = [];
+		}
 	}
-	return blocks.map((block) => (block.kind === 'text' ? { ...block, text: edited.get(block.key)! } : block));
+	return { blocks: blocks.map((block) => (block.kind === 'text' ? { ...block, text: edited.get(block.key)! } : block)), lead };
 }
 
 /** Threads you or a routine started: a line saying who, over the same live card the coordinator's threads get. A deleted thread leaves the card. */
@@ -474,7 +495,8 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	// A drawing on one of them goes to the coordinator, which passes it on.
 	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
 	const reported = useMemo(() => [...new Set(reports.flatMap((report) => byPrefix(threads, report.id) ?? []))], [reports, threads]);
-	const shown = useMemo(() => chipReports(blocks(message.parts.filter(shownPart)), reported, threads), [message.parts, reported, threads]);
+	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart)), reported, threads), [message.parts, reported, threads]);
+	const firstText = shown.find((block) => block.kind === 'text')?.key;
 	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
@@ -483,6 +505,11 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 			{shown.map((block) =>
 				block.kind === 'text' ? (
 					<div key={block.key} className="text-body-lg leading-[21px]">
+						{block.key === firstText && lead.length ? (
+							<p className="mt-0 mb-1.5 flex flex-wrap gap-1">
+								{lead.map((thread) => <ThreadChip key={thread.id} thread={thread} />)}
+							</p>
+						) : null}
 						<InlineLinks.Provider value={chips}>
 							<Markdown text={block.text} streaming={live && Boolean(block.streaming)} />
 						</InlineLinks.Provider>
