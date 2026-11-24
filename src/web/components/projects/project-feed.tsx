@@ -19,7 +19,6 @@ import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/kit/signal';
 import { ProjectRoute } from '@/components/projects/project-viz';
 import { THREAD_CARD, ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/projects/thread-card';
-import { Glyph, ThreadGlyph } from '@/components/marks/thread-glyph';
 import { field } from '@/components/thread/tool-describe';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { ModelChoice } from '@/lib/api/plans';
@@ -94,69 +93,93 @@ const REPORTED: Record<Report['state'], string> = {
 
 const said = (report: Report) => REPORTED[report.state];
 
-function ReportRow({ reports: all, threads }: { reports: Report[]; threads: Session[] }) {
-	const [open, setOpen] = useState(false);
-	const openThread = useOpenThread();
-	// A deleted thread's reports leave the feed with it.
+/** Reports no reply carries: a line each, the thread as the same chip a reply names it by. A deleted thread's reports leave the feed with it. */
+function ReportLines({ reports: all, threads }: { reports: Report[]; threads: Session[] }) {
 	const reports = threadsLoaded(threads) ? all.filter((report) => byPrefix(threads, report.id)) : all;
 	if (!reports.length) return null;
-	const needs = reports.filter((report) => report.state === 'waiting').length;
 	return (
-		<div className="flex flex-col gap-1">
-			<button
-				type="button"
-				aria-expanded={open}
-				onClick={() => setOpen((current) => !current)}
-				className="group/report flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-control bg-(--bg-raised) pr-2.5 pl-1.5 shadow-[inset_0_0_0_1px_var(--line)] text-left text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text-2) focus-visible:shadow-(--focus)"
-			>
-				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform duration-(--t-fast)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
-				<span className="flex shrink-0 items-center -space-x-1">
-					{reports.slice(0, 5).map((report, index) => {
-						const thread = byPrefix(threads, report.id);
-						return (
-							<span key={index} className="inline-flex rounded-full bg-(--bg-panel) p-px">
-								{thread ? <ThreadGlyph thread={thread} size={12} /> : <Glyph kind={report.state} size={12} />}
-							</span>
-						);
-					})}
-				</span>
-				{reports.length === 1 ? (
-					// A long title gives way, never what happened to it.
-					<span className="flex min-w-0 gap-1">
-						<span className="min-w-0 truncate">{reports[0].title}</span>
-						<span className="shrink-0">{said(reports[0])}</span>
-					</span>
-				) : (
-					<span className="min-w-0 truncate">
-						{reports.length} threads reported
-						{needs ? <span className="text-(--warn)"> · {needs} need you</span> : null}
-					</span>
-				)}
-			</button>
-			{open ? (
-				<div className="ml-3 flex flex-col gap-1 border-l border-(--line) py-1 pl-3">
-					{reports.map((report, index) => {
-						const thread = byPrefix(threads, report.id);
-						return (
-							<button
-								key={index}
-								type="button"
-								disabled={!thread}
-								onClick={() => thread && openThread(thread)}
-								className="flex min-w-0 items-start gap-2 rounded-control px-1.5 py-1 text-left outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
-							>
-								<span className="mt-[3px] inline-flex">{thread ? <ThreadGlyph thread={thread} size={12} /> : <Glyph kind={report.state} size={12} />}</span>
-								<span className="flex min-w-0 flex-col">
-									<span className="truncate text-body text-(--text)">{report.title}</span>
-									{report.text ? <span className="line-clamp-2 text-small leading-[17px] text-(--text-3)">{report.text}</span> : null}
-								</span>
-							</button>
-						);
-					})}
-				</div>
-			) : null}
+		<div className="flex flex-col gap-1 text-body-lg leading-[21px] text-(--text-2)">
+			{reports.map((report, index) => {
+				const thread = byPrefix(threads, report.id);
+				return (
+					<p key={index} className="m-0 break-words">
+						{thread ? <ThreadChip thread={thread}>{report.title}</ThreadChip> : report.title} {said(report)}
+						{report.state === 'waiting' && report.text ? `: ${report.text}` : null}
+					</p>
+				);
+			})}
 		</div>
 	);
+}
+
+const reportCache = new WeakMap<FlueConversationPart[], Report[] | null>();
+
+/** A report message's lines about threads whose state changed; a thread just started keeps its own row. Cached by parts, which stay the same object for a sent message. */
+function changedReports(message: FlueConversationMessage): Report[] | null {
+	if (message.role !== 'user') return null;
+	let reports = reportCache.get(message.parts);
+	if (reports === undefined) {
+		reports = parseReports(textOf(message))?.filter((report) => !report.started) ?? null;
+		reportCache.set(message.parts, reports);
+	}
+	return reports;
+}
+
+/** Which reports each reply answers, and the report messages a reply carries so they draw no line of their own. */
+function answeredReports(messages: FlueConversationMessage[]) {
+	const carried = new Map<string, Report[]>();
+	const folded = new Set<string>();
+	let held: FlueConversationMessage[] = [];
+	for (const message of messages) {
+		if (message.settlement) continue;
+		if (message.role === 'user') {
+			if (changedReports(message)?.length) held.push(message);
+			continue;
+		}
+		if (!held.length || !message.parts.some(shownPart)) continue;
+		carried.set(message.id, held.length === 1 ? changedReports(held[0])! : held.flatMap((entry) => changedReports(entry)!));
+		for (const entry of held) folded.add(entry.id);
+		held = [];
+	}
+	return { carried, folded };
+}
+
+const labelOf = (text: string) => text.replace(/[[\]\\]/g, '\\$&');
+const chipLink = (thread: Session, label = thread.title) => `[${labelOf(label)}](#thread-${thread.id})`;
+
+/** The text with the thread's title, where it first appears outside a link or code, linked so it draws as the thread's chip. */
+function linkTitle(text: string, thread: Session): string | null {
+	const title = thread.title.trim();
+	if (!title) return null;
+	const at = text.toLowerCase().indexOf(title.toLowerCase());
+	if (at < 0) return null;
+	const end = at + title.length;
+	const before = text.slice(0, at);
+	if (text[at - 1] === '[' || text.startsWith('](', end) || (before.match(/`/g)?.length ?? 0) % 2) return null;
+	return `${before}${chipLink(thread, text.slice(at, end))}${text.slice(end)}`;
+}
+
+/** A reply's text blocks with every thread a report it answers covers drawn as a chip in its words: where the words already link or name it, else leading the first block. */
+function chipReports(blocks: Block[], reported: Session[], threads: Session[]): Block[] {
+	const texts = blocks.filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text');
+	if (!texts.length) return blocks;
+	const linked = new Set(texts.flatMap((block) => [...block.text.matchAll(/\]\(#thread-([\w-]+)\)/g)].map((match) => byPrefix(threads, match[1])?.id)));
+	const edited = new Map(texts.map((block) => [block.key, block.text]));
+	const lead: Session[] = [];
+	for (const thread of reported) {
+		if (linked.has(thread.id)) continue;
+		const named = texts.find((block) => linkTitle(edited.get(block.key)!, thread) !== null);
+		if (named) edited.set(named.key, linkTitle(edited.get(named.key)!, thread)!);
+		else lead.push(thread);
+	}
+	if (lead.length) {
+		const first = texts[0].key;
+		const text = edited.get(first)!.replace(/^\s+/, '');
+		const chips = lead.map((thread) => chipLink(thread)).join(' ');
+		// A list, heading, quote, table or code fence keeps its own line.
+		edited.set(first, /^([#>|*+-]|\d+[.)]|```)/.test(text) ? `${chips}\n\n${text}` : `${chips} ${text}`);
+	}
+	return blocks.map((block) => (block.kind === 'text' ? { ...block, text: edited.get(block.key)! } : block));
 }
 
 /** Threads you or a routine started: a line saying who, over the same live card the coordinator's threads get. A deleted thread leaves the card. */
@@ -398,23 +421,29 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	space,
 	threads,
 	resolveFile,
+	reports = NO_REPORTS,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
 	space: Space;
 	threads: Session[];
 	resolveFile: (href: string) => ViewerItem | null;
+	/** The thread reports this reply answers: they show as chips in its words. */
+	reports?: Report[];
 }) {
 	const parts = message.parts.filter(shownPart);
 	const chips = useMemo(() => threadChips(threads), [threads]);
 	const files = useMemo(() => (live ? [] : linkedFiles(message.parts, resolveFile)), [live, message.parts, resolveFile]);
 	// A drawing on one of them goes to the coordinator, which passes it on.
 	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
-	if (parts.length === 0 && !live) return null;
+	const reported = useMemo(() => [...new Set(reports.flatMap((report) => byPrefix(threads, report.id) ?? []))], [reports, threads]);
+	const shown = chipReports(blocks(parts), reported, threads);
+	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
 		<div className="flex flex-col gap-2.5">
-			{blocks(parts).map((block) =>
+			{shown.some((block) => block.kind === 'text') ? null : <ReportLines reports={reports} threads={threads} />}
+			{shown.map((block) =>
 				block.kind === 'text' ? (
 					<div key={block.key} className="text-body-lg leading-[21px]">
 						<InlineLinks.Provider value={chips}>
@@ -431,11 +460,14 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 		</div>
 		</OutputLinks.Provider>
 	);
-});
+}, (prev, next) => prev.message === next.message && prev.live === next.live && prev.space === next.space && prev.threads === next.threads && prev.resolveFile === next.resolveFile && sameReports(prev.reports, next.reports));
+
+const NO_REPORTS: Report[] = [];
+const sameReports = (a: Report[] = NO_REPORTS, b: Report[] = NO_REPORTS) => a === b || (a.length === b.length && a.every((report, index) => report === b[index]));
 
 /** Compared by its parts, as the client gives your messages a new object each chunk. */
 const UserEntry = memo(
-	function UserEntry({ message, threads, composer }: { message: FlueConversationMessage; threads: Session[]; composer: string }) {
+	function UserEntry({ message, threads, composer, answered }: { message: FlueConversationMessage; threads: Session[]; composer: string; answered?: boolean }) {
 		const text = textOf(message);
 		const reports = useMemo(() => parseReports(text), [text]);
 		if (!reports) return <Bubble message={message} composer={composer} />;
@@ -444,11 +476,11 @@ const UserEntry = memo(
 		return (
 			<>
 				{started.length ? <StartedRows reports={started} threads={threads} /> : null}
-				{changed.length ? <ReportRow reports={changed} threads={threads} /> : null}
+				{changed.length && !answered ? <ReportLines reports={changed} threads={threads} /> : null}
 			</>
 		);
 	},
-	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads && prev.composer === next.composer,
+	(prev, next) => prev.message.parts === next.message.parts && prev.threads === next.threads && prev.composer === next.composer && prev.answered === next.answered,
 );
 
 const STARTERS = ['What is running right now?', 'Split this into threads: ', 'Which pull requests are ready for review?'];
@@ -756,6 +788,7 @@ export function ProjectFeed({
 		|| (lastAssistant.metadata?.startedAt !== undefined && lastAssistant.metadata.completedAt === undefined && !lastAssistant.metadata.usage)
 		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
+	const answered = useMemo(() => answeredReports(messages), [messages]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
@@ -802,12 +835,12 @@ export function ProjectFeed({
 						if (message.role === 'user')
 							return rises(message.id, false) ? (
 								<div key={message.id} className="in-sent flex flex-col gap-5">
-									<UserEntry message={message} threads={threads} composer={space.id} />
+									<UserEntry message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />
 								</div>
 							) : (
-								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} />
+								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />
 							);
-						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
+						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} reports={answered.carried.get(message.id)} />;
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
 					<div role="status" className={status || waiting.length ? 'flex flex-col gap-2' : 'sr-only'}>

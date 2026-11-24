@@ -349,6 +349,32 @@ describe('threads', () => {
 		expect(await screen.findByRole('complementary', { name: 'Viewing diagram.png' })).toBeTruthy();
 	});
 
+	it('shows thread reports as chips in the reply that answers them, and a line only for one no reply answers yet', async () => {
+		const report = (id: string, title: string, state: string) => ({ id: `r-${id}`, role: 'user', display: 'visible', parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${id}" title="${title}" state="${state}"/>\n</thread-reports>` }] });
+		const reply = (id: string, text: string) => ({ id, role: 'assistant', display: 'visible', parts: [{ type: 'text', text }] });
+		const messages = [
+			report('pr', 'Add the endpoint', 'review'),
+			reply('m1', 'The endpoint now returns invoices.'),
+			report('runs', 'Add the table', 'working'),
+			reply('m2', 'Work on add the table resumed after the fix.'),
+			report('done', 'Old cleanup', 'resolved'),
+			reply('m3', '[Old cleanup](#thread-done) is merged.'),
+			report('asks', 'Pick a name', 'waiting'),
+		];
+		const agent = { messages, status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const lead = (await screen.findByText(/now returns invoices/)).closest('p') as HTMLElement;
+		expect(within(lead).getByRole('button', { name: 'Add the endpoint' })).toBeTruthy();
+		expect(screen.queryByText(/is ready for review/)).toBeNull();
+		const named = screen.getByText(/resumed after the fix/).closest('p') as HTMLElement;
+		expect(within(named).getByRole('button', { name: 'add the table' })).toBeTruthy();
+		expect(screen.getAllByRole('button', { name: 'Old cleanup' })).toHaveLength(1);
+		expect(screen.queryByText(/threads reported/)).toBeNull();
+		const waiting = screen.getByText(/is waiting on you/).closest('p') as HTMLElement;
+		expect(waiting.textContent).toBe('Pick a name is waiting on you');
+		expect(within(waiting).getByRole('button', { name: 'Pick a name' })).toBeTruthy();
+	});
+
 	it('opens a new thread’s form inside the coordinator’s conversation, which stays in view', async () => {
 		const agent = { messages: [{ id: 'm1', role: 'assistant', display: 'visible', parts: [{ type: 'text', text: 'The billing table is in.' }] }], status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
 		const onStartingChange = vi.fn();

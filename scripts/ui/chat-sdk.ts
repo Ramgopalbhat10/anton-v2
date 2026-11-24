@@ -67,6 +67,21 @@ function coordinatorTurn(): Message[] {
 	];
 }
 
+/** With `?reports`, thread reports the coordinator answers (each thread then a chip in its words) and one it has not answered yet (a line of its own). */
+function reportTurns(): Message[] {
+	const report = (id: string, thread: string, title: string, state: string): Message => ({ id, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(`<thread-reports>\n<thread id="${thread}" title="${title}" state="${state}"/>\n</thread-reports>`)] });
+	const reply = (id: string, body: string): Message => ({ id: `${id}-a`, role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: id, parts: [text(body)] });
+	return [
+		report('r1', 'th-api', 'Expose invoices over the API', 'review'),
+		reply('r1', 'Pull request #12 now serves invoices over the API, with green checks.'),
+		report('r2', 'th-schema', 'Migrate the ledger schema', 'working'),
+		reply('r2', 'Work to migrate the ledger schema resumed after the test fix.'),
+		report('r3', 'th-cleanup', 'Prune stale webhook retries', 'resolved'),
+		reply('r3', 'Retries older than 7 days are pruned in [Prune stale webhook retries](#thread-th-cleanup), now merged.'),
+		report('r4', 'th-invoices', 'Name the invoices table', 'waiting'),
+	];
+}
+
 /** With `?approvals`, a reply whose connector calls wait on Run (`tool_wait`) and ran already (`tool_ran`); the mocked API answers both. */
 function approvalTurn(): Message[] {
 	const tool = (toolCallId: string, toolName: string, output: string): Part => ({ type: 'dynamic-tool', toolName, toolCallId, state: 'output-available', input: {}, output });
@@ -99,7 +114,7 @@ export function createFlueClient({ url }: { url: string }) {
 	const turns = turnsFromUrl();
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? coordinatorTurn() : []), ...(new URLSearchParams(location.search).has('approvals') ? approvalTurn() : [])],
+		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? [...coordinatorTurn(), ...(new URLSearchParams(location.search).has('reports') ? reportTurns() : [])] : []), ...(new URLSearchParams(location.search).has('approvals') ? approvalTurn() : [])],
 		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }],
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };
