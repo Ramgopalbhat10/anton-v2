@@ -3,10 +3,15 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, test } from 'node:test';
+import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { init } from '@flue/runtime';
+import { start } from '@flue/runtime/node';
 import { createClient } from '@libsql/client';
+import * as v from 'valibot';
 import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
-import { todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
+import { todoHandoffId, todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
+import { CREATE_TODO, EDIT_TODO } from '../src/routes/space-todo-input.ts';
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-space-todos-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -57,7 +62,7 @@ const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts
 const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 const spaces = await import('../src/services/projects/spaces.ts');
 const todos = await import('../src/services/projects/todos.ts');
-const { coordinatorBrief, stateBlock } = await import('../src/services/projects/coordinator.ts');
+const { coordinatorBrief, primeCoordinator, stateBlock } = await import('../src/services/projects/coordinator.ts');
 const { generalSettings } = await import('../src/services/models/general.ts');
 const { migrate } = await import('../src/db/migrations.ts');
 const sessions = await import('../src/services/tasks/sessions.ts');
@@ -198,6 +203,22 @@ test('the model migration leaves pre-existing to-dos on the project default', as
 	}
 });
 
+test('the to-do write schemas copy only supported fields at every level', () => {
+	const extra = { nested: [{ unknown: { data: true } }] };
+	const attachment = { name: 'details.txt', path: 'details.txt', kind: 'Text', size: 12 };
+	const threadModel = { model: 'openrouter/test/cheap#sort=latency', reasoning: 'low' };
+	const values = { title: 'Write the docs', description: 'One section', attachments: [{ ...attachment, extra }], threadModel: { ...threadModel, extra }, id: extra, extra };
+	const safe = { title: values.title, description: values.description, attachments: [attachment], threadModel };
+	assert.deepEqual(v.parse(CREATE_TODO, { ...values, status: 'done' }), safe);
+	assert.deepEqual(v.parse(EDIT_TODO, { ...values, status: 'done' }), { ...safe, status: 'done' });
+	assert.deepEqual(v.parse(EDIT_TODO, { threadModel: null }), { threadModel: null });
+	for (const schema of [CREATE_TODO, EDIT_TODO]) {
+		for (const wrongType of [{ title: extra }, { description: extra }, { attachments: [{ ...attachment, size: extra }] }, { threadModel: { ...threadModel, model: extra } }]) {
+			assert.equal(v.safeParse(schema, { title: values.title, ...wrongType }).success, false);
+		}
+	}
+});
+
 test('a to-do model is round-tripped on create and edit, kept on unrelated edits, and cleared with null', async () => {
 	const space = await spaces.createSpace({ name: 'Todo API models' });
 	const url = `/api/spaces/${space.id}/todos`;
@@ -251,13 +272,13 @@ test('direct and coordinator to-dos keep distinct models, even in the queue, wit
 	const inherited = await todos.createTodo(space.id, { title: 'Use defaults' });
 	const [directResult] = await Promise.all([todos.startTodo(space.id, direct.id, 'thread'), todos.startTodo(space.id, handed.id, 'coordinator')]);
 	assert.deepEqual([coordinatorBrief(space.id).model, coordinatorBrief(space.id).reasoning], [defaults.coordinatorModel, defaults.coordinatorReasoning]);
-	const delivery = toCoordinator[0].text;
+	const handoff = todoHandoffId(toCoordinator[0].text);
 	assert.match(await stateBlock(space.id), /"Large split task" · started, no thread yet · main thread model: openrouter\/test\/strong/);
-	const taken = await todos.coordinatorTodo(space.id, delivery);
+	const taken = await todos.coordinatorTodo(space.id, handoff);
 	assert.equal(taken?.id, handed.id, 'the saved handoff identifies the to-do without a tool argument');
-	assert.equal((await todos.coordinatorTodo(space.id, delivery, direct.id))?.id, handed.id, 'a wrong tool argument cannot pick another model');
-	assert.equal(await todos.coordinatorTodo(space.id, 'A regular project message'), null);
-	assert.equal((await todos.coordinatorTodo(space.id, 'A regular project message', handed.id))?.id, handed.id);
+	assert.equal((await todos.coordinatorTodo(space.id, handoff, direct.id))?.id, handed.id, 'a wrong tool argument cannot pick another model');
+	assert.equal(await todos.coordinatorTodo(space.id, todoHandoffId('A regular project message')), null);
+	assert.equal((await todos.coordinatorTodo(space.id, null, handed.id))?.id, handed.id);
 	await assert.rejects(() => todos.messageTodoThread(taken!, existing.id, 'Wrong thread'), /Use start_thread/);
 	assert.equal(toThreads.some((entry) => entry.text === 'Wrong thread'), false);
 	const first = await todos.startTodoThread(taken!, { title: 'Part one', brief: 'Start the first part' });
@@ -275,6 +296,70 @@ test('direct and coordinator to-dos keep distinct models, even in the queue, wit
 	assert.deepEqual(sessions.agentModelFor(existing.id), { model: defaults.threadModel, reasoning: defaults.threadReasoning });
 	for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) assert.equal(resumed[key], defaults[key]);
 	assert.deepEqual(await generalSettings(), general);
+});
+
+test('the real coordinator tools keep a board handoff after the project-state signal', async () => {
+	const { Coordinator } = await import('../src/agents/coordinator.ts');
+	const faux = fauxProvider({ provider: 'coordinator-fixture' });
+	const coordinatorModel = `${faux.provider.id}/${faux.getModel().id}`;
+	catalog = Promise.resolve([...allModels, model(coordinatorModel)]);
+	const space = await spaces.createSpace({ name: 'Tool delivery' });
+	await spaces.editSpace(space.id, { coordinatorModel, threadModel: 'openrouter/test/default', threadReasoning: 'low', state: 'paused' });
+	const existing = await spaces.startThread(space.id, { title: 'Existing thread', brief: 'Original work' });
+	const boardTodo = await todos.createTodo(space.id, { title: 'Ship billing v2', threadModel: { model: 'openrouter/test/strong#sort=latency', reasoning: 'high' } });
+	const unrelated = await todos.createTodo(space.id, { title: 'Not this to-do' });
+	await todos.startTodo(space.id, boardTodo.id, 'coordinator');
+
+	const runtime = await start({ agents: [Coordinator], providers: [faux.provider] });
+	try {
+		const agent = init(Coordinator, { id: space.id });
+		let sawStateSignal = false;
+		faux.setResponses([
+			({ messages }) => {
+				sawStateSignal = messages.some((message) => message.role === 'user' && (
+					typeof message.content === 'string' ? message.content : message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
+				).startsWith('<signal type="project-state">'));
+				return fauxAssistantMessage([
+					fauxToolCall('message_thread', { thread: existing.id, message: 'Do not reroute' }, { id: 'message-omitted' }),
+					fauxToolCall('message_thread', { thread: existing.id, message: 'Do not reroute', todo_id: unrelated.id }, { id: 'message-wrong' }),
+					fauxToolCall('start_thread', { title: 'Part one', request: boardTodo.title }, { id: 'start-omitted' }),
+					fauxToolCall('start_thread', { title: 'Part two', request: boardTodo.title, todo_id: unrelated.id }, { id: 'start-wrong' }),
+				], { stopReason: 'toolUse' });
+			},
+			fauxAssistantMessage([fauxText('Started both parts.')]),
+		]);
+		const rejectedNudges: string[] = [];
+		const receipt = await agent.dispatch(toCoordinator[0].text);
+		await agent.read(receipt, {
+			signal: AbortSignal.timeout(5000),
+			onEvent(event) {
+				if (event.type === 'tool-output-error' && event.errorText.includes('Use start_thread')) rejectedNudges.push(event.toolCallId);
+			},
+		});
+		assert.equal(sawStateSignal, true, 'the model received the project-state signal before making those calls');
+		assert.deepEqual(rejectedNudges.sort(), ['message-omitted', 'message-wrong']);
+		const threads = await sessions.listThreads(space.id);
+		for (const title of ['Part one', 'Part two']) {
+			const thread = threads.find((item) => item.title === title);
+			assert.deepEqual([thread?.model, thread?.reasoning, thread?.route, thread?.threadState], ['openrouter/test/strong', 'high', { sort: 'latency' }, 'queued']);
+		}
+		assert.equal(threads.find((thread) => thread.id === existing.id)?.brief, 'Original work');
+		const listed = await todos.listTodos(space.id);
+		assert.equal(listed.find((item) => item.id === boardTodo.id)?.threads, 2);
+		assert.equal(listed.find((item) => item.id === unrelated.id)?.threads, 0);
+
+		await primeCoordinator(space.id);
+		faux.setResponses([
+			fauxAssistantMessage([fauxToolCall('start_thread', { title: 'Unrelated work', request: 'Check the dashboard' })], { stopReason: 'toolUse' }),
+			fauxAssistantMessage([fauxText('Started a thread.')]),
+		]);
+		const followUp = await agent.dispatch('Check the dashboard');
+		await agent.read(followUp, { signal: AbortSignal.timeout(5000) });
+		assert.equal((await sessions.listThreads(space.id)).find((thread) => thread.title === 'Unrelated work')?.model, 'openrouter/test/default');
+		assert.equal((await todos.listTodos(space.id)).find((item) => item.id === boardTodo.id)?.threads, 2);
+	} finally {
+		await runtime.stop();
+	}
 });
 
 test("a to-do's screenshots and files are kept in the project's Library and go with the brief it starts, images as pictures", async () => {

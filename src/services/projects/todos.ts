@@ -1,7 +1,7 @@
 import type { Session } from '../../core/types.ts';
 import { type AttachedFile, withAttachments } from '../../core/attachments.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
-import { MAX_TODO_ATTACHMENTS, shortTodoId, todoBrief, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
+import { MAX_TODO_ATTACHMENTS, MAX_TODO_DESCRIPTION, MAX_TODO_TITLE, shortTodoId, todoBrief, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
 import { getSpace, touchSpace } from '../../db/spaces.ts';
 import { deleteSpaceTodoRecord, getSpaceTodo, insertSpaceTodo, linkTodoThreadRecord, listSpaceTodos, updateSpaceTodo } from '../../db/space-todos.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
@@ -11,9 +11,6 @@ import { coordinatorModel } from './coordinator.ts';
 import { listSpaceFiles } from './space-files.ts';
 import { nudgeThread, startThread, type ThreadInput } from './spaces.ts';
 import { threadStarted } from './thread-reports.ts';
-
-export const MAX_TODO_TITLE = 200;
-export const MAX_TODO_DESCRIPTION = 20_000;
 
 async function existingSpace(spaceId: string) {
 	const space = await getSpace(spaceId);
@@ -116,8 +113,8 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 }
 
 /** A handoff identifies the to-do even when the coordinator omits or miscopies the tool's todo_id. */
-export async function coordinatorTodo(spaceId: string, delivery: string, ref?: string): Promise<SpaceTodo | null> {
-	const todoId = /^Start the project to-do \[todo:([a-f0-9]{8})\]: /.exec(delivery)?.[1] ?? ref;
+export async function coordinatorTodo(spaceId: string, handoffId: string | null, ref?: string): Promise<SpaceTodo | null> {
+	const todoId = handoffId ?? ref;
 	return todoId ? findTodo(spaceId, todoId) : null;
 }
 

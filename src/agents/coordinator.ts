@@ -14,7 +14,7 @@ import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
 import { splitAttachments, withAttachments } from '../core/attachments.ts';
 import { quotedFrom, threadBrief } from '../core/briefs.ts';
-import { todoThreadFiles } from '../core/space-todos.ts';
+import { todoHandoffId, todoThreadFiles } from '../core/space-todos.ts';
 import { onPlan } from '../services/models/subscriptions.ts';
 import { toUsage } from '../services/models/usage.ts';
 import { listProjects } from '../db/projects.ts';
@@ -62,9 +62,7 @@ async function withFiles(spaceId: string, message: string, listed: string[] = []
 }
 
 
-function useCoordinatorTools(spaceId: string) {
-	const delivery = useDelivery();
-	const answering = delivery.kind === 'user' ? delivery.body : '';
+function useCoordinatorTools(spaceId: string, answering: string, handoffId: string | null) {
 	useTool(
 		defineTool({
 			name: 'start_thread',
@@ -90,7 +88,7 @@ function useCoordinatorTools(spaceId: string) {
 					);
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
-				const todo = await coordinatorTodo(spaceId, answering, data.todo_id);
+				const todo = await coordinatorTodo(spaceId, handoffId, data.todo_id);
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), answering), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
@@ -125,7 +123,7 @@ function useCoordinatorTools(spaceId: string) {
 			input: v.object({ thread, message: v.pipe(v.string(), v.minLength(1)), todo_id: todoId, files }),
 			async run({ data }) {
 				const target = await findThread(spaceId, data.thread);
-				const todo = await coordinatorTodo(spaceId, answering, data.todo_id);
+				const todo = await coordinatorTodo(spaceId, handoffId, data.todo_id);
 				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), answering);
 				if (todo) await messageTodoThread(todo, target.id, message);
 				else await nudgeThread(spaceId, target.id, message);
@@ -221,8 +219,11 @@ function useCoordinatorTools(spaceId: string) {
 /** One conversation per project (the instance id is the project's id). Its picture of the project is the latest state block, not its history. */
 export function Coordinator({ id }: AgentProps) {
 	const brief = coordinatorBrief(id);
+	const delivery = useDelivery();
+	const answering = delivery.kind === 'user' ? delivery.body : '';
+	const handoffId = useProjectState(id, delivery);
 	useModel(brief.model, { thinkingLevel: brief.reasoning, compaction: agentCompaction(brief.model) });
-	useCoordinatorTools(id);
+	useCoordinatorTools(id, answering, handoffId);
 	useTool(fullResultTool(id));
 	useResponseStart(() => ({ startedAt: Date.now() }));
 	useResponseFinish(({ response, metadata }) => {
@@ -234,7 +235,6 @@ export function Coordinator({ id }: AgentProps) {
 			...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt <= completedAt ? { completedAt, durationMs: completedAt - startedAt } : {}),
 		};
 	});
-	useProjectState(id);
 	return `${PROMPT}${brief.propose ? ` ${PROPOSE}` : ''} ${STATE_NOTE}`;
 }
 
@@ -244,9 +244,13 @@ const STATE_NOTE =
 const STATE_EVERY = 10;
 
 /** In the conversation, not the instructions: instructions that changed with every thread's state missed the prompt cache. */
-function useProjectState(id: string) {
+function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): string | null {
 	const [, setShown] = usePersistentState<{ body: string; since: number } | null>('project-state', null);
+	const [savedHandoffId, setSavedHandoffId] = usePersistentState<string | null>('todo-handoff', null);
+	const handoffId = delivery.kind === 'user' ? todoHandoffId(delivery.body) : null;
 	useAgentStart(({ append }) => {
+		// The appended state signal takes over useDelivery() for the next render, but does not run this hook itself.
+		if (savedHandoffId !== handoffId) setSavedHandoffId(handoffId);
 		const brief = coordinatorBrief(id);
 		const body = `The project now (${new Date().toISOString().slice(0, 10)}):\n${brief.state || `Project: ${brief.name}`}`;
 		setShown((shown) => {
@@ -255,4 +259,5 @@ function useProjectState(id: string) {
 			return { body, since: 1 };
 		});
 	});
+	return delivery.kind === 'signal' && delivery.type === STATE_SIGNAL ? savedHandoffId : handoffId;
 }

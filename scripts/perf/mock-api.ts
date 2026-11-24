@@ -11,7 +11,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
+import * as v from 'valibot';
 import type { SpaceTodo } from '../../src/core/space-todos.ts';
+import { CREATE_TODO, EDIT_TODO } from '../../src/routes/space-todo-input.ts';
 import { PHASES, runsAt, SESSION_ID } from './scenario.ts';
 import { mockSetup } from './mock-setup.ts';
 import { viewerArtifacts, viewerPdfPath } from '../ui/artifact-fixture.ts';
@@ -415,22 +417,23 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 				});
 				req.on('end', () => {
 					if (res.writableEnded) return;
-					let change: unknown;
+					let input: unknown;
 					try {
-						change = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
+						input = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
 					} catch {
-						change = null;
+						input = null;
 					}
-					if (!change || typeof change !== 'object' || Array.isArray(change)) {
+					const change = input && typeof input === 'object' && !Array.isArray(input) ? v.safeParse(todoId ? EDIT_TODO : CREATE_TODO, input, { abortEarly: true }) : null;
+					if (!change?.success) {
 						res.statusCode = 400;
-						return json(res, { error: 'Expected a JSON object for a to-do' });
+						return json(res, { error: 'Expected a JSON object with valid to-do fields' });
 					}
 					const updatedAt = new Date().toISOString();
 					const todos = spaceTodos.get(spaceId) ?? [];
 					const index = todoId ? todos.findIndex((item) => item.id === todoId) : todos.length;
 					if (index < 0) return void res.writeHead(404).end();
 					const item = todos[index] ?? todo(`todo_${randomUUID()}`, '', '', { spaceId, createdAt: updatedAt });
-					const saved = { ...item, ...change, updatedAt };
+					const saved = { ...item, ...change.output, updatedAt };
 					todos[index] = saved;
 					spaceTodos.set(spaceId, todos);
 					json(res, saved);
