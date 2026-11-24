@@ -53,6 +53,21 @@ describe('joined to-do handoffs', () => {
 		expect(moved).toEqual(new Set([b.id]));
 	});
 
+	it('prefers a confirmed action to an earlier nonfailed raw ID match', () => {
+		const board = handoff('board', 'bbbbbbbb');
+		const host = reply('chat', tool('legacy', 'bbbbbbbb'), { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'confirmed', state: 'output-available', input: {}, output: { todoId: 'todo_bbbbbbbb' } });
+		const settled: FlueConversationSettlement[] = [{ submissionId: 'board', outcome: 'completed', answeredBySubmissionId: 'chat' }];
+		const { byReply } = joinedTodoHandoffs([host, board], settled);
+		expect([...byReply.get(host.id)!]).toEqual([['confirmed', [board]]]);
+	});
+
+	it('never anchors to failed calls, even for an explicitly linked handoff', () => {
+		const board = handoff('board', 'bbbbbbbb');
+		const host = reply('chat', { type: 'dynamic-tool', toolName: 'message_thread', toolCallId: 'failed', state: 'output-error', input: { todo_id: 'bbbbbbbb' }, errorText: 'Message not sent' });
+		expect(joinedTodoHandoffs([host, board], [], host).moved.size).toBe(0);
+		expect(joinedTodoHandoffs([host, board], [{ submissionId: 'board', outcome: 'completed', answeredBySubmissionId: 'chat' }]).moved.size).toBe(0);
+	});
+
 	it('keeps a new handoff after a finished ordinary reply that failed to start the same to-do', () => {
 		const board = handoff('board', 'bbbbbbbb');
 		const host = reply('chat', { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'old-start', state: 'output-error', input: { todo_id: 'bbbbbbbb' }, errorText: 'Request is not the user’s words' });
@@ -68,5 +83,20 @@ describe('joined to-do handoffs', () => {
 		const board = handoff('board', 'bbbbbbbb');
 		const host = reply('chat', tool('old-start', 'bbbbbbbb'));
 		expect(joinedTodoHandoffs([host, board], [{ submissionId: 'board', outcome: 'failed' }], host).moved.size).toBe(0);
+	});
+
+	it('keeps only previously placed handoffs after the host finishes, until their own settlement or reply', () => {
+		const board = handoff('board', 'bbbbbbbb');
+		const fresh = handoff('fresh', 'cccccccc');
+		const host = reply('chat', tool('start-board', 'bbbbbbbb'), tool('start-other', 'cccccccc'));
+		const { pending } = joinedTodoHandoffs([host, board], [], host);
+		const finished = { ...host, metadata: { completedAt: 42 } };
+		const settlements: FlueConversationSettlement[] = [{ submissionId: 'chat', outcome: 'completed' }];
+		expect(joinedTodoHandoffs([finished, board, fresh], [], finished, pending).moved).toEqual(new Set([board.id]));
+		expect(joinedTodoHandoffs([finished, board, fresh], settlements, undefined, pending).moved).toEqual(new Set([board.id]));
+		expect(joinedTodoHandoffs([finished, board, reply('board')], settlements, undefined, pending).moved.size).toBe(0);
+		const failed = joinedTodoHandoffs([finished, board], [...settlements, { submissionId: 'board', outcome: 'failed' }], undefined, pending);
+		expect(failed.moved.size).toBe(0);
+		expect(failed.pending.size).toBe(0);
 	});
 });

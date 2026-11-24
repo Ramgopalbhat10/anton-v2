@@ -1,4 +1,4 @@
-import { createFlueClient, type FlueConversationMessage, type FlueConversationSettlement } from '@flue/sdk';
+import { createFlueClient, type FlueConversationMessage, type FlueConversationPart, type FlueConversationSettlement } from '@flue/sdk';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
@@ -224,7 +224,7 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
 });
 
-it.each(['explicit', 'inferred'] as const)('places a joined to-do and its attachment before its thread action with an %s ID, live and settled', async (mode) => {
+it.each(['explicit', 'inferred'] as const)('keeps a joined to-do and attachment above the right thread action with an %s ID through finish and settlement', async (mode) => {
 	const first = makeTodo({ id: 'todo_aaaaaaaa', title: 'Add invoices to billing', description: '' });
 	const second = makeTodo({ id: 'todo_bbbbbbbb', title: 'Make the invoice preview taller', description: '' });
 	const nextThread = session({ ...threads[0], id: 'thread_2', title: 'Fill the invoice preview' });
@@ -256,9 +256,14 @@ it.each(['explicit', 'inferred'] as const)('places a joined to-do and its attach
 	if (mode === 'explicit') await handOff(first);
 	await publish([u1, reply]);
 	await handOff(second);
+	const rejected: FlueConversationPart = {
+		type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'wrong-brief', state: 'output-error',
+		input: { todo_id: second.id, title: 'Start the billing work again', request: first.title }, errorText: 'Request is not the user’s words for this to-do',
+	};
+	const earlierCalls = mode === 'explicit' ? [...reply.parts, rejected] : reply.parts;
 	const tool = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c2', state: 'input-available', input: { ...(mode === 'explicit' ? { todo_id: second.id } : {}), title: nextThread.title } } as const;
 	const resolved = { ...tool, state: 'output-available', output: { output: 'Started [id:thread_2]', todoId: second.id } } as const;
-	await publish([u1, { ...reply, parts: [...reply.parts, mode === 'explicit' ? tool : resolved] }, u2]);
+	await publish([u1, { ...reply, parts: [...earlierCalls, mode === 'explicit' ? tool : resolved] }, u2]);
 	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
 	const brief1 = dock.getByText(firstText);
 	const row1 = dock.getByRole('article', { name: threads[0].title });
@@ -269,17 +274,35 @@ it.each(['explicit', 'inferred'] as const)('places a joined to-do and its attach
 	before(row1, image);
 	before(image, brief2);
 	before(brief2, dock.getByText(nextThread.title));
-	if (mode === 'explicit') expect(dock.getByText('Starting')).toBeTruthy();
+	if (mode === 'explicit') {
+		expect(dock.getByText('Starting')).toBeTruthy();
+		before(dock.getByText('Could not start “Start the billing work again”'), image);
+	}
 
-	await publish([u1, { ...reply, parts: [...reply.parts, resolved, { type: 'text', state: 'done', text: 'Both threads are underway.' }] }, u2], [
-		{ submissionId: 'first', outcome: 'completed' },
+	const answered: FlueConversationMessage = { ...reply, parts: [...earlierCalls, resolved, { type: 'text', state: 'done', text: 'Both threads are underway.' }] };
+	const assertFinalOrder = () => {
+		const row2 = dock.getByRole('article', { name: nextThread.title });
+		expect(dock.getByText(todoStartMessage(second))).toBe(brief2);
+		before(row1, image);
+		if (mode === 'explicit') before(dock.getByText('Could not start “Start the billing work again”'), image);
+		before(image, brief2);
+		before(brief2, row2);
+		before(row2, dock.getByText('Both threads are underway.'));
+		expect(dock.queryByText('Starting')).toBeNull();
+	};
+	await publish([u1, answered, u2]);
+	assertFinalOrder();
+	const finished = { ...answered, metadata: { ...reply.metadata, completedAt: 84, usage: {} } };
+	await publish([u1, finished, u2]);
+	assertFinalOrder();
+	const hostSettled: FlueConversationSettlement = { submissionId: 'first', outcome: 'completed' };
+	await publish([u1, finished, u2], [hostSettled]);
+	assertFinalOrder();
+	await publish([u1, finished, u2], [
+		hostSettled,
 		{ submissionId: 'second', outcome: 'completed', answeredBySubmissionId: 'first' },
 	]);
-	const row2 = dock.getByRole('article', { name: nextThread.title });
-	before(row1, dock.getByText(todoStartMessage(second)));
-	before(dock.getByText(todoStartMessage(second)), row2);
-	before(row2, dock.getByText('Both threads are underway.'));
-	expect(dock.queryByText('Starting')).toBeNull();
+	assertFinalOrder();
 });
 
 it.each([

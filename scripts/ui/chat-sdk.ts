@@ -76,11 +76,13 @@ function joinedTodos(inferred: boolean): Pick<Conversation, 'messages' | 'settle
 		const output = `Started [id:${thread}]`;
 		return { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: `start-${thread}`, state: 'output-available', input: { todo_id }, output: resolved ? { output, todoId: resolved } : output };
 	};
+	const rejected: Part = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'wrong-brief', state: 'output-error',
+		input: { title: 'Start the ledger work again', request: 'Update the ledger columns', todo_id: 'aaaa0002' }, errorText: 'Request is not the user’s words for this to-do' };
 	return {
 		messages: [
 			user('todo-first', 'Update the ledger columns', inferred ? undefined : 'aaaa0001'),
 			{ id: 'a-todos', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'todo-first', parts: [
-				start('th-schema', inferred ? undefined : 'aaaa0001'), start('th-api', inferred ? undefined : 'aaaa0002', inferred ? 'todo_aaaa0002' : undefined), text('Both threads are underway.'),
+				start('th-schema', inferred ? undefined : 'aaaa0001'), ...(inferred ? [] : [rejected]), start('th-api', inferred ? undefined : 'aaaa0002', 'todo_aaaa0002'), text('Both threads are underway.'),
 			] },
 			user('todo-second', 'Return invoices from the API', 'aaaa0002'),
 		],

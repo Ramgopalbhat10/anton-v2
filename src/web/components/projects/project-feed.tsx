@@ -26,7 +26,7 @@ import type { Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { expandCommand } from '@/lib/completion';
 import type { WindowedAgent } from '@/lib/conversation-window';
-import { joinedTodoHandoffs, type HandoffsBeforeTool } from '@/lib/coordinator-handoffs';
+import { useJoinedTodoHandoffs, type HandoffsBeforeTool } from '@/lib/coordinator-handoffs';
 import { OlderTurnsRow } from '@/components/thread/older-turns';
 import { askToNotify } from '@/lib/notifications';
 import { takeFromInbox, useInbox } from '@/lib/composer-inbox';
@@ -866,7 +866,7 @@ export function ProjectFeed({
 		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
-	const joined = useMemo(() => joinedTodoHandoffs(messages, agent.settlements, liveAssistant), [messages, agent.settlements, liveAssistant]);
+	const joined = useJoinedTodoHandoffs(space.id, messages, agent.settlements, liveAssistant);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
