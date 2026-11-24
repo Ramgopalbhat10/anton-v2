@@ -2,7 +2,8 @@ const assert = require('node:assert/strict');
 const { chromium } = require('playwright-core');
 
 // Run against ui:fixture: node scripts/ui/connectors-menu-layout.cjs <url> [screenshots-dir]
-// A failed connector toggle puts a long API error in the Connectors sub-menu; the rows must stay reachable.
+// A failed connector toggle puts a long API error in the Connectors sub-menu; the rows must stay reachable,
+// the error must be visible without scrolling, and a toggle still in flight at close must not post it late.
 async function check() {
 	const url = process.argv[2];
 	assert(url, 'Pass the running UI fixture URL');
@@ -34,31 +35,58 @@ async function check() {
 		const view = { accounts: [account], mailboxes, mcpServers: [], composio: { configured: false, keyFromEnv: false, accounts: [] } };
 		const longError = `Toggle failed: ${'the connector service returned an unexpected response '.repeat(30)}`;
 
-		await page.route('**/api/connectors/mailboxes/*', (route) => {
-			if (route.request().method() === 'PUT') return route.fulfill({ status: 500, json: { error: longError } });
-			return route.continue();
+		// The first toggle stays in flight until released, so the menu can close while its request is pending.
+		let puts = 0;
+		let releaseFirst;
+		const firstGate = new Promise((resolve) => (releaseFirst = resolve));
+		await page.route('**/api/connectors/mailboxes/*', async (route) => {
+			if (route.request().method() !== 'PUT') return route.continue();
+			puts += 1;
+			if (puts === 1) await firstGate;
+			return route.fulfill({ status: 500, json: { error: longError } });
 		});
 		await page.route('**/api/connectors', (route) => {
 			if (route.request().method() === 'GET') return route.fulfill({ json: view });
 			return route.continue();
 		});
 
+		const openMenu = async () => {
+			await page.getByRole('button', { name: 'Add files and connectors' }).click();
+			await page.getByRole('menuitem', { name: /^Connectors/ }).hover();
+			const submenu = page.getByRole('menu').filter({ hasText: 'Manage connectors' });
+			await submenu.waitFor({ state: 'visible' });
+			return submenu;
+		};
+
 		await page.goto(new URL('/agents/perf-task?turns=0', url).href);
 		await page.waitForFunction(() => Boolean(window.__chat));
-		await page.getByRole('button', { name: 'Add files and connectors' }).click();
-		const trigger = page.getByRole('menuitem', { name: /^Connectors/ });
-		await trigger.hover();
-		const submenu = page.getByRole('menu').filter({ hasText: 'Manage connectors' });
-		await submenu.waitFor({ state: 'visible' });
+		let submenu = await openMenu();
+
+		// Close while the first toggle's request is still pending; its late failure must not appear on reopen.
+		const firstPut = page.waitForRequest('**/api/connectors/mailboxes/*');
+		const firstResponse = page.waitForResponse('**/api/connectors/mailboxes/*');
+		await submenu.getByRole('menuitemcheckbox', { name: /Team mailbox 00/ }).click();
+		await firstPut;
+		await page.keyboard.press('Escape');
+		releaseFirst();
+		await firstResponse;
+		await page.waitForTimeout(250);
+		submenu = await openMenu();
+		assert((await submenu.getByText(/Toggle failed/).count()) === 0, 'A toggle that fails after close cannot post its error');
 
 		const scroller = submenu.locator('div.overflow-y-auto');
 		assert(await scroller.evaluate((el) => el.scrollHeight > el.clientHeight), 'The rows overflow the capped sub-menu');
 		const menuBox = await submenu.boundingBox();
 		assert(menuBox && menuBox.height <= 421, `Sub-menu stays within its 420px cap (got ${menuBox?.height})`);
 
-		// The failing toggle lands its long error inside the scroll region, not the pinned footer.
-		await submenu.getByRole('menuitemcheckbox', { name: /Team mailbox 00/ }).click();
-		await submenu.getByText(longError.slice(0, 60)).waitFor({ state: 'visible' });
+		// A failing toggle shows its error in the pinned area, inside the visible sub-menu without scrolling.
+		await submenu.getByRole('menuitemcheckbox', { name: /Team mailbox 01/ }).click();
+		const error = submenu.getByText(/Toggle failed/);
+		await error.waitFor({ state: 'visible' });
+		const errorBox = await error.boundingBox();
+		const box = await submenu.boundingBox();
+		assert(errorBox && box && errorBox.y >= box.y - 1 && errorBox.y + errorBox.height <= box.y + box.height + 1, 'The error is inside the visible sub-menu without scrolling');
+		assert((await scroller.getByText(/Toggle failed/).count()) === 0, 'The error is not buried at the bottom of the scroll region');
 
 		await scroller.evaluate((el) => {
 			el.scrollTop = el.scrollHeight;
@@ -73,11 +101,8 @@ async function check() {
 
 		// Closing and reopening the sub-menu clears the old error.
 		await page.keyboard.press('Escape');
-		await page.getByRole('button', { name: 'Add files and connectors' }).click();
-		await page.getByRole('menuitem', { name: /^Connectors/ }).hover();
-		const reopened = page.getByRole('menu').filter({ hasText: 'Manage connectors' });
-		await reopened.waitFor({ state: 'visible' });
-		assert((await reopened.getByText(/Toggle failed/).count()) === 0, 'Reopening the sub-menu clears the old error');
+		submenu = await openMenu();
+		assert((await submenu.getByText(/Toggle failed/).count()) === 0, 'Reopening the sub-menu clears the old error');
 		assert.deepEqual(errors, []);
 	} finally {
 		await browser.close();

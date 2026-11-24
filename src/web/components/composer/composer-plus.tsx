@@ -215,13 +215,18 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 	const connectors = useQuery({ queryKey: ['connectors'], queryFn: api.connectors, staleTime: (query) => liveStaleTime(query, 30_000) });
 	const items = connectorItems(connectors.data);
 	const [problem, setProblem] = useState<string | null>(null);
+	// Bumped each time the sub-menu closes, so a toggle that fails after the close cannot post its error into the next opening.
+	const opening = useRef(0);
 	const waiting = items.filter((item) => item.state === 'needs-sign-in').length;
 	const on = items.filter((item) => item.state === 'on').length;
 	const open = (search: { c?: string }) => void navigate({ to: '/settings/connectors/view', search });
 	const pick = (item: ConnectorItem) => {
 		if (item.state === 'needs-sign-in') return open({ c: item.key });
 		setProblem(null);
-		setConnectorOn(queryClient, item, item.state !== 'on').catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)));
+		const at = opening.current;
+		setConnectorOn(queryClient, item, item.state !== 'on').catch((error: unknown) => {
+			if (opening.current === at) setProblem(error instanceof Error ? error.message : String(error));
+		});
 	};
 	return (
 		<>
@@ -247,7 +252,10 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 					{run ? <RunOnMenu run={run} /> : null}
 					<MenuSub
 						onOpenChange={(open) => {
-							if (!open) setProblem(null);
+							if (!open) {
+								opening.current += 1;
+								setProblem(null);
+							}
 						}}
 					>
 						<MenuSubTrigger
@@ -277,11 +285,11 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 								{items.map((item) => (
 									<ConnectorRow key={item.key} item={item} onPick={pick} />
 								))}
-								{problem ? (
-									<p className="m-0 px-2 py-1.5 text-micro leading-[15px] text-pretty text-(--bad)">{problem}</p>
-								) : null}
 							</div>
 							<MenuSeparator />
+							{problem ? (
+								<p className="m-0 max-h-24 overflow-y-auto px-2 py-1.5 text-micro leading-[15px] text-pretty text-(--bad)">{problem}</p>
+							) : null}
 							<p className="m-0 px-2 pt-0.5 pb-1.5 text-micro leading-[15px] text-pretty text-(--text-3)">
 								On for every task. Tools load only when a task uses them, so nothing is spent until then.
 							</p>
