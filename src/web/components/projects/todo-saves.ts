@@ -5,7 +5,7 @@ import type { SpaceTodo, TodoAttachment } from '@/lib/api/spaces';
 import { uniqueUploadNames } from '../../../core/upload-name';
 
 /** What the to-do dialog hands over: files already in the Library, and new ones still to upload. */
-export type TodoDraft = { title: string; description: string; threadModel: SpaceTodo['threadModel']; kept: TodoAttachment[]; uploads: File[] };
+export type TodoDraft = { title: string; description: string; threadModel: SpaceTodo['threadModel']; repos: string[]; kept: TodoAttachment[]; uploads: File[] };
 
 /** How a card stands against the server: still saving, or failed with a way to try again. */
 export type TodoSave = { pending: boolean; saving: boolean; error: string | null; retry?: () => void; dismiss?: () => void };
@@ -23,7 +23,7 @@ export function cacheStartedTodo(queryClient: QueryClient, spaceId: string, todo
 	});
 }
 
-type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'threadModel' | 'status' | 'assignee' | 'completedAt'>>;
+type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'threadModel' | 'repos' | 'status' | 'assignee' | 'completedAt'>>;
 type Created = { key: string; todo: SpaceTodo; draft: TodoDraft; error: string | null; saved: SpaceTodo | null };
 /** `savedAt` is the server's updatedAt once it has the change; the override gives way when the list has caught up. */
 type Edited = { seq: number; change: Change; hidden: boolean; savedAt: string | null };
@@ -75,7 +75,7 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		void (async () => {
 			try {
 				const attachments = await uploadDraft(spaceId, draft);
-				const todo = await api.createSpaceTodo(spaceId, { title: draft.title, description: draft.description, attachments, threadModel: draft.threadModel });
+				const todo = await api.createSpaceTodo(spaceId, { title: draft.title, description: draft.description, attachments, threadModel: draft.threadModel, repos: draft.repos });
 				settle((todos) => (todos.some((other) => other.id === todo.id) ? todos : [...todos, todo]));
 				setCreated((list) => list.map((item) => (item.key === key ? { ...item, saved: todo } : item)));
 			} catch (error) {
@@ -94,6 +94,7 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 			description: draft.description.trim(),
 			attachments: shownFiles(draft),
 			threadModel: draft.threadModel,
+			repos: draft.repos,
 			status: 'open',
 			assignee: null,
 			createdBy: 'user',
@@ -127,9 +128,10 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		const before = todo.threadModel;
 		const after = draft.threadModel;
 		const modelChange = before?.model === after?.model && before?.reasoning === after?.reasoning ? {} : { threadModel: after };
-		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft), ...modelChange }, async () => {
+		const repoChange = todo.repos.join() === draft.repos.join() ? {} : { repos: draft.repos };
+		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft), ...modelChange, ...repoChange }, async () => {
 			const attachments = await uploadDraft(spaceId, draft);
-			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments, ...modelChange });
+			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments, ...modelChange, ...repoChange });
 		});
 	};
 

@@ -219,6 +219,8 @@ const columns = {
 	baseSha: 'base_sha',
 	pushedSha: 'pushed_sha',
 	branch: 'branch',
+	projectId: 'project_id',
+	baseBranch: 'base_branch',
 	reviewJson: 'review_json',
 	runOn: 'run_on',
 } as const;

@@ -99,6 +99,8 @@ import { useComputerSubagent } from './tools/computer.ts';
 import { useRunScript } from './tools/run-script.ts';
 import { useRemember, useAgentRuns, useTodos } from './tools/memory.ts';
 import { useAsk, useShow, useRenderHtml, useGenerateImage } from './tools/replies.ts';
+import { useSetRepo } from './tools/repo.ts';
+import { applyRepoMove, dropRepoMove, pendingRepoMove } from '../../services/projects/thread-repos.ts';
 import { useProjectFiles, useReadAttachment, useSkills } from './tools/files.ts';
 import { useConnectorTools, useHttpRequest } from './tools/connectors.ts';
 import { useProposePlan } from './tools/plan.ts';
@@ -204,6 +206,8 @@ export function Coder({ id }: AgentProps) {
 	useTool(fullResultTool(id));
 	const visual = agentSettingsNow().visualReplies;
 	useAsk(id);
+	// A plan or review stays on the repository it reads.
+	if (project && !planning && !review && !incognito) useSetRepo(id);
 	const drawing = imagesAvailable() && !incognito;
 	if (drawing) useGenerateImage(id);
 	if (visual !== 'off' && !incognito) {
@@ -249,6 +253,12 @@ export function Coder({ id }: AgentProps) {
 			if (signal.aborted) {
 				void stopReplyJobs(id);
 				void stopRepoCheck(id);
+			}
+			// A reply that moves the thread ends there: its checks belong to the repository it leaves.
+			if (pendingRepoMove(id)) {
+				if (signal.aborted) dropRepoMove(id);
+				else whenIdle(id, () => void applyRepoMove(id));
+				return;
 			}
 			// The checks read what they know of the task from its row before any of them runs.
 			await loadGate(id);

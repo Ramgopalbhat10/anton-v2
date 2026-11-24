@@ -8,7 +8,7 @@ import { init } from '@flue/runtime';
 import { start } from '@flue/runtime/node';
 import { createClient } from '@libsql/client';
 import * as v from 'valibot';
-import type { GitHost, ModelCatalog, ModelInfo } from '../src/core/ports.ts';
+import type { DecisionModel, GitHost, ModelCatalog, ModelInfo, Question } from '../src/core/ports.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
 import { shortTodoId, todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
 import { CREATE_TODO, EDIT_TODO } from '../src/routes/space-todo-input.ts';
@@ -72,7 +72,22 @@ const { splitAttachments } = await import('../src/core/attachments.ts');
 const { removeSpaceFile } = await import('../src/services/projects/space-files.ts');
 
 useDatabase(createClient({ url: `file:${path.join(dir, 'anton.db')}` }));
-setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
+/** Answers the repository question with `pick` (the option for that repository, or 'unclear') at `p`; fails when null. */
+let repoAnswer: { pick: string; p: number } | null = null;
+const repoQuestions: Array<{ state: Record<string, unknown>; question: Question }> = [];
+const fakeDecisions: DecisionModel = {
+	name: 'fake/jev',
+	async decide(state, questions) {
+		const question = questions.repo;
+		if (!question || question.type !== 'choice' || !repoAnswer) throw new Error('no answer');
+		repoQuestions.push({ state, question });
+		const option = repoAnswer.pick === 'unclear' ? 'unclear' : Object.entries(question.options).find(([, text]) => text.includes(repoAnswer!.pick))?.[0];
+		if (!option) throw new Error(`no option for ${repoAnswer.pick}`);
+		return { answers: { repo: { choice: option, probabilities: { [option]: repoAnswer.p } } }, inputTokens: 120, cost: 0.00001 };
+	},
+};
+
+setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog, decisions: fakeDecisions });
 
 const toThreads: Array<{ id: string; text: string }> = [];
 const toCoordinator: Array<{ id: string; text: string; images?: Array<{ filename?: string; mimeType: string }> }> = [];
@@ -96,9 +111,14 @@ beforeEach(() => {
 	toCoordinator.length = 0;
 	failCoordinator = false;
 	catalog = fullCatalog;
+	repoAnswer = null;
+	repoQuestions.length = 0;
 });
 
 const apiRepo = await addProject('acme/api');
+const webRepo = await addProject('acme/web');
+const threadRepos = await import('../src/services/projects/thread-repos.ts');
+const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 
 test('to-dos are added, edited, marked done or open again, and deleted', async () => {
 	const space = await spaces.createSpace({ name: 'Todo CRUD', repoIds: [apiRepo.id] });
@@ -509,4 +529,125 @@ test("a to-do split over threads sends each only the files the coordinator names
 	assert.deepEqual(todoThreadFiles(todo, undefined), ['chips.png', 'repos.png', 'sidebar.png']);
 	assert.deepEqual(todoThreadFiles(null, ['notes.md']), ['notes.md']);
 	assert.equal(todoThreadFiles({ attachments: [] }, undefined), undefined);
+});
+
+const contextOf = (text: string) => /<project-context>([\s\S]*?)<\/project-context>/.exec(text)?.[1] ?? '';
+const briefOf = (threadId: string) => toThreads.find((sent) => sent.id === threadId)?.text ?? '';
+const settleThreads = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+test('a to-do keeps the repositories it is tagged with: once each, only the project’s, cleared with an empty list', async () => {
+	const space = await spaces.createSpace({ name: 'Todo repo tags', repoIds: [apiRepo.id, webRepo.id] });
+	const item = await todos.createTodo(space.id, { title: 'Tagged', repos: [webRepo.id, webRepo.id, apiRepo.id] });
+	assert.deepEqual(item.repos, [webRepo.id, apiRepo.id]);
+	const other = await addProject('acme/other');
+	await assert.rejects(() => todos.createTodo(space.id, { title: 'Elsewhere', repos: [other.id] }), /not in this project/);
+	await assert.rejects(() => todos.editTodo(space.id, item.id, { repos: [other.id] }), /not in this project/);
+	assert.deepEqual((await todos.editTodo(space.id, item.id, { title: 'Renamed' })).repos, [webRepo.id, apiRepo.id], 'an edit without repos keeps them');
+	assert.deepEqual((await todos.editTodo(space.id, item.id, { repos: [] })).repos, []);
+	assert.deepEqual(v.parse(EDIT_TODO, { repos: [apiRepo.id] }).repos, [apiRepo.id]);
+	assert.equal(v.safeParse(CREATE_TODO, { title: 'x', repos: 'acme/api' }).success, false);
+});
+
+test('a to-do tagged with repositories starts one thread in each, told which is theirs and to check the fit before changing anything', async () => {
+	const space = await spaces.createSpace({ name: 'Todo tagged start', repoIds: [apiRepo.id, webRepo.id], maxParallel: 5 });
+	repoAnswer = { pick: 'acme/api', p: 0.99 };
+	const one = await todos.createTodo(space.id, { title: 'Fix the login form', repos: [webRepo.id] });
+	const started = await todos.startTodo(space.id, one.id, 'thread');
+	assert.equal(repoQuestions.length, 0, 'a tagged to-do asks the decision model nothing');
+	assert.equal(started.thread?.repo, 'acme/web');
+	assert.equal(started.thread?.title, 'Fix the login form');
+	await settleThreads();
+	assert.match(contextOf(briefOf(started.thread!.id)), /tagged this to-do with acme\/web\. Before you change anything, check/);
+
+	const both = await todos.createTodo(space.id, { title: 'Rename the session cookie', repos: [webRepo.id, apiRepo.id] });
+	const split = await todos.startTodo(space.id, both.id, 'thread');
+	// In the project's order, which the to-do kept.
+	assert.deepEqual(split.threads?.map((thread) => [thread.repo, thread.title]), [
+		['acme/web', 'Rename the session cookie (web)'],
+		['acme/api', 'Rename the session cookie (api)'],
+	]);
+	assert.deepEqual([split.todo.status, split.todo.threads], ['in_progress', 2]);
+	await settleThreads();
+	const apiBrief = briefOf(split.threads![1].id);
+	assert.match(apiBrief, /This thread does only this part of it, in its own pull request; other threads do the rest: its changes in acme\/api/);
+	assert.match(contextOf(apiBrief), /each has a thread of its own, and this one works only in acme\/api/);
+});
+
+test('an untagged to-do in a project with several repositories goes where the decision model is sure, and otherwise starts with none and asks', async () => {
+	const space = await spaces.createSpace({ name: 'Todo picked start', repoIds: [apiRepo.id, webRepo.id], maxParallel: 5 });
+	repoAnswer = { pick: 'acme/web', p: 0.9 };
+	const sure = await todos.createTodo(space.id, { title: 'Fix the navbar', description: 'The web app navbar overlaps on phones.' });
+	const picked = await todos.startTodo(space.id, sure.id, 'thread');
+	assert.equal(picked.thread?.repo, 'acme/web');
+	assert.equal(repoQuestions.length, 1);
+	assert.deepEqual(repoQuestions[0].state.repositories, ['acme/api', 'acme/web']);
+	assert.match(String(repoQuestions[0].state.request), /navbar overlaps on phones/);
+	await settleThreads();
+	assert.match(contextOf(briefOf(picked.thread!.id)), /Anton picked acme\/web from its words\. The project's repositories: acme\/api, acme\/web\./);
+
+	for (const answer of [{ pick: 'acme/web', p: 0.4 }, { pick: 'unclear', p: 0.95 }, null]) {
+		repoAnswer = answer;
+		const unsure = await todos.createTodo(space.id, { title: `Unsure ${answer?.pick ?? 'failed'} ${answer?.p ?? ''}` });
+		const { thread } = await todos.startTodo(space.id, unsure.id, 'thread');
+		assert.equal(thread?.projectId, null, `${JSON.stringify(answer)} starts a thread with no repository`);
+		await settleThreads();
+		assert.match(contextOf(briefOf(thread!.id)), /could not tell which of the project's repositories it belongs in: acme\/api, acme\/web\. .*use ask .* call set_repo/);
+	}
+
+	const single = await spaces.createSpace({ name: 'Todo one repo', repoIds: [apiRepo.id] });
+	const plain = await todos.createTodo(single.id, { title: 'Only one place to go' });
+	repoQuestions.length = 0;
+	const only = await todos.startTodo(single.id, plain.id, 'thread');
+	assert.equal(only.thread?.repo, 'acme/api');
+	assert.equal(repoQuestions.length, 0, 'one repository needs no decision');
+	await settleThreads();
+	assert.equal(contextOf(briefOf(only.thread!.id)), '', 'and no note');
+});
+
+test('a to-do handed to the coordinator names its tagged repositories, and a thread it gives no repo goes to the first', async () => {
+	const space = await spaces.createSpace({ name: 'Todo tagged coordinator', repoIds: [apiRepo.id, webRepo.id], maxParallel: 5 });
+	const item = await todos.createTodo(space.id, { title: 'Tidy the web build', repos: [webRepo.id] });
+	await todos.startTodo(space.id, item.id, 'coordinator');
+	assert.match(toCoordinator[0].text, /Repositories tagged on this to-do: acme\/web\./);
+	assert.match(await stateBlock(space.id), /"Tidy the web build" · .* · repositories: acme\/web/);
+	const { thread } = await todos.startTodoThread((await todos.findTodo(space.id, item.id)), { title: 'Tidy', brief: 'Tidy the web build' });
+	assert.equal(thread.repo, 'acme/web');
+	const named = await todos.startTodoThread((await todos.findTodo(space.id, item.id)), { title: 'Tidy api', brief: 'Tidy the web build', repo: 'acme/api' });
+	assert.equal(named.thread.repo, 'acme/api', 'a repo the coordinator names wins');
+});
+
+test('set_repo moves a thread that changed nothing once its reply ends, and starts the other repositories’ threads for its to-do', async () => {
+	const space = await spaces.createSpace({ name: 'Todo set repo', repoIds: [apiRepo.id, webRepo.id], maxParallel: 5 });
+	repoAnswer = null;
+	const item = await todos.createTodo(space.id, { title: 'Where does this go' });
+	const { thread } = await todos.startTodo(space.id, item.id, 'thread');
+	assert.equal(thread?.projectId, null);
+	await settleThreads();
+	const startIn = async (todoId: string, repos: Array<{ id: string; repoFullName: string }>, from: string) =>
+		(await todos.startTodoThreadsIn(todoId, repos as never, from)).map(({ id, title }) => ({ id, title }));
+	await assert.rejects(() => threadRepos.setThreadRepos(thread!.id, ['acme/nowhere'], startIn), /not one of this project's repositories/);
+
+	const result = await threadRepos.setThreadRepos(thread!.id, ['web', 'acme/api'], startIn);
+	assert.equal(result.moving, true);
+	assert.match(result.output, /moves to acme\/web when this reply ends/);
+	assert.equal(threadRepos.pendingRepoMove(thread!.id), webRepo.id);
+	const linked = (await todos.listTodos(space.id)).find((todo) => todo.id === item.id)!;
+	assert.equal(linked.threads, 2, 'the api thread started for the same to-do');
+	const sibling = (await sessions.listThreads(space.id)).find((other) => other.repo === 'acme/api');
+	assert.ok(sibling, 'a thread in acme/api');
+
+	toThreads.length = 0;
+	await threadRepos.applyRepoMove(thread!.id);
+	const moved = await getSessionRecord(thread!.id);
+	assert.deepEqual([moved?.projectId, moved?.baseBranch, moved?.baseSha, moved?.machineState], [webRepo.id, 'main', 'sha-main', null]);
+	assert.match(moved!.branch, /^anton\/where-does-this-go-/);
+	assert.equal(threadRepos.pendingRepoMove(thread!.id), null);
+	assert.match(toThreads.find((sent) => sent.id === thread!.id)?.text ?? '', /Anton moved this thread to acme\/web .* Carry on with the request there\./);
+
+	const again = await threadRepos.setThreadRepos(thread!.id, ['acme/web'], startIn);
+	assert.deepEqual(again, { moving: false, output: 'This thread already works in acme/web.' });
+
+	await updateSession(thread!.id, { prUrl: 'https://github.com/acme/web/pull/7' });
+	await assert.rejects(() => threadRepos.setThreadRepos(thread!.id, ['acme/api'], startIn), /already pushed work to acme\/web/);
+	assert.equal(threadRepos.pendingRepoMove(thread!.id), null);
 });

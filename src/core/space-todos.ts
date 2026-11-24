@@ -11,6 +11,7 @@ export type TodoAttachment = { name: string; path: string; kind: string; size: n
 export const MAX_TODO_ATTACHMENTS = 10;
 export const MAX_TODO_TITLE = 200;
 export const MAX_TODO_DESCRIPTION = 20_000;
+export const MAX_TODO_REPOS = 20;
 
 export type SpaceTodo = {
 	id: string;
@@ -19,6 +20,8 @@ export type SpaceTodo = {
 	description: string;
 	attachments: TodoAttachment[];
 	threadModel: AgentModel | null;
+	/** Project repositories (their ids) the user tagged it with: a thread started from it works in each. None lets Anton pick one. */
+	repos: string[];
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;
@@ -40,8 +43,9 @@ export function todoBrief(todo: Pick<SpaceTodo, 'title' | 'description'>): strin
 export const shortTodoId = (id: string) => id.replace(/^todo_/, '').slice(0, 8);
 
 /** Sent to the coordinator as the user's own message, so the request it quotes for a thread is in it word for word. */
-export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>): string {
-	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}`;
+export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>, repos: string[] = []): string {
+	const tagged = repos.length ? `\n\nRepositories tagged on this to-do: ${repos.join(', ')}.` : '';
+	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}${tagged}`;
 }
 
 export const todoHandoffId = (message: string): string | null => /^Start the project to-do \[todo:([a-f0-9]{8})\]: /.exec(message)?.[1] ?? null;
