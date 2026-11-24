@@ -8,8 +8,8 @@ const CONVERSATION = '/api/agents/:kind{coder|coordinator|incognito}/:id';
 
 /**
  * `?view=history&turns=N`: Flue's history with only its latest turns, so a long conversation opens at the cost of a
- * short one; with `from=<id>` as well, from that message on (a read again keeps its start). Without `turns` the request
- * goes on to Flue's router untouched. `/older?before=<id>&turns=N`: the turns
+ * short one; with `from=<id>` as well, from that message on (or its host turn if the input joined a reply).
+ * Without `turns` the request goes on to Flue's router untouched. `/older?before=<id>&turns=N`: the turns
  * before a message, as the page scrolls up; 409 when that message is gone (rewound or compacted since).
  */
 export function conversationWindow(routerFor: (kind: string) => HistoryRouter): Hono {
