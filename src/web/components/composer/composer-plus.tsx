@@ -273,10 +273,13 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 								{items.map((item) => (
 									<ConnectorRow key={item.key} item={item} onPick={pick} />
 								))}
+								{problem ? (
+									<p className="m-0 px-2 py-1.5 text-micro leading-[15px] text-pretty text-(--bad)">{problem}</p>
+								) : null}
 							</div>
 							<MenuSeparator />
 							<p className="m-0 px-2 pt-0.5 pb-1.5 text-micro leading-[15px] text-pretty text-(--text-3)">
-								{problem ?? 'On for every task. Tools load only when a task uses them, so nothing is spent until then.'}
+								On for every task. Tools load only when a task uses them, so nothing is spent until then.
 							</p>
 						</MenuSubContent>
 					</MenuSub>
