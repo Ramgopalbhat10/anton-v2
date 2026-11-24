@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronDown } from '@/lib/icons';
+import { Check, ChevronDown, ChevronRight } from '@/lib/icons';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { memo, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, type PointerEvent, useEffect, useId, useRef, useState } from 'react';
+import { Disclosure } from '@/components/kit/disclosure';
 import { Icon, Spinner } from '@/components/kit/signal';
 import type { Todo } from '@/lib/api/sessions';
 import { cn } from '@/lib/utils';
@@ -54,13 +55,8 @@ function Mark({ status, working }: { status: Todo['status']; working: boolean })
 }
 
 function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boolean }) {
-	const details = useRef<HTMLParagraphElement>(null);
 	const [open, setOpen] = useState(false);
-	const [clamped, setClamped] = useState(false);
-	useLayoutEffect(() => {
-		const node = details.current;
-		if (node && !open) setClamped(node.scrollHeight > node.clientHeight + 1);
-	}, [todo.evidence, open]);
+	const detailsId = useId();
 	const current = todo.status === 'in_progress';
 	return (
 		<li
@@ -79,28 +75,24 @@ function Item({ todo, working, last }: { todo: Todo; working: boolean; last: boo
 			</span>
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className={cn('text-body leading-[18px] text-pretty break-words', current ? 'font-medium text-(--text)' : 'text-(--text-2)')}>{todo.content}</span>
-				{todo.evidence && (
-					// The chevron is the keyboard control; the text is a larger target for the pointer.
-					<p
-						ref={details}
-						onClick={clamped ? () => setOpen(!open) : undefined}
-						className={cn('m-0 text-small leading-[17px] text-pretty break-words text-(--text-3)', !open && 'line-clamp-2', clamped && 'cursor-pointer')}
-					>
-						{todo.evidence}
-					</p>
-				)}
+				{todo.evidence ? (
+					<div className="flex flex-col">
+						<button
+							type="button"
+							aria-expanded={open}
+							aria-controls={detailsId}
+							onClick={() => setOpen(!open)}
+							className="-mx-1 flex h-5 w-fit items-center gap-1 rounded-inner px-1 text-micro text-(--text-4) outline-none hover:bg-(--bg-active) hover:text-(--text-2) focus-visible:shadow-(--focus)"
+						>
+							<Icon icon={open ? ChevronDown : ChevronRight} size={11} />
+							<span>Details</span>
+						</button>
+						<Disclosure open={open} id={detailsId}>
+							<p className="m-0 mt-0.5 text-small leading-[17px] text-pretty break-words text-(--text-3)">{todo.evidence}</p>
+						</Disclosure>
+					</div>
+				) : null}
 			</div>
-			{clamped && (
-				<button
-					type="button"
-					aria-expanded={open}
-					aria-label={open ? 'Hide details' : 'Show details'}
-					onClick={() => setOpen(!open)}
-					className="-my-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-inner text-(--text-4) outline-none group-hover/todo:text-(--text-2) hover:bg-(--bg-active) hover:text-(--text) focus-visible:shadow-(--focus)"
-				>
-					<Icon icon={ChevronDown} size={12} className={cn('transition-transform duration-(--t-fast)', open && 'rotate-180')} />
-				</button>
-			)}
 		</li>
 	);
 }

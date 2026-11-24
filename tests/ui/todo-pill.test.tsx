@@ -48,42 +48,31 @@ describe('TodoPill', () => {
 		expect(screen.queryByRole('dialog')).toBeNull();
 	});
 
-	it('shows details under each item, clamped with a toggle only when they run long', async () => {
+	it('keeps every detail collapsed until its item asks for it', async () => {
 		const long = 'Typecheck and new UI tests pass; Playwright measured 44px headers with aligned bottom borders and verified long-name truncation.';
-		const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-		Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-			configurable: true,
-			get(this: HTMLElement) {
-				return this.textContent === long && this.classList.contains('line-clamp-2') ? 80 : 0;
-			},
+		setup({
+			...list,
+			todos: [
+				{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
+				{ content: 'Match header heights', status: 'completed', evidence: long },
+				{ content: 'Open a draft PR', status: 'in_progress' },
+			],
 		});
-		try {
-			setup({
-				...list,
-				todos: [
-					{ content: 'Read the UI code', status: 'completed', evidence: 'Read todo-pill.tsx' },
-					{ content: 'Match header heights', status: 'completed', evidence: long },
-					{ content: 'Open a draft PR', status: 'in_progress' },
-				],
-			});
-			await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
-			const popover = await screen.findByRole('dialog');
-			expect(within(popover).getByText('Read todo-pill.tsx').tagName).toBe('P');
-			const toggles = within(popover).getAllByRole('button', { name: 'Show details' });
-			expect(toggles).toHaveLength(1);
-			expect(toggles[0].closest('li')?.textContent).toContain('Match header heights');
-			const details = within(popover).getByText(long);
-			expect(details.classList.contains('line-clamp-2')).toBe(true);
-			await userEvent.click(toggles[0]);
-			expect(toggles[0].getAttribute('aria-expanded')).toBe('true');
-			expect(toggles[0].getAttribute('aria-label')).toBe('Hide details');
-			expect(details.classList.contains('line-clamp-2')).toBe(false);
-			await userEvent.click(details);
-			expect(details.classList.contains('line-clamp-2')).toBe(true);
-			expect(screen.queryByRole('dialog')).not.toBeNull();
-		} finally {
-			if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
-		}
+		await userEvent.click(screen.getByRole('button', { name: /Todos/ }));
+		const popover = await screen.findByRole('dialog');
+		expect(within(popover).queryByText('Read todo-pill.tsx')).toBeNull();
+		expect(within(popover).queryByText(long)).toBeNull();
+		const toggles = within(popover).getAllByRole('button', { name: 'Details' });
+		expect(toggles).toHaveLength(2);
+		expect(toggles[0].closest('li')?.textContent).toContain('Read the UI code');
+		expect(toggles[1].closest('li')?.textContent).toContain('Match header heights');
+		await userEvent.click(toggles[0]);
+		expect(toggles[0].getAttribute('aria-expanded')).toBe('true');
+		expect(within(popover).getByText('Read todo-pill.tsx').tagName).toBe('P');
+		expect(within(popover).queryByText(long)).toBeNull();
+		await userEvent.click(toggles[1]);
+		expect(within(popover).getByText(long).classList.contains('line-clamp-2')).toBe(false);
+		expect(screen.queryByRole('dialog')).not.toBeNull();
 	});
 
 	it('follows a new list as the agent writes it', async () => {
