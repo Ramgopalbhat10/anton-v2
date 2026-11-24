@@ -103,7 +103,8 @@ test('Coder makes images through the image port whatever its model, with the too
 test('Coordinator keeps its instructions fixed and gives the project state as a signal, only when it has changed', () => {
 	const source = readFileSync(new URL('../src/agents/coordinator.ts', import.meta.url), 'utf8');
 	const render = source.slice(source.indexOf('export function Coordinator'), source.indexOf('const STATE_NOTE'));
-	assert.match(render, /useProjectState\(id\);\n\treturn `\$\{PROMPT\}\$\{brief\.propose \? ` \$\{PROPOSE\}` : ''\} \$\{STATE_NOTE\}`;/);
+	assert.match(render, /useProjectState\(id, delivery\)/);
+	assert.match(render, /return `\$\{PROMPT\}\$\{brief\.propose \? ` \$\{PROPOSE\}` : ''\} \$\{STATE_NOTE\}`;/);
 	assert.doesNotMatch(render, /brief\.state|new Date/, 'nothing that changes between messages is in the instructions');
 	const hook = source.slice(source.indexOf('function useProjectState'));
 	assert.match(hook, /shown\?\.body === body && shown\.since < STATE_EVERY/);
