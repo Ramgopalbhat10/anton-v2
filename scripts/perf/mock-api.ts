@@ -17,6 +17,7 @@ import { mockSetup } from './mock-setup.ts';
 import { viewerArtifacts, viewerPdfPath } from '../ui/artifact-fixture.ts';
 
 const root = new URL('../..', import.meta.url).pathname;
+const MAX_TODO_BODY_BYTES = 256 * 1024;
 
 function walk(dir: string, out: string[], limit: number) {
 	for (const name of readdirSync(dir)) {
@@ -398,20 +399,41 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		const todosRoute = path.match(/^\/api\/spaces\/([^/]+)\/todos(?:\/([^/]+))?$/);
 		if (todosRoute) {
 			const [, spaceId, todoId] = todosRoute;
-			const todos = spaceTodos.get(spaceId) ?? [];
-			if (req.method === 'GET' && !todoId) return json(res, { todos });
+			if (req.method === 'GET' && !todoId) return json(res, { todos: spaceTodos.get(spaceId) ?? [] });
 			if ((req.method === 'POST' && !todoId) || (req.method === 'PATCH' && todoId)) {
 				const chunks: Buffer[] = [];
-				req.on('data', (chunk: Buffer) => chunks.push(chunk));
+				let size = 0;
+				req.on('data', (chunk: Buffer) => {
+					if (res.writableEnded) return;
+					size += chunk.length;
+					if (size > MAX_TODO_BODY_BYTES) {
+						chunks.length = 0;
+						res.statusCode = 413;
+						return json(res, { error: 'To-do request body is too large' });
+					}
+					chunks.push(chunk);
+				});
 				req.on('end', () => {
-					const change = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Partial<SpaceTodo>;
+					if (res.writableEnded) return;
+					let change: unknown;
+					try {
+						change = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
+					} catch {
+						change = null;
+					}
+					if (!change || typeof change !== 'object' || Array.isArray(change)) {
+						res.statusCode = 400;
+						return json(res, { error: 'Expected a JSON object for a to-do' });
+					}
 					const updatedAt = new Date().toISOString();
-					const item = todoId ? todos.find((item) => item.id === todoId) : todo(`todo_${randomUUID()}`, '', '', { spaceId, createdAt: updatedAt });
-					if (!item) return void res.writeHead(404).end();
-					Object.assign(item, change, { updatedAt });
-					if (!todoId) todos.push(item);
+					const todos = spaceTodos.get(spaceId) ?? [];
+					const index = todoId ? todos.findIndex((item) => item.id === todoId) : todos.length;
+					if (index < 0) return void res.writeHead(404).end();
+					const item = todos[index] ?? todo(`todo_${randomUUID()}`, '', '', { spaceId, createdAt: updatedAt });
+					const saved = { ...item, ...change, updatedAt };
+					todos[index] = saved;
 					spaceTodos.set(spaceId, todos);
-					json(res, item);
+					json(res, saved);
 				});
 				return;
 			}

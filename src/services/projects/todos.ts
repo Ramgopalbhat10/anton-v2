@@ -73,7 +73,9 @@ export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo>
 type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel'] };
 
 async function checkThreadModel(choice: SpaceTodo['threadModel'] | undefined): Promise<void> {
-	if (choice && !(await findModel(choice.model))) throw new InvalidInputError(`Unknown model: ${choice.model}`);
+	if (choice && !(await findModel(choice.model))) {
+		throw new InvalidInputError(`Unknown model: ${choice.model}. Choose a different main thread model or use the project default.`);
+	}
 }
 
 export async function createTodo(spaceId: string, input: TodoFields & { createdBy?: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
@@ -144,6 +146,7 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	const message = withAttachments(todoStartMessage(todo), files, 'project');
 	const space = await existingSpace(spaceId);
 	const { images, note } = await projectPictures(spaceId, spaceId, message, await coordinatorModel(space));
+	await checkThreadModel(todo.threadModel);
 	await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: 'coordinator' });
 	const submissionId = await sendToAgent(spaceId, note ? `${message}\n\n${note}` : message, 'coordinator', images).catch(async (error: unknown) => {
 		await updateSpaceTodo(todo.id, { status: 'open', assignee: null });

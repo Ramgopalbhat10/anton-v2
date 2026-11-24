@@ -123,11 +123,15 @@ export function useTodoSaves(spaceId: string, serverTodos: SpaceTodo[]) {
 		);
 	};
 
-	const edit = (todo: SpaceTodo, draft: TodoDraft) =>
-		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft), threadModel: draft.threadModel }, async () => {
+	const edit = (todo: SpaceTodo, draft: TodoDraft) => {
+		const before = todo.threadModel;
+		const after = draft.threadModel;
+		const modelChange = before?.model === after?.model && before?.reasoning === after?.reasoning ? {} : { threadModel: after };
+		run(todo, { title: draft.title.trim(), description: draft.description.trim(), attachments: shownFiles(draft), ...modelChange }, async () => {
 			const attachments = await uploadDraft(spaceId, draft);
-			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments, threadModel: draft.threadModel });
+			return api.editSpaceTodo(spaceId, todo.id, { title: draft.title, description: draft.description, attachments, ...modelChange });
 		});
+	};
 
 	/** Set back to open, a to-do leaves whoever had it, as the server does. */
 	const setStatus = (todo: SpaceTodo, status: 'open' | 'done') =>

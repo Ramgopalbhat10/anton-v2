@@ -313,7 +313,7 @@ it('disables dock retry through attachment upload and editing, retries the saved
 	expect(retryButton.hasAttribute('disabled')).toBe(true);
 	const attachment = { name: 'details.txt', path: 'details.txt', kind: 'Text', size: 7 };
 	await act(() => upload.resolve({ ...attachment, text: 'Updated', cut: null }));
-	expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Revised brief', description: item.description, attachments: [attachment], threadModel: null });
+	expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Revised brief', description: item.description, attachments: [attachment] });
 	expect(retryButton.hasAttribute('disabled')).toBe(true);
 	const saved = { ...item, title: 'Revised brief', updatedAt: '2026-10-04T00:00:00Z', attachments: [attachment] };
 	api.spaceTodos.mockResolvedValue({ todos: [saved] });
@@ -433,7 +433,6 @@ describe('the To do column on the project board', () => {
 				title: 'Fix the toolbar',
 				description: 'Preserve return URL after login.',
 				attachments: [{ name: 'toolbar.png', path: 'toolbar.png', kind: 'PNG image', size: 2048 }],
-				threadModel: null,
 			}),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
@@ -445,6 +444,33 @@ describe('the To do column on the project board', () => {
 			const { todos } = useSpaceTodos('space_1');
 			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />;
 		}
+
+		it('edits a to-do without resending its delisted model', async () => {
+			const threadModel = { model: 'openrouter/test/delisted#sort=latency', reasoning: 'low' } as const;
+			const item = makeTodo({ threadModel });
+			api.spaceTodos.mockResolvedValue({ todos: [item] });
+			api.editSpaceTodo.mockImplementationOnce(async (_spaceId, _todoId, change) => {
+				if (Object.hasOwn(change, 'threadModel')) throw new Error('Unknown model');
+				return { ...item, ...change, updatedAt: '2026-10-04T00:00:00Z' };
+			});
+			renderWithRouter(() => <LiveBoard />);
+			await userEvent.click(await screen.findByRole('button', { name: /^Fix OAuth redirect/ }));
+			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
+			const picker = edit.getByRole('button', { name: 'Main thread model' });
+			await userEvent.click(picker);
+			await userEvent.click(screen.getByRole('textbox', { name: 'Search models' }));
+			expect(await screen.findByText('No models match.')).toBeTruthy();
+			await userEvent.keyboard('{Escape}');
+			expect(picker.textContent).toContain('openrouter/test/delisted');
+			const title = edit.getByRole('textbox', { name: 'Title' });
+			await userEvent.clear(title);
+			await userEvent.type(title, 'Tidy the redirect');
+			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Tidy the redirect', description: item.description, attachments: [] }));
+			await userEvent.click(await screen.findByRole('button', { name: /^Tidy the redirect/ }));
+			expect(within(await screen.findByRole('dialog', { name: 'Edit to-do' })).getByRole('button', { name: 'Main thread model' }).textContent).toContain('openrouter/test/delisted');
+		});
+
 		it('sets a model and effort when adding a to-do, then reopens and clears the saved choice', async () => {
 			const model: ModelInfo = { id: 'openrouter/test/model', name: 'Compact model', vendor: 'Test', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: false, reasoning: ['low', 'high'], defaultReasoning: 'high' };
 			api.models.mockResolvedValueOnce({ models: [model], default: model.id });

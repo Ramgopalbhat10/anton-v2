@@ -40,9 +40,12 @@ const model = (id: string, vision = false): ModelInfo => ({
 	reasoning: ['low', 'high'],
 	defaultReasoning: 'high',
 });
+const allModels = [model('openrouter/test/cheap'), model('openrouter/test/strong', true), model('openrouter/test/default')];
+const fullCatalog = Promise.resolve(allModels);
+let catalog = fullCatalog;
 const fakeCatalog: ModelCatalog = {
 	name: 'fake',
-	list: async () => [model('openrouter/test/cheap'), model('openrouter/test/strong', true), model('openrouter/test/default')],
+	list: () => catalog,
 };
 
 const { useDatabase } = await import('../src/db/client.ts');
@@ -87,6 +90,7 @@ beforeEach(() => {
 	toThreads.length = 0;
 	toCoordinator.length = 0;
 	failCoordinator = false;
+	catalog = fullCatalog;
 });
 
 const apiRepo = await addProject('acme/api');
@@ -213,6 +217,26 @@ test('a to-do model is round-tripped on create and edit, kept on unrelated edits
 	assert.deepEqual((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, changed);
 	assert.equal((await call('PATCH', tail, { threadModel: null })).threadModel, null);
 	assert.equal((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, null);
+});
+
+test('an unavailable to-do model blocks a coordinator handoff without admitting it or changing the to-do', async () => {
+	const space = await spaces.createSpace({ name: 'Delisted to-do model' });
+	const threadModel = { model: 'openrouter/test/cheap#sort=latency', reasoning: 'low' } as const;
+	const item = await todos.createTodo(space.id, { title: 'Tune the API', threadModel });
+	catalog = Promise.resolve(allModels.filter((entry) => entry.id !== 'openrouter/test/cheap'));
+
+	await assert.rejects(() => todos.startTodo(space.id, item.id, 'coordinator'), {
+		status: 400,
+		message: 'Unknown model: openrouter/test/cheap#sort=latency. Choose a different main thread model or use the project default.',
+	});
+	assert.equal(toCoordinator.length, 0);
+	assert.deepEqual(await todos.listTodos(space.id), [item]);
+	assert.deepEqual((await todos.editTodo(space.id, item.id, { title: 'Tune the API again' })).threadModel, threadModel);
+
+	await todos.editTodo(space.id, item.id, { threadModel: null });
+	const started = await todos.startTodo(space.id, item.id, 'coordinator');
+	assert.equal(started.submissionId, 'sub-1');
+	assert.deepEqual([started.todo.status, started.todo.assignee], ['in_progress', 'coordinator']);
 });
 
 test('direct and coordinator to-dos keep distinct models, even in the queue, without changing any defaults or existing threads', async () => {
