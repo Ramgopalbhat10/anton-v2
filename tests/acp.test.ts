@@ -814,7 +814,7 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 		effort: null,
 		callTool: async (_id, name) => {
 			calls.push(name);
-			return { content: [{ type: 'text', text: 'export const a = 1;' }], isError: false };
+			return { content: [{ type: 'text', text: '1\texport const a = 1;' }], isError: false };
 		},
 	});
 	const seen: RuntimeEvent[] = [];
@@ -840,6 +840,6 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 	const use = seen.find((e): e is Extract<RuntimeEvent, { type: 'block_start' }> => e.type === 'block_start' && e.block.type === 'tool_use');
 	assert.equal(use?.block.type === 'tool_use' && use.block.name, 'read');
 	const json = seen.find((e): e is Extract<RuntimeEvent, { type: 'block_delta' }> => e.type === 'block_delta' && Boolean(e.json));
-	assert.equal(json?.json, '{"path":"src/a.ts"}');
+	assert.equal(json?.json, '{"path":"src/a.ts","limit":2000}');
 	conv.close();
 });

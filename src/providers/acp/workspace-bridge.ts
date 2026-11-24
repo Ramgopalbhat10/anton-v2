@@ -11,13 +11,17 @@ type RunTool = (name: string, args: Record<string, unknown>) => Promise<RuntimeT
 /** What `initialize` offers when the bridge serves it; listing models still offers nothing. */
 export const SERVED_CAPABILITIES = { fs: { readTextFile: true, writeTextFile: true }, terminal: true };
 
-/** Flue's `read` appends this when it stops short of the end; the next chunk starts at `offset`. */
-const MORE = /\n\n\[Showing lines \d+-\d+ of \d+\. Use offset=(\d+) to continue\.\]$/;
-/** Flue's `read` could not return one whole line; a partial file must never be handed back as the file. */
-const LINE_TOO_LONG = /\n\n\[Line \d+ exceeds the \d+-byte read limit/;
+/** Anton's `read` ends a page short of the file's end with this line; the next page starts at the offset it names. */
+const MORE = /^\(lines \d+-\d+ of \d+; read on with offset (\d+)\)$/;
+/** Anton's `read` cuts a very long line and says so; a partial file must never be handed back as the file. */
+const CUT = /… \(line cut at \d+ characters\)$/;
+/** A read that starts past the file's end; ACP gets no lines rather than an error. */
+const PAST_END = /^\(the file has \d+ lines; offset \d+ is past its end\)$/;
+/** The most lines one `read` call returns. */
+const PAGE = 2000;
 /** Flue's `bash` ends a failed command's output with this line. */
 const EXIT = /\n\nCommand exited with code (\d+)$/;
-/** 2000 lines a chunk: a file past this many chunks is refused rather than read for minutes. */
+/** A file past this many pages is refused rather than read for minutes. */
 const MAX_CHUNKS = 50;
 
 const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -83,19 +87,22 @@ export class WorkspaceBridge {
 		return text;
 	}
 
+	/**
+	 * ACP wants the file's own text. Anton's `read` numbers each line (`12\tconst a = 1;`) for the model, so the numbers
+	 * come off here: handed back with them, Devin's edit tool matched none of its edits, and the one it applied wrote
+	 * every line back with its number in front.
+	 */
 	private async read(path: string, line: number | null, limit: number | null): Promise<{ content: string }> {
 		const target = this.path(path);
-		const chunks: string[] = [];
-		let offset = line ?? undefined;
-		for (let i = 0; i < MAX_CHUNKS; i++) {
-			const text = await this.call('read', { path: target, ...(offset ? { offset } : {}), ...(limit ? { limit } : {}) });
-			if (LINE_TOO_LONG.test(text)) throw new Error(`${path} has a line too long to read whole`);
-			const more = MORE.exec(text);
-			if (!more) return { content: [...chunks, text].join('\n') };
-			chunks.push(text.slice(0, more.index));
-			// A limited read takes what one call returns, as a model's read would.
-			if (limit) return { content: chunks.join('\n') };
-			offset = Number(more[1]);
+		const lines: string[] = [];
+		let start = line && line > 1 ? Math.floor(line) : 1;
+		for (let page = 0; page < MAX_CHUNKS; page++) {
+			const want = limit ? Math.min(PAGE, limit - lines.length) : PAGE;
+			const text = await this.call('read', { path: target, ...(start > 1 ? { offset: start } : {}), limit: want });
+			const { body, next } = unnumber(text, start, path);
+			lines.push(...body);
+			if (next === null || (limit && lines.length >= limit)) return { content: lines.join('\n') };
+			start = next;
 		}
 		throw new Error(`${path} is too large to read whole`);
 	}
@@ -112,7 +119,8 @@ export class WorkspaceBridge {
 		const exports = env.filter((e) => e.name && /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name)).map((e) => `export ${e.name}=${quote(String(e.value ?? ''))}; `);
 		const dir = typeof p.cwd === 'string' && p.cwd ? this.path(p.cwd) : '.';
 		const cwd = dir === '.' ? '' : `cd ${quote(dir)} && `;
-		const command = `${exports.join('')}${cwd}${[String(p.command ?? ''), ...args.map(quote)].join(' ')}`;
+		// Colour codes are noise the agent pays for on every later call; its own env can still turn colour back on.
+		const command = `export NO_COLOR=1 FORCE_COLOR=0; ${exports.join('')}${cwd}${[String(p.command ?? ''), ...args.map(quote)].join(' ')}`;
 		const id = `term-${++this.terminalSeq}`;
 		const terminal: Terminal = { done: Promise.resolve({ output: '', exitCode: 0 }), result: null, limit: num(p.outputByteLimit) };
 		terminal.done = this.run('bash', { command }).then(
@@ -152,6 +160,25 @@ export class WorkspaceBridge {
 		const result = await this.terminal(id).done;
 		return { exitCode: result.exitCode, signal: null };
 	}
+}
+
+/**
+ * One page of Anton's `read` as the file's own lines, and where the next page starts (null at the end). Anything that
+ * is not numbered from `start` (a missing file, a folder, a binary) is the read's answer, so it fails the request.
+ */
+function unnumber(text: string, start: number, path: string): { body: string[]; next: number | null } {
+	if (PAST_END.test(text)) return { body: [], next: null };
+	const rows = text.split('\n');
+	const more = rows.length > 1 ? MORE.exec(rows.at(-1) ?? '') : null;
+	if (more) rows.pop();
+	const body = rows.map((row, index) => {
+		const prefix = `${start + index}\t`;
+		if (!row.startsWith(prefix)) throw new Error(text.trim() || `${path} could not be read`);
+		const content = row.slice(prefix.length);
+		if (CUT.test(content)) throw new Error(`${path} has a line too long to read whole`);
+		return content;
+	});
+	return { body, next: more ? Number(more[1]) : null };
 }
 
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
