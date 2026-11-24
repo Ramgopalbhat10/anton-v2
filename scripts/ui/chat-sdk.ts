@@ -14,7 +14,7 @@ import { answerText } from '../perf/scenario.ts';
 
 type Part = Record<string, unknown> & { type: string };
 type Message = { id: string; role: string; purpose: string; display: string; submissionId?: string; parts: Part[]; metadata?: Record<string, unknown> };
-type Conversation = { conversationId: string; messages: Message[]; settlements: Array<{ submissionId: string; outcome: string }> };
+type Conversation = { conversationId: string; messages: Message[]; settlements: Array<{ submissionId: string; outcome: string; answeredBySubmissionId?: string }> };
 type Snapshot = { conversation: Conversation; offset: string; phase: 'live'; error: undefined };
 
 /** How a script drives the conversation, from the page (`page.evaluate(() => window.__chat.reply())`). */
@@ -67,6 +67,29 @@ function coordinatorTurn(): Message[] {
 	];
 }
 
+/** A reply whose second thread was started for a handoff that joined it. */
+function joinedTodos(): Pick<Conversation, 'messages' | 'settlements'> {
+	const user = (id: string, todo: string, brief: string): Message => ({
+		id: `u-${id}`, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(`Start the project to-do [todo:${todo}]: ${brief}`)],
+	});
+	const start = (todo_id: string, thread: string): Part => ({
+		type: 'dynamic-tool', toolName: 'start_thread', toolCallId: `start-${thread}`, state: 'output-available', input: { todo_id }, output: `Started [id:${thread}]`,
+	});
+	return {
+		messages: [
+			user('todo-first', 'aaaa0001', 'Update the ledger columns'),
+			{ id: 'a-todos', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'todo-first', parts: [
+				start('aaaa0001', 'th-schema'), start('aaaa0002', 'th-api'), text('Both threads are underway.'),
+			] },
+			user('todo-second', 'aaaa0002', 'Return invoices from the API'),
+		],
+		settlements: [
+			{ submissionId: 'todo-first', outcome: 'completed' },
+			{ submissionId: 'todo-second', outcome: 'completed', answeredBySubmissionId: 'todo-first' },
+		],
+	};
+}
+
 /** With `?reports`, thread reports the coordinator answers (each thread then a chip in its words) and one it has not answered yet (a line of its own). */
 function reportTurns(): Message[] {
 	const report = (id: string, thread: string, title: string, state: string): Message => ({ id, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(`<thread-reports>\n<thread id="${thread}" title="${title}" state="${state}"/>\n</thread-reports>`)] });
@@ -112,10 +135,13 @@ function turnsFromUrl(): number {
 
 export function createFlueClient({ url }: { url: string }) {
 	const turns = turnsFromUrl();
+	const params = new URLSearchParams(location.search);
+	const coordinator = url.includes('/coordinator/');
+	const todos = coordinator && params.has('joined-todos') ? joinedTodos() : { messages: [], settlements: [] };
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: [...startingTurns(turns), ...(url.includes('/coordinator/') ? [...coordinatorTurn(), ...(new URLSearchParams(location.search).has('reports') ? reportTurns() : [])] : []), ...(new URLSearchParams(location.search).has('approvals') ? approvalTurn() : [])],
-		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }],
+		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns() : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : [])],
+		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }, ...todos.settlements],
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };
 	const listeners = new Set<() => void>();

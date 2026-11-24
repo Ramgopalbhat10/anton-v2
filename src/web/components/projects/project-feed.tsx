@@ -3,7 +3,7 @@ import { type FlueConversationMessage, type FlueConversationPart, type UseFlueAg
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUp, Bookmark, Check, ChevronRight, CircleAlert, FolderGit2, ListPlus, ListTodo, Plus, Send, Square, Waypoints } from '@/lib/icons';
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposerPlus } from '@/components/composer/composer-plus';
 import { AttachButton, AttachmentTray, SentAttachments, useAttachments } from '@/components/composer/attachments';
 import { besidePictures, SentImages, sentPictures } from '@/components/thread/sent-images';
@@ -26,6 +26,7 @@ import type { Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { expandCommand } from '@/lib/completion';
 import type { WindowedAgent } from '@/lib/conversation-window';
+import { joinedTodoHandoffs, type HandoffsBeforeTool } from '@/lib/coordinator-handoffs';
 import { OlderTurnsRow } from '@/components/thread/older-turns';
 import { askToNotify } from '@/lib/notifications';
 import { takeFromInbox, useInbox } from '@/lib/composer-inbox';
@@ -439,13 +440,13 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 type Block = { kind: 'text'; text: string; streaming?: boolean; key: string } | { kind: 'tool'; part: ToolPart } | { kind: 'dispatch'; parts: ToolPart[] };
 
 /** The message's parts as blocks: threads started in a row become one dispatch. */
-function blocks(parts: FlueConversationPart[]): Block[] {
+function blocks(parts: FlueConversationPart[], before?: HandoffsBeforeTool): Block[] {
 	const out: Block[] = [];
 	parts.forEach((part, index) => {
 		if (part.type === 'text') return void out.push({ kind: 'text', text: part.text, streaming: part.state === 'streaming', key: String(index) });
 		if (part.type !== 'dynamic-tool') return;
 		const last = out[out.length - 1];
-		if (part.toolName === 'start_thread' && last?.kind === 'dispatch') last.parts.push(part);
+		if (part.toolName === 'start_thread' && last?.kind === 'dispatch' && !before?.has(part.toolCallId)) last.parts.push(part);
 		else if (part.toolName === 'start_thread') out.push({ kind: 'dispatch', parts: [part] });
 		else out.push({ kind: 'tool', part });
 	});
@@ -482,6 +483,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	threads,
 	resolveFile,
 	reports = NO_REPORTS,
+	before,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
@@ -490,6 +492,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	resolveFile: (href: string) => ViewerItem | null;
 	/** The thread reports this reply answers: they show as chips in its words. */
 	reports?: Report[];
+	before?: HandoffsBeforeTool;
 }) {
 	const parts = message.parts.filter(shownPart);
 	const chips = useMemo(() => threadChips(threads), [threads]);
@@ -497,15 +500,15 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	// A drawing on one of them goes to the coordinator, which passes it on.
 	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
 	const reported = useMemo(() => [...new Set(reports.flatMap((report) => byPrefix(threads, report.id) ?? []))], [reports, threads]);
-	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart)), reported, threads), [message.parts, reported, threads]);
+	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart), before), reported, threads), [message.parts, before, reported, threads]);
 	const firstText = shown.find((block) => block.kind === 'text')?.key;
 	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
 		<div className="flex flex-col gap-2.5">
 			{shown.some((block) => block.kind === 'text') ? null : <ReportLines reports={reports} threads={threads} />}
-			{shown.map((block) =>
-				block.kind === 'text' ? (
+			{shown.map((block) => {
+				if (block.kind === 'text') return (
 					<div key={block.key} className="text-body-lg leading-[21px]">
 						{block.key === firstText && lead.length ? (
 							<p className="mt-0 mb-1.5 flex flex-wrap gap-1">
@@ -516,17 +519,25 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 							<Markdown text={block.text} streaming={live && Boolean(block.streaming)} />
 						</InlineLinks.Provider>
 					</div>
-				) : block.kind === 'dispatch' ? (
-					<Dispatch key={block.parts[0].toolCallId} parts={block.parts} threads={threads} live={live} />
-				) : (
-					<ToolBlock key={block.part.toolCallId} part={block.part} space={space} threads={threads} live={live} />
-				),
-			)}
+				);
+				const key = block.kind === 'dispatch' ? block.parts[0].toolCallId : block.part.toolCallId;
+				const handoffs = before?.get(key);
+				return (
+					<Fragment key={key}>
+						{handoffs?.length ? (
+							<div className="my-2.5 flex flex-col gap-5 first:mt-0">
+								{handoffs.map((handoff) => <UserEntry key={handoff.id} message={handoff} threads={threads} composer={space.id} />)}
+							</div>
+						) : null}
+						{block.kind === 'dispatch' ? <Dispatch parts={block.parts} threads={threads} live={live} /> : <ToolBlock part={block.part} space={space} threads={threads} live={live} />}
+					</Fragment>
+				);
+			})}
 			<OutputCards items={files} composer={space.id} />
 		</div>
 		</OutputLinks.Provider>
 	);
-}, (prev, next) => prev.message === next.message && prev.live === next.live && prev.space === next.space && prev.threads === next.threads && prev.resolveFile === next.resolveFile && sameReports(prev.reports, next.reports));
+}, (prev, next) => prev.message === next.message && prev.live === next.live && prev.space === next.space && prev.threads === next.threads && prev.resolveFile === next.resolveFile && prev.before === next.before && sameReports(prev.reports, next.reports));
 
 const NO_REPORTS: Report[] = [];
 const sameReports = (a: Report[] = NO_REPORTS, b: Report[] = NO_REPORTS) => a === b || (a.length === b.length && a.every((report, index) => report === b[index]));
@@ -855,6 +866,7 @@ export function ProjectFeed({
 		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
+	const joined = useMemo(() => joinedTodoHandoffs(messages, agent.settlements), [messages, agent.settlements]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
@@ -891,6 +903,7 @@ export function ProjectFeed({
 					{messages.length === 0 && !busy && !pending && handoffs.length === 0 && agent.historyReady ? <Welcome space={space} onPick={setDraft} /> : null}
 					<OlderTurnsRow older={agent.older} scroller={scroller} following={following} first={messages[0]?.id ?? null} />
 					{messages.map((message) => {
+						if (joined.moved.has(message.id)) return null;
 						if (message.settlement) {
 							return (
 								<ActionRow key={message.id} icon={CircleAlert} failed>
@@ -906,7 +919,7 @@ export function ProjectFeed({
 							) : (
 								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />
 							);
-						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} reports={answered.carried.get(message.id)} />;
+						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} reports={answered.carried.get(message.id)} before={joined.byReply.get(message.id)} />;
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
 					<div role="status" className={status || waiting.length ? 'flex flex-col gap-2' : 'sr-only'}>

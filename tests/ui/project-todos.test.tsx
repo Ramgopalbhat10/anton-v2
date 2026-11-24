@@ -224,6 +224,60 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
 });
 
+it('places a joined to-do and its attachment between the first thread card and its own thread action, live and settled', async () => {
+	const first = makeTodo({ id: 'todo_aaaaaaaa', title: 'Add invoices to billing', description: '' });
+	const second = makeTodo({ id: 'todo_bbbbbbbb', title: 'Make the invoice preview taller', description: '' });
+	const nextThread = session({ ...threads[0], id: 'thread_2', title: 'Fill the invoice preview' });
+	api.sessions.mockResolvedValueOnce({ sessions: [...threads, nextThread] });
+	api.spaceTodos.mockResolvedValue({ todos: [first, second] });
+	api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...first, status: 'in_progress' }, submissionId: 'first' });
+	api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...second, status: 'in_progress' }, submissionId: 'second' });
+	const { publish } = coordinatorConversation();
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	const handOff = async (todo: SpaceTodo) => {
+		await userEvent.click(await screen.findByRole('button', { name: `Actions for ${todo.title}` }));
+		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+		await screen.findByText(`Waiting for the coordinator to pick up “${todo.title}”`);
+	};
+	const userMessage = (todo: SpaceTodo, submissionId: string): FlueConversationMessage => ({
+		id: `user-${submissionId}`, role: 'user', purpose: 'user', display: 'visible', submissionId,
+		parts: [{ type: 'text', state: 'done', text: todoStartMessage(todo) }],
+	});
+	const u1 = userMessage(first, 'first');
+	const u2 = userMessage(second, 'second');
+	u2.parts.push({ type: 'file', mediaType: 'image/png', filename: 'preview.png', url: '/preview.png' });
+	const reply: FlueConversationMessage = {
+		id: 'reply', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'first',
+		parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c1', state: 'output-available', input: { todo_id: '[todo:aaaaaaaa]' }, output: 'Started [id:thread_1]' }],
+	};
+	await handOff(first);
+	await publish([u1, reply]);
+	await handOff(second);
+	const tool = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c2', state: 'input-available', input: { todo_id: second.id, title: nextThread.title } } as const;
+	await publish([u1, { ...reply, parts: [...reply.parts, tool] }, u2]);
+	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
+	const brief1 = dock.getByText(todoStartMessage(first));
+	const row1 = dock.getByRole('article', { name: threads[0].title });
+	const brief2 = dock.getByText(todoStartMessage(second));
+	const image = dock.getByRole('button', { name: 'Open preview.png' });
+	const before = (node: Node, other: Node) => expect(node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	before(brief1, row1);
+	before(row1, image);
+	before(image, brief2);
+	before(brief2, dock.getByText(nextThread.title));
+	expect(dock.getByText('Starting')).toBeTruthy();
+
+	await publish([u1, { ...reply, parts: [...reply.parts, { ...tool, state: 'output-available', output: 'Started [id:thread_2]' }, { type: 'text', state: 'done', text: 'Both threads are underway.' }] }, u2], [
+		{ submissionId: 'first', outcome: 'completed' },
+		{ submissionId: 'second', outcome: 'completed', answeredBySubmissionId: 'first' },
+	]);
+	const row2 = dock.getByRole('article', { name: nextThread.title });
+	before(row1, dock.getByText(todoStartMessage(second)));
+	before(dock.getByText(todoStartMessage(second)), row2);
+	before(row2, dock.getByText('Both threads are underway.'));
+	expect(dock.queryByText('Starting')).toBeNull();
+});
+
 it.each([
 	{ outcome: 'failed', error: { message: 'The provider could not render the reply' }, text: 'The coordinator failed while working on “Backlog item”: The provider could not render the reply' },
 	{ outcome: 'aborted', error: undefined, text: 'The coordinator stopped while working on “Backlog item”.' },
