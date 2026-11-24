@@ -236,16 +236,46 @@ it.each([
 	await userEvent.click(await screen.findByRole('button', { name: 'Actions for Backlog item' }));
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
 	await screen.findByText('Waiting for the coordinator to pick up “Backlog item”');
-	const marker: FlueConversationMessage = { id: 'marker', role: 'system', purpose: 'advisory', display: 'diagnostic', submissionId: 'handoff', settlement: { outcome }, parts: [{ type: 'text', state: 'done', text: 'The runtime explained the outcome.' }] };
-	const unrelated = { ...marker, id: 'other-marker', submissionId: 'unrelated', parts: [{ type: 'text' as const, state: 'done' as const, text: 'An unrelated submission failed.' }] };
+	const marker = (id: string, body: string): FlueConversationMessage => ({
+		id: `entry_submission_${outcome === 'aborted' ? 'aborted' : 'interrupted'}_${id}`,
+		role: 'system', purpose: 'advisory', display: 'diagnostic', settlement: { outcome },
+		...(outcome === 'aborted' ? { signal: { attributes: { submissionId: id, kind: 'dispatch', reason: 'aborted' } } } : { submissionId: id }),
+		parts: [{ type: 'text', state: 'done', text: body }],
+	});
+	const unrelated = marker('unrelated', 'The runtime explained another submission.');
 	const settlements = [{ submissionId: 'handoff', outcome, error }];
 	await publish([unrelated], settlements);
 	expect(screen.getByRole('alert').textContent).toContain(text);
 	expect(screen.queryByText('Waiting for the coordinator to pick up “Backlog item”')).toBeNull();
 	expect(screen.getByRole('button', { name: 'Try again' }).hasAttribute('disabled')).toBe(true);
-	await publish([unrelated, marker], settlements);
+	await publish([unrelated, marker('handoff', 'The runtime explained the outcome.')], settlements);
 	expect(screen.getAllByText('The runtime explained the outcome.')).toHaveLength(1);
 	expect(screen.queryByText(text)).toBeNull();
+});
+
+it('blocks dock retry while the same to-do is starting a thread, even if the board is remounted', async () => {
+	const item = makeTodo({ id: 'todo_open', title: 'Backlog item' });
+	const starting = later<Awaited<ReturnType<typeof api.startSpaceTodo>>>();
+	api.spaceTodos.mockResolvedValue({ todos: [item] });
+	api.startSpaceTodo.mockRejectedValueOnce(new Error('Could not connect')).mockReturnValueOnce(starting.promise);
+	coordinatorConversation();
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	const action = 'Actions for Backlog item';
+	await userEvent.click(await screen.findByRole('button', { name: action }));
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+	const retry = await screen.findByRole('button', { name: 'Try again' });
+	expect(retry.hasAttribute('disabled')).toBe(false);
+	await userEvent.click(screen.getByRole('button', { name: action }));
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Start a thread' }));
+	await waitFor(() => expect(retry.hasAttribute('disabled')).toBe(true));
+	await userEvent.click(retry);
+	expect(api.startSpaceTodo.mock.calls).toEqual([['space_1', item.id, 'coordinator'], ['space_1', item.id, 'thread']]);
+	await userEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+	expect(retry.hasAttribute('disabled')).toBe(true);
+	await userEvent.click(screen.getByRole('tab', { name: 'Board' }));
+	expect(screen.getByRole('button', { name: action }).hasAttribute('disabled')).toBe(true);
+	await act(() => starting.reject(new Error('Could not start the thread')));
+	await waitFor(() => expect(retry.hasAttribute('disabled')).toBe(false));
 });
 
 it('disables dock retry through attachment upload and editing, retries the saved to-do, and disables retry when it is done', async () => {

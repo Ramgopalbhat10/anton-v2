@@ -819,7 +819,10 @@ export function ProjectFeed({
 						{status ? <CoordinatorProgress>{status}</CoordinatorProgress> : null}
 					</div>
 					{handoffs.map((entry) => {
-						if (entry.state !== 'failed' || (entry.settlement && messages.some((message) => message.settlement && message.submissionId === entry.settlement?.submissionId))) return null;
+						if (entry.state !== 'failed') return null;
+						const id = entry.settlement?.submissionId;
+						// Flue terminal advisories can carry their submission id only in the signal attributes.
+						if (id && messages.some((message) => message.settlement && (message.submissionId ?? message.signal?.attributes?.submissionId) === id)) return null;
 						const action = entry.settlement?.outcome === 'aborted' ? 'The coordinator stopped while working on' : entry.settlement ? 'The coordinator failed while working on' : 'Could not hand off';
 						return (
 							<div key={entry.todo.id} className="flex min-w-0 flex-wrap items-center gap-1">

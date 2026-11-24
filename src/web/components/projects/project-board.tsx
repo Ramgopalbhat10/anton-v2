@@ -15,7 +15,7 @@ import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@
 import { imageFile } from '@/lib/attachments';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
-import { canStartTodo, todoIsUnsaved, type TodoDraft, type TodoSaves } from './todo-saves';
+import { cacheStartedTodo, canStartTodo, todoIsUnsaved, todoThreadStartKey, type TodoDraft, type TodoSaves } from './todo-saves';
 
 /** Thread states: threads move into these on their own, so only To do creates work. */
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
@@ -155,14 +155,17 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 	const save = saves.stateOf(todo);
 	// Not on the server yet, or a change to it still on the way: starting or editing it now would work from the old one.
 	const unsaved = todoIsUnsaved(save);
-	const canStart = canStartTodo(todo, save) && !handingOff;
 	const start = useMutation({
+		mutationKey: [...todoThreadStartKey(spaceId), todo.id],
 		mutationFn: () => api.startSpaceTodo(spaceId, todo.id, 'thread'),
 		onSuccess: (result) => {
+			cacheStartedTodo(queryClient, spaceId, result.todo);
 			void refresh();
 			if (result.thread) openThread(result.thread);
 		},
 	});
+	const startingThread = start.isPending || saves.isStartingThread(todo.id);
+	const canStart = canStartTodo(todo, save) && !handingOff && !startingThread;
 	const withCoordinator = todo.status === 'in_progress';
 	return (
 		<article aria-label={todo.title} aria-busy={save?.saving || undefined} className={`flex min-w-0 flex-col gap-1.5 p-2.5 ${CARD}`}>
@@ -179,7 +182,7 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 				</button>
 				<Menu>
 					<MenuTrigger asChild>
-						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={handingOff || start.isPending || save?.pending} />
+						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={handingOff || startingThread || save?.pending} />
 					</MenuTrigger>
 					<MenuContent align="end" onCloseAutoFocus={(event) => {
 						if (focusAfterHandoff.current && onHandoffFocus) {
@@ -219,10 +222,10 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 					</MenuContent>
 				</Menu>
 			</div>
-			{withCoordinator || handingOff || start.isPending ? (
+			{withCoordinator || handingOff || startingThread ? (
 				<button type="button" onClick={onOpenCoordinator} className="flex items-center gap-1.5 text-small text-(--accent-text) outline-none hover:underline">
 					<Icon icon={Waypoints} size={11} />
-					{start.isPending ? 'Starting…' : withCoordinator ? 'With the coordinator' : 'Handing off…'}
+					{startingThread ? 'Starting…' : withCoordinator ? 'With the coordinator' : 'Handing off…'}
 				</button>
 			) : null}
 			{save?.error ? (

@@ -5,12 +5,12 @@ import { Popover } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api } from '@/lib/api';
-import type { Space, SpaceTodo } from '@/lib/api/spaces';
+import type { Space } from '@/lib/api/spaces';
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
 import { ProjectFeed, type TodoHandoff } from '@/components/projects/project-feed';
-import { canStartTodo, useTodoSaves } from '@/components/projects/todo-saves';
+import { cacheStartedTodo, canStartTodo, todoThreadStartKey, useTodoSaves } from '@/components/projects/todo-saves';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
@@ -362,11 +362,12 @@ export function ProjectPage() {
 	const refreshCoordinator = agent.refresh;
 	const eligibleTodo = (id: string) => {
 		const todo = todoSaves.todos.find((item) => item.id === id);
-		return todo && !handingOff.has(id) && canStartTodo(todo, todoSaves.stateOf(todo)) ? todo : undefined;
+		return todo && !handingOff.has(id) && !todoSaves.isStartingThread(id) && canStartTodo(todo, todoSaves.stateOf(todo)) ? todo : undefined;
 	};
 	const handTodo = (id: string, focus = false) => {
 		const todo = eligibleTodo(id);
-		if (!todo) return;
+		// The board's mutation enters the cache before observers redraw with its pending state.
+		if (!todo || queryClient.isMutating({ mutationKey: [...todoThreadStartKey(spaceId), id], exact: true })) return;
 		if (focus) focusCoordinator();
 		openCoordinator();
 		const update = (next: TodoHandoff | null) => setHandoffs((all) => {
@@ -376,10 +377,7 @@ export function ProjectPage() {
 		update({ todo, state: 'sending' });
 		const key = ['space-todos', spaceId];
 		void api.startSpaceTodo(spaceId, id, 'coordinator').then(({ todo: savedTodo, submissionId }) => {
-			queryClient.setQueryData<{ todos: SpaceTodo[] }>(key, (previous) => previous && savedTodo ? {
-				...previous,
-				todos: previous.todos.map((item) => item.id === id && item.updatedAt <= savedTodo.updatedAt ? savedTodo : item),
-			} : previous);
+			cacheStartedTodo(queryClient, spaceId, savedTodo);
 			update(submissionId ? { todo, state: 'accepted', submissionId } : null);
 			// The SDK stops observing a conversation that doesn't exist yet. Admission creates it.
 			if (!hasConversation.current) refreshCoordinator();
