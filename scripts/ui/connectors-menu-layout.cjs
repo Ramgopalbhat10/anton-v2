@@ -70,6 +70,14 @@ async function check() {
 		const finalBox = await submenu.boundingBox();
 		assert(helpBox && finalBox && helpBox.y + helpBox.height <= finalBox.y + finalBox.height + 1, 'The pinned footer is not clipped by the cap');
 		if (screenshots) await page.screenshot({ path: `${screenshots}/connectors-menu-long-error.png` });
+
+		// Closing and reopening the sub-menu clears the old error.
+		await page.keyboard.press('Escape');
+		await page.getByRole('button', { name: 'Add files and connectors' }).click();
+		await page.getByRole('menuitem', { name: /^Connectors/ }).hover();
+		const reopened = page.getByRole('menu').filter({ hasText: 'Manage connectors' });
+		await reopened.waitFor({ state: 'visible' });
+		assert((await reopened.getByText(/Toggle failed/).count()) === 0, 'Reopening the sub-menu clears the old error');
 		assert.deepEqual(errors, []);
 	} finally {
 		await browser.close();

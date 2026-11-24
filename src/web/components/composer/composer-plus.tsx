@@ -245,7 +245,11 @@ export function ComposerPlus({ attachments, label = 'Attach files', side = 'top'
 					</MenuItem>
 					<ArtifactsMenu attachments={attachments} />
 					{run ? <RunOnMenu run={run} /> : null}
-					<MenuSub>
+					<MenuSub
+						onOpenChange={(open) => {
+							if (!open) setProblem(null);
+						}}
+					>
 						<MenuSubTrigger
 							icon={Plug}
 							hint={
