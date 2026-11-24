@@ -5,6 +5,9 @@ export type HandoffsBeforeTool = Map<string, FlueConversationMessage[]>;
 
 function toolTodo(part: FlueConversationPart): string | null {
 	if (part.type !== 'dynamic-tool' || (part.toolName !== 'start_thread' && part.toolName !== 'message_thread')) return null;
+	const output = part.state === 'output-available' ? part.output : undefined;
+	if (output && typeof output === 'object' && 'todoId' in output && typeof output.todoId === 'string') return shortTodoId(output.todoId);
+	// Pending calls and older transcripts only have the original tool input.
 	const ref = (part.input as { todo_id?: unknown } | undefined)?.todo_id;
 	if (typeof ref !== 'string') return null;
 	const id = todoRef(ref);
@@ -12,8 +15,9 @@ function toolTodo(part: FlueConversationPart): string | null {
 }
 
 /** Flue lists joined inputs after the whole assistant reply. Show each board handoff before its first thread action. */
-export function joinedTodoHandoffs(messages: FlueConversationMessage[], settlements: FlueConversationSettlement[]) {
+export function joinedTodoHandoffs(messages: FlueConversationMessage[], settlements: FlueConversationSettlement[], liveReply?: FlueConversationMessage) {
 	const answeredBy = new Map(settlements.map((item) => [item.submissionId, item.answeredBySubmissionId]));
+	const active = liveReply && !answeredBy.has(liveReply.submissionId ?? '') && liveReply.metadata?.completedAt === undefined && !liveReply.metadata?.usage ? liveReply : undefined;
 	const ownReplies = new Set(messages.flatMap((message) => message.role === 'assistant' && !message.settlement && message.submissionId ? [message.submissionId] : []));
 	const earlierReplies = new Map<string, FlueConversationMessage>();
 	const seen = new Set<string>();
@@ -30,8 +34,9 @@ export function joinedTodoHandoffs(messages: FlueConversationMessage[], settleme
 		const todo = todoHandoffId(message.parts.map((part) => part.type === 'text' ? part.text : '').join(''));
 		if (!todo) continue;
 		const host = answeredBy.get(message.submissionId);
-		// Before settlement the matching tool identifies the join. A retry of the same to-do needs explicit linkage.
-		const reply = host ? earlierReplies.get(host) : !ownReplies.has(message.submissionId) && !seen.has(todo) ? previousReply : undefined;
+		// A matching tool is provisional evidence only while both sides are active. Retries need explicit linkage.
+		const provisional = active && active === previousReply && !answeredBy.has(message.submissionId) && !ownReplies.has(message.submissionId) && !seen.has(todo);
+		const reply = host ? earlierReplies.get(host) : provisional ? active : undefined;
 		seen.add(todo);
 		if (!reply) continue;
 		const at = reply.parts.findIndex((part) => toolTodo(part) === todo);

@@ -68,20 +68,21 @@ function coordinatorTurn(): Message[] {
 }
 
 /** A reply whose second thread was started for a handoff that joined it. */
-function joinedTodos(): Pick<Conversation, 'messages' | 'settlements'> {
-	const user = (id: string, todo: string, brief: string): Message => ({
-		id: `u-${id}`, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(`Start the project to-do [todo:${todo}]: ${brief}`)],
+function joinedTodos(inferred: boolean): Pick<Conversation, 'messages' | 'settlements'> {
+	const user = (id: string, brief: string, todo?: string): Message => ({
+		id: `u-${id}`, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(todo ? `Start the project to-do [todo:${todo}]: ${brief}` : brief)],
 	});
-	const start = (todo_id: string, thread: string): Part => ({
-		type: 'dynamic-tool', toolName: 'start_thread', toolCallId: `start-${thread}`, state: 'output-available', input: { todo_id }, output: `Started [id:${thread}]`,
-	});
+	const start = (thread: string, todo_id?: string, resolved?: string): Part => {
+		const output = `Started [id:${thread}]`;
+		return { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: `start-${thread}`, state: 'output-available', input: { todo_id }, output: resolved ? { output, todoId: resolved } : output };
+	};
 	return {
 		messages: [
-			user('todo-first', 'aaaa0001', 'Update the ledger columns'),
+			user('todo-first', 'Update the ledger columns', inferred ? undefined : 'aaaa0001'),
 			{ id: 'a-todos', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'todo-first', parts: [
-				start('aaaa0001', 'th-schema'), start('aaaa0002', 'th-api'), text('Both threads are underway.'),
+				start('th-schema', inferred ? undefined : 'aaaa0001'), start('th-api', inferred ? undefined : 'aaaa0002', inferred ? 'todo_aaaa0002' : undefined), text('Both threads are underway.'),
 			] },
-			user('todo-second', 'aaaa0002', 'Return invoices from the API'),
+			user('todo-second', 'Return invoices from the API', 'aaaa0002'),
 		],
 		settlements: [
 			{ submissionId: 'todo-first', outcome: 'completed' },
@@ -137,7 +138,7 @@ export function createFlueClient({ url }: { url: string }) {
 	const turns = turnsFromUrl();
 	const params = new URLSearchParams(location.search);
 	const coordinator = url.includes('/coordinator/');
-	const todos = coordinator && params.has('joined-todos') ? joinedTodos() : { messages: [], settlements: [] };
+	const todos = coordinator && params.has('joined-todos') ? joinedTodos(params.get('joined-todos') === 'inferred') : { messages: [], settlements: [] };
 	let conversation: Conversation = {
 		conversationId: url,
 		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns() : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : [])],

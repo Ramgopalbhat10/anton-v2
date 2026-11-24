@@ -224,13 +224,13 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
 });
 
-it('places a joined to-do and its attachment between the first thread card and its own thread action, live and settled', async () => {
+it.each(['explicit', 'inferred'] as const)('places a joined to-do and its attachment before its thread action with an %s ID, live and settled', async (mode) => {
 	const first = makeTodo({ id: 'todo_aaaaaaaa', title: 'Add invoices to billing', description: '' });
 	const second = makeTodo({ id: 'todo_bbbbbbbb', title: 'Make the invoice preview taller', description: '' });
 	const nextThread = session({ ...threads[0], id: 'thread_2', title: 'Fill the invoice preview' });
 	api.sessions.mockResolvedValueOnce({ sessions: [...threads, nextThread] });
 	api.spaceTodos.mockResolvedValue({ todos: [first, second] });
-	api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...first, status: 'in_progress' }, submissionId: 'first' });
+	if (mode === 'explicit') api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...first, status: 'in_progress' }, submissionId: 'first' });
 	api.startSpaceTodo.mockResolvedValueOnce({ todo: { ...second, status: 'in_progress' }, submissionId: 'second' });
 	const { publish } = coordinatorConversation();
 	renderWithRouter(() => <Outlet />, '/projects/space_1');
@@ -244,19 +244,23 @@ it('places a joined to-do and its attachment between the first thread card and i
 		parts: [{ type: 'text', state: 'done', text: todoStartMessage(todo) }],
 	});
 	const u1 = userMessage(first, 'first');
+	const firstText = mode === 'explicit' ? todoStartMessage(first) : first.title;
+	u1.parts = [{ type: 'text', state: 'done', text: firstText }];
 	const u2 = userMessage(second, 'second');
 	u2.parts.push({ type: 'file', mediaType: 'image/png', filename: 'preview.png', url: '/preview.png' });
 	const reply: FlueConversationMessage = {
 		id: 'reply', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'first',
-		parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c1', state: 'output-available', input: { todo_id: '[todo:aaaaaaaa]' }, output: 'Started [id:thread_1]' }],
+		metadata: { startedAt: 42 },
+		parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c1', state: 'output-available', input: mode === 'explicit' ? { todo_id: '[todo:aaaaaaaa]' } : {}, output: 'Started [id:thread_1]' }],
 	};
-	await handOff(first);
+	if (mode === 'explicit') await handOff(first);
 	await publish([u1, reply]);
 	await handOff(second);
-	const tool = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c2', state: 'input-available', input: { todo_id: second.id, title: nextThread.title } } as const;
-	await publish([u1, { ...reply, parts: [...reply.parts, tool] }, u2]);
+	const tool = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'c2', state: 'input-available', input: { ...(mode === 'explicit' ? { todo_id: second.id } : {}), title: nextThread.title } } as const;
+	const resolved = { ...tool, state: 'output-available', output: { output: 'Started [id:thread_2]', todoId: second.id } } as const;
+	await publish([u1, { ...reply, parts: [...reply.parts, mode === 'explicit' ? tool : resolved] }, u2]);
 	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
-	const brief1 = dock.getByText(todoStartMessage(first));
+	const brief1 = dock.getByText(firstText);
 	const row1 = dock.getByRole('article', { name: threads[0].title });
 	const brief2 = dock.getByText(todoStartMessage(second));
 	const image = dock.getByRole('button', { name: 'Open preview.png' });
@@ -265,9 +269,9 @@ it('places a joined to-do and its attachment between the first thread card and i
 	before(row1, image);
 	before(image, brief2);
 	before(brief2, dock.getByText(nextThread.title));
-	expect(dock.getByText('Starting')).toBeTruthy();
+	if (mode === 'explicit') expect(dock.getByText('Starting')).toBeTruthy();
 
-	await publish([u1, { ...reply, parts: [...reply.parts, { ...tool, state: 'output-available', output: 'Started [id:thread_2]' }, { type: 'text', state: 'done', text: 'Both threads are underway.' }] }, u2], [
+	await publish([u1, { ...reply, parts: [...reply.parts, resolved, { type: 'text', state: 'done', text: 'Both threads are underway.' }] }, u2], [
 		{ submissionId: 'first', outcome: 'completed' },
 		{ submissionId: 'second', outcome: 'completed', answeredBySubmissionId: 'first' },
 	]);

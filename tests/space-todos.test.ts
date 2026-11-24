@@ -467,6 +467,60 @@ test('two board handoffs join one coordinator reply before its tools run and eac
 	}
 });
 
+test('an inferred to-do joining an ordinary coordinator reply carries its resolved ID on both thread actions', async () => {
+	const { Coordinator } = await import('../src/agents/coordinator.ts');
+	const faux = fauxProvider({ provider: 'inferred-coordinator-fixture' });
+	const coordinatorModel = `${faux.provider.id}/${faux.getModel().id}`;
+	catalog = Promise.resolve([...allModels, model(coordinatorModel)]);
+	const space = await spaces.createSpace({ name: 'Inferred handoff' });
+	await spaces.editSpace(space.id, { coordinatorModel, state: 'paused' });
+	const existing = await spaces.startThread(space.id, { title: 'Existing thread', brief: 'Original work' });
+	const todo = await todos.createTodo(space.id, { title: 'Fix duplicate invoices' });
+	const other = await todos.createTodo(space.id, { title: 'An unrelated to-do' });
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const runtime = await start({ agents: [Coordinator], providers: [faux.provider] });
+	try {
+		const agent = init(Coordinator, { id: space.id });
+		faux.setResponses([
+			async () => {
+				entered.resolve();
+				await release.promise;
+				return fauxAssistantMessage('Here is the status.');
+			},
+			fauxAssistantMessage([
+				fauxToolCall('start_thread', { title: 'Fix invoices', request: todo.title }, { id: 'inferred-start' }),
+				fauxToolCall('message_thread', { thread: existing.id, message: todo.title, todo_id: other.id }, { id: 'inferred-message' }),
+			], { stopReason: 'toolUse' }),
+			fauxAssistantMessage('The invoice work is underway.'),
+		]);
+		await primeCoordinator(space.id);
+		const host = await agent.dispatch('What is running?');
+		const outputs = new Map<string, unknown>();
+		const answeredBy = new Map<string, string | undefined>();
+		const reply = agent.read(host, { signal: AbortSignal.timeout(5000), onEvent(event) {
+			if (event.type === 'tool-output') outputs.set(event.toolCallId, event.output);
+			if (event.type === 'submission-settled') answeredBy.set(event.submissionId, event.answeredBySubmissionId);
+		} });
+		await Promise.race([entered.promise, reply.then(() => { throw new Error('The coordinator settled before the handoff'); })]);
+		await todos.startTodo(space.id, todo.id, 'coordinator');
+		const joined = await agent.dispatch(toCoordinator.at(-1)!.text);
+		release.resolve();
+		await reply;
+		assert.equal(answeredBy.get(joined.submissionId), host.submissionId);
+		const started = (await sessions.listThreads(space.id)).find(({ title }) => title === 'Fix invoices');
+		assert.ok(started);
+		assert.deepEqual(outputs.get('inferred-start'), { output: `Queued thread "Fix invoices" [id:${started.id}] with no repository. It starts when a working thread finishes.`, todoId: todo.id });
+		assert.deepEqual(outputs.get('inferred-message'), { output: `Sent to "Existing thread" [id:${existing.id}].`, todoId: todo.id });
+		const byId = new Map((await todos.listTodos(space.id)).map((item) => [item.id, item]));
+		assert.equal(byId.get(todo.id)?.threads, 2);
+		assert.equal(byId.get(other.id)?.threads, 0);
+	} finally {
+		release.resolve();
+		await runtime.stop();
+	}
+});
+
 test("a to-do's screenshots and files are kept in the project's Library and go with the brief it starts, images as pictures", async () => {
 	const space = await spaces.createSpace({ name: 'Todo files', repoIds: [apiRepo.id] });
 	await spaces.editSpace(space.id, { coordinatorModel: 'openrouter/test/strong' });

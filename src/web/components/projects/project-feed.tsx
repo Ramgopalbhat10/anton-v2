@@ -866,7 +866,7 @@ export function ProjectFeed({
 		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
-	const joined = useMemo(() => joinedTodoHandoffs(messages, agent.settlements), [messages, agent.settlements]);
+	const joined = useMemo(() => joinedTodoHandoffs(messages, agent.settlements, liveAssistant), [messages, agent.settlements, liveAssistant]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');

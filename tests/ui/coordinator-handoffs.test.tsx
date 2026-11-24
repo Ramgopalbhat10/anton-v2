@@ -1,4 +1,4 @@
-import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
+import type { FlueConversationMessage, FlueConversationPart, FlueConversationSettlement } from '@flue/react';
 import { describe, expect, it } from 'vitest';
 import { joinedTodoHandoffs } from '@/lib/coordinator-handoffs';
 
@@ -19,7 +19,7 @@ describe('joined to-do handoffs', () => {
 		const b = handoff('second', 'bbbbbbbb');
 		const c = handoff('third', 'cccccccc');
 		const host = reply('first', tool('first-start', 'aaaaaaaa'), tool('third-send', 'cccccccc', 'message_thread'), tool('second-start', 'todo_bbbbbbbb'), tool('second-split', '[todo:bbbbbbbb]'));
-		const { byReply, moved } = joinedTodoHandoffs([a, host, b, c], []);
+		const { byReply, moved } = joinedTodoHandoffs([a, host, b, c], [], host);
 		expect([...byReply.get(host.id)!]).toEqual([['third-send', [b, c]]]);
 		expect(moved).toEqual(new Set([b.id, c.id]));
 	});
@@ -30,7 +30,7 @@ describe('joined to-do handoffs', () => {
 		const separate = handoff('separate', 'bbbbbbbb');
 		const unmatched = handoff('unmatched', 'cccccccc');
 		const host = reply('first', tool('first-start', 'aaaaaaaa'), tool('other-marker', 'bbbbbbbb'), tool('not-a-dispatch', 'cccccccc', 'remember'));
-		const { byReply, moved } = joinedTodoHandoffs([a, host, retry, unmatched, separate, reply('separate')], []);
+		const { byReply, moved } = joinedTodoHandoffs([a, host, retry, unmatched, separate, reply('separate')], [], host);
 		expect(byReply.size).toBe(0);
 		expect(moved.size).toBe(0);
 	});
@@ -42,5 +42,31 @@ describe('joined to-do handoffs', () => {
 		const other = reply('other', tool('not-this-start', 'bbbbbbbb'));
 		const { byReply } = joinedTodoHandoffs([a, host, other, b], [{ submissionId: 'second', outcome: 'completed', answeredBySubmissionId: 'first' }]);
 		expect([...byReply]).toEqual([[host.id, new Map([['second-start', [b]]])]]);
+	});
+
+	it.each(['start_thread', 'message_thread'] as const)('uses the resolved to-do from %s instead of the wrong raw ID', (toolName) => {
+		const b = handoff('board', 'bbbbbbbb');
+		const unrelated = handoff('other', 'cccccccc');
+		const host = reply('chat', { type: 'dynamic-tool', toolName, toolCallId: 'dispatch', state: 'output-available', input: { todo_id: 'cccccccc' }, output: { output: 'Done', todoId: 'todo_bbbbbbbb' } });
+		const { byReply, moved } = joinedTodoHandoffs([host, b, unrelated], [{ submissionId: 'board', outcome: 'completed', answeredBySubmissionId: 'chat' }], host);
+		expect([...byReply]).toEqual([[host.id, new Map([['dispatch', [b]]])]]);
+		expect(moved).toEqual(new Set([b.id]));
+	});
+
+	it('keeps a new handoff after a finished ordinary reply that failed to start the same to-do', () => {
+		const board = handoff('board', 'bbbbbbbb');
+		const host = reply('chat', { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'old-start', state: 'output-error', input: { todo_id: 'bbbbbbbb' }, errorText: 'Request is not the user’s words' });
+		const settled: FlueConversationSettlement = { submissionId: 'chat', outcome: 'completed' };
+		expect(joinedTodoHandoffs([host, board], [settled], host).moved.size).toBe(0);
+		expect(joinedTodoHandoffs([host, board], [settled, { submissionId: 'board', outcome: 'failed' }]).moved.size).toBe(0);
+		const finished = { ...host, metadata: { completedAt: 42 } };
+		expect(joinedTodoHandoffs([finished, board], [], finished).moved.size).toBe(0);
+		expect(joinedTodoHandoffs([host, board], []).moved.size).toBe(0);
+	});
+
+	it('does not use provisional linkage for a settled handoff even if the candidate reply is live', () => {
+		const board = handoff('board', 'bbbbbbbb');
+		const host = reply('chat', tool('old-start', 'bbbbbbbb'));
+		expect(joinedTodoHandoffs([host, board], [{ submissionId: 'board', outcome: 'failed' }], host).moved.size).toBe(0);
 	});
 });
