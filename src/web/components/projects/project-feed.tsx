@@ -55,7 +55,14 @@ function outputText(output: unknown): string {
 }
 
 const textOf = (message: FlueConversationMessage) => message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
-const shownPart = (part: FlueConversationPart) => (part.type === 'text' && part.text.trim()) || part.type === 'dynamic-tool';
+
+const DISPLAYED_TOOLS = new Set(['start_thread', 'message_thread', 'remember', 'resolve_thread', 'stop_thread', 'add_repo', 'create_todo']);
+const suggestionsIn = (part: ToolPart) => (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
+const shownPart = (part: FlueConversationPart) => part.type === 'text' ? Boolean(part.text.trim())
+	: part.type === 'dynamic-tool' && (part.toolName === 'suggest_threads' ? suggestionsIn(part).length > 0 : DISPLAYED_TOOLS.has(part.toolName));
+
+const livePart = (part: FlueConversationPart) => ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming')
+	|| (part.type === 'dynamic-tool' && part.state === 'input-available');
 
 const threadIdIn = (part: ToolPart) => (part.state === 'output-available' ? (/\[id:([\w-]+)\]/.exec(outputText(part.output))?.[1] ?? null) : null);
 
@@ -317,7 +324,7 @@ function ToolBlock({ part, space, threads, live }: { part: ToolPart; space: Spac
 		case 'start_thread':
 			return <Dispatch parts={[part]} threads={threads} live={live} />;
 		case 'suggest_threads': {
-			const list = (part.input as { threads?: Suggestion[] } | undefined)?.threads ?? [];
+			const list = suggestionsIn(part);
 			return list.length ? <SuggestedThreads space={space} suggestions={list} /> : null;
 		}
 		case 'message_thread':
@@ -701,11 +708,10 @@ const CoordinatorComposer = memo(function CoordinatorComposer({
 	);
 });
 
-export type HandoffTodo = Pick<SpaceTodo, 'id' | 'title'>;
-export type TodoHandoff = { todo: HandoffTodo } & (
+export type TodoHandoff = { todo: Pick<SpaceTodo, 'id' | 'title'> } & (
 	| { state: 'sending' }
 	| { state: 'accepted'; submissionId: string }
-	| { state: 'failed'; error: string }
+	| { state: 'failed'; error: string; settlement?: { submissionId: string; outcome: 'failed' | 'aborted' } }
 );
 const NO_HANDOFFS: TodoHandoff[] = [];
 
@@ -725,6 +731,7 @@ export function ProjectFeed({
 	starting = false,
 	onStartingChange: setStarting,
 	handoffs = NO_HANDOFFS,
+	canRetryHandoff,
 	onRetryHandoff,
 }: {
 	space: Space;
@@ -734,22 +741,29 @@ export function ProjectFeed({
 	starting?: boolean;
 	onStartingChange: (starting: boolean) => void;
 	handoffs?: TodoHandoff[];
-	onRetryHandoff?: (todo: HandoffTodo) => void;
+	canRetryHandoff?: (id: string) => boolean;
+	onRetryHandoff?: (id: string) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const [draft, setDraft] = useState('');
 	const busy = agent.status === 'submitted' || agent.status === 'streaming' || handoffs.some((entry) => entry.state === 'accepted');
 	const messages = useMemo(() => agent.messages.filter((message) => message.settlement || (message.display === 'visible' && message.role !== 'system')), [agent.messages]);
 	const last = messages.at(-1);
+	const lastAssistant = messages.findLast((message) => message.role === 'assistant' && !message.settlement);
+	const assistantSettled = lastAssistant?.submissionId && agent.settlements.some((item) => item.submissionId === lastAssistant.submissionId);
+	// A queued or joined user message can be after the assistant message Flue is still updating.
+	const liveAssistant = busy && lastAssistant && !assistantSettled && (lastAssistant === last || lastAssistant.parts.some(livePart)
+		|| (lastAssistant.metadata?.startedAt !== undefined && lastAssistant.metadata.completedAt === undefined && !lastAssistant.metadata.usage)
+		|| handoffs.some((entry) => entry.state === 'accepted' && entry.submissionId === lastAssistant.submissionId)) ? lastAssistant : undefined;
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
 	const waiting = handoffs.filter((entry) => entry.state === 'sending' || (entry.state === 'accepted' && !messages.some((message) => message.submissionId === entry.submissionId)));
 	let status: string | null = null;
-	if (busy && waiting.length === 0 && !last?.settlement) {
-		if (last?.role !== 'assistant') status = 'The coordinator is reading';
-		else if (!last.parts.some(shownPart)) status = 'The coordinator is thinking';
+	if (busy) {
+		if (liveAssistant && !liveAssistant.parts.some(shownPart)) status = 'The coordinator is thinking';
+		else if (!liveAssistant && waiting.length === 0 && last?.role !== 'assistant' && !last?.settlement) status = 'The coordinator is reading';
 	}
 
 	const { following, follow } = useFollowLatest(scroller, { reset: space.id });
@@ -793,7 +807,7 @@ export function ProjectFeed({
 							) : (
 								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} />
 							);
-						return <CoordinatorMessage key={message.id} message={message} live={busy && message === last} space={space} threads={threads} resolveFile={resolveFile} />;
+						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} />;
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
 					<div role="status" className={status || waiting.length ? 'flex flex-col gap-2' : 'sr-only'}>
@@ -804,12 +818,16 @@ export function ProjectFeed({
 						))}
 						{status ? <CoordinatorProgress>{status}</CoordinatorProgress> : null}
 					</div>
-					{handoffs.map((entry) => entry.state === 'failed' ? (
-						<div key={entry.todo.id} className="flex min-w-0 flex-wrap items-center gap-1">
-							<div role="alert" className="min-w-0"><ActionRow icon={CircleAlert} failed>Could not hand off “{entry.todo.title}”: {entry.error}</ActionRow></div>
-							{onRetryHandoff ? <Btn size="sm" variant="ghost" onClick={() => onRetryHandoff(entry.todo)}>Try again</Btn> : null}
-						</div>
-					) : null)}
+					{handoffs.map((entry) => {
+						if (entry.state !== 'failed' || (entry.settlement && messages.some((message) => message.settlement && message.submissionId === entry.settlement?.submissionId))) return null;
+						const action = entry.settlement?.outcome === 'aborted' ? 'The coordinator stopped while working on' : entry.settlement ? 'The coordinator failed while working on' : 'Could not hand off';
+						return (
+							<div key={entry.todo.id} className="flex min-w-0 flex-wrap items-center gap-1">
+								<div role="alert" className="min-w-0"><ActionRow icon={CircleAlert} failed>{action} “{entry.todo.title}”{entry.error ? `: ${entry.error}` : '.'}</ActionRow></div>
+								{onRetryHandoff ? <Btn size="sm" variant="ghost" disabled={!canRetryHandoff?.(entry.todo.id)} onClick={() => onRetryHandoff(entry.todo.id)}>Try again</Btn> : null}
+							</div>
+						);
+					})}
 					{agent.status === 'error' && !messages.some((message) => message.settlement) ? (
 						<ActionRow icon={CircleAlert} failed>
 							{agent.error?.message ? `The coordinator failed: ${agent.error.message}` : 'The coordinator failed. Send the message again.'}
@@ -817,7 +835,7 @@ export function ProjectFeed({
 					) : null}
 					{starting ? <NewThreadForm space={space} onDone={() => setStarting(false)} /> : null}
 				</div>
-					<JumpToLatest show={!following} live={busy || Boolean(sendingTodo) || Boolean(pending)} onJump={follow} />
+				<JumpToLatest show={!following} live={busy || Boolean(sendingTodo) || Boolean(pending)} onJump={follow} />
 			</div>
 			<CoordinatorComposer space={space} busy={busy} send={send} draft={draft} onDraft={setDraft} onNewThread={newThread} onPending={showPending} />
 		</div>

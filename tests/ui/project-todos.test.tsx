@@ -3,12 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
 import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSpaceTodos } from '@/lib/spaces';
+import { useTodoSaves } from '@/components/projects/todo-saves';
 import { session } from './render';
 import { todoStartMessage } from '../../src/core/space-todos';
 
@@ -19,6 +20,7 @@ const api = vi.hoisted(() => ({
 	models: vi.fn(async () => ({ models: [], default: '' })),
 	commands: vi.fn(async () => ({ commands: [] })),
 	budget: vi.fn(async () => ({ blocked: null })),
+	spaceUsage: vi.fn(async () => ({ today: 0, month: 0, byThread: [], byModel: [], daily: [] })),
 	storedOutputs: vi.fn(async () => ({ outputs: [] })),
 	createSpaceTodo: vi.fn(async (_spaceId: string, input: { title: string }) => makeTodo({ id: 'todo_new', title: input.title })),
 	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => makeTodo({ id: todoId, ...change })),
@@ -29,8 +31,13 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 vi.mock('@flue/sdk', async (original) => ({ ...(await original<typeof import('@flue/sdk')>()), createFlueClient: vi.fn() }));
 
-const { ProjectBoard } = await import('@/components/projects/project-board');
+const { ProjectBoard: Board } = await import('@/components/projects/project-board');
 const { ProjectPage } = await import('@/components/projects/project-page');
+
+function ProjectBoard({ todos, ...props }: Omit<ComponentProps<typeof Board>, 'saves'> & { todos: SpaceTodo[] }) {
+	const saves = useTodoSaves(props.space.id, todos);
+	return <Board {...props} saves={saves} />;
+}
 
 const space: Space = {
 	id: 'space_1',
@@ -116,19 +123,22 @@ beforeEach(() => {
 	api.spaceTodos.mockResolvedValue({ todos: [] });
 });
 
-it('opens the coordinator during a delayed handoff, makes failure retryable, and tracks the accepted submission', async () => {
-	const item = makeTodo({ id: 'todo_open', title: 'Backlog item', description: '' });
-	api.spaceTodos.mockResolvedValue({ todos: [item] });
-	localStorage.setItem('anton.project-panel.space_1', JSON.stringify({ open: false, view: 'board' }));
+const later = <T,>() => {
+	let resolve!: (value: T) => void;
 	let reject!: (error: Error) => void;
-	let accept!: (result: { todo: SpaceTodo; submissionId: string }) => void;
-	api.startSpaceTodo
-		.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }))
-		.mockImplementationOnce(() => new Promise((resolve) => { accept = resolve; }));
+	const promise = new Promise<T>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	return { promise, resolve, reject };
+};
+
+function coordinatorConversation() {
 	let onChange = () => {};
 	let snapshot: { phase: 'absent' | 'live'; conversation?: { messages: FlueConversationMessage[]; settlements: FlueConversationSettlement[] } } = { phase: 'absent' };
 	const refresh = vi.fn();
-	vi.mocked(createFlueClient).mockReturnValue({ observe: () => ({
+	const send = vi.fn(async () => ({ submissionId: 'joined' }));
+	vi.mocked(createFlueClient).mockReturnValue({ send, observe: () => ({
 		getSnapshot: () => snapshot,
 		subscribe: (listener: () => void) => { onChange = listener; return () => {}; },
 		refresh,
@@ -138,6 +148,19 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 		snapshot = { phase: 'live', conversation: { messages, settlements } };
 		onChange();
 	});
+	return { publish, refresh, send };
+}
+
+it('opens the coordinator during a delayed handoff, makes failure retryable, and tracks the accepted submission', async () => {
+	const item = makeTodo({ id: 'todo_open', title: 'Backlog item', description: '' });
+	api.spaceTodos.mockResolvedValue({ todos: [item] });
+	localStorage.setItem('anton.project-panel.space_1', JSON.stringify({ open: false, view: 'board' }));
+	let reject!: (error: Error) => void;
+	let accept!: (result: { todo: SpaceTodo; submissionId: string }) => void;
+	api.startSpaceTodo
+		.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }))
+		.mockImplementationOnce(() => new Promise((resolve) => { accept = resolve; }));
+	const { publish, refresh, send } = coordinatorConversation();
 	renderWithRouter(() => <Outlet />, '/projects/space_1');
 	const actions = await screen.findByRole('button', { name: 'Actions for Backlog item' });
 	expect(screen.queryByRole('button', { name: 'Hide the coordinator' })).toBeNull();
@@ -166,20 +189,110 @@ it('opens the coordinator during a delayed handoff, makes failure retryable, and
 	const reply: FlueConversationMessage = { id: 'reply', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'handoff', parts: [] };
 	await publish([message, reply]);
 	expect(screen.getByText('The coordinator is thinking')).toBeTruthy();
+	for (const toolName of ['read_project_file', 'read_thread', 'suggest_threads']) {
+		await publish([message, { ...reply, parts: [{ type: 'dynamic-tool', toolName, toolCallId: toolName, state: 'input-available', input: {} }] }]);
+		expect(screen.getByText('The coordinator is thinking')).toBeTruthy();
+	}
 	await publish([message, { ...reply, parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'start', state: 'input-available', input: { title: 'Start billing work' } }] }]);
 	expect(screen.getByText('Start billing work')).toBeTruthy();
 	expect(screen.getByText('Starting')).toBeTruthy();
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
+	const followUp: FlueConversationMessage = { ...message, id: 'joined-message', submissionId: 'joined', parts: [{ type: 'text', state: 'done', text: 'Also run the tests.' }] };
+	const launching: FlueConversationMessage = { ...reply, parts: [{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'start', state: 'output-available', input: { title: 'Start billing work' }, output: 'Started [id:thread-not-yet-listed]' }] };
+	await publish([message, launching]);
+	await userEvent.type(screen.getByRole('textbox', { name: 'Add to what the coordinator is doing' }), 'Also run the tests.{Enter}');
+	expect(send).toHaveBeenCalledOnce();
+	expect(screen.getByText('Also run the tests.')).toBeTruthy();
+	expect(screen.getByText('Starting')).toBeTruthy();
+	await publish([message, launching, followUp]);
+	expect(screen.getAllByText('Also run the tests.')).toHaveLength(1);
+	expect(screen.getByText('Starting')).toBeTruthy();
+	expect(screen.queryByText('The coordinator is reading')).toBeNull();
 	await publish([message, { ...reply, parts: [
 		{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'start', state: 'output-available', input: { title: 'Start billing work' }, output: 'Started [id:thread_1]' },
 		{ type: 'text', state: 'done', text: 'Done for now.' },
-	] }], [{ submissionId: 'handoff', outcome: 'completed' }]);
+	] }, followUp], [{ submissionId: 'handoff', outcome: 'completed' }, { submissionId: 'joined', outcome: 'completed', answeredBySubmissionId: 'handoff' }]);
 	const dock = within(screen.getByRole('complementary', { name: 'Coordinator' }));
 	expect(dock.getByRole('article', { name: 'Add invoices table' })).toBeTruthy();
 	expect(dock.queryByText('Starting')).toBeNull();
 	expect(screen.getByText('Done for now.')).toBeTruthy();
 	expect(screen.queryByRole('button', { name: 'Stop the coordinator' })).toBeNull();
 	expect(screen.queryByText('The coordinator is thinking')).toBeNull();
+});
+
+it.each([
+	{ outcome: 'failed', error: { message: 'The provider could not render the reply' }, text: 'The coordinator failed while working on “Backlog item”: The provider could not render the reply' },
+	{ outcome: 'aborted', error: undefined, text: 'The coordinator stopped while working on “Backlog item”.' },
+] as const)('explains an accepted handoff that settled $outcome without a transcript marker, then gives way to the marker', async ({ outcome, error, text }) => {
+	const item = makeTodo({ id: 'todo_open', title: 'Backlog item' });
+	const assigned = { ...item, status: 'in_progress', assignee: 'coordinator', updatedAt: '2026-10-04T00:00:00Z' } as const;
+	api.spaceTodos.mockResolvedValue({ todos: [item] });
+	api.startSpaceTodo.mockImplementationOnce(async () => {
+		api.spaceTodos.mockResolvedValue({ todos: [assigned] });
+		return { todo: assigned, submissionId: 'handoff' };
+	});
+	const { publish } = coordinatorConversation();
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	await userEvent.click(await screen.findByRole('button', { name: 'Actions for Backlog item' }));
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+	await screen.findByText('Waiting for the coordinator to pick up “Backlog item”');
+	const marker: FlueConversationMessage = { id: 'marker', role: 'system', purpose: 'advisory', display: 'diagnostic', submissionId: 'handoff', settlement: { outcome }, parts: [{ type: 'text', state: 'done', text: 'The runtime explained the outcome.' }] };
+	const unrelated = { ...marker, id: 'other-marker', submissionId: 'unrelated', parts: [{ type: 'text' as const, state: 'done' as const, text: 'An unrelated submission failed.' }] };
+	const settlements = [{ submissionId: 'handoff', outcome, error }];
+	await publish([unrelated], settlements);
+	expect(screen.getByRole('alert').textContent).toContain(text);
+	expect(screen.queryByText('Waiting for the coordinator to pick up “Backlog item”')).toBeNull();
+	expect(screen.getByRole('button', { name: 'Try again' }).hasAttribute('disabled')).toBe(true);
+	await publish([unrelated, marker], settlements);
+	expect(screen.getAllByText('The runtime explained the outcome.')).toHaveLength(1);
+	expect(screen.queryByText(text)).toBeNull();
+});
+
+it('disables dock retry through attachment upload and editing, retries the saved to-do, and disables retry when it is done', async () => {
+	const item = makeTodo({ id: 'todo_open', title: 'Backlog item' });
+	api.spaceTodos.mockResolvedValue({ todos: [item] });
+	api.startSpaceTodo.mockRejectedValueOnce(new Error('Could not connect')).mockRejectedValueOnce(new Error('Could not connect'));
+	const upload = later<Awaited<ReturnType<typeof api.attachToProject>>>();
+	api.attachToProject.mockReturnValueOnce(upload.promise);
+	const patch = later<SpaceTodo>();
+	api.editSpaceTodo.mockReturnValueOnce(patch.promise);
+	coordinatorConversation();
+	renderWithRouter(() => <Outlet />, '/projects/space_1');
+	await userEvent.click(await screen.findByRole('button', { name: 'Actions for Backlog item' }));
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
+	const retryButton = await screen.findByRole('button', { name: 'Try again' });
+	const card = within(screen.getByRole('article', { name: 'Backlog item' }));
+	await userEvent.click(card.getByRole('button', { name: /Backlog item Preserve/ }));
+	const dialog = await screen.findByRole('dialog', { name: 'Edit to-do' });
+	const edit = within(dialog);
+	await userEvent.clear(edit.getByRole('textbox', { name: 'Title' }));
+	await userEvent.type(edit.getByRole('textbox', { name: 'Title' }), 'Revised brief');
+	await userEvent.upload(dialog.querySelector<HTMLInputElement>('input[type=file]')!, new File(['Updated'], 'details.txt', { type: 'text/plain' }));
+	await userEvent.click(edit.getByRole('button', { name: 'Save' }));
+	expect(api.attachToProject).toHaveBeenCalledTimes(1);
+	expect(api.editSpaceTodo).not.toHaveBeenCalled();
+	expect(retryButton.hasAttribute('disabled')).toBe(true);
+	await userEvent.click(retryButton);
+	expect(api.startSpaceTodo).toHaveBeenCalledTimes(1);
+
+	// Leaving the board does not lose the save in progress or make dock retry available.
+	await userEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+	expect(retryButton.hasAttribute('disabled')).toBe(true);
+	const attachment = { name: 'details.txt', path: 'details.txt', kind: 'Text', size: 7 };
+	await act(() => upload.resolve({ ...attachment, text: 'Updated', cut: null }));
+	expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Revised brief', description: item.description, attachments: [attachment] });
+	expect(retryButton.hasAttribute('disabled')).toBe(true);
+	const saved = { ...item, title: 'Revised brief', updatedAt: '2026-10-04T00:00:00Z', attachments: [attachment] };
+	api.spaceTodos.mockResolvedValue({ todos: [saved] });
+	await act(() => patch.resolve(saved));
+	await waitFor(() => expect(retryButton.hasAttribute('disabled')).toBe(false));
+	await userEvent.click(retryButton);
+	expect(await screen.findByText('Could not hand off “Revised brief”: Could not connect')).toBeTruthy();
+	expect(api.startSpaceTodo).toHaveBeenCalledTimes(2);
+	await userEvent.click(screen.getByRole('tab', { name: 'Board' }));
+	await userEvent.click(await screen.findByRole('button', { name: 'Actions for Revised brief' }));
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Mark done' }));
+	await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' }).hasAttribute('disabled')).toBe(true));
 });
 
 describe('the To do column on the project board', () => {
@@ -235,7 +348,7 @@ describe('the To do column on the project board', () => {
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
-		expect(onHandTodo).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 'todo_open', title: 'Backlog item' }));
+		expect(onHandTodo).toHaveBeenCalledExactlyOnceWith('todo_open');
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start a thread' }));
@@ -298,16 +411,6 @@ describe('the To do column on the project board', () => {
 			const { todos } = useSpaceTodos('space_1');
 			return <ProjectBoard space={space} threads={threads} todos={todos} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />;
 		}
-		const later = <T,>() => {
-			let resolve!: (value: T) => void;
-			let reject!: (error: Error) => void;
-			const promise = new Promise<T>((yes, no) => {
-				resolve = yes;
-				reject = no;
-			});
-			return { promise, resolve, reject };
-		};
-
 		it('shows a new to-do the moment it is added, then the saved one in its place, once', async () => {
 			const saved = makeTodo({ id: 'todo_new', title: 'Write the docs', description: '' });
 			const create = later<SpaceTodo>();

@@ -5,11 +5,12 @@ import { Popover } from 'radix-ui';
 import { ChevronRight, FolderGit2, Maximize2, Minimize2, PanelRight, Plus, Settings, Waypoints, Workflow } from '@/lib/icons';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api } from '@/lib/api';
-import type { Space } from '@/lib/api/spaces';
+import type { Space, SpaceTodo } from '@/lib/api/spaces';
 import { PanelTab, PanelTabs, Status } from '@/components/kit/instrument';
 import { MenuButton } from '@/components/kit/nav';
 import { ProjectBoard } from '@/components/projects/project-board';
-import { ProjectFeed, type HandoffTodo, type TodoHandoff } from '@/components/projects/project-feed';
+import { ProjectFeed, type TodoHandoff } from '@/components/projects/project-feed';
+import { canStartTodo, useTodoSaves } from '@/components/projects/todo-saves';
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
@@ -300,6 +301,7 @@ export function ProjectPage() {
 	const space = useSpace(spaceId);
 	const { threads } = useThreads(spaceId);
 	const { todos } = useSpaceTodos(spaceId);
+	const todoSaves = useTodoSaves(spaceId, todos);
 	const path = `/api/agents/coordinator/${spaceId}`;
 	const client = useWindowedClient(path);
 	const agent = useOlderTurns(path, client, useFlueAgent({ client }));
@@ -358,32 +360,47 @@ export function ProjectPage() {
 	const openCoordinator = useCallback(() => changeDock({ open: true }), [changeDock]);
 	const focusCoordinator = useCallback(() => heading.current?.focus({ preventScroll: true }), []);
 	const refreshCoordinator = agent.refresh;
-	const handTodo = useCallback((todo: HandoffTodo) => {
+	const eligibleTodo = (id: string) => {
+		const todo = todoSaves.todos.find((item) => item.id === id);
+		return todo && !handingOff.has(id) && canStartTodo(todo, todoSaves.stateOf(todo)) ? todo : undefined;
+	};
+	const handTodo = (id: string, focus = false) => {
+		const todo = eligibleTodo(id);
+		if (!todo) return;
+		if (focus) focusCoordinator();
 		openCoordinator();
 		const update = (next: TodoHandoff | null) => setHandoffs((all) => {
 			const others = all.filter((entry) => entry.todo.id !== todo.id);
 			return next ? [...others, next] : others;
 		});
 		update({ todo, state: 'sending' });
-		void api.startSpaceTodo(spaceId, todo.id, 'coordinator').then(({ submissionId }) => {
+		const key = ['space-todos', spaceId];
+		void api.startSpaceTodo(spaceId, id, 'coordinator').then(({ todo: savedTodo, submissionId }) => {
+			queryClient.setQueryData<{ todos: SpaceTodo[] }>(key, (previous) => previous && savedTodo ? {
+				...previous,
+				todos: previous.todos.map((item) => item.id === id && item.updatedAt <= savedTodo.updatedAt ? savedTodo : item),
+			} : previous);
 			update(submissionId ? { todo, state: 'accepted', submissionId } : null);
 			// The SDK stops observing a conversation that doesn't exist yet. Admission creates it.
 			if (!hasConversation.current) refreshCoordinator();
 		}, (error: unknown) => {
 			update({ todo, state: 'failed', error: error instanceof Error ? error.message : String(error) });
-		}).finally(() => void queryClient.invalidateQueries({ queryKey: ['space-todos', spaceId] }));
-	}, [openCoordinator, queryClient, refreshCoordinator, spaceId]);
-	const retryHandTodo = useCallback((todo: HandoffTodo) => {
-		focusCoordinator();
-		handTodo(todo);
-	}, [focusCoordinator, handTodo]);
+		}).finally(() => void queryClient.invalidateQueries({ queryKey: key }));
+	};
 
 	const settlements = agent.settlements;
 	useEffect(() => {
-		if (!settlements.length || !handoffs.some((entry) => entry.state === 'accepted')) return;
+		if (!settlements.length || !handoffs.some((entry) => entry.state === 'accepted' && settlements.some((item) => item.submissionId === entry.submissionId))) return;
+		const byId = new Map(settlements.map((item) => [item.submissionId, item]));
 		setHandoffs((all) => {
-			const pending = all.filter((entry) => entry.state !== 'accepted' || !settlements.some((settlement) => settlement.submissionId === entry.submissionId));
-			return pending.length === all.length ? all : pending;
+			return all.flatMap((entry): TodoHandoff[] => {
+				const settled = entry.state === 'accepted' ? byId.get(entry.submissionId) : undefined;
+				if (!settled) return [entry];
+				if (settled.outcome === 'completed') return [];
+				const reason = settled.error;
+				const detail = reason && typeof reason === 'object' && 'message' in reason ? reason.message : reason;
+				return [{ todo: entry.todo, state: 'failed', error: typeof detail === 'string' ? detail.trim() : '', settlement: { submissionId: settled.submissionId, outcome: settled.outcome } }];
+			});
 		});
 	}, [settlements, handoffs]);
 
@@ -470,7 +487,7 @@ export function ProjectPage() {
 				</header>
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					{saved.view === 'board' ? (
-					<ProjectBoard space={data} threads={threads} todos={todos} onNewThread={startThread} onOpenCoordinator={openCoordinator} onHandTodo={handTodo} onHandoffFocus={focusCoordinator} handingOff={handingOff} />
+						<ProjectBoard space={data} threads={threads} saves={todoSaves} onNewThread={startThread} onOpenCoordinator={openCoordinator} onHandTodo={handTodo} onHandoffFocus={focusCoordinator} handingOff={handingOff} />
 					) : (
 						<div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-3 px-4 py-4 md:px-6">
 							{saved.view === 'files' ? <ProjectFiles space={data} threads={threads} /> : null}
@@ -551,7 +568,7 @@ export function ProjectPage() {
 					/>
 					<IconBtn icon={PanelRight} size="sm" label="Hide the coordinator" onClick={() => changeDock({ open: false })} />
 				</div>
-				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} handoffs={handoffs} onRetryHandoff={retryHandTodo} />
+				<ProjectFeed space={data} agent={agent} threads={threads} starting={starting} onStartingChange={setStarting} handoffs={handoffs} canRetryHandoff={(id) => Boolean(eligibleTodo(id))} onRetryHandoff={(id) => handTodo(id, true)} />
 				</div>
 			</aside>
 			) : null}

@@ -15,7 +15,7 @@ import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@
 import { imageFile } from '@/lib/attachments';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
-import { type TodoDraft, type TodoSaves, useTodoSaves } from './todo-saves';
+import { canStartTodo, todoIsUnsaved, type TodoDraft, type TodoSaves } from './todo-saves';
 
 /** Thread states: threads move into these on their own, so only To do creates work. */
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
@@ -143,7 +143,7 @@ function TodoDialog({ spaceId, todo, onSave, onClose }: { spaceId: string; todo:
 
 type TodoActions = {
 	onOpenCoordinator: () => void;
-	onHandTodo: (todo: SpaceTodo) => void;
+	onHandTodo: (todoId: string) => void;
 	onHandoffFocus?: () => void;
 };
 
@@ -154,7 +154,8 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 	const refresh = () => queryClient.invalidateQueries({ queryKey: ['space-todos', spaceId] });
 	const save = saves.stateOf(todo);
 	// Not on the server yet, or a change to it still on the way: starting or editing it now would work from the old one.
-	const unsaved = Boolean(save?.pending || save?.saving);
+	const unsaved = todoIsUnsaved(save);
+	const canStart = canStartTodo(todo, save) && !handingOff;
 	const start = useMutation({
 		mutationFn: () => api.startSpaceTodo(spaceId, todo.id, 'thread'),
 		onSuccess: (result) => {
@@ -178,29 +179,29 @@ function TodoCard({ spaceId, todo, saves, onEdit, onOpenCoordinator, onHandTodo,
 				</button>
 				<Menu>
 					<MenuTrigger asChild>
-					<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={handingOff || start.isPending || save?.pending} />
+						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={handingOff || start.isPending || save?.pending} />
 					</MenuTrigger>
-				<MenuContent align="end" onCloseAutoFocus={(event) => {
-					if (focusAfterHandoff.current && onHandoffFocus) {
-						// During handoff the menu's trigger is disabled, or covered by the dock.
-						event.preventDefault();
-						onHandoffFocus();
-					}
-					focusAfterHandoff.current = false;
-				}}>
+					<MenuContent align="end" onCloseAutoFocus={(event) => {
+						if (focusAfterHandoff.current && onHandoffFocus) {
+							// During handoff the menu's trigger is disabled, or covered by the dock.
+							event.preventDefault();
+							onHandoffFocus();
+						}
+						focusAfterHandoff.current = false;
+					}}>
 						{withCoordinator ? (
 							<MenuItem icon={RotateCcw} onSelect={() => saves.setStatus(todo, 'open')}>
 								Move back to To do
 							</MenuItem>
 						) : (
 							<>
-							<MenuItem icon={Play} disabled={unsaved} onSelect={() => start.mutate()}>
+								<MenuItem icon={Play} disabled={!canStart} onSelect={() => start.mutate()}>
 									Start a thread
 								</MenuItem>
-							<MenuItem icon={Waypoints} disabled={unsaved} onSelect={() => {
-								focusAfterHandoff.current = true;
-								onHandTodo(todo);
-							}}>
+								<MenuItem icon={Waypoints} disabled={!canStart} onSelect={() => {
+									focusAfterHandoff.current = true;
+									onHandTodo(todo.id);
+								}}>
 									Hand to the coordinator
 								</MenuItem>
 							</>
@@ -284,19 +285,18 @@ function TodoColumn({ spaceId, saves, handingOff, ...actions }: TodoActions & { 
 export function ProjectBoard({
 	space,
 	threads,
-	todos,
+	saves,
 	onNewThread,
 	handingOff,
 	...actions
 }: TodoActions & {
 	space: Space;
 	threads: Session[];
-	todos: SpaceTodo[];
+	saves: TodoSaves;
 	onNewThread: () => void;
 	handingOff?: ReadonlySet<string>;
 }) {
 	const [adding, setAdding] = useState(false);
-	const saves = useTodoSaves(space.id, todos);
 	if (threads.length === 0 && saves.todos.length === 0) {
 		return (
 			<div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-3 p-6 text-center">

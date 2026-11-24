@@ -10,6 +10,9 @@ export type TodoDraft = { title: string; description: string; kept: TodoAttachme
 /** How a card stands against the server: still saving, or failed with a way to try again. */
 export type TodoSave = { pending: boolean; saving: boolean; error: string | null; retry?: () => void; dismiss?: () => void };
 
+export const todoIsUnsaved = (save: TodoSave | undefined) => Boolean(save?.pending || save?.saving);
+export const canStartTodo = (todo: SpaceTodo, save: TodoSave | undefined) => todo.status === 'open' && !todoIsUnsaved(save);
+
 type Change = Partial<Pick<SpaceTodo, 'title' | 'description' | 'attachments' | 'status' | 'assignee' | 'completedAt'>>;
 type Created = { key: string; todo: SpaceTodo; draft: TodoDraft; error: string | null; saved: SpaceTodo | null };
 /** `savedAt` is the server's updatedAt once it has the change; the override gives way when the list has caught up. */

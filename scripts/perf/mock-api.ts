@@ -391,6 +391,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			});
 		if (path === '/api/profile') return json(res, { name: 'Perf' });
 		if (path === '/api/spaces') return json(res, { spaces });
+		if (/^\/api\/spaces\/[^/]+\/usage$/.test(path)) return json(res, { today: 0, month: 0, byThread: [], byModel: [], daily: [] });
 		const todosOf = path.match(/^\/api\/spaces\/([^/]+)\/todos$/)?.[1];
 		if (todosOf) return json(res, { todos: todosOf === 'space-billing' ? billingTodos : [] });
 		const spaceId = path.match(/^\/api\/spaces\/([^/]+)$/)?.[1];
