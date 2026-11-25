@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
 	space: vi.fn(async (_spaceId: string) => space),
 	sessions: vi.fn(async () => ({ sessions: threads })),
 	models: vi.fn(async () => ({ models: [] as ModelInfo[], default: '' })),
+	runners: vi.fn(async () => ({ sandbox: 'modal', host: true })),
 	subscriptions: vi.fn(async () => ({ subscriptions: [] })),
 	commands: vi.fn(async () => ({ commands: [] })),
 	budget: vi.fn(async () => ({ blocked: null })),
@@ -77,6 +78,7 @@ function makeTodo(patch: Partial<SpaceTodo>): SpaceTodo {
 		attachments: [],
 		threadModel: null,
 		repos: [],
+		runOn: 'sandbox',
 	status: 'open',
 	assignee: null,
 	createdBy: 'user',
@@ -125,6 +127,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	localStorage.clear();
 	api.spaceTodos.mockResolvedValue({ todos: [] });
+	api.runners.mockResolvedValue({ sandbox: 'modal', host: true });
 });
 
 const later = <T,>() => {
@@ -459,7 +462,7 @@ describe('the To do column on the project board', () => {
 		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
 		await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), 'For the new CLI');
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
-		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null, repos: [] }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null, repos: [], runOn: 'sandbox' }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
@@ -500,7 +503,7 @@ describe('the To do column on the project board', () => {
 		expect(await screen.findByText('crash.log')).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
 		await waitFor(() =>
-			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null, repos: [] }),
+			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null, repos: [], runOn: 'sandbox' }),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 
@@ -601,6 +604,39 @@ describe('the To do column on the project board', () => {
 			await userEvent.click(await screen.findByRole('menuitem', { name: 'Let Anton pick' }));
 			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
 			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ repos: [] })));
+		});
+
+		it('lets a to-do choose Run on This server or Sandbox, shows it on the card, and hides the option when host is unavailable', async () => {
+			renderWithRouter(() => <LiveBoard />);
+			await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
+			await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Inspect local socket');
+			const chip = await screen.findByRole('button', { name: 'Run on: Sandbox' });
+			expect(chip.textContent).toContain('Sandbox');
+			await userEvent.click(chip);
+			expect((await screen.findByRole('menuitemradio', { name: /Sandbox · Modal/ })).getAttribute('aria-checked')).toBe('true');
+			expect(screen.getByText(/not isolated from that machine/)).toBeTruthy();
+			await userEvent.click(screen.getByRole('menuitemradio', { name: 'This server' }));
+			expect(screen.getByRole('button', { name: 'Run on: This server' }).textContent).toContain('This server');
+			await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+			await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', expect.objectContaining({ title: 'Inspect local socket', runOn: 'host' })));
+			const column = await screen.findByRole('region', { name: 'To do' });
+			expect(within(column).getByText('This server')).toBeTruthy();
+
+			await userEvent.click(await screen.findByRole('button', { name: /^Inspect local socket/ }));
+			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
+			await userEvent.click(edit.getByRole('button', { name: 'Run on: This server' }));
+			await userEvent.click(await screen.findByRole('menuitemradio', { name: /Sandbox · Modal/ }));
+			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ runOn: 'sandbox' })));
+		});
+
+		it('hides the Run on option when every task already runs locally', async () => {
+			api.runners.mockResolvedValue({ sandbox: 'local', host: false });
+			renderWithRouter(() => <LiveBoard />);
+			await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
+			await screen.findByRole('textbox', { name: 'Title' });
+			await waitFor(() => expect(api.runners).toHaveBeenCalled());
+			expect(screen.queryByRole('button', { name: /^Run on:/ })).toBeNull();
 		});
 
 		it('shows a new to-do the moment it is added, then the saved one in its place, once', async () => {

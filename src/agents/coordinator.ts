@@ -1,6 +1,6 @@
 'use agent';
 
-import { type AgentProps, defineTool, useAgentStart, useDelivery, useModel, usePersistentState, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
+import { type AgentProps, defineTool, useAgentFinish, useAgentStart, useDelivery, useModel, usePersistentState, useResponseFinish, useResponseStart, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { STATE_SIGNAL } from '../services/context/context-prune.ts';
 import { agentCompaction } from '../services/context/context-usage.ts';
@@ -8,7 +8,7 @@ import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
-import { coordinatorTodo, createTodo, messageTodoThread, startTodoThread, type TodoHandoffs } from '../services/projects/todos.ts';
+import { claimCoordinatorHandoff, coordinatorTodo, createTodo, messageTodoThread, revokeCoordinatorHandoffs, startTodoThread, type TodoHandoffs } from '../services/projects/todos.ts';
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
@@ -41,6 +41,7 @@ const PROMPT = [
 	'A to-do the user tagged with repositories (its handoff and its line in the project state name them) has its threads only in those, one or more per repository; a thread you give no repo goes to the first one tagged.',
 	'If several board handoffs arrive together, use the matching todo_id and words from that handoff on each call. Do not combine different to-dos into one thread.',
 	'A to-do with its own main thread model must start with start_thread, not message_thread; its new threads automatically use that model. Ordinary follow-up messages to its running threads need no todo_id.',
+	'A to-do set to run on This server needs the user’s board handoff for this reply; its new threads run on This server automatically, and message_thread can only route it to an existing This server thread (never a sandbox thread, and never while it has a pending repository move). A sandbox to-do cannot be routed to a This server thread.',
 	'When the user states a lasting preference or decision ("run at most two at a time", "always add tests"), save it with remember.',
 	'Talk like a capable colleague in a group chat: lead with the answer, one or two short sentences, no headings or lists unless asked, no internal ids in your words. Name a thread by linking its title to its id from the project state, as [Fix the login page](#thread-1a2b3c4d): it shows as a chip the user can open. A thread you start shows as a row of its own, so it needs no link in the same reply. Link a file a thread saved (its reply names it as ../outputs/<path>) by the thread\'s id and that path, as [diagram.png](#thread-1a2b3c4d/outputs/diagram.png): it shows as a card that opens the file.',
 ].join(' ');
@@ -98,7 +99,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
 				const todo = linked?.todo ?? null;
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
-				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
+				const started = todo ? (await startTodoThread(todo, input, { hostGrant: linked?.hostGrant })).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
 				return threadActionResult(
 					`${queued ? 'Queued' : 'Started'} thread "${started.title}" [id:${started.id}] ${started.repo ? `on ${started.repo}` : 'with no repository'}.${queued ? ' It starts when a working thread finishes.' : ''}`,
@@ -137,7 +138,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const linked = await coordinatorTodo(spaceId, handoffs(), data.todo_id);
 				const todo = linked?.todo ?? null;
 				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), linked?.text ?? answering);
-				if (todo) await messageTodoThread(todo, target.id, message);
+				if (todo) await messageTodoThread(todo, target.id, message, { hostGrant: linked?.hostGrant });
 				else await nudgeThread(spaceId, target.id, message);
 				return threadActionResult(`Sent to "${target.title}" [id:${target.id}].`, todo?.id);
 			},
@@ -265,14 +266,21 @@ function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): 
 	useResponseStart(() => {
 		startsResponse = true;
 	});
-	useAgentStart(({ append }) => {
+	useAgentStart(async ({ append }) => {
+		if (startsResponse) {
+			const previous = activeHandoffs.entries.flatMap((entry) => (entry.hostGrant ? [entry.hostGrant] : []));
+			await revokeCoordinatorHandoffs(id, previous.length ? previous : undefined);
+		}
 		// Reset on the first delivery, not a join or a replay whose delivery hook was already committed.
 		const text = handoffId && delivery.kind === 'user' ? splitAttachments(delivery.body).text : '';
+		const claimed = handoffId && delivery.kind === 'user' ? await claimCoordinatorHandoff(id, handoffId, delivery.body) : null;
 		setHandoffs((current) => {
 			const entries = startsResponse ? [] : current.entries;
 			// Flue can call the tools from this render before rendering again with the saved state.
 			activeHandoffs = {
-				entries: handoffId ? [...entries.filter(({ id }) => id !== handoffId), { id: handoffId, text }] : entries,
+				entries: handoffId
+					? [...entries.filter(({ id: entryId }) => entryId !== handoffId), { id: handoffId, text, ...(claimed ? { hostGrant: claimed.grantId } : {}) }]
+					: entries,
 				latestIsHandoff: Boolean(handoffId),
 			};
 			return activeHandoffs;
@@ -284,6 +292,10 @@ function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): 
 			append({ kind: 'signal', type: STATE_SIGNAL, body });
 			return { body, since: 1 };
 		});
+	});
+	useAgentFinish(async () => {
+		const grants = activeHandoffs.entries.flatMap((entry) => (entry.hostGrant ? [entry.hostGrant] : []));
+		if (grants.length) await revokeCoordinatorHandoffs(id, grants);
 	});
 	return () => activeHandoffs;
 }

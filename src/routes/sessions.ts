@@ -29,11 +29,9 @@ import { decideToolApproval, toolApprovals } from '../services/connectors/tool-a
 import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from '../services/git/pull-requests.ts';
 import { requestReview } from '../services/git/code-review.ts';
 import { taskRows } from '../core/task-rows.ts';
-import { REASONING, ROUTE, body, contentType, bytes } from './shared.ts';
+import { REASONING, ROUTE, RUN_ON, body, contentType, bytes } from './shared.ts';
 
 const app = new Hono();
-
-const RUN_ON = v.picklist(['sandbox', 'host']);
 
 // `?view=rows` cuts long texts to what a list row shows; the whole task is `GET /api/sessions/:id`.
 app.get('/api/sessions', async (c) => {

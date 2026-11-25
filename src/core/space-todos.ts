@@ -1,4 +1,4 @@
-import type { AgentModel } from './types.ts';
+import type { AgentModel, RunOn } from './types.ts';
 
 /** A project to-do waits in `open`; starting it (a thread, or the coordinator) makes it `in_progress`; its threads resolving make it `done`. */
 export const SPACE_TODO_STATUSES = ['open', 'in_progress', 'done'] as const;
@@ -22,6 +22,8 @@ export type SpaceTodo = {
 	threadModel: AgentModel | null;
 	/** Project repositories (their ids) the user tagged it with: a thread started from it works in each. None lets Anton pick one. */
 	repos: string[];
+	/** Where threads started from this to-do run: `'sandbox'` or `'host'` (This server). */
+	runOn: RunOn;
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;
@@ -45,9 +47,10 @@ export const shortTodoId = (id: string) => id.replace(/^todo_/, '').slice(0, 8);
 export const todoRef = (ref: string) => ref.trim().replace(/^\[|\]$/g, '').replace(/^todo:/, '');
 
 /** Sent to the coordinator as the user's own message, so the request it quotes for a thread is in it word for word. */
-export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'>, repos: string[] = []): string {
+export function todoStartMessage(todo: Pick<SpaceTodo, 'id' | 'title' | 'description'> & { runOn?: RunOn }, repos: string[] = []): string {
 	const tagged = repos.length ? `\n\nRepositories tagged on this to-do: ${repos.join(', ')}.` : '';
-	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}${tagged}`;
+	const runner = todo.runOn === 'host' ? '\n\nRun on: This server.' : '';
+	return `Start the project to-do [todo:${shortTodoId(todo.id)}]: ${todoBrief(todo)}${tagged}${runner}`;
 }
 
 export const todoHandoffId = (message: string): string | null => /^Start the project to-do \[todo:([a-f0-9]{8})\]: /.exec(message)?.[1] ?? null;
