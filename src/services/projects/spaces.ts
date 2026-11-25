@@ -1,5 +1,5 @@
 import type { Reasoning } from '../../core/ports.ts';
-import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Project, type Session } from '../../core/types.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Project, type RunOn, type Session } from '../../core/types.ts';
 import { announce } from '../../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { THREAD_STATES, type ThreadState } from '../../core/thread-state.ts';
@@ -156,6 +156,7 @@ export type ThreadInput = {
 	reasoning?: Reasoning;
 	planMode?: boolean;
 	automationId?: string;
+	runOn?: RunOn;
 };
 
 const NO_REPO = new Set(['none', 'no repository', 'chat']);
@@ -206,6 +207,7 @@ export async function startThread(spaceId: string, input: ThreadInput, { wait = 
 		model: input.model ?? space.threadModel ?? undefined,
 		reasoning: input.reasoning ?? (input.model ? undefined : (space.threadReasoning ?? undefined)),
 		planMode: input.planMode,
+		runOn: input.runOn,
 	});
 	await touchSpace(spaceId);
 	// Shown at once, even when it waits for a slot or cannot start yet.

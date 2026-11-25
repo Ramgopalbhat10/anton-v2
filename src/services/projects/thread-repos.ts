@@ -76,6 +76,7 @@ export async function todoThreadPlan(space: Space, todo: SpaceTodo): Promise<Rep
 }
 
 const moving = new Map<string, string>();
+const applying = new Set<string>();
 
 /** The repository a thread moves to once its reply ends; the reply skips its end checks then. */
 export const pendingRepoMove = (id: string): string | null => moving.get(id) ?? null;
@@ -95,7 +96,7 @@ async function assertMovable(id: string, current: string | null): Promise<void> 
 	}
 }
 
-type StartIn = (todoId: string, repos: Project[], from: string) => Promise<Array<{ id: string; title: string }>>;
+type StartIn = (todoId: string, repos: Project[], from: string, sourceThreadId: string) => Promise<Array<{ id: string; title: string }>>;
 
 /**
  * The first repository is this thread's; each other one gets a thread of its own for the same to-do. A move waits for
@@ -114,24 +115,28 @@ export async function setThreadRepos(id: string, refs: string[], startIn: StartI
 	const current = session.projectId ? ((await spaceRepos(space)).find((project) => project.id === session.projectId)?.repoFullName ?? 'its repository') : null;
 	const stays = first.id === session.projectId;
 	if (!stays) await assertMovable(id, current);
-	const started = todoId ? await startIn(todoId, rest, first.repoFullName) : [];
+	const started = todoId ? await startIn(todoId, rest, first.repoFullName, id) : [];
 	const others = started.length ? ` Started ${started.map((thread) => `"${thread.title}"`).join(', ')} for ${names(rest)}; do none of that work here.` : '';
 	if (stays) return { moving: false, output: `This thread already works in ${first.repoFullName}.${others}` };
 	moving.set(id, first.id);
 	return { moving: true, output: `This thread moves to ${first.repoFullName} when this reply ends, and Anton then tells you to carry on there.${others} Stop here; write nothing after this.` };
 }
 
-/** Runs once the reply that asked for it has ended. */
+/** Runs once the reply that asked for it has ended. Keeps `pendingRepoMove` set until the DB move finishes. */
 export async function applyRepoMove(id: string): Promise<void> {
 	const projectId = moving.get(id);
-	if (!projectId) return;
-	moving.delete(id);
+	if (!projectId || applying.has(id)) return;
+	applying.add(id);
 	try {
 		const moved = await moveToRepo(id, projectId);
+		moving.delete(id);
 		forgetRepoContext(id);
 		await sendToAgent(id, `Anton moved this thread to ${moved.repo} (branch ${moved.branch} from ${moved.baseBranch}). Carry on with the request there.`);
 	} catch (error) {
+		moving.delete(id);
 		logProblem('warn', 'Could not move the thread to another repository', error, id);
 		await sendToAgent(id, `Anton could not move this thread to the other repository: ${error instanceof Error ? error.message : String(error)}. Tell the user, and carry on where you are only if they say so.`).catch(() => undefined);
+	} finally {
+		applying.delete(id);
 	}
 }

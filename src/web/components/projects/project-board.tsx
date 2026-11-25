@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog } from 'radix-ui';
-import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Trash2, Waypoints, X } from '@/lib/icons';
+import { CircleCheck, Cloud, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Server, Trash2, Waypoints, X } from '@/lib/icons';
 import { type FormEvent, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
+import { RUN_ON_NOTE, RUN_ON_PROVIDERS } from '@/components/composer/composer-plus';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
@@ -11,7 +12,7 @@ import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks
 import { AREA } from '@/components/settings/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { api } from '@/lib/api';
-import { repoShort, type Session } from '@/lib/api/sessions';
+import { repoShort, type RunOn, type Session } from '@/lib/api/sessions';
 import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@/lib/api/spaces';
 import { imageFile } from '@/lib/attachments';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
@@ -115,12 +116,36 @@ function TodoRepoPicker({ repos, value, onChange }: { repos: Repos; value: strin
 	);
 }
 
+function TodoRunOnPicker({ sandbox, value, onChange }: { sandbox: string; value: RunOn; onChange: (next: RunOn) => void }) {
+	const provider = RUN_ON_PROVIDERS[sandbox] ?? sandbox;
+	const label = value === 'host' ? 'This server' : 'Sandbox';
+	return (
+		<Menu>
+			<MenuTrigger asChild>
+				<PickerChip icon={value === 'host' ? Server : Cloud} label={label} aria-label={`Run on: ${label}`} />
+			</MenuTrigger>
+			<MenuContent align="end" className="w-[260px]">
+				<MenuItem role="menuitemradio" aria-checked={value === 'sandbox'} checked={value === 'sandbox'} icon={Cloud} onSelect={() => onChange('sandbox')}>
+					Sandbox <span className="text-(--text-3)">· {provider}</span>
+				</MenuItem>
+				<MenuItem role="menuitemradio" aria-checked={value === 'host'} checked={value === 'host'} icon={Server} onSelect={() => onChange('host')}>
+					This server
+				</MenuItem>
+				<MenuSeparator />
+				<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">{RUN_ON_NOTE}</p>
+			</MenuContent>
+		</Menu>
+	);
+}
+
 function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string; repos: Repos; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
 	const [threadModel, setThreadModel] = useState<SpaceTodo['threadModel']>(todo?.threadModel ?? null);
 	// Tags for repositories since removed from the project are dropped on the next save.
 	const [tagged, setTagged] = useState<string[]>(() => taggedRepos(repos, todo?.repos ?? []).map((repo) => repo.id));
+	const [runOn, setRunOn] = useState<RunOn>(todo?.runOn ?? 'sandbox');
+	const runners = useQuery({ queryKey: ['runners'], queryFn: api.runners, staleTime: 5 * 60_000 });
 	const [dialog, setDialog] = useState<HTMLDivElement | null>(null);
 	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
 	const attachments = useAttachments({ overflowImagesAsFiles: true });
@@ -130,7 +155,7 @@ function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		if (!ready) return;
-		onSave({ title, description, threadModel, repos: tagged, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
+		onSave({ title, description, threadModel, repos: tagged, runOn, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
 		onClose();
 	};
 	return (
@@ -175,6 +200,14 @@ function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string
 									<span className="text-small font-medium text-(--text-2)">Repositories</span>
 									<FloatingLayerContainer.Provider value={dialog}>
 										<TodoRepoPicker repos={repos} value={tagged} onChange={setTagged} />
+									</FloatingLayerContainer.Provider>
+								</div>
+							) : null}
+							{runners.data?.host ? (
+								<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+									<span className="text-small font-medium text-(--text-2)">Run on</span>
+									<FloatingLayerContainer.Provider value={dialog}>
+										<TodoRunOnPicker sandbox={runners.data.sandbox} value={runOn} onChange={setRunOn} />
 									</FloatingLayerContainer.Provider>
 								</div>
 							) : null}
@@ -248,6 +281,12 @@ function TodoCard({ spaceId, repos, todo, saves, onEdit, onOpenCoordinator, onHa
 						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={tagged.map((repo) => repo.repoFullName).join('\n')}>
 							<Icon icon={FolderGit2} size={11} className="shrink-0" />
 							<span className="min-w-0 truncate">{tagged.map(repoName).join(', ')}</span>
+						</span>
+					) : null}
+					{todo.runOn === 'host' ? (
+						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)">
+							<Icon icon={Server} size={11} className="shrink-0" />
+							<span className="min-w-0 truncate">This server</span>
 						</span>
 					) : null}
 					{todo.attachments.length ? (

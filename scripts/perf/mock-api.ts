@@ -169,7 +169,7 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	updatedAt: ago(30),
 });
 const todo = (id: string, title: string, description: string, patch: Partial<SpaceTodo> = {}): SpaceTodo => ({
-	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, repos: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, repos: [], runOn: 'sandbox', status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
 	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {
@@ -353,6 +353,7 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, spaceThreads.find((item) => item.id === other[1]) ?? { ...session, working, id: other[1] });
 		if (other && other[1] !== SESSION_ID) path = `${task}${other[2]}`;
 		if (path === '/api/health') return json(res, { ok: true, openRouter: true, providers: { sandbox: 'local', store: 'disk', git: 'github' } });
+		if (path === '/api/runners') return json(res, { sandbox: 'modal', host: true });
 		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...spaceThreads, ...others] });
 		if (path === task) return json(res, { ...session, working });
 		if (path === `${task}/files`) return json(res, { source: 'live', at: null, paths: tree, changes: changed });

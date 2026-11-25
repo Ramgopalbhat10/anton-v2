@@ -1,18 +1,34 @@
-import type { Project, Session } from '../../core/types.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Project, RunOn, Session } from '../../core/types.ts';
 import { threadBrief } from '../../core/briefs.ts';
 import { type AttachedFile, withAttachments } from '../../core/attachments.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { MAX_TODO_ATTACHMENTS, MAX_TODO_DESCRIPTION, MAX_TODO_TITLE, shortTodoId, todoBrief, todoRef, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
+import { getSessionRecord } from '../../db/sessions.ts';
 import { getSpace, touchSpace } from '../../db/spaces.ts';
-import { deleteSpaceTodoRecord, getSpaceTodo, insertSpaceTodo, linkTodoThreadRecord, listSpaceTodos, updateSpaceTodo } from '../../db/space-todos.ts';
+import {
+	claimTodoHandoffGrant,
+	deleteSpaceTodoRecord,
+	getSpaceTodo,
+	hasValidTodoHostGrant,
+	insertSpaceTodo,
+	insertTodoHandoffGrant,
+	linkTodoThreadRecord,
+	listSpaceTodos,
+	revokeHandoffGrantsByIds,
+	revokeSpaceClaimedHandoffGrants,
+	revokeTodoHandoffGrants,
+	updateSpaceTodo,
+} from '../../db/space-todos.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
+import { hostRunnerAvailable } from '../tasks/runners.ts';
 import { projectAttachment, projectPictures } from '../artifacts/attachments.ts';
 import { findModel } from '../models/models.ts';
 import { coordinatorModel } from './coordinator.ts';
 import { listSpaceFiles } from './space-files.ts';
 import { nudgeThread, spaceRepos, startThread, type ThreadInput } from './spaces.ts';
 import { threadStarted } from './thread-reports.ts';
-import { type RepoPlan, todoThreadPlan } from './thread-repos.ts';
+import { pendingRepoMove, type RepoPlan, todoThreadPlan } from './thread-repos.ts';
 
 async function existingSpace(spaceId: string) {
 	const space = await getSpace(spaceId);
@@ -69,7 +85,15 @@ export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo>
 	return found;
 }
 
-type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[] };
+type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[]; runOn?: RunOn };
+
+const bodyHash = (text: string) => createHash('sha256').update(text).digest('hex');
+
+function checkRunOn(runOn: RunOn | undefined, createdBy?: SpaceTodo['createdBy']): void {
+	if (runOn !== 'host') return;
+	if (createdBy === 'coordinator') throw new InvalidInputError('Only the user can set a to-do to run on This server.');
+	if (!hostRunnerAvailable()) throw new InvalidInputError('Every task already runs on this server.');
+}
 
 /** Each once, in the order picked, and only the project's own. */
 async function projectRepos(spaceId: string, repos: string[] | undefined): Promise<string[] | undefined> {
@@ -93,24 +117,31 @@ export async function createTodo(spaceId: string, input: TodoFields & { createdB
 	if (description.length > MAX_TODO_DESCRIPTION) throw new InvalidInputError('The description is too long');
 	const attachments = await libraryFiles(spaceId, input.attachments ?? []);
 	await checkThreadModel(input.threadModel);
+	const createdBy = input.createdBy ?? 'user';
+	checkRunOn(input.runOn, createdBy);
 	const repos = await projectRepos(spaceId, input.repos);
-	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, threadModel: input.threadModel, repos, createdBy: input.createdBy ?? 'user' });
+	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, threadModel: input.threadModel, repos, runOn: input.runOn ?? 'sandbox', createdBy });
 	await touchSpace(spaceId);
 	return todo;
 }
 
 /** Set back to open, a to-do leaves whoever had it; marked done, it keeps them. */
 export async function editTodo(spaceId: string, todoId: string, change: Partial<TodoFields> & { status?: SpaceTodoStatus }): Promise<SpaceTodo> {
-	await existingTodo(spaceId, todoId);
+	const current = await existingTodo(spaceId, todoId);
 	const attachments = change.attachments === undefined ? undefined : await libraryFiles(spaceId, change.attachments);
 	await checkThreadModel(change.threadModel);
+	if (change.runOn !== undefined && change.runOn !== current.runOn) checkRunOn(change.runOn);
 	const repos = await projectRepos(spaceId, change.repos);
+	if (change.status === 'open' || change.status === 'done' || change.runOn === 'sandbox') {
+		await revokeTodoHandoffGrants(todoId);
+	}
 	return (await updateSpaceTodo(todoId, {
 		...(change.title !== undefined ? { title: cleanTitle(change.title) } : {}),
 		...(change.description !== undefined ? { description: change.description.trim() } : {}),
 		...(attachments !== undefined ? { attachments } : {}),
 		...(change.threadModel !== undefined ? { threadModel: change.threadModel } : {}),
 		...(repos !== undefined ? { repos } : {}),
+		...(change.runOn !== undefined ? { runOn: change.runOn } : {}),
 		...(change.status === 'open' ? { status: 'open', assignee: null, completedAt: null } : {}),
 		...(change.status === 'done' ? { status: 'done', completedAt: new Date().toISOString() } : {}),
 	}))!;
@@ -127,9 +158,26 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 	return (await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: todo.assignee ?? 'thread', completedAt: null }))!;
 }
 
-export type TodoHandoffs = { entries: { id: string; text: string }[]; latestIsHandoff: boolean };
+export type TodoHandoffs = { entries: { id: string; text: string; hostGrant?: string }[]; latestIsHandoff: boolean };
 
-export async function coordinatorTodo(spaceId: string, { entries, latestIsHandoff }: TodoHandoffs, ref?: string): Promise<{ todo: SpaceTodo; text?: string } | null> {
+/**
+ * Claims the server-issued board handoff grant for this exact delivery so a forged message or a later turn
+ * cannot authorize a This server run.
+ */
+export async function claimCoordinatorHandoff(spaceId: string, shortId: string, deliveredBody: string): Promise<{ todoId: string; grantId: string } | null> {
+	const todo = await findTodo(spaceId, shortId).catch(() => null);
+	if (!todo || todo.status !== 'in_progress' || todo.runOn !== 'host' || !hostRunnerAvailable()) return null;
+	const claimed = await claimTodoHandoffGrant(spaceId, todo.id, bodyHash(deliveredBody));
+	if (!claimed || claimed.runOn !== 'host') return null;
+	return { todoId: todo.id, grantId: claimed.id };
+}
+
+export async function revokeCoordinatorHandoffs(spaceId: string, grantIds?: string[]): Promise<void> {
+	if (grantIds?.length) await revokeHandoffGrantsByIds(grantIds);
+	else await revokeSpaceClaimedHandoffGrants(spaceId);
+}
+
+export async function coordinatorTodo(spaceId: string, { entries, latestIsHandoff }: TodoHandoffs, ref?: string): Promise<{ todo: SpaceTodo; text?: string; hostGrant?: string } | null> {
 	const wanted = ref ? todoRef(ref) : null;
 	const fullId = wanted?.startsWith('todo_') ? wanted : null;
 	const infer = entries.length === 1 && latestIsHandoff;
@@ -140,20 +188,59 @@ export async function coordinatorTodo(spaceId: string, { entries, latestIsHandof
 	const id = handoff?.id ?? ref;
 	if (!id) return null;
 	const todo = handoff && fullId && !infer ? await existingTodo(spaceId, fullId) : await findTodo(spaceId, id);
-	return { todo, text: handoff?.text };
+	return { todo, text: handoff?.text, hostGrant: handoff?.hostGrant };
 }
 
-/** A thread given no repository goes to the to-do's first tagged one that is still in the project. */
-export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning'>): Promise<{ todo: SpaceTodo; thread: Session }> {
+async function verifyHostAuthorization(todo: SpaceTodo, hostGrant: string | undefined): Promise<void> {
+	if (todo.runOn !== 'host' || !hostRunnerAvailable()) return;
+	if (!hostGrant || todo.status !== 'in_progress' || !(await hasValidTodoHostGrant(todo.spaceId, todo.id, hostGrant))) {
+		throw new ConflictError('This to-do is set to run on This server. Start it or hand it off from the board to authorize a This server run.');
+	}
+}
+
+async function createTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning' | 'runOn'>, runOn: RunOn): Promise<{ todo: SpaceTodo; thread: Session }> {
 	const unnamed = input.projectId === undefined && !input.repo?.trim();
 	const space = unnamed && todo.repos.length ? await getSpace(todo.spaceId) : null;
 	const tagged = space ? todo.repos.find((id) => space.repoIds.includes(id)) : undefined;
-	const thread = await startThread(todo.spaceId, { ...input, ...(tagged ? { projectId: tagged } : {}), model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined }, { wait: false });
+	const thread = await startThread(
+		todo.spaceId,
+		{ ...input, ...(tagged ? { projectId: tagged } : {}), model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined, runOn },
+		{ wait: false },
+	);
 	return { thread, todo: await linkTodoToThread(todo.spaceId, todo.id, thread.id) };
 }
 
-export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string): Promise<void> {
+/** A thread given no repository goes to the to-do's first tagged one that is still in the project. */
+export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning' | 'runOn'>, auth: { hostGrant?: string } = {}): Promise<{ todo: SpaceTodo; thread: Session }> {
+	await verifyHostAuthorization(todo, auth.hostGrant);
+	const runOn: RunOn = todo.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox';
+	return createTodoThread(todo, input, runOn);
+}
+
+export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string, auth: { hostGrant?: string } = {}): Promise<void> {
 	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
+	const target = await getSessionRecord(threadId);
+	if (!target || target.spaceId !== todo.spaceId) throw new NotFoundError('No such thread in this project');
+	const hostAvailable = hostRunnerAvailable();
+	const wantedRunOn: RunOn = todo.runOn === 'host' && hostAvailable ? 'host' : 'sandbox';
+	const targetRunOn: RunOn = target.runOn === 'host' && hostAvailable ? 'host' : 'sandbox';
+	if (wantedRunOn === 'host' && targetRunOn !== 'host') {
+		throw new ConflictError('This to-do is set to run on This server. Use start_thread with its todo_id instead of messaging a sandbox thread.');
+	}
+	if (wantedRunOn === 'sandbox' && targetRunOn === 'host') {
+		throw new ConflictError('This to-do is set to run in a sandbox, not on This server. Use start_thread with its todo_id instead of messaging a This server thread.');
+	}
+	await verifyHostAuthorization(todo, auth.hostGrant);
+	if (pendingRepoMove(threadId)) {
+		throw new ConflictError('This thread is moving to another repository. Use start_thread with its todo_id instead of messaging it during a repository move.');
+	}
+	if (todo.repos.length) {
+		const space = await getSpace(todo.spaceId);
+		const tagged = space ? todo.repos.filter((id) => space.repoIds.includes(id)) : [];
+		if (tagged.length && (!target.projectId || !tagged.includes(target.projectId))) {
+			throw new ConflictError('This thread is not in one of the repositories tagged on this to-do. Use start_thread with its todo_id instead.');
+		}
+	}
 	await nudgeThread(todo.spaceId, threadId, message);
 	await linkTodoToThread(todo.spaceId, todo.id, threadId);
 }
@@ -161,22 +248,25 @@ export async function messageTodoThread(todo: SpaceTodo, threadId: string, messa
 const threadTitle = (todo: SpaceTodo, repo: string | null, several: boolean) =>
 	(several && repo ? `${todo.title} (${repo.split('/').pop()})` : todo.title).slice(0, 80);
 
-async function startTodoThreadIn(todo: SpaceTodo, entry: RepoPlan, files: AttachedFile[], several: boolean): Promise<{ todo: SpaceTodo; thread: Session }> {
+async function startTodoThreadIn(todo: SpaceTodo, entry: RepoPlan, files: AttachedFile[], several: boolean, runOn: RunOn): Promise<{ todo: SpaceTodo; thread: Session }> {
 	const brief = withAttachments(threadBrief(todoBrief(todo), entry.context, entry.part), files, 'project');
-	const started = await startTodoThread(todo, { title: threadTitle(todo, entry.repo, several), brief, projectId: entry.projectId });
+	const started = await createTodoThread(todo, { title: threadTitle(todo, entry.repo, several), brief, projectId: entry.projectId }, runOn);
 	await threadStarted(started.thread.id, { by: 'you', brief });
 	return started;
 }
 
 /** For `set_repo`: a thread of the same to-do in each of these repositories, after the user picked them in another thread. */
-export async function startTodoThreadsIn(todoId: string, repos: Project[], from: string): Promise<Session[]> {
+export async function startTodoThreadsIn(todoId: string, repos: Project[], from: string, sourceThreadId?: string): Promise<Session[]> {
 	const todo = await getSpaceTodo(todoId);
 	if (!todo) throw new NotFoundError('To-do not found');
+	// Never escalate a sandbox thread to This server via set_repo: sibling threads run on host only if both the source thread and to-do do.
+	const source = sourceThreadId ? await getSessionRecord(sourceThreadId) : null;
+	const runOn: RunOn = todo.runOn === 'host' && source?.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox';
 	const files = await attachedFiles(todo.spaceId, todo);
 	const threads: Session[] = [];
 	for (const project of repos) {
 		const context = `The user chose several repositories for this to-do; another thread works in ${from}, and this one works only in ${project.repoFullName}.`;
-		threads.push((await startTodoThreadIn(todo, { projectId: project.id, repo: project.repoFullName, context, part: `its changes in ${project.repoFullName}` }, files, true)).thread);
+		threads.push((await startTodoThreadIn(todo, { projectId: project.id, repo: project.repoFullName, context, part: `its changes in ${project.repoFullName}` }, files, true, runOn)).thread);
 	}
 	return threads;
 }
@@ -187,11 +277,12 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	if (todo.status !== 'open') throw new ConflictError('This to-do is already started or done');
 	const files = await attachedFiles(spaceId, todo);
 	if (target === 'thread') {
+		const runOn: RunOn = todo.runOn === 'host' && hostRunnerAvailable() ? 'host' : 'sandbox';
 		const plan = await todoThreadPlan(await existingSpace(spaceId), todo);
 		const threads: Session[] = [];
 		let latest = todo;
 		for (const entry of plan) {
-			const started = await startTodoThreadIn(todo, entry, files, plan.length > 1);
+			const started = await startTodoThreadIn(todo, entry, files, plan.length > 1, runOn);
 			threads.push(started.thread);
 			latest = started.todo;
 		}
@@ -201,9 +292,15 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	const tagged = (await spaceRepos(space)).filter((project) => todo.repos.includes(project.id)).map((project) => project.repoFullName);
 	const message = withAttachments(todoStartMessage(todo, tagged), files, 'project');
 	const { images, note } = await projectPictures(spaceId, spaceId, message, await coordinatorModel(space));
+	const delivered = note ? `${message}\n\n${note}` : message;
 	await checkThreadModel(todo.threadModel);
 	await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: 'coordinator' });
-	const submissionId = await sendToAgent(spaceId, note ? `${message}\n\n${note}` : message, 'coordinator', images).catch(async (error: unknown) => {
+	const grantId = todo.runOn === 'host' && hostRunnerAvailable() ? `grant_${randomUUID()}` : null;
+	if (grantId) {
+		await insertTodoHandoffGrant({ id: grantId, spaceId, todoId: todo.id, runOn: 'host', bodyHash: bodyHash(delivered) });
+	}
+	const submissionId = await sendToAgent(spaceId, delivered, 'coordinator', images).catch(async (error: unknown) => {
+		if (grantId) await revokeHandoffGrantsByIds([grantId]);
 		await updateSpaceTodo(todo.id, { status: 'open', assignee: null });
 		throw error;
 	});

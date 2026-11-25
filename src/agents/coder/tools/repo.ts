@@ -21,7 +21,9 @@ export function useSetRepo(id: string) {
 				),
 			}),
 			async run({ data }) {
-				const result = await setThreadRepos(id, data.repos, async (todoId, repos, from) => (await startTodoThreadsIn(todoId, repos, from)).map(({ id: threadId, title }) => ({ id: threadId, title })));
+				const result = await setThreadRepos(id, data.repos, async (todoId, repos, from, sourceThreadId) =>
+					(await startTodoThreadsIn(todoId, repos, from, sourceThreadId)).map(({ id: threadId, title }) => ({ id: threadId, title })),
+				);
 				return result.moving ? { output: result.output, terminate: true } : { output: result.output };
 			},
 		}),

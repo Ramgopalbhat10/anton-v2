@@ -5,6 +5,7 @@ import { REASONING_LEVELS } from '../core/ports.ts';
 import { ROUTE_SORTS } from '../core/model-route.ts';
 
 export const REASONING = v.picklist(REASONING_LEVELS);
+export const RUN_ON = v.picklist(['sandbox', 'host']);
 /** One provider first (by the gateway's slug), or a sort; null leaves it to the gateway. */
 export const ROUTE = v.nullable(
 	v.union([v.object({ provider: v.pipe(v.string(), v.regex(/^[\w.\-/:]{1,80}$/)) }), v.object({ sort: v.picklist(ROUTE_SORTS) })]),

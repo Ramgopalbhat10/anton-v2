@@ -203,6 +203,12 @@ export const migrations: string[][] = [
 	[`ALTER TABLE space_todos ADD COLUMN repos_json TEXT NOT NULL DEFAULT '[]'`],
 	// 51: when the user stopped the thread's reply, until its next reply starts.
 	[`ALTER TABLE sessions ADD COLUMN stopped_at TEXT`],
+	// 52: where a project to-do's threads run (NULL = sandbox, 'host' = This server), and unforgeable board handoff grants.
+	[
+		`ALTER TABLE space_todos ADD COLUMN run_on TEXT`,
+		`CREATE TABLE IF NOT EXISTS space_todo_handoffs (id TEXT PRIMARY KEY, space_id TEXT NOT NULL, todo_id TEXT NOT NULL, run_on TEXT NOT NULL, body_hash TEXT NOT NULL, created_at TEXT NOT NULL, claimed_at TEXT, revoked_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS space_todo_handoffs_lookup ON space_todo_handoffs (space_id, todo_id, claimed_at, revoked_at)`,
+	],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

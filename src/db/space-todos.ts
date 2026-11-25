@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { RunOn } from '../core/types.ts';
 import { announce } from '../core/changes.ts';
 import { SPACE_TODO_STATUSES, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../core/space-todos.ts';
 import { appDb } from './client.ts';
@@ -43,6 +44,7 @@ function toTodo(row: Row): SpaceTodo {
 		attachments: attachmentsOf(row.attachments_json),
 		threadModel: row.thread_model_json == null ? null : JSON.parse(String(row.thread_model_json)),
 		repos: reposOf(row.repos_json),
+		runOn: row.run_on === 'host' ? 'host' : 'sandbox',
 		status: (SPACE_TODO_STATUSES as readonly string[]).includes(status) ? (status as SpaceTodoStatus) : 'open',
 		assignee: assignee === 'coordinator' || assignee === 'thread' ? assignee : null,
 		createdBy: row.created_by === 'coordinator' ? 'coordinator' : 'user',
@@ -86,19 +88,19 @@ export async function getSpaceTodo(id: string): Promise<SpaceTodo | null> {
 
 const modelJson = (choice: SpaceTodo['threadModel'] | undefined) => choice ? JSON.stringify(choice) : null;
 
-export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[]; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
+export async function insertSpaceTodo(input: { spaceId: string; title: string; description: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[]; runOn?: RunOn; createdBy: SpaceTodo['createdBy'] }): Promise<SpaceTodo> {
 	const db = await appDb();
 	const id = `todo_${randomUUID()}`;
 	const now = new Date().toISOString();
 	await db.execute({
-		sql: 'INSERT INTO space_todos (id, space_id, title, description, attachments_json, thread_model_json, repos_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-		args: [id, input.spaceId, input.title, input.description, JSON.stringify(input.attachments ?? []), modelJson(input.threadModel), JSON.stringify(input.repos ?? []), input.createdBy, now, now],
+		sql: 'INSERT INTO space_todos (id, space_id, title, description, attachments_json, thread_model_json, repos_json, run_on, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+		args: [id, input.spaceId, input.title, input.description, JSON.stringify(input.attachments ?? []), modelJson(input.threadModel), JSON.stringify(input.repos ?? []), input.runOn === 'host' ? 'host' : null, input.createdBy, now, now],
 	});
 	announce({ kind: 'space', id: input.spaceId, what: 'todos' });
 	return (await getSpaceTodo(id))!;
 }
 
-const COLUMNS = { title: 'title', description: 'description', attachments: 'attachments_json', threadModel: 'thread_model_json', repos: 'repos_json', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
+const COLUMNS = { title: 'title', description: 'description', attachments: 'attachments_json', threadModel: 'thread_model_json', repos: 'repos_json', runOn: 'run_on', status: 'status', assignee: 'assignee', completedAt: 'completed_at' } as const;
 
 export type SpaceTodoUpdate = Partial<Pick<SpaceTodo, keyof typeof COLUMNS>>;
 
@@ -112,7 +114,8 @@ export async function updateSpaceTodo(id: string, update: SpaceTodoUpdate, { qui
 			if (key === 'attachments') return JSON.stringify(update.attachments ?? []);
 			if (key === 'threadModel') return modelJson(update.threadModel);
 			if (key === 'repos') return JSON.stringify(update.repos ?? []);
-			return update[key as Exclude<keyof SpaceTodoUpdate, 'attachments' | 'threadModel' | 'repos'>] ?? null;
+			if (key === 'runOn') return update.runOn === 'host' ? 'host' : null;
+			return update[key as Exclude<keyof SpaceTodoUpdate, 'attachments' | 'threadModel' | 'repos' | 'runOn'>] ?? null;
 		}), new Date().toISOString(), id],
 	});
 	const todo = await getSpaceTodo(id);
@@ -124,6 +127,7 @@ export async function deleteSpaceTodoRecord(todo: SpaceTodo): Promise<void> {
 	const db = await appDb();
 	await db.batch(
 		[
+			{ sql: 'DELETE FROM space_todo_handoffs WHERE todo_id = ?', args: [todo.id] },
 			{ sql: 'DELETE FROM space_todo_threads WHERE todo_id = ?', args: [todo.id] },
 			{ sql: 'DELETE FROM space_todos WHERE id = ?', args: [todo.id] },
 		],
@@ -142,4 +146,67 @@ export async function todoIdOfThread(sessionId: string): Promise<string | null> 
 export async function linkTodoThreadRecord(todoId: string, sessionId: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'INSERT OR IGNORE INTO space_todo_threads (todo_id, session_id, linked_at) VALUES (?, ?, ?)', args: [todoId, sessionId, new Date().toISOString()] });
+}
+
+/** One-time server-issued authorization for a board handoff to the coordinator. */
+export async function insertTodoHandoffGrant(input: { id: string; spaceId: string; todoId: string; runOn: RunOn; bodyHash: string }): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: 'INSERT INTO space_todo_handoffs (id, space_id, todo_id, run_on, body_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+		args: [input.id, input.spaceId, input.todoId, input.runOn, input.bodyHash, new Date().toISOString()],
+	});
+}
+
+/** Atomically claims a pending board handoff grant matching this space, to-do and exact delivered body. */
+export async function claimTodoHandoffGrant(spaceId: string, todoId: string, bodyHash: string): Promise<{ id: string; todoId: string; runOn: RunOn } | null> {
+	const db = await appDb();
+	const found = await db.execute({
+		sql: 'SELECT id, todo_id, run_on FROM space_todo_handoffs WHERE space_id = ? AND todo_id = ? AND body_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1',
+		args: [spaceId, todoId, bodyHash],
+	});
+	const row = found.rows[0] as Row | undefined;
+	if (!row) return null;
+	const id = String(row.id);
+	const updated = await db.execute({
+		sql: 'UPDATE space_todo_handoffs SET claimed_at = ? WHERE id = ? AND claimed_at IS NULL AND revoked_at IS NULL',
+		args: [new Date().toISOString(), id],
+	});
+	if (!updated.rowsAffected) return null;
+	return { id, todoId: String(row.todo_id), runOn: row.run_on === 'host' ? 'host' : 'sandbox' };
+}
+
+export async function hasValidTodoHostGrant(spaceId: string, todoId: string, grantId: string): Promise<boolean> {
+	const db = await appDb();
+	const result = await db.execute({
+		sql: "SELECT 1 FROM space_todo_handoffs WHERE id = ? AND space_id = ? AND todo_id = ? AND run_on = 'host' AND claimed_at IS NOT NULL AND revoked_at IS NULL LIMIT 1",
+		args: [grantId, spaceId, todoId],
+	});
+	return result.rows.length > 0;
+}
+
+export async function revokeTodoHandoffGrants(todoId: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: 'UPDATE space_todo_handoffs SET revoked_at = ? WHERE todo_id = ? AND revoked_at IS NULL',
+		args: [new Date().toISOString(), todoId],
+	});
+}
+
+export async function revokeHandoffGrantsByIds(grantIds: string[]): Promise<void> {
+	if (!grantIds.length) return;
+	const db = await appDb();
+	const now = new Date().toISOString();
+	await db.batch(
+		grantIds.map((id) => ({ sql: 'UPDATE space_todo_handoffs SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL', args: [now, id] })),
+		'write',
+	);
+}
+
+/** Revokes grants already claimed by earlier replies in this project without touching pending handoffs not yet delivered. */
+export async function revokeSpaceClaimedHandoffGrants(spaceId: string): Promise<void> {
+	const db = await appDb();
+	await db.execute({
+		sql: 'UPDATE space_todo_handoffs SET revoked_at = ? WHERE space_id = ? AND claimed_at IS NOT NULL AND revoked_at IS NULL',
+		args: [new Date().toISOString(), spaceId],
+	});
 }

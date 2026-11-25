@@ -56,13 +56,14 @@ function ConnectorRow({ item, onPick }: { item: ConnectorItem; onPick: (item: Co
 /** Where a task's commands run, chosen per task; `locked` says why it cannot change now. */
 export type RunChoice = { value: RunOn; onChange: (next: RunOn) => void; locked?: string | null; note?: string | null };
 
-const PROVIDER_NAMES: Record<string, string> = { modal: 'Modal', docker: 'Docker', local: 'a folder' };
+export const RUN_ON_PROVIDERS: Record<string, string> = { modal: 'Modal', docker: 'Docker', local: 'a folder' };
+export const RUN_ON_NOTE = "This server runs the task's commands in a folder on the machine Anton runs on, from its address. It is not isolated from that machine, so keep it for tasks you trust.";
 
 function RunOnMenu({ run }: { run: RunChoice }) {
 	const runners = useQuery({ queryKey: ['runners'], queryFn: api.runners, staleTime: 5 * 60_000 });
 	// Only where this server is a place of its own: a server whose sandbox is a local folder already runs everything here.
 	if (!runners.data?.host) return null;
-	const sandbox = PROVIDER_NAMES[runners.data.sandbox] ?? runners.data.sandbox;
+	const sandbox = RUN_ON_PROVIDERS[runners.data.sandbox] ?? runners.data.sandbox;
 	const pick = (next: RunOn) => {
 		if (next !== run.value && !run.locked) run.onChange(next);
 	};
@@ -80,9 +81,7 @@ function RunOnMenu({ run }: { run: RunChoice }) {
 				</MenuItem>
 				<MenuSeparator />
 				<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">
-					{run.locked ??
-						run.note ??
-						"This server runs the task's commands in a folder on the machine Anton runs on, from its address. It is not isolated from that machine, so keep it for tasks you trust."}
+					{run.locked ?? run.note ?? RUN_ON_NOTE}
 				</p>
 			</MenuSubContent>
 		</MenuSub>

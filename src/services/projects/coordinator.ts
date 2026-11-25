@@ -31,7 +31,7 @@ const clip = (text: string, length: number) => {
 const prNumber = (url: string) => /\/pull\/(\d+)/.exec(url)?.[1];
 
 export function threadLine(thread: Session): string {
-	const parts = [`[${thread.id.slice(0, 8)}] "${thread.title}"`, thread.repo || 'no repository', THREAD_STATE_LABELS[thread.threadState ?? 'idle']];
+	const parts = [`[${thread.id.slice(0, 8)}] "${thread.title}"`, thread.repo || 'no repository', ...(thread.runOn === 'host' ? ['This server'] : []), THREAD_STATE_LABELS[thread.threadState ?? 'idle']];
 	if (thread.prUrl) {
 		const pr = thread.pullRequest;
 		parts.push(`PR #${prNumber(thread.prUrl) ?? '?'}${pr ? ` ${pr.state}${pr.checks ? `, checks ${pr.checks}` : ''}${pr.approved ? ', approved' : ''}` : ''}`);
@@ -63,7 +63,7 @@ export async function threadActivity(threadId: string, now = Date.now()): Promis
 const RESOLVED_SHOWN = 5;
 
 const todoLine = (todo: SpaceTodo, repoNames: Map<string, string>) =>
-	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.threadModel ? ` · main thread model: ${todo.threadModel.model}` : ''}${taggedLine(todo, repoNames)}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
+	`- [todo:${shortTodoId(todo.id)}] "${todo.title}" · ${todo.status === 'open' ? 'open' : todo.threads ? `in progress (${todo.threads} thread${todo.threads === 1 ? '' : 's'})` : 'started, no thread yet'}${todo.threadModel ? ` · main thread model: ${todo.threadModel.model}` : ''}${taggedLine(todo, repoNames)}${todo.runOn === 'host' ? ' · run on: This server' : ''}${todo.attachments.length ? ` · files: ${todo.attachments.map((file) => file.path).join(', ')}` : ''}`;
 
 const taggedLine = (todo: SpaceTodo, repoNames: Map<string, string>) => {
 	const names = todo.repos.flatMap((id) => repoNames.get(id) ?? []);
