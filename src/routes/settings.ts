@@ -85,6 +85,7 @@ app.put('/api/settings/general', async (c) => {
 			reasoning: v.nullable(REASONING),
 			planMode: v.boolean(),
 			reviewPullRequests: v.boolean(),
+			fixLowFindings: v.optional(v.boolean(), false),
 			codeMode: v.boolean(),
 			visualReplies: v.optional(v.picklist(VISUAL_REPLIES), 'some'),
 			pageNetwork: v.optional(v.boolean(), true),

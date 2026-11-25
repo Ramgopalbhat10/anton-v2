@@ -872,6 +872,7 @@ test('General settings decide how a new task starts when the launcher does not s
 		reasoning: 'low',
 		planMode: true,
 		reviewPullRequests: true,
+		fixLowFindings: false,
 		codeMode: false,
 		visualReplies: 'some',
 		pageNetwork: true,
@@ -1288,6 +1289,33 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	activity = { ...activity, comments: [asReview('review-1', reviews[0].body), { id: 'line-2', author: 'ada', body: 'Says reviewed twice.', path: 'README.md', line: 1, at: '' }] };
 	assert.equal(await followUp((await getSessionRecord(session.id))!), true);
 	assert.match(delivered[0].text, /README\.md line 1: Says reviewed twice/);
+	assert.doesNotMatch(delivered[0].text, /1 problem to fix/, 'the summary is left out: its findings come as line comments');
+	assert.match(delivered[0].text, /find the cause[\s\S]*what your fix could break[\s\S]*real code path/, 'a fix is asked for at its cause, not only its line');
+
+	// Low-severity findings stay on the pull request for a person unless the setting says to fix them too.
+	await postReview(session.id, {
+		summary: 'Two more.',
+		findings: [
+			{ path: 'README.md', line: 1, body: 'Typo in the heading.', kind: 'bug', severity: 'low' },
+			{ path: 'README.md', line: 1, body: 'Loses the title.', kind: 'bug', severity: 'medium' },
+		],
+	});
+	const [medium, low] = reviews[1].comments;
+	assert.match(medium.body, /^\*\*Bug · medium\*\*/);
+	const asLine = (id: string, body: string) => ({ id, author: 'ada', body, path: 'README.md', line: 1, at: '' });
+	activity = { ...activity, comments: [...activity.comments, asReview('review-4', reviews[1].body), asLine('line-5', medium.body), asLine('line-6', low.body)] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), true);
+	assert.match(delivered[1].text, /Loses the title/);
+	assert.doesNotMatch(delivered[1].text, /Typo in the heading/, 'a low finding never starts a fix round');
+	activity = { ...activity, comments: [...activity.comments, asLine('line-7', low.body.replace('Typo', 'Another typo'))] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), false, 'low findings alone wake nothing');
+	await setGeneralSettings({ ...(await generalSettings()), fixLowFindings: true });
+	activity = { ...activity, comments: [...activity.comments, asLine('line-8', low.body.replace('Typo', 'A third typo'))] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), true);
+	assert.match(delivered[2].text, /A third typo/, 'unless the user asks for them to be fixed too');
+	await setGeneralSettings({ ...(await generalSettings()), fixLowFindings: false });
+	reviews.splice(1);
+
 	await postReview(session.id, { summary: '', findings: [] });
 	assert.match(reviews[1].body, /no problems found/);
 	activity = { ...activity, comments: [...activity.comments, asReview('review-3', reviews[1].body)] };
@@ -1297,14 +1325,18 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	activity = { ...activity, comments: Array.from({ length: MAX_REVIEWS }, (_, index) => asReview(`review-${index}`, `x ${index ? REVIEW_MARK : CLEAN_MARK}`)) };
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	assert.equal(await requestReview(session.id, { automatic: false }), true);
-	activity = { ...activity, comments: [] };
+	assert.doesNotMatch(reviewRequests[1].text, /You last reviewed/, 'the same head is read whole');
+	activity = { ...activity, headSha: 'head-2', comments: [] };
+	assert.equal(await requestReview(session.id, { automatic: false }), true);
+	assert.match(reviewRequests[2].text, /You last reviewed it at head-1: what changed since is `git diff head-1\.\.head-2`/, 'a re-review reads what came after the last one');
+	activity = { ...activity, headSha: 'head-1', comments: [] };
 	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: false });
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: true });
 	activity = { ...activity, state: 'merged' };
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await assert.rejects(() => requestReview(session.id, { automatic: false }), /merged/);
-	assert.equal(reviewRequests.length, 2);
+	assert.equal(reviewRequests.length, 3);
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 

@@ -64,6 +64,8 @@ export type GeneralSettings = {
 	reasoning: Reasoning | null;
 	planMode: boolean;
 	reviewPullRequests: boolean;
+	/** The agent also fixes the reviewer's low-severity findings. */
+	fixLowFindings: boolean;
 	codeMode: boolean;
 	/** How much the agent draws its replies (cards, charts, pages) rather than writing them. */
 	visualReplies: 'off' | 'some' | 'more';

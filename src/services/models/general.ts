@@ -15,6 +15,8 @@ export type GeneralSettings = {
 	reasoning: Reasoning | null;
 	planMode: boolean;
 	reviewPullRequests: boolean;
+	/** Off: Anton's low-severity review findings stay on the pull request for a person, and never start a fix round. */
+	fixLowFindings: boolean;
 	codeMode: boolean;
 	visualReplies: VisualReplies;
 	pageNetwork: boolean;
@@ -85,6 +87,7 @@ export async function generalSettings(): Promise<GeneralSettings> {
 		reasoning: null,
 		planMode: false,
 		reviewPullRequests: true,
+		fixLowFindings: false,
 		codeMode: true,
 		visualReplies: 'some',
 		pageNetwork: true,
