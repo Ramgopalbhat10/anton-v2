@@ -1,10 +1,10 @@
 import type { Project } from '../../core/types.ts';
-import { todoBrief, type SpaceTodo } from '../../core/space-todos.ts';
+import { HOST_TAGS_ONLY, outsideHostTags, todoBrief, type SpaceTodo } from '../../core/space-todos.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { logProblem } from '../../core/log.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { getSpace, type Space } from '../../db/spaces.ts';
-import { todoIdOfThread } from '../../db/space-todos.ts';
+import { getSpaceTodo, todoIdOfThread } from '../../db/space-todos.ts';
 import { changes } from '../git/git.ts';
 import { readCheckpoint } from '../git/checkpoints.ts';
 import { choiceOf, decide } from '../models/decisions.ts';
@@ -109,8 +109,10 @@ export async function setThreadRepos(id: string, refs: string[], startIn: StartI
 	const projects = found.filter((project, index) => found.findIndex((other) => other.id === project.id) === index);
 	const [first, ...rest] = projects;
 	if (!first) throw new InvalidInputError('Name at least one of the project\'s repositories.');
-	const todoId = rest.length ? await todoIdOfThread(id) : null;
+	const todoId = rest.length || session.runOn === 'host' ? await todoIdOfThread(id) : null;
 	if (rest.length && !todoId) throw new InvalidInputError('Only a thread started from a project to-do can start threads for other repositories. Pass one repository.');
+	const todo = todoId && session.runOn === 'host' ? await getSpaceTodo(todoId) : null;
+	if (todo && outsideHostTags({ ...todo, runOn: 'host' }, projects.map(({ id }) => id))) throw new InvalidInputError(HOST_TAGS_ONLY);
 	const current = session.projectId ? ((await spaceRepos(space)).find((project) => project.id === session.projectId)?.repoFullName ?? 'its repository') : null;
 	const stays = first.id === session.projectId;
 	if (!stays) await assertMovable(id, current);

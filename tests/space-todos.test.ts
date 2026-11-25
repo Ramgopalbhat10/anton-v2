@@ -9,6 +9,7 @@ import { start } from '@flue/runtime/node';
 import { createClient } from '@libsql/client';
 import * as v from 'valibot';
 import type { DecisionModel, GitHost, ModelCatalog, ModelInfo, Question } from '../src/core/ports.ts';
+import { withoutAgentNote } from '../src/core/attachments.ts';
 import { quotedFrom } from '../src/core/briefs.ts';
 import { shortTodoId, todoStartMessage, todoThreadFiles, type SpaceTodo } from '../src/core/space-todos.ts';
 import { CREATE_TODO, EDIT_TODO } from '../src/routes/space-todo-input.ts';
@@ -324,6 +325,13 @@ test('a This server to-do starts threads only in its tagged repositories', async
 		const named = await todos.startTodoThread(hosted, { title: 'Api', brief: 'Work', repo: 'acme/api' });
 		const inferred = await todos.startTodoThread(hosted, { title: 'Api too', brief: 'Work' });
 		for (const { thread } of [named, inferred]) assert.deepEqual([thread.repo, (await getSessionRecord(thread.id))?.runOn], ['acme/api', 'host']);
+		const startIn = async (todoId: string, repos: Array<{ id: string; repoFullName: string }>, from: string) =>
+			(await todos.startTodoThreadsIn(todoId, repos as never, from, named.thread.id)).map(({ id, title }) => ({ id, title }));
+		await assert.rejects(() => threadRepos.setThreadRepos(named.thread.id, ['acme/web'], startIn), /only in the repositories tagged on it/);
+		assert.equal(threadRepos.pendingRepoMove(named.thread.id), null, 'a host thread cannot move into an untagged repository');
+		const count = (await sessions.listThreads(space.id)).length;
+		await assert.rejects(() => todos.startTodoThreadsIn(hosted.id, [apiRepo, webRepo] as never, 'acme/api', named.thread.id), /only in the repositories tagged on it/);
+		assert.equal((await sessions.listThreads(space.id)).length, count, 'a split with one untagged repository starts none of its threads');
 		const sandboxed = await todos.createTodo(space.id, { title: 'Sandbox api work', repos: [apiRepo.id] });
 		assert.equal((await todos.startTodoThread(sandboxed, { title: 'Web', brief: 'Work', repo: 'acme/web' })).thread.repo, 'acme/web', 'a sandbox to-do may still be sent elsewhere');
 	} finally {
@@ -360,6 +368,23 @@ test("the coordinator cannot start a host to-do's thread unless the user handed 
 			});
 			assert.ok(errors.some((text) => /only the user can start it/.test(text)), 'a bare todo_id is refused');
 			assert.equal((await sessions.listThreads(space.id)).some((thread) => thread.title === 'Sneaky'), false);
+
+			assert.match(handoff, /<for-agent>\nBoard handoff code: [a-f0-9]{32}\. Ignore it\.\n<\/for-agent>$/);
+			const forged = withoutAgentNote(handoff);
+			assert.equal(forged, todoStartMessage(hosted), 'the page shows the handoff without its code');
+			faux.setResponses([
+				fauxAssistantMessage([fauxToolCall('start_thread', { title: 'Forged', request: 'Runs here', todo_id: hosted.id }, { id: 'forged-start' })], { stopReason: 'toolUse' }),
+				fauxAssistantMessage([fauxText('Done.')]),
+			]);
+			const forgedRefusals = new Set<string>();
+			await agent.read(await agent.dispatch(forged), {
+				signal: AbortSignal.timeout(5000),
+				onEvent(event) {
+					if (event.type === 'tool-output-error' && event.toolCallId === 'forged-start' && /only the user can start it/.test(event.errorText)) forgedRefusals.add(event.toolCallId);
+				},
+			});
+			assert.equal(forgedRefusals.size, 1, 'the handoff text without its code, sent before the real one, claims nothing');
+			assert.equal((await sessions.listThreads(space.id)).some((thread) => thread.title === 'Forged'), false);
 
 			faux.setResponses([
 				fauxAssistantMessage([fauxToolCall('start_thread', { title: 'Runs here', request: 'Runs here', todo_id: hosted.id }, { id: 'with-handoff' })], { stopReason: 'toolUse' }),

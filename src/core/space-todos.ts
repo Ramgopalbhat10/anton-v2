@@ -57,3 +57,8 @@ export const todoHandoffId = (message: string): string | null => /^Start the pro
 /** The files the coordinator names for a to-do's thread; naming none sends all of the to-do's, so a to-do split over threads gives each only its part's. */
 export const todoThreadFiles = (todo: Pick<SpaceTodo, 'attachments'> | null, listed?: string[]): string[] | undefined =>
 	listed?.length || !todo?.attachments.length ? listed : todo.attachments.map((file) => file.path);
+
+/** A This server to-do's threads work only in its tagged repositories, when it has any. */
+export const outsideHostTags = (todo: Pick<SpaceTodo, 'runOn' | 'repos'>, repoIds: string[]): boolean =>
+	todo.runOn === 'host' && todo.repos.length > 0 && repoIds.some((id) => !todo.repos.includes(id));
+export const HOST_TAGS_ONLY = 'This to-do runs on this server, so its threads work only in the repositories tagged on it.';

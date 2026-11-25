@@ -8,7 +8,7 @@ import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
-import { assertHostHandoff, coordinatorTodo, createTodo, messageTodoThread, startTodoThread, takeHostHandoff, type TodoHandoffs } from '../services/projects/todos.ts';
+import { assertHostHandoff, coordinatorTodo, createTodo, messageTodoThread, startTodoThread, claimHostHandoff, type TodoHandoffs } from '../services/projects/todos.ts';
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
@@ -270,7 +270,7 @@ function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): 
 	useAgentStart(({ append }) => {
 		// Reset on the first delivery, not a join or a replay whose delivery hook was already committed.
 		const text = handoffId && delivery.kind === 'user' ? splitAttachments(delivery.body).text : '';
-		const host = handoffId ? takeHostHandoff(handoffId) : undefined;
+		const host = handoffId && delivery.kind === 'user' ? claimHostHandoff(delivery.body, handoffId) : undefined;
 		setHandoffs((current) => {
 			const entries = startsResponse ? [] : current.entries;
 			// Flue can call the tools from this render before rendering again with the saved state.
