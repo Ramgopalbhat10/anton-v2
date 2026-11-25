@@ -36,7 +36,7 @@ export const REVIEW_TRUST =
 
 /** A review that asks for a new subsystem turns one change into many rounds; that is the user's call, not a fix. */
 export const REVIEW_SCOPE =
-	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user, with low severity unless the change as written can be exploited or loses data.';
+	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user. That holds for a new authorization check, guard or approval step too, whatever the severity: give the risk its severity and say what it exposes, but leave the choice of guard to the user, since each guard a review asks for is new code the next review finds holes in.';
 
 export const REVIEW_GUIDE = [
 	REVIEW_RUBRIC,

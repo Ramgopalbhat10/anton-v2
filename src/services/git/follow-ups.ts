@@ -10,6 +10,7 @@ import { generalSettings } from '../models/general.ts';
 import { decide, yesOf } from '../models/decisions.ts';
 import { logProblem } from '../../core/log.ts';
 import { readPullRequest } from './pr-status.ts';
+import { PR_COMMENTS_HEAD } from '../../core/review-follow-up.ts';
 
 /** So a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
@@ -58,7 +59,7 @@ function conflictsMessage(url: string, base: string): string {
  */
 function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	return [
-		`New comments on your pull request (${url}):`,
+		`${PR_COMMENTS_HEAD} (${url}):`,
 		...comments.map((comment, index) => {
 			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
 			return `${index + 1}. @${comment.author}${where}: ${comment.body.replace(/\n/g, '\n   ')}`;
@@ -67,7 +68,7 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			'For the rest: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
 			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
 			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it. ' +
-			'Do not build a new feature, data model or approval flow to answer a comment: say in your reply that it needs the user\'s decision.',
+			'Do not build a new feature, data model, approval flow, or authorization check or guard to answer a comment, whatever its severity: say in your reply that it needs the user\'s decision.',
 		'Then call open_pull_request to update the pull request. If you disagree with one, say why in your reply.',
 	].join('\n');
 }
