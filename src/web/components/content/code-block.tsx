@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Copy } from '@/lib/icons';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { IconBtn } from '@/components/kit/signal';
-import { highlight } from '@/lib/highlight';
+import { hashText, highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 
 /** Waits for a value to stop changing, so a block still streaming is highlighted once it settles, not on every chunk. */
@@ -33,24 +33,10 @@ export function CopyButton({ text, label = 'Copy', className }: { text: string; 
 	);
 }
 
-/** A short stand-in for the text in the query key, which the cache hashes every render: 53 bits (cyrb53) plus the length, so blocks in view practically never collide. */
-function textHash(text: string): string {
-	let h1 = 0xdeadbeef;
-	let h2 = 0x41c6ce57;
-	for (let index = 0; index < text.length; index++) {
-		const code = text.charCodeAt(index);
-		h1 = Math.imul(h1 ^ code, 2654435761);
-		h2 = Math.imul(h2 ^ code, 1597334677);
-	}
-	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
-
 export function CodeBlock({ code, language, className, source = false }: { code: string; language?: string; className?: string; source?: boolean }) {
 	const text = source ? code.replace(/\r\n?/g, '\n') : code.replace(/\n$/, '');
 	const settled = useSettled(text);
-	const textId = useMemo(() => textHash(settled), [settled]);
+	const textId = useMemo(() => hashText(settled), [settled]);
 	const colored = useQuery({
 		queryKey: ['highlight-block', language ?? '', settled.length, textId],
 		queryFn: () => highlight(settled, `block.${language ?? 'txt'}`),

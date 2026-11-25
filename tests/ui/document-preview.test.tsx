@@ -6,7 +6,7 @@ import { FileImages, Markdown } from '@/components/content/markdown';
 import readme from '../fixtures/skills/anatomy-readme.md?raw';
 import skill from '../fixtures/skills/SKILL.md?raw';
 
-vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
+vi.mock('@/lib/highlight', () => ({ highlight: async () => null, hashText: (text: string) => text.length.toString(36) }));
 
 function file(text: string) {
 	return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>

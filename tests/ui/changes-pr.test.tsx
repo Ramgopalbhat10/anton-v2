@@ -15,7 +15,11 @@ const api = vi.hoisted(() => ({
 	revertFile: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
+vi.mock('@/lib/highlight', () => ({
+	highlight: async () => null,
+	highlightDiff: async (lines: Array<{ kind: string; text?: string }>) => lines.map((line) => (line.kind === 'hunk' ? null : [{ content: line.text ?? '', color: 'var(--syntax-function)' }])),
+	hashText: (text: string) => text.length.toString(36),
+}));
 
 const { GitTab } = await import('@/components/workspace/git-tab');
 const { HeaderChanges } = await import('@/components/shell/shell');
@@ -57,6 +61,7 @@ describe('Changes', () => {
 		expect(within(list).getAllByRole('listitem').map((row) => row.getAttribute('aria-label'))).toEqual(['src/b.ts']);
 		expect(within(list).getByRole('button', { name: /^b\.ts/, expanded: true })).toBeTruthy();
 		expect(screen.getByText('new')).toBeTruthy();
+		await waitFor(() => expect(screen.getByText('new').style.color).toBe('var(--syntax-function)'));
 		expect(screen.getByRole('button', { name: /^b\.ts\s*\+1\s*M$/ })).toBeTruthy();
 
 		fireEvent.click(screen.getByRole('button', { name: 'Whole branch' }));
