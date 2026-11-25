@@ -35,6 +35,24 @@ describe('Syntax colours', () => {
 		expect(rows?.[2]?.some((part) => part.content.includes('old'))).toBe(false);
 	});
 
+	it('resets tokenizer state at each hunk boundary', async () => {
+		const rows = await highlightDiff(
+			[
+				{ kind: 'hunk', text: '-1,3 +1,3' },
+				{ kind: 'context', number: 1, text: '/* started here' },
+				{ kind: 'remove', number: 2, text: 'old();' },
+				{ kind: 'add', number: 2, text: 'new();' },
+				{ kind: 'hunk', text: '-20,2 +20,2' },
+				{ kind: 'remove', number: 20, text: 'const oldLater = true;' },
+				{ kind: 'add', number: 20, text: 'const newLater = true;' },
+			],
+			'value.ts',
+		);
+		const token = (row: number, content: string) => rows?.[row]?.find((part) => part.content === content);
+		expect(token(5, 'const')?.color).toBe('var(--syntax-keyword)');
+		expect(token(6, 'const')?.color).toBe('var(--syntax-keyword)');
+	});
+
 	it('paints a deleted file from its old lines', async () => {
 		const rows = await highlightDiff([{ kind: 'remove', number: 1, text: 'const gone = true;' }], 'gone.ts');
 		expect(rows?.[0]?.find((part) => part.content === 'const')?.color).toBe('var(--syntax-keyword)');

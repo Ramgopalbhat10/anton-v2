@@ -67,15 +67,17 @@ export function hashText(text: string): string {
 	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** Colours each visible line from the side of the diff it belongs to: removals with the old lines around them, additions and context with the new. */
-export async function highlightDiff(lines: DiffLine[], path: string): Promise<Array<ThemedToken[] | null> | null> {
+type CodeDiffLine = Exclude<DiffLine, { kind: 'hunk' }>;
+
+type IndexedLine = { line: CodeDiffLine; index: number };
+
+async function highlightHunk(lines: IndexedLine[], path: string): Promise<Array<readonly [number, ThemedToken[] | null]> | null> {
 	const before: string[] = [];
 	const after: string[] = [];
 	const beforeRows = new Map<number, number>();
 	const afterRows = new Map<number, number>();
-	const removals = lines.some((line) => line.kind === 'remove');
-	lines.forEach((line, index) => {
-		if (line.kind === 'hunk') return;
+	const removals = lines.some(({ line }) => line.kind === 'remove');
+	for (const { line, index } of lines) {
 		if (removals && line.kind !== 'add') {
 			beforeRows.set(index, before.length);
 			before.push(line.text);
@@ -84,15 +86,40 @@ export async function highlightDiff(lines: DiffLine[], path: string): Promise<Ar
 			afterRows.set(index, after.length);
 			after.push(line.text);
 		}
-	});
+	}
 	const [beforeTokens, afterTokens] = await Promise.all([
 		before.length ? highlight(before.join('\n'), path) : null,
 		after.length ? highlight(after.join('\n'), path) : null,
 	]);
 	if (!beforeTokens && !afterTokens) return null;
-	return lines.map((line, index) => {
-		if (line.kind === 'hunk') return null;
-		if (line.kind === 'remove') return beforeTokens?.[beforeRows.get(index) ?? -1] ?? null;
-		return afterTokens?.[afterRows.get(index) ?? -1] ?? beforeTokens?.[beforeRows.get(index) ?? -1] ?? null;
+	return lines.map(({ line, index }) => {
+		if (line.kind === 'remove') return [index, beforeTokens?.[beforeRows.get(index) ?? -1] ?? null] as const;
+		return [index, afterTokens?.[afterRows.get(index) ?? -1] ?? beforeTokens?.[beforeRows.get(index) ?? -1] ?? null] as const;
 	});
+}
+
+/** Colours each visible line from the side of the diff it belongs to. Hunks are highlighted separately: their omitted context can hold a comment or string delimiter, so tokenizer state must not leak across them. */
+export async function highlightDiff(lines: DiffLine[], path: string): Promise<Array<ThemedToken[] | null> | null> {
+	const visibleChars = lines.reduce((sum, line) => (line.kind === 'hunk' ? sum : sum + line.text.length + 1), 0);
+	if (visibleChars > MAX_CHARS) return null;
+	const hunks: IndexedLine[][] = [];
+	let current: IndexedLine[] = [];
+	lines.forEach((line, index) => {
+		if (line.kind === 'hunk') {
+			if (current.length) hunks.push(current);
+			current = [];
+			return;
+		}
+		current.push({ line, index });
+	});
+	if (current.length) hunks.push(current);
+	const rows: Array<ThemedToken[] | null> = Array(lines.length).fill(null);
+	let highlighted = false;
+	for (const hunk of hunks) {
+		const tokens = await highlightHunk(hunk, path);
+		if (!tokens) continue;
+		highlighted = true;
+		for (const [index, lineTokens] of tokens) rows[index] = lineTokens;
+	}
+	return highlighted ? rows : null;
 }
