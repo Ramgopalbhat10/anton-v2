@@ -337,10 +337,20 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			}, 700);
 			return;
 		}
+		// A delete takes a few seconds, as stopping a sandbox and keeping its files does; the thread is gone after.
+		const deleting = req.method === 'DELETE' ? /^\/api\/sessions\/([^/]+)$/.exec(path)?.[1] : undefined;
+		if (deleting) {
+			setTimeout(() => {
+				const at = spaceThreads.findIndex((item) => item.id === deleting);
+				if (at >= 0) spaceThreads.splice(at, 1);
+				json(res, { kept: [] });
+			}, 3000);
+			return;
+		}
 		const task = `/api/sessions/${SESSION_ID}`;
 		// Any other task (an incognito chat's, one the UI fixture opens) is answered as the scripted one.
 		const other = path.match(/^\/api\/sessions\/([^/]+)(\/.*)?$/);
-		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, { ...session, working, id: other[1] });
+		if (other && other[1] !== SESSION_ID && !other[2]) return json(res, spaceThreads.find((item) => item.id === other[1]) ?? { ...session, working, id: other[1] });
 		if (other && other[1] !== SESSION_ID) path = `${task}${other[2]}`;
 		if (path === '/api/health') return json(res, { ok: true, openRouter: true, providers: { sandbox: 'local', store: 'disk', git: 'github' } });
 		if (path === '/api/sessions') return json(res, { sessions: [{ ...session }, ...spaceThreads, ...others] });

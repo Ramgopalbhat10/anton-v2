@@ -93,8 +93,8 @@ function joinedTodos(inferred: boolean): Pick<Conversation, 'messages' | 'settle
 	};
 }
 
-/** With `?reports`, thread reports the coordinator answers (each thread then a chip in its words) and one it has not answered yet (a line of its own). */
-function reportTurns(): Message[] {
+/** With `?reports`, thread reports the coordinator answers (each thread then a chip in its words) and one it has not answered yet (a line of its own); `?reports=deleted` adds a thread started and reported on, then deleted. */
+function reportTurns(deleted = false): Message[] {
 	const report = (id: string, thread: string, title: string, state: string): Message => ({ id, role: 'user', purpose: 'user', display: 'visible', submissionId: id, parts: [text(`<thread-reports>\n<thread id="${thread}" title="${title}" state="${state}"/>\n</thread-reports>`)] });
 	const reply = (id: string, body: string): Message => ({ id: `${id}-a`, role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: id, parts: [text(body)] });
 	return [
@@ -104,6 +104,17 @@ function reportTurns(): Message[] {
 		reply('r2', 'Work to migrate the ledger schema resumed after the test fix.'),
 		report('r3', 'th-cleanup', 'Prune stale webhook retries', 'resolved'),
 		reply('r3', 'Retries older than 7 days are pruned in [Prune stale webhook retries](#thread-th-cleanup), now merged.'),
+		...(deleted
+			? [
+					{ id: 'r-gone-u', role: 'user', purpose: 'user', display: 'visible', submissionId: 'r-gone-u', parts: [text('Add a Run on option to project to-dos')] } satisfies Message,
+					{ id: 'r-gone-a', role: 'assistant', purpose: 'assistant', display: 'visible', submissionId: 'r-gone-u', parts: [
+						text('I’ve started the update in `billing-api`.'),
+						{ type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'gone-start', state: 'output-available', input: { title: 'Add Run on option for project to-dos' }, output: 'Started "Add Run on option for project to-dos" [id:th-gone-run-on]' },
+					] } satisfies Message,
+					report('r5', 'th-gone-run-on', 'Add Run on option for project to-dos', 'idle'),
+					reply('r5', 'Add Run on option for project to-dos now requires an explicit handoff before the coordinator starts a **This server** thread; type checks and all 22 to-do tests passed.'),
+				]
+			: []),
 		report('r4', 'th-invoices', 'Name the invoices table', 'waiting'),
 	];
 }
@@ -143,7 +154,7 @@ export function createFlueClient({ url }: { url: string }) {
 	const todos = coordinator && params.has('joined-todos') ? joinedTodos(params.get('joined-todos') === 'inferred') : { messages: [], settlements: [] };
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns() : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : [])],
+		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns(params.get('reports') === 'deleted') : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : [])],
 		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }, ...todos.settlements],
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };
