@@ -146,7 +146,7 @@ function ThreadRow({ thread, active, repos, compact, onNavigate }: { thread: Ses
 						<span className={cn('flex min-w-0 items-center gap-1.5 text-micro', state === 'waiting' ? 'text-(--warn)' : 'text-(--text-3)')}>
 							<PrStatus thread={thread} />
 							<span className="min-w-0 truncate">
-								{state === 'waiting' && thread.asking ? thread.asking : [repos > 1 && repoShort(thread), when(threadActiveAt(thread))].filter(Boolean).join(' · ')}
+								{state === 'waiting' && thread.asking ? thread.asking : state === 'waiting' && thread.stoppedAt ? 'Stopped' : [repos > 1 && repoShort(thread), when(threadActiveAt(thread))].filter(Boolean).join(' · ')}
 							</span>
 						</span>
 					)}

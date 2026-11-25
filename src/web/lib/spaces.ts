@@ -70,6 +70,7 @@ export const stateOf = (thread: Session): ThreadState =>
 		prUrl: thread.prUrl,
 		resolvedAt: thread.resolvedAt ?? null,
 		brief: thread.brief ?? null,
+		stoppedAt: thread.stoppedAt ?? null,
 	});
 
 export function groupByState(threads: Session[]): Array<{ state: ThreadState; threads: Session[] }> {
@@ -78,11 +79,14 @@ export function groupByState(threads: Session[]): Array<{ state: ThreadState; th
 
 export const threadActiveAt = (thread: Session) => [thread.checkpointAt, thread.lastInputAt, thread.createdAt].filter((at): at is string => Boolean(at)).sort().pop() ?? thread.createdAt;
 
+export const STOPPED_LINE = 'You stopped it before it finished.';
+
 /** One line about the thread: its question when it waits on you, else its last words, else its brief. */
 export function threadLine(thread: Session, markdown = false): string {
 	if (thread.status === 'error') return thread.errorMessage ?? 'The thread failed.';
 	// A resolved thread is done: a question left from before it closed is not its line any more.
 	if (thread.asking && !thread.resolvedAt) return thread.asking;
+	if (thread.stoppedAt && !thread.resolvedAt && !thread.working) return STOPPED_LINE;
 	const text = thread.lastReply ?? thread.brief ?? thread.lastInput ?? '';
 	// A heading only names what follows, so the first line of prose is preferred.
 	const lines = text.split('\n').filter((entry) => entry.trim() && !/^\s*(?:---+|\|)/.test(entry));
