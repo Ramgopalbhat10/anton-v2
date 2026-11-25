@@ -350,6 +350,18 @@ function Form({ settings: savedSettings }: { settings: GeneralSettings }) {
 						label={<span className="sr-only">Review pull requests</span>}
 					/>
 				</SettingRow>
+				<SettingRow
+					title="Fix low-severity findings"
+					help="Off, they stay on the pull request for you."
+					info="With follow-ups on, the agent fixes the reviewer's high and medium findings on its own. Low ones are left as comments for you to weigh unless this is on: each fix round re-reads the agent's whole conversation, so it costs about ten reviews."
+				>
+					<Switch
+						checked={settings.fixLowFindings}
+						disabled={save.isPending || !settings.reviewPullRequests}
+						onChange={(fixLowFindings) => edit({ fixLowFindings })}
+						label={<span className="sr-only">Fix low-severity findings</span>}
+					/>
+				</SettingRow>
 			</Block>
 			{/* The page's own footer, after the last card, so it never covers one. */}
 			<div

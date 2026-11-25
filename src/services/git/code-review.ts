@@ -22,7 +22,8 @@ export const REVIEW_GUIDE = [
 	'Report a security problem only with an exploit path you traced in the code: who can trigger it, through what input, and what they gain. Give it a severity: critical (anyone can take over accounts, data or the server), high (a realistic attacker gets data or actions they should not), medium (needs unusual access or conditions), low (defense in depth).',
 	'Leave out style, naming and matters of taste unless REVIEW.md asks for them. Confirm each problem in the code before you report it, and drop anything you are not sure of.',
 	'Finish by calling post_review once. Put each finding on the line it is about, a line of the new file that the change added or modified, and say how to fix it. With no findings, call it with an empty list.',
-	'When this conversation has earlier reviews, report a problem again only if it is still there.',
+	'When this conversation has an earlier review of this pull request, this one is a re-review: read the commits since the head you last reviewed and the code they touch, not the whole change again. ' +
+		'Report an earlier problem again only if it is still there, and a new problem in code your earlier review already read only if it is high or critical.',
 ].join(' ');
 
 /** Lets Anton count its own reviews on a pull request. */
@@ -37,10 +38,14 @@ const isAntonReview = (comment: PullRequestComment) => comment.id.startsWith('re
 /** So its line comments land on the lines it read. */
 const reviewing = new Map<string, string>();
 
-function reviewMessage(url: string, baseSha: string, head: string): string {
+/** The head each task's last review read, so a re-review reads only what came after it. Lost on a restart, when the reviewer's conversation still names it. */
+const lastReviewed = new Map<string, string>();
+
+function reviewMessage(url: string, baseSha: string, head: string, previous?: string): string {
 	return [
 		`Review the pull request ${url} at ${head.slice(0, 7)}.`,
 		`The change is \`git diff ${baseSha}...${head}\` in the repository, and \`git log ${baseSha}..${head}\` lists its commits.`,
+		...(previous && previous !== head ? [`You last reviewed it at ${previous.slice(0, 7)}: what changed since is \`git diff ${previous}..${head}\`.`] : []),
 		'Call post_review once when you are done.',
 	].join('\n');
 }
@@ -87,7 +92,7 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	if (automatic && (await documentationOnly(id, session.prUrl))) return false;
 	reviewing.set(id, activity.headSha);
 	if (!session.review) {
-		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha), 'reviewer');
+		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha, lastReviewed.get(id)), 'reviewer');
 		return true;
 	}
 	preparing.add(id);
@@ -159,6 +164,9 @@ export type Severity = (typeof SEVERITIES)[number];
 
 export type Finding = { path: string; line: number; body: string; kind?: 'bug' | 'security'; severity?: Severity; exploit?: string };
 
+/** A line comment `commentBody` wrote for a low-severity finding. */
+export const isMinorFinding = (body: string): boolean => /^\*\*(?:(?:Bug|Security) · )?low\*\*/.test(body.trimStart());
+
 function commentBody({ kind, severity, body, exploit }: Finding): string {
 	const label = [kind === 'security' ? 'Security' : kind === 'bug' ? 'Bug' : null, severity].filter(Boolean).join(' · ');
 	return [label ? `**${label}**` : null, body.trim(), kind === 'security' && exploit?.trim() ? `**Exploit path:** ${exploit.trim()}` : null].filter(Boolean).join('\n\n');
@@ -182,6 +190,8 @@ export async function postReview(id: string, { summary, findings }: { summary: s
 		body: [headingOf(findings), summary.trim(), clean ? CLEAN_MARK : REVIEW_MARK].filter(Boolean).join('\n\n'),
 		comments: ordered.map((finding) => ({ path: finding.path.replace(/^\.?\//, ''), line: finding.line, body: commentBody(finding) })),
 	});
+	const head = reviewing.get(id);
+	if (head && !session.review) lastReviewed.set(id, head);
 	const done = session.review ? 'Now tell the user what you found.' : 'You are done.';
 	return clean ? `Posted: no problems found. ${done}` : `Posted ${findings.length} finding${findings.length === 1 ? '' : 's'} on the pull request. ${done}`;
 }

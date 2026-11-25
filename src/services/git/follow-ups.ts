@@ -5,7 +5,8 @@ import { getSessionRecord, listSessionRecords, updateSession } from '../../db/se
 import { isWorking } from '../tasks/activity.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
 import { budget } from '../models/budget.ts';
-import { CLEAN_MARK } from './code-review.ts';
+import { CLEAN_MARK, isMinorFinding, REVIEW_MARK } from './code-review.ts';
+import { generalSettings } from '../models/general.ts';
 import { decide, yesOf } from '../models/decisions.ts';
 import { logProblem } from '../../core/log.ts';
 import { readPullRequest } from './pr-status.ts';
@@ -51,6 +52,10 @@ function conflictsMessage(url: string, base: string): string {
 	].join('\n');
 }
 
+/*
+ * A fix aimed only at the reported line tends to move the problem: over five production pull requests (Nov 2026), 7 of 19
+ * review findings were caused or left half-fixed by the previous round's fix, each a full round of the agent's context.
+ */
 function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	return [
 		`New comments on your pull request (${url}):`,
@@ -58,9 +63,20 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
 			return `${index + 1}. @${comment.author}${where}: ${comment.body.replace(/\n/g, '\n   ')}`;
 		}),
-		'Address each one, then call open_pull_request to update the pull request. If you disagree with one, say why in your reply.',
+		'For each one: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
+			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
+			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it.',
+		'Then call open_pull_request to update the pull request. If you disagree with one, say why in your reply.',
 	].join('\n');
 }
+
+/**
+ * Comments that never wake the agent: Anton's review summary, whose findings arrive as its line comments, and, unless the
+ * user chose otherwise, its low-severity findings, which stay on the pull request for a person to weigh. A fix round
+ * resumes the agent's whole conversation, about ten times a review's tokens.
+ */
+export const heldBack = (comments: PullRequestComment[], fixLow: boolean): string[] =>
+	comments.filter((comment) => comment.body.includes(REVIEW_MARK) || (!fixLow && isMinorFinding(comment.body))).map((comment) => comment.id);
 
 /** `quiet` comments are marked seen without a message. Conflicts are sent once for each head and base. */
 export function nextFollowUp(
@@ -107,7 +123,10 @@ export async function followUp(session: SessionRecord, read?: PullRequestActivit
 		await save({ ...state, done: true });
 		return false;
 	}
-	const next = nextFollowUp(session.prUrl, activity, state, await askingNothing(session.id, unseenComments(activity, state)), session.baseBranch);
+	const unseen = unseenComments(activity, state);
+	const held = heldBack(unseen, (await generalSettings()).fixLowFindings);
+	const quiet = [...held, ...(await askingNothing(session.id, unseen.filter((comment) => !held.includes(comment.id))))];
+	const next = nextFollowUp(session.prUrl, activity, state, quiet, session.baseBranch);
 	if (next.message) await sendToAgent(session.id, next.message);
 	if (next.state !== state) await save(next.state);
 	return next.message !== null;
