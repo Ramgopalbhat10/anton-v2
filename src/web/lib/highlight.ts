@@ -1,4 +1,5 @@
 import type { ThemedToken, ThemeRegistration } from 'shiki';
+import type { DiffLine } from '@/lib/diff';
 
 /** Larger files show as plain text: highlighting them would stall the page. */
 const MAX_CHARS = 300_000;
@@ -50,4 +51,48 @@ export async function highlight(code: string, path: string): Promise<ThemedToken
 	if (!lang) return null;
 	const { tokens } = await codeToTokens(code, { lang: lang as keyof typeof bundledLanguages, theme: THEME });
 	return tokens;
+}
+
+/** A small hash for a text whose colours are cached: 53 bits (cyrb53) plus the length, so entries in view practically never collide. */
+export function hashText(text: string): string {
+	let h1 = 0xdeadbeef;
+	let h2 = 0x41c6ce57;
+	for (let index = 0; index < text.length; index++) {
+		const code = text.charCodeAt(index);
+		h1 = Math.imul(h1 ^ code, 2654435761);
+		h2 = Math.imul(h2 ^ code, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+/** Colours each visible line from the side of the diff it belongs to: removals with the old lines around them, additions and context with the new. */
+export async function highlightDiff(lines: DiffLine[], path: string): Promise<Array<ThemedToken[] | null> | null> {
+	const before: string[] = [];
+	const after: string[] = [];
+	const beforeRows = new Map<number, number>();
+	const afterRows = new Map<number, number>();
+	const removals = lines.some((line) => line.kind === 'remove');
+	lines.forEach((line, index) => {
+		if (line.kind === 'hunk') return;
+		if (removals && line.kind !== 'add') {
+			beforeRows.set(index, before.length);
+			before.push(line.text);
+		}
+		if (line.kind !== 'remove') {
+			afterRows.set(index, after.length);
+			after.push(line.text);
+		}
+	});
+	const [beforeTokens, afterTokens] = await Promise.all([
+		before.length ? highlight(before.join('\n'), path) : null,
+		after.length ? highlight(after.join('\n'), path) : null,
+	]);
+	if (!beforeTokens && !afterTokens) return null;
+	return lines.map((line, index) => {
+		if (line.kind === 'hunk') return null;
+		if (line.kind === 'remove') return beforeTokens?.[beforeRows.get(index) ?? -1] ?? null;
+		return afterTokens?.[afterRows.get(index) ?? -1] ?? beforeTokens?.[beforeRows.get(index) ?? -1] ?? null;
+	});
 }

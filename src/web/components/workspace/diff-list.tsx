@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Undo2, X } from '@/lib/icons';
-import { Fragment, useContext, useEffect, useRef, useState } from 'react';
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/kit/disclosure';
 import { FileIcon, FileIcons } from '@/components/marks/file-icons';
 import { StatusChip } from '@/components/content/file-view';
@@ -8,6 +8,7 @@ import { ChangesArt } from '@/components/marks/illustrations';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import type { DiffLine, FileDiff } from '@/lib/diff';
+import { hashText, highlightDiff } from '@/lib/highlight';
 import { type ReviewComment, useReviewComments } from '@/lib/review';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
@@ -66,7 +67,9 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 	);
 }
 
-function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }) {
+type Token = { content: string; color?: string };
+
+function CodeRow({ line, tokens, onComment }: { line: CodeLine; tokens?: Token[] | null; onComment?: () => void }) {
 	return (
 		<div
 			className={cn(
@@ -95,7 +98,13 @@ function CodeRow({ line, onComment }: { line: CodeLine; onComment?: () => void }
 					line.kind === 'context' ? 'text-(--text-2)' : 'text-(--text)',
 				)}
 			>
-				{line.text}
+				{tokens
+					? tokens.map((token, at) => (
+							<span key={at} style={{ color: token.color }}>
+								{token.content}
+							</span>
+						))
+					: line.text}
 			</span>
 		</div>
 	);
@@ -115,6 +124,16 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 	const codeLines = file.lines.filter((line): line is CodeLine => line.kind !== 'hunk');
 	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => matches(comment, line));
 	const outdated = (commenting?.comments ?? []).filter((comment) => !codeLines.some((line) => matches(comment, line)));
+	const cacheText = useMemo(() => diffText(file), [file]);
+	const cacheHash = useMemo(() => hashText(cacheText), [cacheText]);
+	const colored = useQuery({
+		queryKey: ['highlight-diff', file.path, file.lines.length, cacheHash],
+		queryFn: () => highlightDiff(file.lines, file.path),
+		enabled: file.lines.length > 0,
+		staleTime: Number.POSITIVE_INFINITY,
+		gcTime: 60_000,
+	});
+	const tokens = colored.data ?? null;
 	if (file.lines.length === 0) {
 		return <div className="border-t border-(--line) px-3 py-2 text-small text-(--text-3)">{file.status === 'D' ? 'The file was deleted.' : 'No lines to show: the file is empty or binary.'}</div>;
 	}
@@ -133,7 +152,7 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 					) : (
 						// Keyed by the line, not its position, so an open comment form keeps its text when the diff refreshes.
 						<Fragment key={`${sideOf(line)}-${line.number}`}>
-							<CodeRow line={line} onComment={commenting ? () => setDraft({ side: sideOf(line), line: line.number }) : undefined} />
+							<CodeRow line={line} tokens={tokens?.[index]} onComment={commenting ? () => setDraft({ side: sideOf(line), line: line.number }) : undefined} />
 							{on(line).map((comment, at) => (
 								<CommentCard key={at} comment={comment} onRemove={() => commenting?.onRemove(comment)} />
 							))}

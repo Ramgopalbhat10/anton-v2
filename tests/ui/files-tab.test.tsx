@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
 	file: vi.fn(async (_id: string, _path: string) => new TextEncoder().encode('export const answer = 42;\n')),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-vi.mock('@/lib/highlight', () => ({ highlight: async () => null }));
+vi.mock('@/lib/highlight', () => ({ highlight: async () => null, hashText: (text: string) => text.length.toString(36) }));
 
 const { FilesTab } = await import('@/components/workspace/files-tab');
 
