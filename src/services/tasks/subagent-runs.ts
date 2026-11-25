@@ -108,7 +108,12 @@ const announcing = new Map<string, ReturnType<typeof setTimeout>>();
 const saving = new Map<string, ReturnType<typeof setTimeout>>();
 
 function changed(id: string, now = false) {
-	if (!announcing.has(id)) {
+	// A run's end is told at once: a page still showing it running reads as a Stop that did nothing.
+	if (now) {
+		clearTimeout(announcing.get(id));
+		announcing.delete(id);
+		announce({ kind: 'task', id, what: 'subagents' });
+	} else if (!announcing.has(id)) {
 		announcing.set(
 			id,
 			setTimeout(() => {
@@ -275,13 +280,28 @@ export function onSubagentStop(runId: string, stop: (note: string) => void): () 
 
 const STOPPED_WITH_REPLY = 'Stopped with the reply.';
 
+/**
+ * Recorded as stopped the moment it is stopped. The runtime's own end of the run comes only once the subagent's
+ * current step lets go of its abort, and until then every open page showed it running and the reply waiting on it.
+ */
+function endStopped(id: string, run: SubagentRun, result: string): void {
+	run.status = 'stopped';
+	run.durationMs = Date.now() - Date.parse(run.startedAt);
+	run.result = result.slice(0, MAX_RESULT);
+	run.writing = null;
+	for (const step of run.steps) if (step.state === 'running') step.state = 'done';
+	changed(id, true);
+}
+
 export async function stopSubagent(id: string, runId: string): Promise<boolean> {
 	const run = (await runsOf(id)).find((entry) => entry.id === runId);
 	const stop = stoppers.get(runId);
 	if (!run || run.status !== 'running' || !stop) return false;
 	stoppers.delete(runId);
 	stopping.add(runId);
-	stop(stoppedNote(run));
+	const note = stoppedNote(run);
+	stop(note);
+	endStopped(id, run, note);
 	return true;
 }
 
@@ -291,17 +311,22 @@ export async function endOverTime(id: string, runId: string, budgetMs: number): 
 	if (!run || run.status !== 'running' || !stop) return false;
 	stoppers.delete(runId);
 	stopping.add(runId);
-	stop(
-		[
-			`This subagent ran past its ${Math.round(budgetMs / 60_000)} minutes and was ended. Use what it found; if more is needed, brief a narrower job, or read pages yourself with web_fetch.`,
-			runReport(run, Date.now(), 'ended'),
-		].join('\n'),
-	);
+	const note = [
+		`This subagent ran past its ${Math.round(budgetMs / 60_000)} minutes and was ended. Use what it found; if more is needed, brief a narrower job, or read pages yourself with web_fetch.`,
+		runReport(run, Date.now(), 'ended'),
+	].join('\n');
+	stop(note);
+	endStopped(id, run, note);
 	return true;
 }
 
+/** The whole reply is stopping: its running subagents end with it, as stopped, from this moment. */
 export function noteRepliesStopping(id: string): void {
-	for (const run of runs.get(id) ?? []) if (run.status === 'running') stopping.add(run.id);
+	for (const run of runs.get(id) ?? []) {
+		if (run.status !== 'running') continue;
+		stopping.add(run.id);
+		endStopped(id, run, STOPPED_WITH_REPLY);
+	}
 }
 
 const MAX_NOTE_STEPS = 12;

@@ -27,6 +27,8 @@ type Live = {
 	writing: Map<string, { tool: string; head: string; chars: number }>;
 	timer: { handle: ReturnType<typeof setTimeout>; settling: boolean } | null;
 	said: string;
+	/** Until then the line says Stopping, whatever the runtime still reports of the steps it is abandoning. */
+	stoppingUntil: number;
 };
 
 const tasks = new Map<string, Live>();
@@ -88,7 +90,7 @@ function liveOf(id: string, who: Who): Live {
 	const key = keyOf(id, who);
 	let live = tasks.get(key);
 	if (!live) {
-		live = { id, who, now: null, running: new Map(), writing: new Map(), timer: null, said: '' };
+		live = { id, who, now: null, running: new Map(), writing: new Map(), timer: null, said: '', stoppingUntil: 0 };
 		tasks.set(key, live);
 	}
 	return live;
@@ -130,12 +132,38 @@ function say(live: Live): void {
 	live.timer = { handle, settling: changed };
 }
 
+/** A stop that has not settled by then let the line go back to what the runtime reports, so a stop that failed hides nothing for long. */
+const STOPPING_MS = 60_000;
+
+/**
+ * Said at once when Stop is pressed, on every open page. Without it the line kept saying what the agent was doing
+ * ("Waiting on the browser agent") until the runtime's last events about the abandoned steps had come and gone.
+ */
+export function noteAgentStopping(id: string): void {
+	const live = liveOf(id, 'coder');
+	live.stoppingUntil = Date.now() + STOPPING_MS;
+	live.running.clear();
+	live.writing.clear();
+	set(live, { what: 'stopping', tool: null, detail: null, chars: 0 }, new Date().toISOString());
+	say(live);
+}
+
 /** Runs in the event observer; never throws. */
 export function recordAgentNow(event: NowEvent): void {
 	const who = whoOf(event);
 	if (!who) return;
 	const at = event.timestamp ?? new Date().toISOString();
 	const live = liveOf(event.instanceId!, who);
+	const stopping = live.stoppingUntil > Date.now();
+	if (event.type === 'submission_settled' || event.type === 'submission_running') {
+		live.stoppingUntil = 0;
+		// A reply starting after the stop is said from its own events.
+		if (event.type === 'submission_running') {
+			if (!stopping) return;
+			live.now = null;
+			return say(live);
+		}
+	} else if (stopping) return;
 	switch (event.type) {
 		case 'turn_request':
 			live.writing.clear();

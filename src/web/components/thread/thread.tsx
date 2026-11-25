@@ -36,6 +36,7 @@ import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { outputLinkPath } from '../../../core/outputs';
 import { taskQueries } from '@/lib/task-queries';
+import { useStopCatchUp } from '@/lib/stop-catch-up';
 import { type Block, changedPaths, openedPullRequest, proposesPlan, replyOutputs, toBlocks } from '@/components/thread/blocks';
 import { SessionId } from '@/components/thread/session-context';
 import { StepsCard } from '@/components/thread/steps';
@@ -380,13 +381,14 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const waiting = useRef<{ texts: string[]; until: number } | null>(null);
 	const latest = useRef(messages);
 	latest.current = messages;
-	const onStop = useCallback(() => {
+	const catchUp = useStopCatchUp(sessionId, busy, agent.refresh);
+	const onStop = useCallback(async () => {
 		const shown = latest.current;
 		const last = shown.findLastIndex((message) => message.role === 'assistant');
 		const texts = shown.slice(last + 1).flatMap((message) => (message.role === 'user' ? [textOf(message)] : [])).filter(Boolean);
 		waiting.current = texts.length ? { texts, until: Number.POSITIVE_INFINITY } : null;
-		return api.stopAgent(sessionId);
-	}, [sessionId]);
+		await catchUp(() => api.stopAgent(sessionId));
+	}, [sessionId, catchUp]);
 	useEffect(() => {
 		const pending = waiting.current;
 		if (!pending || busy) return;

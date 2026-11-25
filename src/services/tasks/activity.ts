@@ -4,6 +4,7 @@ import { stopRepoCheck } from '../sandbox/repo-check.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { logProblem } from '../../core/log.ts';
 import { noteRepliesStopping } from './subagent-runs.ts';
+import { noteAgentStopping } from './agent-now.ts';
 import { updateSession } from '../../db/sessions.ts';
 
 /** In memory only: after a restart the runtime re-emits `submission_running` for each response it recovers. */
@@ -83,16 +84,38 @@ export function setAgentAbort(abort: Abort): void {
 	abortAgent = abort;
 }
 
-/** Written before the reply ends, so the end-of-reply check sees a stopped thread and never judges it done. */
+/**
+ * Written before the reply ends, so the end-of-reply check sees a stopped thread and never judges it done. Its running
+ * subagents end as stopped, not failed, and open pages hear at once that it is stopping.
+ */
 export async function noteStopped(id: string): Promise<void> {
 	if (!isWorking(id)) return;
+	noteRepliesStopping(id);
+	// A project's coordinator has no such line.
+	if (!id.startsWith('space_')) noteAgentStopping(id);
 	await updateSession(id, { stoppedAt: new Date().toISOString() }).catch((error: unknown) => logProblem('warn', 'Could not record the stop', error, id));
+}
+
+/** Resolves once no reply of the task is in flight, or with false after `ms`. */
+export function untilIdle(id: string, ms: number): Promise<boolean> {
+	if (!inFlight.has(id)) return Promise.resolve(true);
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => {
+			off();
+			resolve(false);
+		}, ms);
+		const off = onIdle((idle) => {
+			if (idle !== id) return;
+			clearTimeout(timer);
+			off();
+			resolve(true);
+		});
+	});
 }
 
 export async function stopAgent(id: string): Promise<void> {
 	if (!inFlight.has(id)) return;
 	await noteStopped(id);
-	noteRepliesStopping(id);
 	// Its suites and builds stop with it, so a stopped reply leaves nothing running in the sandbox.
 	void stopReplyJobs(id).catch((error: unknown) => logProblem('warn', 'Could not stop the background jobs', error, id));
 	void stopRepoCheck(id).catch((error: unknown) => logProblem('warn', "Could not stop the repository's check", error, id));

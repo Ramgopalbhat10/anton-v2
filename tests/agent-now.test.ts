@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { agentNow, detailOf, recordAgentNow } = await import('../src/services/tasks/agent-now.ts');
+const { agentNow, detailOf, noteAgentStopping, recordAgentNow } = await import('../src/services/tasks/agent-now.ts');
 const { onChange } = await import('../src/core/changes.ts');
 
 const main = { instanceId: 'task-1' };
@@ -127,4 +127,40 @@ test("the Reviewer's steps, once the reply has ended, are the task's line under 
 	await wait(300);
 	assert.equal(told.at(-1)?.now, null);
 	stop();
+});
+
+test('a stop is said at once, and held over the steps the runtime abandons until the reply settles', async () => {
+	const told: Array<{ now: { what: string } | null }> = [];
+	const stop = onChange((change) => change.kind === 'now' && change.id === 'task-stop' && told.push(change as never));
+	const at = { instanceId: 'task-stop' };
+	recordAgentNow({ type: 'tool_start', ...at, toolCallId: 't', toolName: 'task', args: { agent: 'browser' } });
+	assert.equal(agentNow('task-stop')?.detail, 'browser');
+
+	noteAgentStopping('task-stop');
+	assert.equal(agentNow('task-stop')?.what, 'stopping');
+	// The abort ends the subagent's call, and the model is asked once more before the reply settles.
+	recordAgentNow({ type: 'tool', ...at, toolCallId: 't', toolName: 'task' });
+	recordAgentNow({ type: 'turn_request', ...at, purpose: 'agent' });
+	recordAgentNow({ type: 'turn', ...at, purpose: 'agent' });
+	assert.equal(agentNow('task-stop')?.what, 'stopping');
+	await wait(300);
+	assert.equal(told[told.length - 1].now?.what, 'stopping');
+
+	recordAgentNow({ type: 'submission_settled', ...at });
+	assert.equal(agentNow('task-stop'), null);
+	// The next reply is said from its own events.
+	recordAgentNow({ type: 'turn_request', ...at, purpose: 'agent' });
+	assert.equal(agentNow('task-stop')?.what, 'thinking');
+	recordAgentNow({ type: 'submission_settled', ...at });
+	await wait(300);
+	stop();
+});
+
+test('a reply starting after a stop that never settled is said from its own events', () => {
+	noteAgentStopping('task-restart');
+	recordAgentNow({ type: 'submission_running', instanceId: 'task-restart' });
+	assert.equal(agentNow('task-restart'), null);
+	recordAgentNow({ type: 'turn_request', instanceId: 'task-restart', purpose: 'agent' });
+	assert.equal(agentNow('task-restart')?.what, 'thinking');
+	recordAgentNow({ type: 'submission_settled', instanceId: 'task-restart' });
 });

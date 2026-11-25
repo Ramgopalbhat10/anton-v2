@@ -309,6 +309,21 @@ describe('Thread', () => {
 		expect(screen.getByRole('button', { name: 'Stop the browser agent' })).toBeTruthy();
 	});
 
+	it('says Stopping as Stop is pressed, and reads the conversation again when its stream has not caught up with the stop', async () => {
+		api.now.mockResolvedValue({ now: { what: 'running', tool: 'task', detail: 'browser', chars: 0, since: new Date().toISOString() } });
+		const refresh = vi.fn();
+		show(agent([user('u1', 'Find deals'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Check prices' })])], { status: 'streaming', refresh }));
+		expect(await screen.findByText('Waiting on the browser agent')).toBeTruthy();
+		api.now.mockResolvedValue({ now: null });
+		api.stopAgent.mockResolvedValueOnce(undefined);
+		fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }));
+		expect(await screen.findByText('Stopping')).toBeTruthy();
+		expect(screen.queryByText('Waiting on the browser agent')).toBeNull();
+		// Stop has answered, so the server has settled; a page still running then has missed it.
+		await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1), { timeout: 2000 });
+		expect(api.subagents.mock.calls.length).toBeGreaterThan(1);
+	});
+
 	it('says in the header of the live steps card what the agent is doing, and for how long, with no line below', async () => {
 		const since = new Date(Date.now() - 42_000).toISOString();
 		api.now.mockResolvedValue({ now: { what: 'writing', tool: 'write', detail: 'outputs/nourish/app.js', chars: 6200, since } });

@@ -133,6 +133,8 @@ function browserTool(id: string, places: BrowserPlace[]) {
 				}
 				state = await go(step);
 			}
+			// A stopped step skips the model's judgements of the page, so the subagent lets go of its abort at once.
+			if (signal?.aborted) return { output: { problem: 'The step was stopped.' } };
 			if (place === 'panel' && (await needsTheUser(id, state.url, state.title, state.snapshot, tally))) {
 				askTheUser(id, 'Sign in or pass the check here, then ask the agent to carry on.', state.url);
 				state = { ...state, problem: 'This page needs the user to sign in or pass a human check. Stop and report that they can do it in the Browser panel; do not try to get past it.' };

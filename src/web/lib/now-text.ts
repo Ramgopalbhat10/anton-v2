@@ -39,6 +39,8 @@ function stepText(now: AgentNow): string {
 			return 'Compacting the conversation';
 		case 'finishing':
 			return 'Wrapping up';
+		case 'stopping':
+			return 'Stopping';
 		case 'writing': {
 			const size = now.chars >= 200 ? ` · ${written(now.chars)}` : '';
 			if (now.tool === 'write' && file) return `Writing ${file}${size}`;
@@ -69,3 +71,7 @@ function stepText(now: AgentNow): string {
 	}
 }
 
+/** What the page shows the moment Stop is pressed, until the server says the same or that the reply has settled. */
+export function stoppingNow(): AgentNow {
+	return { what: 'stopping', tool: null, detail: null, chars: 0, since: new Date().toISOString() };
+}
