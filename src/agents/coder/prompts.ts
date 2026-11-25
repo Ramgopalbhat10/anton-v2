@@ -177,6 +177,7 @@ export const REQUIREMENTS_HINT =
 
 const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
+	'Then look past the request at what the change could break: callers and state it touches, ordering and timing, error and failure paths, input limits, keyboard and focus in a UI, and data in the shape the real system produces rather than a stand-in. Test the riskiest of these on the real code path. ' +
 	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
 	'Start it with run_in_background (independent suites side by side) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures. ' +
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +

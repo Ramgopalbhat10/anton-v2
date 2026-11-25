@@ -51,6 +51,7 @@ import { checkReply, stallReminder, startStallCheck } from '../../services/repli
 import { startAwaitingRun } from '../../services/replies/asks.ts';
 import { finishReview, isRequest, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
 import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
+import { prePushReview, startPrePushReview } from '../../services/replies/pre-push-review.ts';
 import { takePinned } from '../../services/replies/compaction-pin.ts';
 import { type GateName, loadGate } from '../../services/replies/gate-state.ts';
 import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../../services/replies/send-backs.ts';
@@ -302,6 +303,12 @@ export function Coder({ id }: AgentProps) {
 				await sendBack('completion', undone);
 				return;
 			}
+			// Once the change is done, before its push: what it could break, read with fresh eyes.
+			const bugs = (workspace || hasWorkspace(id)) && !planning && !review && !signal.aborted ? await prePushReview(id) : null;
+			if (bugs) {
+				await sendBack('bugs', bugs);
+				return;
+			}
 			// Last, so the one push carries every fix the checks above asked for.
 			const unpushed = signal.aborted ? null : await pushGate(id);
 			if (unpushed) {
@@ -346,6 +353,7 @@ export function Coder({ id }: AgentProps) {
 			startJobsGate(id);
 			startCheckGate(id);
 			startPushGate(id);
+			startPrePushReview(id);
 			startSendBacks(id);
 			startReplyClock(id);
 			if (!workspace && !hasWorkspace(id)) void prewarmFor(id, opening.kind === 'user' ? opening.body : null);
