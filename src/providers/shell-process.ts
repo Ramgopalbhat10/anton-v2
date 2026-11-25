@@ -11,10 +11,35 @@ const MAX_STREAM_BYTES = 64 * 1024 * 1024;
 
 export type ProcessOptions = { cwd?: string; env: Record<string, string>; stdin?: Uint8Array; signal?: AbortSignal; timeoutMs?: number };
 
+/** How long a stopped command's group has after TERM before it is killed. */
+const KILL_GRACE_MS = 2000;
+
+/**
+ * Stops the whole process group. Node's own `signal` ends only the shell, and what it started goes on: a setup stopped
+ * on This server left its `npm install` running.
+ */
+function stopGroup(pid: number | undefined): void {
+	if (!pid) return;
+	const kill = (signal: NodeJS.Signals) => {
+		try {
+			process.kill(-pid, signal);
+		} catch {
+			// The group has already ended.
+		}
+	};
+	kill('SIGTERM');
+	setTimeout(() => kill('SIGKILL'), KILL_GRACE_MS).unref();
+}
+
+const aborted = (signal: AbortSignal) => Object.assign(new Error('The operation was aborted', { cause: signal.reason }), { name: 'AbortError', code: 'ABORT_ERR' });
+
 /** A server left in the background may hold the output open for good, so this stops waiting once the process exits and the output is quiet. */
 export function runProcess(file: string, args: string[], options: ProcessOptions): Promise<ExecResult> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(file, args, { cwd: options.cwd, env: options.env, signal: options.signal, timeout: options.timeoutMs });
+		const { signal } = options;
+		if (signal?.aborted) return reject(aborted(signal));
+		// In a group of its own, so a stop reaches everything the command started.
+		const child = spawn(file, args, { cwd: options.cwd, env: options.env, detached: Boolean(signal), timeout: options.timeoutMs });
 		const out: Buffer[] = [];
 		const err: Buffer[] = [];
 		let lastChunkAt = Date.now();
@@ -32,6 +57,14 @@ export function runProcess(file: string, args: string[], options: ProcessOptions
 		};
 		child.stdout.on('data', collect(out));
 		child.stderr.on('data', collect(err));
+		const onAbort = () => {
+			if (settled) return;
+			settled = true;
+			stopGroup(child.pid);
+			reject(aborted(signal!));
+		};
+		signal?.addEventListener('abort', onAbort, { once: true });
+		child.on('exit', () => signal?.removeEventListener('abort', onAbort));
 		const finish = (code: number | null) => {
 			if (settled) return;
 			settled = true;

@@ -118,16 +118,54 @@ test('read numbers lines and pages the same from the snapshot and the sandbox', 
 	assert.match(await files.readTaskFile(id, { path: 'src/long.txt', offset: 900 }, noMachine), /offset 900 is past its end/);
 });
 
-test('a path outside the repository is read from the machine, and another repository from its snapshot', async () => {
+test('a path outside the repository is read from the machine once there is a workspace, and another repository from its snapshot', async () => {
 	const before = machineCalls;
-	assert.equal(await files.readTaskFile(id, { path: '../outputs/report.txt' }, { ...inMachine, workspace: () => false }), '1\ta report\n2\tin outputs\n3\t');
-	assert.equal(machineCalls, before + 1, 'only the machine has it');
-	await assert.rejects(() => files.readTaskFile(id, { path: '/tmp/x.txt' }, noMachine), /a read started a machine/);
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/report.txt' }, inMachine), '1\ta report\n2\tin outputs\n3\t');
+	assert.equal(machineCalls, before + 1, 'with a workspace, the machine has it');
 	// repo names another GitHub repository, read without cloning whatever the task's state.
 	assert.match(await files.readTaskFile(id, { path: 'src/app.ts', repo: 'acme/other@main' }, inMachine), /^1\timport \{ answer \}/);
 	assert.match(await files.grepTask(id, { pattern: 'Button', repo: 'acme/other@main' }, inMachine), /^src\/components\/button\.tsx:1: /);
 	assert.equal(await files.globTask(id, { pattern: '*.tsx', repo: 'acme/other@main' }, inMachine), 'src/components/button.tsx');
 	assert.equal(machineCalls, before + 1, 'another repository never needs the machine');
+});
+
+test('without a workspace, a path outside the repository never starts a machine: the Library and project files are read where Anton keeps them', async () => {
+	// On This server a machine is a clone and a whole install: a read of ../outputs/uploads/ once waited 5 minutes for one.
+	const kept = new Map([
+		['outputs:uploads/shot.txt', new TextEncoder().encode('from the Library\n')],
+		['project-files:brief.md', new TextEncoder().encode('# Brief\n')],
+	]);
+	const library = async (_id: string, place: { folder: string; path: string }) => kept.get(`${place.folder}:${place.path}`) ?? null;
+	const deps = { ...noMachine, library };
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/shot.txt' }, deps), '1\tfrom the Library\n2\t');
+	assert.equal(await files.readTaskFile(id, { path: `${path.dirname(root)}/project-files/brief.md` }, deps), '1\t# Brief\n2\t');
+	assert.equal(new TextDecoder().decode(await files.taskFileBytes(id, '../outputs/uploads/shot.txt', undefined, deps)), 'from the Library\n');
+	assert.match(await files.readTaskFile(id, { path: '../outputs/uploads/pasted.png' }, deps), /^\.\.\/outputs\/uploads\/pasted\.png is not in the task's Library/);
+	assert.match(await files.readTaskFile(id, { path: '../project-files/missing.md' }, deps), /not a project file\. List them with read_project_file/);
+	await assert.rejects(() => files.taskFileBytes(id, '../outputs/uploads/pasted.png', undefined, deps), /not in the task's Library/);
+	// Anywhere else only a workspace has, and the read says how to get one rather than start it.
+	assert.match(await files.readTaskFile(id, { path: '/tmp/x.txt' }, deps), /^\/tmp\/x\.txt is outside the repository.*Call start_workspace first/);
+	await assert.rejects(() => files.taskFileBytes(id, '/tmp/x.png', undefined, deps), /Call start_workspace first/);
+	assert.match(await files.grepTask(id, { pattern: 'x', path: '/tmp' }, deps), /Call start_workspace first/);
+	assert.match(await files.globTask(id, { pattern: '*', path: '../outputs' }, deps), /not searched before the task has a workspace/);
+	await assert.rejects(() => files.taskPaths(id, { pattern: '*', path: '/tmp' }, deps), /Call start_workspace first/);
+	// Through the default, a Library file saved for the task is the one read.
+	const { saveOutput } = await import('../src/services/git/checkpoints.ts');
+	await saveOutput(id, 'uploads/saved.txt', new TextEncoder().encode('saved\n'));
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/saved.txt' }, noMachine), '1\tsaved\n2\t');
+});
+
+test('Stop ends a read, search or listing that waits for the machine', async () => {
+	const { taskTools } = await import('../src/flue/task-sandbox.ts');
+	const never = new Promise<never>(() => undefined);
+	const waiting = { read: () => never, bytes: () => never, grep: () => never, glob: () => never };
+	const tools = taskTools(waiting, { sees: async () => false, describe: async () => '' })({ cwd: root, resolvePath: (file: string) => path.posix.resolve(root, file), readFile: async () => '' } as never, { subagents: {} } as never);
+	for (const [name, params] of [['read', { path: 'a.ts' }], ['read', { path: 'a.ts', more: [{ path: 'b.ts' }] }], ['read', { path: 'shot.png' }], ['grep', { pattern: 'x' }], ['glob', { pattern: '*' }]] as const) {
+		const controller = new AbortController();
+		const call = tools.find((tool) => tool.name === name)!.execute('call', params as never, controller.signal);
+		setTimeout(() => controller.abort(new Error('stopped')), 10);
+		await assert.rejects(call, /stopped/, `${name} ${JSON.stringify(params)}`);
+	}
 });
 
 test('one read takes several files with more, each read as a lone read would be, the same from either side', async () => {

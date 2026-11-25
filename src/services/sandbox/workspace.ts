@@ -1,7 +1,7 @@
 import type { Acquired, Machine, MachineOrigin } from '../../core/ports.ts';
 import { config } from '../../config.ts';
 import { announce } from '../../core/changes.ts';
-import { withEnv } from '../../core/machine-env.ts';
+import { withEnv, withSignal } from '../../core/machine-env.ts';
 import type { Project, SessionRecord } from '../../core/types.ts';
 import { getProject } from '../../db/projects.ts';
 import { getSessionRecord, updateSession } from '../../db/sessions.ts';
@@ -77,7 +77,38 @@ async function acquireReady(session: SessionRecord, project: Project | null): Pr
 	return { acquired: await sandbox.acquire({ ...request, state: null }), readiness: { state: 'unready' } };
 }
 
+/** Each start under way, so Stop can end its setup rather than leave a clone and an install running for nobody. */
+const setups = new Map<string, { controller: AbortController; stopped: Promise<boolean> }>();
+
+/**
+ * Ends the task's start if one is under way, once its machine is stopped, and says whether it did. Its record then
+ * forgets the machine, so the task's next message reads the repository snapshot again rather than wait for a new setup.
+ */
+export async function stopSetup(id: string): Promise<boolean> {
+	const setup = setups.get(id);
+	if (!setup || setup.controller.signal.aborted) return false;
+	setup.controller.abort(new Error('The task was stopped while its workspace was being set up.'));
+	// A start that finished before the abort reached it has a machine like any other, for Stop to save and stop.
+	return setup.stopped;
+}
+
 async function provision(id: string): Promise<Machine> {
+	const controller = new AbortController();
+	const work = provisionWith(id, controller.signal);
+	const setup = { controller, stopped: work.then(() => false, () => true) };
+	setups.set(id, setup);
+	try {
+		return await work;
+	} catch (error) {
+		// Only while no newer start owns the task, whose record holds its own machine.
+		if (controller.signal.aborted && setups.get(id) === setup) await updateSession(id, { machineState: null, failed: false, errorMessage: null });
+		throw error;
+	} finally {
+		if (setups.get(id) === setup) setups.delete(id);
+	}
+}
+
+async function provisionWith(id: string, signal: AbortSignal): Promise<Machine> {
 	const startedAt = Date.now();
 	const { session, project } = await load(id);
 	// Wait for a spare woken while the task was typed rather than start a second one.
@@ -102,12 +133,16 @@ async function provision(id: string): Promise<Machine> {
 		copyLibrary(machine, id).catch((error: unknown) => logProblem('warn', 'Could not put the Library back', error, id)),
 	]);
 	try {
-		const context = { machine: setupMachine, session, project };
+		const context = { machine: withSignal(setupMachine, signal), session, project };
 		if (readiness.state === 'spare') {
 			if (!(await finishSpare(setupMachine, readiness.marker, session))) await prepare(context, 'image');
 		} else if (readiness.state === 'unready') await prepare(context, acquired.origin);
 	} catch (error) {
 		await files;
+		if (signal.aborted) {
+			await runnerFor(session.runOn).stop(acquired.state).catch((stopError: unknown) => logProblem('warn', 'Could not stop a machine stopped during its setup', stopError, id));
+			throw signal.reason ?? error;
+		}
 		await updateSession(id, { failed: true, errorMessage: error instanceof Error ? error.message : String(error) });
 		notifySandboxFailed(session, error);
 		throw error;

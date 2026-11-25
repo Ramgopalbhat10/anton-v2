@@ -471,6 +471,43 @@ test('a second Stop while one is under way waits for it, rather than saving and 
 	assert.ok(!(await local.running()).has(session.id));
 });
 
+test('Stop during setup ends the setup and everything it started, and the task forgets the half-built machine', async () => {
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id });
+	// A long install, in the background of the setup script as npm's own children are.
+	await updateSettings(project.id, { env: {}, setupScript: 'sleep 120 & echo $! > ../install.pid; wait', previewPorts: [], baseImage: null });
+	try {
+		const starting = machineFor(session.id);
+		const outcome = starting.then(() => 'ready', (error: Error) => error.message);
+		const pidFile = path.join(local.rootOf(session.id), 'install.pid');
+		const deadline = Date.now() + 30_000;
+		while (!(existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+		const pid = Number(readFileSync(pidFile, 'utf8').trim());
+		const before = machinesStopped;
+		const stoppedAt = Date.now();
+		await sessions.stopSession(session.id);
+		assert.match(await outcome, /stopped while its workspace was being set up/);
+		assert.ok(Date.now() - stoppedAt < 10_000, 'Stop does not wait for the setup to finish');
+		assert.equal(machinesStopped, before + 1);
+		const record = (await getSessionRecord(session.id))!;
+		assert.equal(record.machineState, null, 'the next message reads the snapshot, not a machine that was never set up');
+		assert.equal(record.errorMessage, null, 'a stop is not a failed setup');
+		const gone = Date.now() + 5_000;
+		const alive = () => {
+			try {
+				process.kill(pid, 0);
+				return true;
+			} catch {
+				return false;
+			}
+		};
+		while (alive() && Date.now() < gone) await new Promise((resolve) => setTimeout(resolve, 100));
+		assert.ok(!alive(), 'the install the setup started is stopped too');
+	} finally {
+		await updateSettings(project.id, { env: {}, setupScript: '', previewPorts: [], baseImage: null });
+	}
+});
+
 test('a terminal closed while its machine starts opens no shell', async () => {
 	const project = await addProject('acme/demo');
 	const session = await sessions.createSession({ projectId: project.id });

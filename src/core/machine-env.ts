@@ -11,3 +11,14 @@ export function withEnv(machine: Machine, env: Record<string, string>): Machine 
 		socketUrl: (port) => machine.socketUrl(port),
 	};
 }
+
+/** Every command ends when `signal` aborts, as a setup stopped part way must not go on installing. */
+export function withSignal(machine: Machine, signal: AbortSignal): Machine {
+	return {
+		...machine,
+		exec: (command, options = {}) => {
+			if (signal.aborted) return Promise.reject(signal.reason ?? new Error('The operation was aborted.'));
+			return machine.exec(command, { ...options, signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal });
+		},
+	};
+}
