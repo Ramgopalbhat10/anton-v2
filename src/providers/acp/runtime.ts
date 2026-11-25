@@ -70,6 +70,14 @@ export type AcpAgent = {
 	modelArgs?: (model: string) => string[];
 	/** Name the agent sees its Anton tools under (tools appear as mcp__<name>__*). */
 	mcpServerName: string;
+	/** How the agent names an Anton tool it calls, for the tool list in its instructions (Devin: `mcp__anton__<tool>`). */
+	mcpToolName?: (tool: string) => string;
+	/**
+	 * Cut each tool's description in `tools/list` to about this many characters. Devin lists MCP tools only on demand and
+	 * cuts a long listing into a file in its own container, which its reads (served from the task's sandbox) cannot open,
+	 * so a full listing of Anton's tools hid most of them from it.
+	 */
+	mcpDescriptionChars?: number;
 	/** configOptions id carrying the model list in session/new. */
 	modelConfigId: string;
 	/** _meta key on model options that marks image support; absent means assume every model has it. */
@@ -224,6 +232,17 @@ const ZERO_USAGE: RuntimeUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite
 const HANDSHAKE_MS = 90_000;
 /** A turn this quiet is dead. Anton tool calls pause the watchdog while they run. */
 const STALL_MS = 5 * 60_000;
+/**
+ * A message the user sends mid-turn rides back with the agent's next tool result or command output. When none comes
+ * within `steerMs` while the agent is not waiting on a tool, the turn is cancelled and the message goes in as the next
+ * prompt of the same reply: a Devin reply once ran 21 minutes past a question the user asked 3 minutes in. `watchMs` is
+ * how often the watchdog checks for that and for a stalled turn. Tests shorten both.
+ */
+export const steerTiming = { steerMs: 10_000, watchMs: 2_000 };
+
+/** How a message sent mid-turn reads to the agent, beside a tool result or command output. */
+export const userMessageNote = (texts: string[]) =>
+	`<user_message>\nThe user wrote this while you were working. Read it now and follow it:\n${texts.join('\n\n')}\n</user_message>`;
 
 const toAcpPrompt = (content: RuntimeContent[]) =>
 	content.map((part) =>
@@ -262,8 +281,6 @@ class AcpConversation implements RuntimeConversation {
 	private lastActivity = 0;
 	/** Anton tool calls in flight; the agent legitimately waits silently while they run. */
 	private parkedTools = 0;
-	/** Of those, the calls the agent made through MCP: only their results can carry the user's words back. */
-	private parkedMcp = 0;
 	/** The agent reported a model call's own counters during this turn, so its summed total must not be booked again. */
 	private turnMeasured = false;
 	/** What this turn's closed steps booked, and what the open step holds, so the turn's total can settle the difference. */
@@ -273,8 +290,14 @@ class AcpConversation implements RuntimeConversation {
 	private lastContext = 0;
 	/** The last turn total, for the step log line. */
 	private lastTotal: RuntimeUsage | null = null;
-	/** What the user wrote while the agent waited on an Anton tool; it rides back with that tool's result. */
-	private steering: string[] = [];
+	/** What the user wrote during the turn; it rides back with the agent's next tool result or command output, or opens the next prompt. */
+	private steering: RuntimeContent[] = [];
+	/** When the oldest of those arrived, for the fallback that cancels the turn to deliver them. */
+	private steerAt = 0;
+	/** A turn is running: a message sent now is the user's words to it, not a prompt of its own. */
+	private turnRunning = false;
+	/** The tool list the agent's instructions last named, so a changed list is named again with the next prompt. */
+	private catalogKey = '';
 	/** The agent's native file and shell requests, run as Anton's own tools on the task's sandbox. */
 	private readonly workspace: WorkspaceBridge;
 	/** Anton's instructions lead the session's first prompt. */
@@ -290,6 +313,7 @@ class AcpConversation implements RuntimeConversation {
 			(name, args) => this.handleToolCall(name, args, false),
 			(name) => this.tools.some((tool) => tool.name === name),
 			agent.workdir,
+			() => this.takeSteer(),
 		);
 	}
 
@@ -297,13 +321,23 @@ class AcpConversation implements RuntimeConversation {
 
 	send(content: RuntimeContent[]): void {
 		if (this.closed) return;
-		// ACP has no way into a running turn, and a new prompt waits for the whole turn to end, so a message sent
-		// while the agent waits on a tool goes back with that tool's result, where the agent reads it at once.
-		if (this.parkedMcp > 0 && content.every((part) => part.type === 'text')) {
-			this.steering.push(...content.map((part) => (part.type === 'text' ? part.text : '')).filter(Boolean));
+		// ACP has no way into a running turn, and a new prompt waits for the whole turn to end. So a message sent during a
+		// turn goes back with the agent's next Anton tool result or command output, where it reads it at once; failing
+		// that, the watchdog cancels the turn and the same reply carries on with it as the next prompt.
+		if (this.turnRunning) {
+			if (!this.steering.length) this.steerAt = Date.now();
+			this.steering.push(...content);
 			return;
 		}
 		this.queue = this.queue.then(() => this.prompt(content)).catch((error) => this.push({ type: 'error', message: error instanceof Error ? error.message : String(error), limit: false }));
+	}
+
+	/** The user's words as a note for a tool result, when they are all text; null leaves them for the next prompt. */
+	private takeSteer(): string | null {
+		if (!this.steering.length || this.steering.some((part) => part.type !== 'text')) return null;
+		const texts = this.steering.map((part) => (part.type === 'text' ? part.text : '')).filter(Boolean);
+		this.steering = [];
+		return texts.length ? userMessageNote(texts) : null;
 	}
 
 	close(): void {
@@ -502,19 +536,16 @@ class AcpConversation implements RuntimeConversation {
 		this.seg.open = false;
 		this.book(this.segUsage ?? ZERO_USAGE);
 		this.parkedTools += 1;
-		if (steer) this.parkedMcp += 1;
 		try {
 			const output = await this.options.callTool(toolUseId, name);
 			if (!steer) return output;
 			// The bridge delivers results before the user's words, so wait a tick for them.
 			await Promise.resolve();
-			const said = this.steering.splice(0);
-			if (!said.length) return output;
-			const note = `<user_message>\nThe user wrote this while you were working. Read it now and follow it:\n${said.join('\n\n')}\n</user_message>`;
+			const note = this.takeSteer();
+			if (!note) return output;
 			return { ...output, content: [...output.content, { type: 'text', text: note }] };
 		} finally {
 			this.parkedTools -= 1;
-			if (steer) this.parkedMcp -= 1;
 			// The agent gets a fresh quiet window to answer once the result lands.
 			this.lastActivity = Date.now();
 		}
@@ -534,7 +565,7 @@ class AcpConversation implements RuntimeConversation {
 			throw new Error('The conversation was closed.');
 		}
 		this.proc = proc;
-		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.handleToolCall(name, args));
+		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.handleToolCall(name, args), this.agent.mcpDescriptionChars);
 		this.acp = new AcpClient(proc.acp, {
 			onNotification: (method, params) => {
 				this.agent.notification?.(method, params);
@@ -603,15 +634,61 @@ class AcpConversation implements RuntimeConversation {
 		);
 	}
 
-	/** The repo's own AGENTS.md now reads through to the task's sandbox, so Anton's instructions open the first prompt instead. */
+	/**
+	 * Anton's instructions open the session's first prompt (the repo's own AGENTS.md reads through to the task's
+	 * sandbox, so it cannot carry them), after what differs for an agent driven over ACP and a list of Anton's tools by
+	 * the name the agent calls them. The tool list comes again with a later prompt when it has changed.
+	 */
 	private withInstructions(content: RuntimeContent[]): RuntimeContent[] {
+		const parts: RuntimeContent[] = [];
+		const key = this.tools.map((tool) => tool.name).join(',');
 		const instructions = this.options.instructions.trim();
-		if (this.instructionsSent || !instructions) return content;
-		this.instructionsSent = true;
-		// Reads, writes and commands reach the repo; the agent's own file search runs in its empty container and finds nothing.
-		const searching = 'Your file search and listing tools cannot see the repository; search with shell commands such as rg, find and ls, or with the grep and glob tools.';
-		return [{ type: 'text', text: `<instructions>\n${instructions}\n\n${searching}\n</instructions>` }, ...content];
+		if (!this.instructionsSent) {
+			this.instructionsSent = true;
+			this.catalogKey = key;
+			const catalog = toolCatalog(this.tools, this.agent);
+			const text = [acpNotes(this.agent), catalog, instructions].filter(Boolean).join('\n\n');
+			parts.push({ type: 'text', text: `<instructions>\n${text}\n</instructions>` });
+		} else if (key !== this.catalogKey && this.tools.length) {
+			this.catalogKey = key;
+			parts.push({ type: 'text', text: `<anton_tools_changed>\n${toolCatalog(this.tools, this.agent)}\n</anton_tools_changed>` });
+		}
+		return [...parts, ...content];
 	}
+
+	/** One `session/prompt`, raced against the stall watchdog, which also cancels the turn for the user's waiting words. */
+	private async promptOnce(content: RuntimeContent[]): Promise<{ result: { stopReason?: string; usage?: Record<string, unknown> }; cancelled: boolean }> {
+		this.lastActivity = Date.now();
+		let stallTimer: ReturnType<typeof setInterval> | undefined;
+		let cancelled = false;
+		const stall = new Promise<never>((_, reject) => {
+			stallTimer = setInterval(() => {
+				if (this.parkedTools > 0) return;
+				if (Date.now() - this.lastActivity > STALL_MS) {
+					this.stalled = true;
+					this.acp?.notify('session/cancel', { sessionId: this.sessionId });
+					reject(new Error(`${this.agent.name} stopped responding`));
+				} else if (!cancelled && this.steering.length && Date.now() - this.steerAt > steerTiming.steerMs) {
+					// No tool result or command output came to carry the user's words: stop the turn, and the reply goes on with them.
+					cancelled = true;
+					console.error(`[acp:${this.agent.id}] cancelling the turn to deliver the user's message`);
+					this.acp?.notify('session/cancel', { sessionId: this.sessionId });
+				}
+			}, steerTiming.watchMs);
+			stallTimer.unref?.();
+		});
+		try {
+			const result = (await Promise.race([
+				this.acp!.request('session/prompt', { sessionId: this.sessionId, prompt: toAcpPrompt(content) }),
+				stall,
+			])) as { stopReason?: string; usage?: Record<string, unknown> };
+			return { result, cancelled };
+		} finally {
+			if (stallTimer) clearInterval(stallTimer);
+		}
+	}
+
+	private stalled = false;
 
 	private async prompt(content: RuntimeContent[]): Promise<void> {
 		this.ready ??= this.setup();
@@ -629,51 +706,101 @@ class AcpConversation implements RuntimeConversation {
 		this.turnMeasured = false;
 		this.turnBooked = { ...ZERO_USAGE };
 		this.lastTotal = null;
-		this.lastActivity = t0;
-		let stalled = false;
-		let stallTimer: ReturnType<typeof setInterval> | undefined;
-		const stall = new Promise<never>((_, reject) => {
-			stallTimer = setInterval(() => {
-				if (this.parkedTools === 0 && Date.now() - this.lastActivity > STALL_MS) {
-					stalled = true;
-					this.acp?.notify('session/cancel', { sessionId: this.sessionId });
-					reject(new Error(`${this.agent.name} stopped responding`));
-				}
-			}, 5_000);
-			stallTimer.unref?.();
-		});
+		this.stalled = false;
+		this.turnRunning = true;
+		/** What earlier prompts of this reply measured as a total and no step booked; it goes on the reply's last step. */
+		let carried: RuntimeUsage = { ...ZERO_USAGE };
 		try {
-			const result = (await Promise.race([
-				this.acp!.request('session/prompt', {
-					sessionId: this.sessionId,
-					prompt: toAcpPrompt(this.withInstructions(content)),
-				}),
-				stall,
-			])) as { stopReason?: string; usage?: Record<string, unknown> };
-			// The turn's total sums every model call in it. An agent that counted each call has booked it already; one
-			// that reported only each call's context (Antigravity) gets the rest of the total on the last step.
-			const total = this.turnMeasured ? null : readUsage(result?.usage ?? {}, this.agent.metaNamespace);
-			// A turn that ends right after a tool result still answers that step, if only with nothing.
-			this.ensureSegment();
-			const last = total && !total.occupancy ? settle(total, this.turnBooked) : null;
-			this.lastTotal = total;
-			// What the cache could not have served was not covered by any report: the last call's context.
-			if (last && this.lastContext) this.lastContext = Math.max(this.lastContext, last.input + last.cacheRead + last.cacheWrite);
-			this.closeSegment(result?.stopReason ?? 'end_turn', last ?? {});
-			this.push({ type: 'turn_end' });
+			let next = this.withInstructions(content);
+			for (;;) {
+				const { result, cancelled } = await this.promptOnce(next);
+				// The turn's total sums every model call in it. An agent that counted each call has booked it already; one
+				// that reported only each call's context (Antigravity) gets the rest of the total on the last step.
+				const total = this.turnMeasured ? null : readUsage(result?.usage ?? {}, this.agent.metaNamespace);
+				const part = total && !total.occupancy ? settle(total, this.turnBooked) : null;
+				this.lastTotal = total;
+				// What the cache could not have served was not covered by any report: the last call's context.
+				if (part && this.lastContext) this.lastContext = Math.max(this.lastContext, part.input + part.cacheRead + part.cacheWrite);
+				if (part) carried = addUsage(carried, part);
+				// The user wrote while the turn ran and nothing carried it: the same reply goes on with it, so Flue's step
+				// that is open now reads what the agent does next. Ended here, nothing would read that turn.
+				// A turn Anton cancelled for them goes on too, even when a command's output carried them meanwhile.
+				if ((this.steering.length || cancelled) && !this.closed) {
+					const said = this.steering.splice(0);
+					next = this.withInstructions(said.length ? steerPrompt(said, cancelled) : [{ type: 'text', text: 'Anton stopped your turn to pass on a message from the user, which you have read. Carry on with the task where you left off, as it asks.' }]);
+					this.turnMeasured = false;
+					this.turnBooked = { ...ZERO_USAGE };
+					continue;
+				}
+				this.turnRunning = false;
+				// A turn that ends right after a tool result still answers that step, if only with nothing.
+				this.ensureSegment();
+				const last = USAGE_KEYS.some((k) => carried[k]) ? carried : null;
+				this.closeSegment(result?.stopReason ?? 'end_turn', last ?? {});
+				this.push({ type: 'turn_end' });
+				break;
+			}
 		} catch (error) {
+			this.turnRunning = false;
+			this.steering = [];
 			this.closeSegment(null);
 			this.push({ type: 'error', message: error instanceof Error ? error.message : String(error), limit: false });
 			this.push({ type: 'turn_end' });
 			// A silent agent does not recover; the next message gets a fresh spawn either way.
-			if (stalled) this.close();
+			if (this.stalled) this.close();
 		} finally {
-			if (stallTimer) clearInterval(stallTimer);
+			this.turnRunning = false;
 		}
 		console.error(
 			`[acp:${this.agent.id}] step ${++this.stepSeq}: spawn=${this.spawnMs}ms setup=${this.setupMs}ms ttft=${this.ttftMs ?? '—'}ms prompt=${Date.now() - t0}ms model=${this.options.model}${this.lastTotal ? ` total=${JSON.stringify(this.lastTotal)}` : ''}`,
 		);
 	}
+}
+
+const addUsage = (a: RuntimeUsage, b: RuntimeUsage): RuntimeUsage => ({
+	input: a.input + b.input,
+	output: a.output + b.output,
+	cacheRead: a.cacheRead + b.cacheRead,
+	cacheWrite: a.cacheWrite + b.cacheWrite,
+});
+
+/** The user's words that no tool result carried, as the prompt the reply goes on with. */
+function steerPrompt(said: RuntimeContent[], cancelled: boolean): RuntimeContent[] {
+	const lead = cancelled
+		? 'Anton stopped your turn so you could read a message the user wrote while you were working. Read it now and answer it; then carry on with the task where you left off, as it asks.'
+		: 'The user wrote this while you were working. Read it now and answer it; then carry on, as it asks.';
+	const texts = said.every((part) => part.type === 'text');
+	if (texts) return [{ type: 'text', text: `${lead}\n<user_message>\n${said.map((part) => (part.type === 'text' ? part.text : '')).join('\n\n')}\n</user_message>` }];
+	return [{ type: 'text', text: lead }, ...said];
+}
+
+/** What differs for an agent Anton drives over ACP from Anton's own instructions, which follow and were written for its own loop. */
+export function acpNotes(agent: Pick<AcpAgent, 'mcpServerName'>): string {
+	return [
+		"You are working for Anton. Where Anton's instructions below differ from these notes, follow these:",
+		"- Your own file reads, writes and shell commands run in the task's sandbox, in the repository. Your own file search and listing tools cannot see the repository: search with shell commands such as rg, find and ls, or with Anton's grep and glob tools.",
+		`- Anton's other tools come from the MCP server "${agent.mcpServerName}" and are listed below. Call them by name with the arguments shown; you need not list them first.`,
+		"- Run a test suite, build or other long command with Anton's run_in_background and read its end with check_job (wait waits for it), rather than polling with sleep. Start a server that should keep running with nohup and & and never in the foreground; a command still running after 30 seconds keeps running while you get its output so far.",
+		'- A message the user writes while you work reaches you inside <user_message> with your next tool result or command output, or Anton stops your turn to give it to you. Answer it in a sentence, then carry on.',
+	].join('\n');
+}
+
+const FIRST_SENTENCE = /^(.+?[.!?])(\s|$)/s;
+
+/** Anton's tools by the name the agent calls them, with their arguments (`?` when optional) and the first sentence of each description. */
+export function toolCatalog(tools: RuntimeTool[], agent: Pick<AcpAgent, 'mcpServerName' | 'mcpToolName'>): string {
+	if (!tools.length) return '';
+	const name = agent.mcpToolName ?? ((tool: string) => tool);
+	const lines = tools.map((tool) => {
+		const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+		const required = new Set(schema.required ?? []);
+		const args = Object.keys(schema.properties ?? {}).map((arg) => (required.has(arg) ? arg : `${arg}?`));
+		const description = tool.description.trim().replace(/\s+/g, ' ');
+		const first = FIRST_SENTENCE.exec(description)?.[1] ?? description;
+		const brief = first.length > 200 ? `${first.slice(0, 199)}…` : first;
+		return `- ${name(tool.name)}(${args.join(', ')}): ${brief}`;
+	});
+	return `Anton's tools (MCP server "${agent.mcpServerName}"):\n${lines.join('\n')}`;
 }
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) || 0 : 0);

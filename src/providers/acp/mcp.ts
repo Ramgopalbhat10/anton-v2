@@ -11,6 +11,7 @@ export function mcpServer(
 	transport: AcpTransport,
 	tools: RuntimeTool[] | (() => RuntimeTool[]),
 	call: (name: string, args: unknown) => Promise<RuntimeToolOutput>,
+	descriptionChars?: number,
 ): { close(): void; toolsChanged(): void } {
 	let buffer = '';
 	let closed = false;
@@ -34,8 +35,8 @@ export function mcpServer(
 				return respond(msg.id, {
 					tools: (typeof tools === 'function' ? tools() : tools).map((tool) => ({
 						name: tool.name,
-						description: tool.description,
-						inputSchema: { ...tool.inputSchema, type: 'object' as const },
+						description: descriptionChars ? cut(tool.description, descriptionChars) : tool.description,
+						inputSchema: { ...(descriptionChars ? briefSchema(tool.inputSchema, descriptionChars) : tool.inputSchema), type: 'object' as const },
 					})),
 				});
 			case 'tools/call': {
@@ -91,4 +92,25 @@ export function mcpServer(
 			if (!closed) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
 		},
 	};
+}
+
+/** A description cut at a sentence end within `chars` where there is one, else at `chars`. */
+export function cut(text: string, chars: number): string {
+	const flat = text.trim();
+	if (flat.length <= chars) return flat;
+	const head = flat.slice(0, chars);
+	const end = Math.max(head.lastIndexOf('. '), head.lastIndexOf('.\n'));
+	return end > chars / 3 ? head.slice(0, end + 1) : `${head.slice(0, chars - 1)}…`;
+}
+
+/** The schema with each property's own description cut the same way; types, enums and required stay whole. */
+function briefSchema(schema: Record<string, unknown>, chars: number): Record<string, unknown> {
+	const walk = (node: unknown): unknown => {
+		if (Array.isArray(node)) return node.map(walk);
+		if (!node || typeof node !== 'object') return node;
+		return Object.fromEntries(
+			Object.entries(node as Record<string, unknown>).map(([key, value]) => [key, key === 'description' && typeof value === 'string' ? cut(value, Math.min(chars, 160)) : walk(value)]),
+		);
+	};
+	return walk(schema) as Record<string, unknown>;
 }
