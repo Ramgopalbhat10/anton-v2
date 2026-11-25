@@ -12,6 +12,7 @@ import { dollars, tokens } from '@/lib/format';
 import { useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 import { useModelName } from '@/lib/models';
+import { deleteInBackground } from '@/lib/deleting';
 
 export function PullRequestChip({ session }: { session: Session }) {
 	const pull = useQuery({ queryKey: ['pull-request', session.id, session.prUrl], queryFn: () => api.pullRequest(session.id), enabled: Boolean(session.prUrl), staleTime: 60_000 });
@@ -208,19 +209,15 @@ export function TaskMenu({
 	const pin = usePin(session);
 	const fork = useFork(session);
 	const rewind = useRewind(session);
-	const remove = useMutation({
-		mutationFn: async () => {
+	// It leaves the lists at once and a notice follows the delete, which takes a while: it stops the sandbox and keeps the files first.
+	const remove = () => {
+		if (params.threadId === session.id && session.spaceId) void navigate({ to: '/projects/$spaceId', params: { spaceId: session.spaceId } });
+		else if (params.sessionId === session.id) void navigate({ to: '/' });
+		deleteInBackground(queryClient, session, async () => {
 			if (session.working) await api.stopAgent(session.id).catch(() => undefined);
 			await api.deleteSession(session.id);
-		},
-		onSuccess: () => {
-			refresh();
-			// A deleted thread leaves its project's feed too, and its files show in the project's Library.
-			if (session.spaceId) void queryClient.invalidateQueries({ queryKey: ['space-files', session.spaceId] });
-			if (params.threadId === session.id && session.spaceId) void navigate({ to: '/projects/$spaceId', params: { spaceId: session.spaceId } });
-			else if (params.sessionId === session.id) void navigate({ to: '/' });
-		},
-	});
+		});
+	};
 	const thread = Boolean(session.spaceId);
 	// As in Claude's projects, a resolved thread is the project's record: it is reopened before it can go.
 	const locked = thread && Boolean(session.resolvedAt);
@@ -299,7 +296,7 @@ export function TaskMenu({
 				<MenuItem
 					icon={Trash2}
 					className="sg-menu-item--destructive"
-					disabled={remove.isPending || locked}
+					disabled={locked}
 					hint={locked ? 'Reopen first' : undefined}
 					onSelect={(event) => {
 						if (!confirming) {
@@ -307,13 +304,12 @@ export function TaskMenu({
 							setConfirming(true);
 							return;
 						}
-						remove.mutate();
+						remove();
 					}}
 				>
-					{remove.isPending ? 'Deleting…' : confirming ? 'Click again to delete' : thread ? 'Delete thread' : 'Delete task'}
+					{confirming ? 'Click again to delete' : thread ? 'Delete thread' : 'Delete task'}
 				</MenuItem>
 				{confirming && thread ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--text-3)">Its files stay in the project Library, in a folder named for it.</div> : null}
-				{remove.isError ? <div className="max-w-[240px] px-2 pb-1 text-micro leading-[15px] text-(--bad)">{remove.error.message}</div> : null}
 				<MenuSeparator />
 				<TaskFacts session={session} />
 			</MenuContent>

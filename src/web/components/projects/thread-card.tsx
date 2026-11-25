@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, Clock, Github, GitPullRequest, type IconComponent, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Wrench } from '@/lib/icons';
-import { type ReactNode, useState } from 'react';
+import { ArrowUpRight, Clock, Github, GitPullRequest, type IconComponent, MessageCircleReply, MessageSquare, Play, RotateCcw, Square, Trash2, Wrench } from '@/lib/icons';
+import { type ReactNode, useCallback, useState } from 'react';
 import { Popover } from 'radix-ui';
 import { Markdown, InlineLinks } from '@/components/content/markdown';
 import { HoverPeek } from '@/components/kit/hover-peek';
@@ -435,5 +435,49 @@ export function ThreadChip({ thread, children }: { thread: Session; children?: R
 				<span className="truncate">{children ?? thread.title}</span>
 			</button>
 		</HoverPeek>
+	);
+}
+
+/** The task listed under this id, or the start of it, in any project: a thread a project no longer lists may have moved rather than gone. */
+export function useListedTask(id: string): Session | undefined {
+	const select = useCallback((data: { sessions: Session[] }) => data.sessions.find((task) => task.id === id || (id.length >= 6 && task.id.startsWith(id))), [id]);
+	return useQuery({ queryKey: ['sessions'], queryFn: api.sessions, select }).data;
+}
+
+/**
+ * A deleted thread where the coordinator's words name it: its name struck through, as a deleted branch shows on GitHub, and nothing to open.
+ * The words around it stay as written, since they were true when the coordinator wrote them.
+ */
+export function DeletedThreadChip({ children }: { children: ReactNode }) {
+	return (
+		<span
+			title="This thread was deleted"
+			className="mx-px inline-flex max-w-full items-center gap-1 rounded-control px-1.5 align-baseline text-[0.95em] leading-[1.5] text-(--text-3) shadow-[inset_0_0_0_1px_var(--line)]"
+		>
+			<span className="inline-flex shrink-0 self-center">
+				<Icon icon={Trash2} size={11} />
+			</span>
+			<span className="truncate line-through decoration-(--text-4)">{children}</span>
+			<span className="sr-only"> (deleted)</span>
+		</span>
+	);
+}
+
+/** A thread named by an id this project no longer lists: moved to another project, it still opens; deleted, it shows as deleted. */
+export function GoneThreadChip({ id, children }: { id: string; children: ReactNode }) {
+	const moved = useListedTask(id);
+	return moved ? <ThreadChip thread={moved}>{children}</ThreadChip> : <DeletedThreadChip>{children}</DeletedThreadChip>;
+}
+
+/** In place of the card of a thread started here and since deleted, so the words that started it still point at something. */
+export function GoneThreadRow({ id, title }: { id: string; title: string }) {
+	const moved = useListedTask(id);
+	if (moved) return <ThreadRow thread={moved} />;
+	return (
+		<div title="This thread was deleted" className="flex h-7 max-w-full min-w-0 items-center gap-2 rounded-control px-2.5 text-small text-(--text-3) shadow-[inset_0_0_0_1px_var(--line)]">
+			<Icon icon={Trash2} size={12} className="shrink-0" />
+			<span className="min-w-0 truncate line-through decoration-(--text-4)">{title}</span>
+			<span className="shrink-0 text-(--text-4)">Deleted</span>
+		</div>
 	);
 }

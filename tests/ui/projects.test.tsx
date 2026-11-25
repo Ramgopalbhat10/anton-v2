@@ -375,6 +375,33 @@ describe('threads', () => {
 		expect(within(waiting).getByRole('button', { name: 'Pick a name' })).toBeTruthy();
 	});
 
+	it('shows a deleted thread the coordinator names as deleted, fades a reply only about it, and keeps a moved thread’s chip', async () => {
+		api.sessions.mockResolvedValue({ sessions: [...threads, thread({ id: 'moved-away', title: 'Moved work', spaceId: 'space_2' })] });
+		const report = (id: string, title: string) => ({ id: `r-${id}`, role: 'user', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${id}" title="${title}" state="idle"/>\n</thread-reports>` }] });
+		const reply = (id: string, text: string) => ({ id: `a-${id}`, role: 'assistant', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text }] });
+		const started = { type: 'dynamic-tool', toolName: 'start_thread', toolCallId: 'call-1', state: 'output-available', input: { title: 'Gone thread' }, output: 'Started "Gone thread" [id:gone1234]' };
+		const messages = [
+			{ id: 'u-0', role: 'user', display: 'visible', submissionId: 's-0', parts: [{ type: 'text', text: 'Split it up' }] },
+			{ id: 'a-0', role: 'assistant', display: 'visible', submissionId: 's-0', parts: [{ type: 'text', text: 'Starting one.' }, started] },
+			report('gone1234', 'Gone thread'),
+			reply('gone1234', 'Gone thread now returns invoices.'),
+			report('moved-away', 'Moved work'),
+			reply('moved-away', 'Moved work is done.'),
+		];
+		const agent = { messages, status: 'idle', historyReady: true, settlements: [], sendMessage: vi.fn(), refresh: () => {} };
+		withRouter(() => <ProjectFeed space={space} agent={agent as never} threads={threads} onStartingChange={() => {}} />);
+		const gone = (await screen.findByText(/now returns invoices/)).closest('p') as HTMLElement;
+		expect(within(gone).queryByRole('button')).toBeNull();
+		expect(within(gone).getByText('Gone thread').className).toContain('line-through');
+		expect(gone.textContent).toContain('(deleted)');
+		await waitFor(() => expect(gone.closest('[title="About a thread since deleted"]')).toBeTruthy());
+		// The card the coordinator started it with stays, as a deleted row.
+		expect(screen.getByText('Deleted').closest('[title="This thread was deleted"]')?.textContent).toContain('Gone thread');
+		const moved = screen.getByText(/is done/).closest('p') as HTMLElement;
+		expect(await within(moved).findByRole('button', { name: 'Moved work' })).toBeTruthy();
+		expect(moved.closest('[title="About a thread since deleted"]')).toBeNull();
+	});
+
 	it('keeps a report’s line when its turn failed, rather than folding it into the next reply, and folds one joined into a reply there', async () => {
 		const reports = (id: string, threadId: string, title: string, state: string, asks = '') => ({ id, role: 'user', display: 'visible', submissionId: id, parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${threadId}" title="${title}" state="${state}" asks="${asks}"/>\n</thread-reports>` }] });
 		const messages = [

@@ -18,7 +18,7 @@ import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, PickerChip, Spinner } from '@/components/kit/signal';
 import { ProjectRoute } from '@/components/projects/project-viz';
-import { THREAD_CARD, ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/projects/thread-card';
+import { GoneThreadChip, GoneThreadRow, THREAD_CARD, ThreadChip, ThreadRow, ThreadRows, useOpenThread } from '@/components/projects/thread-card';
 import { field } from '@/components/thread/tool-describe';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { ModelChoice } from '@/lib/api/plans';
@@ -157,7 +157,11 @@ function answeredReports(messages: FlueConversationMessage[], settlements: UseFl
 }
 
 const labelOf = (text: string) => text.replace(/[[\]\\]/g, '\\$&');
-const chipLink = (thread: Session, label = thread.title) => `[${labelOf(label)}](#thread-${thread.id})`;
+/** A thread a reply names: one the project lists, or a deleted one by the id and title its report gave. */
+type Named = { id: string; title: string };
+const chipLink = (thread: Named, label = thread.title) => `[${labelOf(label)}](#thread-${thread.id})`;
+/** Two ids, either of them perhaps only the start of one, naming the same thread. */
+const sameThread = (a: string, b: string) => a === b || (a.length >= 6 && b.startsWith(a)) || (b.length >= 6 && a.startsWith(b));
 
 const markdown = unified().use(remarkParse).use(remarkGfm);
 
@@ -184,7 +188,7 @@ function readMarkdown(text: string) {
 }
 
 /** The text with the thread's title, where it first appears in prose (outside links and code), linked so it draws as the thread's chip. */
-function linkTitle(text: string, thread: Session): string | null {
+function linkTitle(text: string, thread: Named): string | null {
 	const title = thread.title.trim();
 	if (!title) return null;
 	// Matched on the original words, never a lowercased copy: lowercasing can change a string's length (İ), and with it every offset after.
@@ -217,17 +221,17 @@ function leadWith(source: string, chips: string): string | null {
  * A reply's text blocks with every thread a report it answers covers drawn as a chip in its words: where the words already link or name it, else leading its opening paragraph.
  * `lead` is the threads left to show as chips of their own above its first text, when leading it would change its Markdown.
  */
-function chipReports(blocks: Block[], reported: Session[], threads: Session[]): { blocks: Block[]; lead: Session[] } {
+function chipReports(blocks: Block[], reported: Named[]): { blocks: Block[]; lead: Named[] } {
 	const texts = blocks.filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text');
 	if (!texts.length || !reported.length) return { blocks, lead: [] };
-	const linked = new Set(texts.flatMap((block) => readMarkdown(block.text).links.flatMap((url) => {
+	const linked = texts.flatMap((block) => readMarkdown(block.text).links.flatMap((url) => {
 		const id = /^#thread-([\w-]+)$/.exec(url)?.[1];
-		return id ? [byPrefix(threads, id)?.id] : [];
-	})));
+		return id ? [id] : [];
+	}));
 	const edited = new Map(texts.map((block) => [block.key, block.text]));
-	let lead: Session[] = [];
+	let lead: Named[] = [];
 	for (const thread of reported) {
-		if (linked.has(thread.id)) continue;
+		if (linked.some((id) => sameThread(id, thread.id))) continue;
 		const named = texts.find((block) => linkTitle(edited.get(block.key)!, thread) !== null);
 		if (named) edited.set(named.key, linkTitle(edited.get(named.key)!, thread)!);
 		else lead.push(thread);
@@ -243,11 +247,13 @@ function chipReports(blocks: Block[], reported: Session[], threads: Session[]): 
 	return { blocks: blocks.map((block) => (block.kind === 'text' ? { ...block, text: edited.get(block.key)! } : block)), lead };
 }
 
-/** Threads you or a routine started: a line saying who, over the same live card the coordinator's threads get. A deleted thread leaves the card. */
+/** Threads you or a routine started: a line saying who, over the same live card the coordinator's threads get. A deleted thread leaves a struck-through row. */
 function StartedRows({ reports, threads }: { reports: Report[]; threads: Session[] }) {
+	const loaded = threadsLoaded(threads);
 	const rows = reports.flatMap((report) => {
 		const thread = byPrefix(threads, report.id);
-		return thread ? [<ThreadRow key={report.id} thread={thread} />] : [];
+		if (thread) return [<ThreadRow key={report.id} thread={thread} />];
+		return loaded && report.id ? [<GoneThreadRow key={report.id} id={report.id} title={report.title} />] : [];
 	});
 	if (!rows.length) return null;
 	const who = reports.every((report) => report.started === 'routine') ? 'A routine' : 'You';
@@ -388,14 +394,14 @@ function Starting({ part }: { part: ToolPart }) {
 	);
 }
 
-/** Several threads started at once read as one batch. One the reply being written just started may not be listed yet, so it shows as starting until it is. */
+/** Several threads started at once read as one batch. One the reply being written just started may not be listed yet, so it shows as starting until it is; one deleted since shows as deleted. */
 function Dispatch({ parts, threads, live }: { parts: ToolPart[]; threads: Session[]; live: boolean }) {
 	const rows = parts.flatMap((part) => {
 		const id = threadIdIn(part);
 		const thread = id ? threads.find((item) => item.id === id) : undefined;
 		if (thread) return [<ThreadRow key={part.toolCallId} thread={thread} />];
 		const gone = id !== null && !live && threadsLoaded(threads);
-		return gone ? [] : [<Starting key={part.toolCallId} part={part} />];
+		return gone ? [<GoneThreadRow key={part.toolCallId} id={id} title={field(part.input, 'title') || 'A thread'} />] : [<Starting key={part.toolCallId} part={part} />];
 	});
 	if (!rows.length) return null;
 	return <ThreadRows label={rows.length === 1 ? 'Started a thread' : `Started ${rows.length} threads`}>{rows}</ThreadRows>;
@@ -453,13 +459,15 @@ function blocks(parts: FlueConversationPart[], before?: HandoffsBeforeTool): Blo
 	return out;
 }
 
-/** A thread named in a reply as `[title](#thread-<id>)` draws as its chip; one the project no longer has, as its words. */
+/** A thread named in a reply as `[title](#thread-<id>)` draws as its chip; one the project no longer has, as deleted (or moved), once the list is in. */
 function threadChips(threads: Session[]): InlineLinks {
+	const loaded = threadsLoaded(threads);
 	return (href, children) => {
 		const id = /^#thread-([\w-]+)$/.exec(href)?.[1];
 		if (!id) return null;
 		const thread = byPrefix(threads, id);
-		return thread ? <ThreadChip thread={thread}>{children}</ThreadChip> : <span>{children}</span>;
+		if (thread) return <ThreadChip thread={thread}>{children}</ThreadChip>;
+		return loaded ? <GoneThreadChip id={id}>{children}</GoneThreadChip> : <span>{children}</span>;
 	};
 }
 
@@ -474,6 +482,23 @@ function linkedFiles(parts: FlueConversationPart[], resolve: (href: string) => V
 		}
 	}
 	return items;
+}
+
+/**
+ * Whether a reply only answered reports on threads deleted since (not moved): it then reads as history, faded until pointed at, rather than as news.
+ * Its words stay: they were true when written, and the coordinator still remembers them.
+ */
+function useAboutDeletedOnly(reports: Report[], threads: Session[], shown: Block[], live: boolean): boolean {
+	const gone = useMemo(() => (threadsLoaded(threads) ? reports.flatMap((report) => (byPrefix(threads, report.id) ? [] : [report.id])) : []), [reports, threads]);
+	const allGone = !live && reports.length > 0 && gone.length === reports.length;
+	const anyMoved = useCallback((data: { sessions: Session[] }) => gone.some((id) => byPrefix(data.sessions, id)), [gone]);
+	const moved = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, select: anyMoved, enabled: allGone }).data;
+	// A reply that also started a thread still in the project is news.
+	const startsLive = shown.some((block) => block.kind === 'dispatch' && block.parts.some((part) => {
+		const id = threadIdIn(part);
+		return !id || byPrefix(threads, id);
+	}));
+	return allGone && moved === false && !startsLive;
 }
 
 const CoordinatorMessage = memo(function CoordinatorMessage({
@@ -499,20 +524,34 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	const files = useMemo(() => (live ? [] : linkedFiles(message.parts, resolveFile)), [live, message.parts, resolveFile]);
 	// A drawing on one of them goes to the coordinator, which passes it on.
 	const outputLinks = useMemo<OutputLinks>(() => ({ resolve: resolveFile, open: (item) => openViewer(item, files, space.id) }), [resolveFile, files, space.id]);
-	const reported = useMemo(() => [...new Set(reports.flatMap((report) => byPrefix(threads, report.id) ?? []))], [reports, threads]);
-	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart), before), reported, threads), [message.parts, before, reported, threads]);
+	const loaded = threadsLoaded(threads);
+	// A report on a deleted thread still names it, by the id and title the report gave, so its words show it as deleted.
+	const reported = useMemo(() => {
+		const named = new Map<string, Named>();
+		for (const report of reports) {
+			const thread = byPrefix(threads, report.id);
+			if (thread) named.set(thread.id, { id: thread.id, title: thread.title });
+			else if (loaded && report.id && ![...named.keys()].some((id) => sameThread(id, report.id))) named.set(report.id, { id: report.id, title: report.title });
+		}
+		return [...named.values()];
+	}, [reports, threads, loaded]);
+	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart), before), reported), [message.parts, before, reported]);
+	const stale = useAboutDeletedOnly(reports, threads, shown, live);
 	const firstText = shown.find((block) => block.kind === 'text')?.key;
 	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
-		<div className="flex flex-col gap-2.5">
+		<div
+			className={cn('flex flex-col gap-2.5', stale && 'opacity-60 transition-opacity duration-(--t-fast) focus-within:opacity-100 hover:opacity-100')}
+			title={stale ? 'About a thread since deleted' : undefined}
+		>
 			{shown.some((block) => block.kind === 'text') ? null : <ReportLines reports={reports} threads={threads} />}
 			{shown.map((block) => {
 				if (block.kind === 'text') return (
 					<div key={block.key} className="text-body-lg leading-[21px]">
 						{block.key === firstText && lead.length ? (
 							<p className="mt-0 mb-1.5 flex flex-wrap gap-1">
-								{lead.map((thread) => <ThreadChip key={thread.id} thread={thread} />)}
+								{lead.map((thread) => <Fragment key={thread.id}>{chips(`#thread-${thread.id}`, thread.title)}</Fragment>)}
 							</p>
 						) : null}
 						<InlineLinks.Provider value={chips}>

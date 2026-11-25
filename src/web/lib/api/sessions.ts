@@ -2,6 +2,7 @@ import type { AgentNow } from '../../../core/agent-now';
 import type { ModelRoute } from '../../../core/model-route';
 import type { Trace } from '../../../core/trace';
 import { withStarting } from '../starting';
+import { withoutDeleting } from '../deleting';
 import { json, post, request } from './http';
 import type { ModelChoice, Reasoning } from './plans';
 import type { ThreadState } from './spaces';
@@ -125,10 +126,10 @@ export const sessionsApi = {
 	wakeDraft: (projectId: string, taskId: string, branch?: string) => post<{ waking: boolean }>(`/api/projects/${projectId}/wake`, { taskId, ...(branch ? { branch } : {}) }),
 	releaseDraft: (taskId: string) => json<{ released: boolean }>(`/api/drafts/${taskId}/wake`, { method: 'DELETE', keepalive: true }),
 	wakeSession: (id: string) => post<{ waking: boolean }>(`/api/sessions/${id}/wake`),
-	// Tasks still being made are listed too, as the server lists them only once made.
+	// Tasks still being made are listed too, as the server lists them only once made; those being deleted are not, though the server lists them until it is done.
 	sessions: async () => {
 		const data = await json<{ sessions: Session[] }>('/api/sessions?view=rows');
-		return { ...data, sessions: withStarting(data.sessions) };
+		return { ...data, sessions: withStarting(withoutDeleting(data.sessions)) };
 	},
 	/** `titleFrom` is the first message: a fast model names the task from it in a moment, in place of `title`. */
 	createSession: (body: { id?: string; projectId?: string; branch?: string; title?: string; titleFrom?: string; model?: string; reasoning?: Reasoning; route?: ModelRoute | null; planMode?: boolean; runOn?: RunOn }) =>
