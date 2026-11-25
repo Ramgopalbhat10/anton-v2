@@ -197,7 +197,10 @@ export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 
 
 export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string): Promise<void> {
 	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
-	const runOn = (await getSessionRecord(threadId))?.runOn ?? 'sandbox';
+	const session = await getSessionRecord(threadId);
+	const runOn = session?.runOn ?? 'sandbox';
+	if (runOn === todo.runOn && session?.projectId && outsideHostTags(todo, [session.projectId]))
+		throw new ConflictError(`${HOST_TAGS_ONLY} That thread works in another one: use start_thread with its todo_id in a tagged repository.`);
 	if (runOn !== todo.runOn)
 		throw new ConflictError(
 			todo.runOn === 'host'

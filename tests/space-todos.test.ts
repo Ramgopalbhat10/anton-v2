@@ -332,6 +332,12 @@ test('a This server to-do starts threads only in its tagged repositories', async
 		const count = (await sessions.listThreads(space.id)).length;
 		await assert.rejects(() => todos.startTodoThreadsIn(hosted.id, [apiRepo, webRepo] as never, 'acme/api', named.thread.id), /only in the repositories tagged on it/);
 		assert.equal((await sessions.listThreads(space.id)).length, count, 'a split with one untagged repository starts none of its threads');
+		const webHost = await spaces.startThread(space.id, { title: 'Web host thread', brief: 'Work', repo: 'acme/web', runOn: 'host' });
+		await assert.rejects(() => todos.messageTodoThread(hosted, webHost.id, 'Do the api work'), /only in the repositories tagged on it.*start_thread/);
+		assert.equal((await getSessionRecord(webHost.id))?.brief, 'Work', 'nothing reaches a queued host thread in an untagged repository');
+		assert.equal((await todos.listTodos(space.id)).find(({ id }) => id === hosted.id)?.threads, 2, 'and it is not linked');
+		await todos.messageTodoThread(hosted, named.thread.id, 'More api work');
+		assert.match((await getSessionRecord(named.thread.id))?.brief ?? '', /\n\nMore api work$/, 'a host thread in a tagged repository still hears it');
 		const sandboxed = await todos.createTodo(space.id, { title: 'Sandbox api work', repos: [apiRepo.id] });
 		assert.equal((await todos.startTodoThread(sandboxed, { title: 'Web', brief: 'Work', repo: 'acme/web' })).thread.repo, 'acme/web', 'a sandbox to-do may still be sent elsewhere');
 	} finally {
