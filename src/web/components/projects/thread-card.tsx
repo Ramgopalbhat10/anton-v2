@@ -441,7 +441,8 @@ export function ThreadChip({ thread, children }: { thread: Session; children?: R
 /** The task listed under this id, or the start of it, in any project: a thread a project no longer lists may have moved rather than gone. */
 export function useListedTask(id: string): Session | undefined {
 	const select = useCallback((data: { sessions: Session[] }) => data.sessions.find((task) => task.id === id || (id.length >= 6 && task.id.startsWith(id))), [id]);
-	return useQuery({ queryKey: ['sessions'], queryFn: api.sessions, select }).data;
+	// Read from the list every page keeps current, not fetched again for each chip.
+	return useQuery({ queryKey: ['sessions'], queryFn: api.sessions, select, refetchOnMount: false }).data;
 }
 
 /**

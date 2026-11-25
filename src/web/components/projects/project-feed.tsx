@@ -942,8 +942,8 @@ export function ProjectFeed({
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
 	const joined = useJoinedTodoHandoffs(space.id, messages, agent.settlements, liveAssistant);
-	// Every task, not only this project's: a thread moved to another project is not gone. Read only once the project's own list is in.
-	const everyTask = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, enabled: threadsLoaded(threads) }).data?.sessions;
+	// Every task, not only this project's: a thread moved to another project is not gone. The list the project's threads come from, read as it is rather than fetched again.
+	const everyTask = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchOnMount: false }).data?.sessions;
 	const faded = useMemo(
 		() => aboutDeletedOnly(messages, agent.settlements, answered.carried, threadsLoaded(threads) ? everyTask : undefined, liveAssistant),
 		[messages, agent.settlements, answered.carried, threads, everyTask, liveAssistant],
