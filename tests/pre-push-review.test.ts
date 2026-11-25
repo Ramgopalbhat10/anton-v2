@@ -33,8 +33,8 @@ test('a reply about to push a code change is asked once for a fresh-eyes review 
 	assert.match(asked ?? '', /reviewer subagent/);
 	assert.match(asked ?? '', /`git diff base01234567`/, 'the brief names the range to read');
 	assert.match(asked ?? '', /critical, high or medium/);
-	assert.match(asked ?? '', /Do not build a new feature, data model or approval flow/, 'a design question goes to the user, not into the change');
-	assert.match(asked ?? '', /do not ask it again/);
+	assert.match(asked ?? '', /Do not build a new feature, data model, approval flow, or authorization check or guard to answer a finding, whatever its severity/, 'a design question goes to the user, not into the change');
+	assert.match(asked ?? '', /do not start it again/);
 	assert.doesNotMatch(asked ?? '', /since your last push/);
 	assert.match(asked ?? '', /If you cannot start the subagent/, 'a runtime without subagents reviews it itself');
 	assert.equal(await prePushReview('a', deps(`${CODE}+fixed\n`)), null, 'once a reply, so its fixes are not reviewed again before the push');
@@ -94,4 +94,35 @@ test("the reviewer judges the change against the user's own request, and by the 
 	assert.ok(REVIEW_GUIDE.includes(REVIEW_TRUST), 'the pull request reviewer has the same rule');
 	assert.match(REVIEW_TRUST, /already allows adds no new risk/);
 	assert.match(bugReviewMessage('base0123456789abcdef', false), /a reviewer can be wrong/);
+});
+
+test('a reply answering pull request comments is left to the pull request re-review', async () => {
+	const { answersPrComments, PR_COMMENTS_HEAD } = await import('../src/core/review-follow-up.ts');
+	const { REVIEW_SCOPE } = await import('../src/services/git/code-review.ts');
+	const comments = `${PR_COMMENTS_HEAD} (https://github.com/acme/api/pull/7):\n1. @bot on src/a.ts line 3: **Security · high**`;
+	assert.ok(answersPrComments(comments));
+	assert.ok(answersPrComments(`Checks failed on your pull request.\n\n${comments}`), 'after a checks or conflicts message too');
+	assert.ok(!answersPrComments('Add a run-on option to to-dos'));
+	assert.ok(!answersPrComments(undefined));
+	startPrePushReview('c');
+	queue('c');
+	changeGate('c', (state) => {
+		state.request = comments;
+	});
+	assert.equal(await prePushReview('c', deps(CODE)), null);
+	changeGate('c', (state) => {
+		state.request = 'Add a run-on option to to-dos';
+	});
+	assert.ok(await prePushReview('c', deps(CODE)), 'a reply the user asked for is still reviewed');
+	assert.match(REVIEW_SCOPE, /authorization check, guard or approval step too, whatever the severity/);
+});
+
+test('answers round-trip, and the comment ids are read from the follow-up message', async () => {
+	const { answerBody, answerOf, commentIdsIn } = await import('../src/core/review-follow-up.ts');
+	assert.deepEqual(answerOf(answerBody('declined', ' Out of scope: the user chose it. ')), { verdict: 'declined', note: 'Out of scope: the user chose it.' });
+	assert.deepEqual(answerOf(answerBody('question', 'Keep both?')), { verdict: 'question', note: 'Keep both?' });
+	assert.equal(answerOf('**Fixed:** looks like one but has no mark'), null);
+	const text = 'New comments on your pull request (u):\n1. [line-12] @a on x.ts: one\n2. [review-3] @a: two\n   3. [line-9] quoted, not listed';
+	assert.deepEqual(commentIdsIn(text), ['line-12', 'review-3']);
+	assert.deepEqual(commentIdsIn(undefined), []);
 });

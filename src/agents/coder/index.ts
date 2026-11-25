@@ -52,6 +52,7 @@ import { startAwaitingRun } from '../../services/replies/asks.ts';
 import { finishReview, isRequest, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
 import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
 import { prePushReview, startPrePushReview } from '../../services/replies/pre-push-review.ts';
+import { reviewAnswersGate, startReviewAnswers } from '../../services/git/review-answers.ts';
 import { takePinned } from '../../services/replies/compaction-pin.ts';
 import { type GateName, loadGate } from '../../services/replies/gate-state.ts';
 import { noteSendBack, sendBacksOf, settleSendBacks, startSendBacks } from '../../services/replies/send-backs.ts';
@@ -309,6 +310,12 @@ export function Coder({ id }: AgentProps) {
 				await sendBack('bugs', bugs);
 				return;
 			}
+			// A reply to review comments answers each where it was made, so the next review hears the author's side.
+			const unanswered = !planning && !review && !signal.aborted ? await reviewAnswersGate(id) : null;
+			if (unanswered) {
+				await sendBack('answers', unanswered);
+				return;
+			}
 			// Last, so the one push carries every fix the checks above asked for.
 			const unpushed = signal.aborted ? null : await pushGate(id);
 			if (unpushed) {
@@ -354,6 +361,7 @@ export function Coder({ id }: AgentProps) {
 			startCheckGate(id);
 			startPushGate(id);
 			startPrePushReview(id);
+			startReviewAnswers(id);
 			startSendBacks(id);
 			startReplyClock(id);
 			if (!workspace && !hasWorkspace(id)) void prewarmFor(id, opening.kind === 'user' ? opening.body : null);

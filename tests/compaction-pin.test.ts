@@ -139,7 +139,7 @@ test('the Coder pins the message with every send-back and at the next message’
 		.join('\n');
 	const gates = source.slice(source.indexOf('useAgentFinish(async'), source.indexOf('queueCheckpoint(id);\n\t\t\t// What the reply leaves'));
 	// Every gate sends the reply back through sendBack, which puts the message first; no gate appends on its own.
-	assert.equal((gates.match(/await sendBack\(/g) ?? []).length, 8);
+	assert.equal((gates.match(/await sendBack\(/g) ?? []).length, 9);
 	assert.equal((gates.match(/append\(/g) ?? []).length, 2);
 	assert.match(gates, /const pinned = await takePinned\(id\);\n\t\t\t\tif \(pinned\) append\(\{ kind: 'signal', type: 'reminder', body: pinned \}\);\n\t\t\t\tappend\(\{ kind: 'signal', type: 'reminder', body \}\);/);
 	// A reply that ends with nothing to send back appends nothing: the message waits for the next start.

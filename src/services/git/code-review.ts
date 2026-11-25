@@ -12,6 +12,7 @@ import { generalSettings } from '../models/general.ts';
 import { repoDir } from './git.ts';
 import { bringCommit, OFFLINE_GIT } from './host-commits.ts';
 import { logProblem } from '../../core/log.ts';
+import { answerOf } from '../../core/review-follow-up.ts';
 import { machineFor } from '../sandbox/workspace.ts';
 
 /** What any review of a change looks for, wherever its findings go. */
@@ -36,7 +37,7 @@ export const REVIEW_TRUST =
 
 /** A review that asks for a new subsystem turns one change into many rounds; that is the user's call, not a fix. */
 export const REVIEW_SCOPE =
-	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user, with low severity unless the change as written can be exploited or loses data.';
+	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user. That holds for a new authorization check, guard or approval step too, whatever the severity: give the risk its severity and say what it exposes, but leave the choice of guard to the user, since each guard a review asks for is new code the next review finds holes in.';
 
 export const REVIEW_GUIDE = [
 	REVIEW_RUBRIC,
@@ -62,11 +63,35 @@ const reviewing = new Map<string, string>();
 /** The head each task's last review read, so a re-review reads only what came after it. Lost on a restart, when the reviewer's conversation still names it. */
 const lastReviewed = new Map<string, string>();
 
-function reviewMessage(url: string, baseSha: string, head: string, previous?: string): string {
+const MAX_ANSWER_CHARS = 400;
+const firstLine = (text: string) => text.replace(/^\*\*[^*]+\*\*\s*/, '').trim().split('\n')[0].slice(0, 160);
+
+/** The author's latest answer to each earlier finding, as posted with answer_review_comment, so a re-review weighs both sides. */
+export function answersMessage(comments: PullRequestComment[]): string | null {
+	const byId = new Map(comments.map((comment) => [comment.id, comment]));
+	const latest = new Map<string, { verdict: string; note: string }>();
+	for (const comment of [...comments].sort((a, b) => a.at.localeCompare(b.at))) {
+		const answer = answerOf(comment.body);
+		if (answer && comment.replyTo && byId.has(comment.replyTo)) latest.set(comment.replyTo, answer);
+	}
+	if (latest.size === 0) return null;
+	const lines = [...latest].map(([id, { verdict, note }]) => {
+		const finding = byId.get(id)!;
+		return `- ${finding.path ?? 'the pull request'}${finding.line ? `:${finding.line}` : ''} "${firstLine(finding.body)}": ${verdict}. ${note.slice(0, MAX_ANSWER_CHARS)}`;
+	});
+	return [
+		'The author answered your earlier findings on the pull request:',
+		...lines,
+		"Weigh these answers. Report a finding the author declined again only if the code shows the reason does not hold or the new commits make it worse, and say why; leave one that is the user's decision to them.",
+	].join('\n');
+}
+
+function reviewMessage(url: string, baseSha: string, head: string, previous?: string, answers?: string | null): string {
 	return [
 		`Review the pull request ${url} at ${head.slice(0, 7)}.`,
 		`The change is \`git diff ${baseSha}...${head}\` in the repository, and \`git log ${baseSha}..${head}\` lists its commits.`,
 		...(previous && previous !== head ? [`You last reviewed it at ${previous.slice(0, 7)}: what changed since is \`git diff ${previous}..${head}\`.`] : []),
+		...(answers ? [answers] : []),
 		'Call post_review once when you are done.',
 	].join('\n');
 }
@@ -113,7 +138,7 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	if (automatic && (await documentationOnly(id, session.prUrl))) return false;
 	reviewing.set(id, activity.headSha);
 	if (!session.review) {
-		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha, lastReviewed.get(id)), 'reviewer');
+		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha, lastReviewed.get(id), answersMessage(activity.comments)), 'reviewer');
 		return true;
 	}
 	preparing.add(id);

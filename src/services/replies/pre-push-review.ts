@@ -7,6 +7,7 @@ import { liveMachine } from '../sandbox/workspace.ts';
 import { patchFiles } from './finish-review.ts';
 import { changeGate, gate, loadGate } from './gate-state.ts';
 import { reviewerRan, startReviewerRuns } from './reviewer-runs.ts';
+import { answersPrComments } from '../../core/review-follow-up.ts';
 
 /*
  * Anton's pull request reviewer used to be the first to ask what a change breaks, after the push. Each finding then cost a
@@ -56,15 +57,17 @@ export const bugReviewMessage = (from: string, pushed: boolean) =>
 		`Start the reviewer subagent with a brief that says in two or three sentences what the change is for, and that it is \`git diff ${from.slice(0, 12)}\` in the repository${pushed ? ' (what changed since your last push)' : ''}.`,
 		'It reports problems with a severity. Check each against the code and what the user asked for before you act: a reviewer can be wrong. ' +
 			'Fix each critical, high or medium one that holds, with a test that covers it, and commit; for one that does not, or that rests on a risk the code already accepts elsewhere, say why in a line and leave it. Leave low ones out of this reply and name them in a line. ' +
-			'Do not build a new feature, data model or approval flow to answer a finding: name it in your reply as a question for the user. It reviews once a reply, so do not ask it again; end your reply: Anton pushes it then.',
+			'Do not build a new feature, data model, approval flow, or authorization check or guard to answer a finding, whatever its severity: once the rest is done, end your reply by asking the user with the ask tool, with options to pick from. It reviews once a reply, so do not start it again; end your reply: Anton pushes it then.',
 		'If you cannot start the subagent, read that diff yourself the same way: callers and state it touches, ordering and timing, error and failure paths, input limits, and data in the shape the real system produces.',
 	].join('\n');
 
 /** Null unless the reply is about to push a change no such review has read; asked once a reply. */
 export async function prePushReview(id: string, deps: Deps = defaults): Promise<string | null> {
 	await loadGate(id);
-	const { pullRequest, bugsAsked, bugsReviewed } = gate(id);
+	const { pullRequest, bugsAsked, bugsReviewed, request } = gate(id);
 	if (!pullRequest) return null;
+	// Prod, Nov 2026: a fix for PR comments that is also reviewed here draws two sets of findings a round; the PR's re-review covers it.
+	if (answersPrComments(request)) return null;
 	if (!(await deps.reviews())) return null;
 	const change = await deps.change(id);
 	const patch = change?.patch.trim();

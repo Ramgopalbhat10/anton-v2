@@ -24,7 +24,7 @@ import { elapsedNote } from '../../services/replies/reply-clock.ts';
 import { checkJob, jobNotice, MAX_WAIT_S, startJob } from '../../services/sandbox/background-jobs.ts';
 import { checkNotice } from '../../services/sandbox/repo-check.ts';
 import { explorer, tester, withSettingsModel, useTaskSubagents } from './subagents.ts';
-import { useOpenPullRequest, useMergeBaseBranch } from './tools/git.ts';
+import { useAnswerReviewComment, useOpenPullRequest, useMergeBaseBranch, useReadReviewComments } from './tools/git.ts';
 
 export function useStartWorkspace(id: string, chat: boolean, startWorkspace: () => void) {
 	useTool(
@@ -107,6 +107,8 @@ export function useTaskWorkspace(id: string, profile: ToolProfile) {
 	useBackgroundJobs(id, (task) => workMachine(task));
 	useTaskSubagents(id);
 	useOpenPullRequest(id);
+	useAnswerReviewComment(id);
+	useReadReviewComments(id);
 	useMergeBaseBranch(id);
 	useSandboxChecks(id);
 }
