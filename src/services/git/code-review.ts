@@ -14,13 +14,18 @@ import { bringCommit, OFFLINE_GIT } from './host-commits.ts';
 import { logProblem } from '../../core/log.ts';
 import { machineFor } from '../sandbox/workspace.ts';
 
-export const REVIEW_GUIDE = [
+/** What any review of a change looks for, wherever its findings go. */
+export const REVIEW_RUBRIC = [
 	'Review the change, not the whole repository: read the diff, then read the surrounding code, callers and tests you need to judge it.',
 	'If the repository has a REVIEW.md, follow it; its AGENTS.md and CLAUDE.md rules apply too.',
 	"Report only problems a careful reviewer would ask to fix before merging: bugs and wrong behavior, data loss, unhandled failures that matter, changed behavior with no test where the repository tests that kind of code, and clear breaks of the repository's written rules.",
 	'Then make a security pass over the change: follow untrusted input (requests, form fields, URLs, files, headers, webhooks, other services, the environment) to where the change uses it, and look for injection (SQL, shell, template), cross-site scripting, broken authentication or authorization, server-side request forgery, path traversal, unsafe deserialization, secrets in code or logs, weak cryptography, and new dependencies or permissions that widen what can be reached.',
 	'Report a security problem only with an exploit path you traced in the code: who can trigger it, through what input, and what they gain. Give it a severity: critical (anyone can take over accounts, data or the server), high (a realistic attacker gets data or actions they should not), medium (needs unusual access or conditions), low (defense in depth).',
 	'Leave out style, naming and matters of taste unless REVIEW.md asks for them. Confirm each problem in the code before you report it, and drop anything you are not sure of.',
+].join(' ');
+
+export const REVIEW_GUIDE = [
+	REVIEW_RUBRIC,
 	'Finish by calling post_review once. Put each finding on the line it is about, a line of the new file that the change added or modified, and say how to fix it. With no findings, call it with an empty list.',
 	'When this conversation has an earlier review of this pull request, this one is a re-review: read the commits since the head you last reviewed and the code they touch, not the whole change again. ' +
 		'Report an earlier problem again only if it is still there, and a new problem in code your earlier review already read only if it is high or critical.',

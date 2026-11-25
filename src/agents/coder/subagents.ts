@@ -5,6 +5,7 @@ import { agentKeepsContext, COMPACTION_SUMMARY_EFFORT, compactionFor } from '../
 import { OUTPUTS, repoInstructionsPrompt } from './prompts.ts';
 import { useRepoSnapshot } from './tools/snapshot.ts';
 import { useRunScript } from './tools/run-script.ts';
+import { REVIEW_RUBRIC } from '../../services/git/code-review.ts';
 
 /**
  * Prod, Nov 2026, 106 explorer runs: median 7 steps and 140k tokens, p90 11 steps and 270k; the runs past that read
@@ -47,6 +48,16 @@ function Tester() {
 	].join(' ');
 }
 
+/** Asked for before a push (`src/services/replies/pre-push-review.ts`): the pull request reviewer's rubric, its findings handed to the Coder. */
+function ChangeReviewer() {
+	return [
+		'You are the reviewer specialist. You review a change before it is pushed, with fresh eyes: you have not seen how it was written.',
+		'Read the diff your brief names with git diff, then the surrounding code, callers and tests you need to judge it. You may run read-only commands and the tests; change no files, and do not commit or push.',
+		REVIEW_RUBRIC,
+		'Report each problem most severe first, each as its severity (critical, high, medium or low), file and line, the problem, why it matters and how to fix it; then say in one line what you checked. With no problems, say so in one line. Keep it to about 400 words.',
+	].join(' ');
+}
+
 export const explorer = defineSubagent({
 	name: 'explorer',
 	description: `Read-only investigation of the repository, answering with its findings with files and lines. ${EXPLORER_USE}`,
@@ -63,7 +74,7 @@ export const tester = defineSubagent({
  * Without its own model a subagent uses the task's, and its compaction. One on a Claude Code model compacts where
  * Settings › General says Claude Code compacts (scripts/patch-flue.ts reads `compaction`), not near the end of a 1M window.
  */
-export function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'browser' | 'computer'): typeof explorer {
+export function withSettingsModel(id: string, subagent: typeof explorer, name: 'explorer' | 'tester' | 'reviewer' | 'browser' | 'computer'): typeof explorer {
 	const choice = helperModelFor(id, name);
 	if (!choice) return subagent;
 	const compaction = agentKeepsContext(choice.model) ? false : choice.model.startsWith('claude-code/') ? compactionFor(choice.model) : { reasoning: COMPACTION_SUMMARY_EFFORT };
@@ -129,4 +140,10 @@ export function useTaskSubagents(id: string) {
 	const taskTester = defineSubagent({ ...tester, agent: () => `${Tester()}${repoInstructionsPrompt(repoInstructionsFor(id))}` });
 	useSubagent(withSettingsModel(id, taskExplorer, 'explorer'));
 	useSubagent(withSettingsModel(id, taskTester, 'tester'));
+	const reviewer = defineSubagent({
+		name: 'reviewer',
+		description: 'Reviews a change with fresh eyes before it is pushed, read-only, and answers with the problems it confirmed, each with a severity. It starts without this conversation: brief it with what the change is for and the git diff range to read.',
+		agent: () => `${ChangeReviewer()}${repoInstructionsPrompt(repoInstructionsFor(id))}`,
+	});
+	useSubagent(withSettingsModel(id, reviewer, 'reviewer'));
 }
