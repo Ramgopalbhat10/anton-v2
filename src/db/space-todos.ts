@@ -142,6 +142,13 @@ export async function todoIdOfThread(sessionId: string): Promise<string | null> 
 	return result.rows[0] ? String(result.rows[0].todo_id) : null;
 }
 
+/** Every to-do a thread was started or messaged for. */
+export async function todoIdsOfThread(sessionId: string): Promise<string[]> {
+	const db = await appDb();
+	const result = await db.execute({ sql: 'SELECT todo_id FROM space_todo_threads WHERE session_id = ? ORDER BY linked_at', args: [sessionId] });
+	return result.rows.map((row) => String(row.todo_id));
+}
+
 export async function linkTodoThreadRecord(todoId: string, sessionId: string): Promise<void> {
 	const db = await appDb();
 	await db.execute({ sql: 'INSERT OR IGNORE INTO space_todo_threads (todo_id, session_id, linked_at) VALUES (?, ?, ?)', args: [todoId, sessionId, new Date().toISOString()] });

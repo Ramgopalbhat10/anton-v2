@@ -338,6 +338,22 @@ test('a This server to-do starts threads only in its tagged repositories', async
 		assert.equal((await todos.listTodos(space.id)).find(({ id }) => id === hosted.id)?.threads, 2, 'and it is not linked');
 		await todos.messageTodoThread(hosted, named.thread.id, 'More api work');
 		assert.match((await getSessionRecord(named.thread.id))?.brief ?? '', /\n\nMore api work$/, 'a host thread in a tagged repository still hears it');
+		const untagged = await todos.createTodo(space.id, { title: 'Host anywhere', runOn: 'host' });
+		const shared = (await todos.startTodoThread(untagged, { title: 'Shared', brief: 'Work' })).thread;
+		assert.equal(shared.repo, 'acme/api');
+		await todos.messageTodoThread(hosted, shared.id, 'Tagged work too');
+		await assert.rejects(() => threadRepos.setThreadRepos(shared.id, ['acme/web'], startIn), /only in the repositories tagged on it/, 'every to-do linked to a host thread keeps it in its tags, not only the first');
+		const roaming = (await todos.startTodoThread(untagged, { title: 'Roaming', brief: 'Work' })).thread;
+		const moveStart = async () => [];
+		assert.equal((await threadRepos.setThreadRepos(roaming.id, ['acme/web'], moveStart)).moving, true);
+		await assert.rejects(() => todos.messageTodoThread(hosted, roaming.id, 'Api work'), /is moving to, another one/, 'a pending move to an untagged repository counts');
+		const applied = threadRepos.applyRepoMove(roaming.id);
+		assert.equal(threadRepos.repoMoveTarget(roaming.id), webRepo.id, 'the target stays known while the move runs');
+		await applied;
+		assert.equal(threadRepos.repoMoveTarget(roaming.id), null);
+		assert.equal((await getSessionRecord(roaming.id))?.projectId, webRepo.id);
+		await assert.rejects(() => todos.messageTodoThread(hosted, roaming.id, 'Api work'), /only in the repositories tagged on it/);
+		assert.equal((await todos.listTodos(space.id)).find(({ id }) => id === hosted.id)?.threads, 3, 'only the shared thread was linked');
 		const sandboxed = await todos.createTodo(space.id, { title: 'Sandbox api work', repos: [apiRepo.id] });
 		assert.equal((await todos.startTodoThread(sandboxed, { title: 'Web', brief: 'Work', repo: 'acme/web' })).thread.repo, 'acme/web', 'a sandbox to-do may still be sent elsewhere');
 	} finally {

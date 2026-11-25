@@ -14,7 +14,7 @@ import { listSpaceFiles } from './space-files.ts';
 import { nudgeThread, repoFor, spaceRepos, startThread, type ThreadInput } from './spaces.ts';
 import { hostRunnerAvailable } from '../tasks/runners.ts';
 import { threadStarted } from './thread-reports.ts';
-import { type RepoPlan, todoThreadPlan } from './thread-repos.ts';
+import { type RepoPlan, repoMoveTarget, todoThreadPlan } from './thread-repos.ts';
 
 async function existingSpace(spaceId: string) {
 	const space = await getSpace(spaceId);
@@ -199,8 +199,9 @@ export async function messageTodoThread(todo: SpaceTodo, threadId: string, messa
 	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
 	const session = await getSessionRecord(threadId);
 	const runOn = session?.runOn ?? 'sandbox';
-	if (runOn === todo.runOn && session?.projectId && outsideHostTags(todo, [session.projectId]))
-		throw new ConflictError(`${HOST_TAGS_ONLY} That thread works in another one: use start_thread with its todo_id in a tagged repository.`);
+	const repos = [session?.projectId, repoMoveTarget(threadId)].filter((repo): repo is string => Boolean(repo));
+	if (runOn === todo.runOn && outsideHostTags(todo, repos))
+		throw new ConflictError(`${HOST_TAGS_ONLY} That thread works in, or is moving to, another one: use start_thread with its todo_id in a tagged repository.`);
 	if (runOn !== todo.runOn)
 		throw new ConflictError(
 			todo.runOn === 'host'

@@ -4,7 +4,7 @@ import { ConflictError, InvalidInputError, NotFoundError } from '../../core/erro
 import { logProblem } from '../../core/log.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { getSpace, type Space } from '../../db/spaces.ts';
-import { getSpaceTodo, todoIdOfThread } from '../../db/space-todos.ts';
+import { getSpaceTodo, todoIdOfThread, todoIdsOfThread } from '../../db/space-todos.ts';
 import { changes } from '../git/git.ts';
 import { readCheckpoint } from '../git/checkpoints.ts';
 import { choiceOf, decide } from '../models/decisions.ts';
@@ -79,6 +79,9 @@ const moving = new Map<string, string>();
 
 /** The repository a thread moves to once its reply ends; the reply skips its end checks then. */
 export const pendingRepoMove = (id: string): string | null => moving.get(id) ?? null;
+const applying = new Map<string, string>();
+/** The repository a thread is about to move to, from `set_repo` until the move is done. */
+export const repoMoveTarget = (id: string): string | null => moving.get(id) ?? applying.get(id) ?? null;
 
 export const dropRepoMove = (id: string): void => void moving.delete(id);
 
@@ -109,10 +112,12 @@ export async function setThreadRepos(id: string, refs: string[], startIn: StartI
 	const projects = found.filter((project, index) => found.findIndex((other) => other.id === project.id) === index);
 	const [first, ...rest] = projects;
 	if (!first) throw new InvalidInputError('Name at least one of the project\'s repositories.');
-	const todoId = rest.length || session.runOn === 'host' ? await todoIdOfThread(id) : null;
+	const todoId = rest.length ? await todoIdOfThread(id) : null;
 	if (rest.length && !todoId) throw new InvalidInputError('Only a thread started from a project to-do can start threads for other repositories. Pass one repository.');
-	const todo = todoId && session.runOn === 'host' ? await getSpaceTodo(todoId) : null;
-	if (todo && outsideHostTags({ ...todo, runOn: 'host' }, projects.map(({ id }) => id))) throw new InvalidInputError(HOST_TAGS_ONLY);
+	if (session.runOn === 'host') {
+		const linked = await Promise.all((await todoIdsOfThread(id)).map((todo) => getSpaceTodo(todo)));
+		if (linked.some((todo) => todo && outsideHostTags({ ...todo, runOn: 'host' }, projects.map(({ id: repo }) => repo)))) throw new InvalidInputError(HOST_TAGS_ONLY);
+	}
 	const current = session.projectId ? ((await spaceRepos(space)).find((project) => project.id === session.projectId)?.repoFullName ?? 'its repository') : null;
 	const stays = first.id === session.projectId;
 	if (!stays) await assertMovable(id, current);
@@ -128,11 +133,14 @@ export async function applyRepoMove(id: string): Promise<void> {
 	const projectId = moving.get(id);
 	if (!projectId) return;
 	moving.delete(id);
+	applying.set(id, projectId);
 	try {
 		const moved = await moveToRepo(id, projectId);
+		applying.delete(id);
 		forgetRepoContext(id);
 		await sendToAgent(id, `Anton moved this thread to ${moved.repo} (branch ${moved.branch} from ${moved.baseBranch}). Carry on with the request there.`);
 	} catch (error) {
+		applying.delete(id);
 		logProblem('warn', 'Could not move the thread to another repository', error, id);
 		await sendToAgent(id, `Anton could not move this thread to the other repository: ${error instanceof Error ? error.message : String(error)}. Tell the user, and carry on where you are only if they say so.`).catch(() => undefined);
 	}
