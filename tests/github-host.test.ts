@@ -267,3 +267,36 @@ test("the PR panel reads a pull request whole, anyone's comments included, and m
 	assert.equal(merge?.method, 'PUT');
 	assert.deepEqual(JSON.parse(merge?.body ?? '{}'), { merge_method: 'squash', commit_title: 'Ship it (#9)', sha: 'h9' });
 });
+
+test('an answer to a line comment goes into its thread and resolves it; any other comment is answered on the pull request', async () => {
+	const { graphqlUrl } = await import('../src/providers/github/host.ts');
+	assert.equal(graphqlUrl('https://api.github.com'), 'https://api.github.com/graphql');
+	assert.equal(graphqlUrl('https://git.acme.test/api/v3'), 'https://git.acme.test/api/graphql', 'GitHub Enterprise keeps GraphQL beside v3');
+	const calls: Array<{ url: string; body: { body?: string; query?: string; variables?: Record<string, unknown> } }> = [];
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		const body = JSON.parse(String(init?.body ?? '{}'));
+		calls.push({ url: String(input), body });
+		if (String(input).endsWith('/graphql') && body.query.startsWith('query')) {
+			const nodes = [
+				{ id: 'T_other', isResolved: false, comments: { nodes: [{ databaseId: 11 }] } },
+				{ id: 'T_mine', isResolved: false, comments: { nodes: [{ databaseId: 42 }] } },
+			];
+			return new Response(JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: { nodes } } } } }), { status: 200 });
+		}
+		return new Response('{}', { status: 200 });
+	}) as typeof fetch;
+	const host = githubHost({ token: 't', apiUrl: API });
+	await host.answerComment!('https://github.com/acme/demo/pull/7', 'line-42', 'Fixed: guarded.', true);
+	assert.equal(calls[0].url, `${API}/repos/acme/demo/pulls/7/comments/42/replies`);
+	assert.deepEqual(calls[0].body, { body: 'Fixed: guarded.' });
+	assert.equal(calls[1].url, `${API}/graphql`);
+	assert.deepEqual(calls[1].body.variables, { owner: 'acme', name: 'demo', number: 7 });
+	assert.match(calls[2].body.query ?? '', /resolveReviewThread/);
+	assert.deepEqual(calls[2].body.variables, { id: 'T_mine' }, 'the thread this comment started');
+	calls.length = 0;
+	await host.answerComment!('https://github.com/acme/demo/pull/7', 'line-42', 'Question: which?', false);
+	assert.equal(calls.length, 1, 'a question leaves its thread open');
+	calls.length = 0;
+	await host.answerComment!('https://github.com/acme/demo/pull/7', 'review-5', 'Fixed.', true);
+	assert.deepEqual(calls.map((call) => call.url), [`${API}/repos/acme/demo/issues/7/comments`]);
+});

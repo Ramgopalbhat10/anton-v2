@@ -125,6 +125,7 @@ const fakeHost: GitHost = {
 		return new Uint8Array(execFileSync('git', ['cat-file', 'blob', sha], { cwd: remote }));
 	},
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
+	answerComment: async (url, comment, body, resolve) => void answers.push({ url, comment, body, resolve }),
 	accountName: async () => 'Ada Lovelace',
 	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
 	searchRepos: async () => [],
@@ -139,6 +140,7 @@ async function waitFor(ready: () => boolean): Promise<void> {
 }
 /** Reviews Anton posted on pull requests. */
 const reviews: Array<{ url: string } & ReviewInput> = [];
+const answers: Array<{ url: string; comment: string; body: string; resolve: boolean }> = [];
 // What the fake GitHub reports; tests change these.
 let issues: Issue[] = [];
 let activity: PullRequestActivity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
@@ -1291,6 +1293,35 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	assert.match(delivered[0].text, /README\.md line 1: Says reviewed twice/);
 	assert.doesNotMatch(delivered[0].text, /1 problem to fix/, 'the summary is left out: its findings come as line comments');
 	assert.match(delivered[0].text, /find the cause[\s\S]*what your fix could break[\s\S]*real code path/, 'a fix is asked for at its cause, not only its line');
+	assert.match(delivered[0].text, /1\. \[line-2\] @ada on README\.md/, 'each comment carries the id its answer names');
+	assert.match(delivered[0].text, /answer_review_comment/);
+
+	// The agent answers each comment where it was made; the reply is sent back once while any is unanswered.
+	const { answerReviewComment, reviewAnswersGate, startReviewAnswers } = await import('../src/services/git/review-answers.ts');
+	const { changeGate } = await import('../src/services/replies/gate-state.ts');
+	startReviewAnswers(session.id);
+	changeGate(session.id, (state) => {
+		state.request = delivered[0].text;
+	});
+	assert.match((await reviewAnswersGate(session.id)) ?? '', /Still unanswered: line-2\./);
+	assert.equal(await reviewAnswersGate(session.id), null, 'asked once a reply');
+	startReviewAnswers(session.id);
+	changeGate(session.id, (state) => {
+		state.request = delivered[0].text;
+	});
+	assert.match(await answerReviewComment(session.id, { comment: 'line-2', verdict: 'declined', note: 'The readme says it once.' }), /marked the thread resolved/);
+	assert.equal(await reviewAnswersGate(session.id), null, 'nothing left to answer');
+	assert.equal(answers.length, 1);
+	assert.equal(answers[0].comment, 'line-2');
+	assert.equal(answers[0].resolve, true);
+	assert.match(answers[0].body, /^\*\*Not changed:\*\* The readme says it once\./);
+	await assert.rejects(() => answerReviewComment(session.id, { comment: 'nope', verdict: 'fixed', note: 'x' }), /Unknown comment/);
+	assert.match(await answerReviewComment(session.id, { comment: 'line-2', verdict: 'question', note: 'Keep both headings?' }), /stays open/);
+	assert.equal(answers[1].resolve, false, 'a question for the user leaves its thread open');
+	answers.length = 0;
+	const answer = { id: 'line-9', author: 'ada', body: '**Not changed:** The readme says it once.\n\n<!-- anton-answer -->', path: 'README.md', line: 1, at: '2', replyTo: 'line-2' };
+	activity = { ...activity, comments: [...activity.comments, answer] };
+	assert.equal(await followUp((await getSessionRecord(session.id))!), false, 'its own answers never wake the agent');
 
 	// Low-severity findings stay on the pull request for a person unless the setting says to fix them too.
 	await postReview(session.id, {
@@ -1326,9 +1357,11 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	assert.equal(await requestReview(session.id, { automatic: false }), true);
 	assert.doesNotMatch(reviewRequests[1].text, /You last reviewed/, 'the same head is read whole');
-	activity = { ...activity, headSha: 'head-2', comments: [] };
+	activity = { ...activity, headSha: 'head-2', comments: [{ id: 'line-2', author: 'ada', body: '**Bug · medium**\n\nSays reviewed twice.', path: 'README.md', line: 1, at: '1' }, answer] };
 	assert.equal(await requestReview(session.id, { automatic: false }), true);
 	assert.match(reviewRequests[2].text, /You last reviewed it at head-1: what changed since is `git diff head-1\.\.head-2`/, 'a re-review reads what came after the last one');
+	assert.match(reviewRequests[2].text, /- README\.md:1 "Says reviewed twice\.": declined\. The readme says it once\./, "and the author's answer to each earlier finding");
+	assert.match(reviewRequests[2].text, /Report a finding the author declined again only if/);
 	activity = { ...activity, headSha: 'head-1', comments: [] };
 	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: false });
 	assert.equal(await requestReview(session.id, { automatic: true }), false);

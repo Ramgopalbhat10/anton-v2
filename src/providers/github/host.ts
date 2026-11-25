@@ -53,7 +53,7 @@ type PullRequest = {
 };
 type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
-type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null };
+type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null; in_reply_to_id?: number | null };
 
 /** Each reviewer's latest verdict counts: approved when one approves and none still asks for changes. */
 function approvedBy(reviews: Comment[]): boolean {
@@ -113,8 +113,12 @@ function commentOf(kind: string, comment: Comment): PullRequestComment {
 		path: comment.path ?? null,
 		line: comment.line ?? comment.original_line ?? null,
 		at: comment.submitted_at ?? comment.created_at ?? '',
+		...(comment.in_reply_to_id ? { replyTo: `${kind}-${comment.in_reply_to_id}` } : {}),
 	};
 }
+
+/** GitHub's GraphQL endpoint beside its REST one: api.github.com/graphql, or <host>/api/graphql on GitHub Enterprise. */
+export const graphqlUrl = (apiUrl: string) => `${apiUrl.replace(/\/+$/, '').replace(/\/v3$/, '')}/graphql`;
 
 function foldComments(body: string, comments: ReviewComment[]): string {
 	const list = comments.map((comment) => `- \`${comment.path}:${comment.line}\`: ${comment.body.replace(/\n+/g, ' ')}`);
@@ -142,9 +146,9 @@ function stateOf(pull: PullRequest): PullRequestState {
 export type GitHubOptions = { token: string; apiUrl: string };
 
 export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
-	const urlOf = (path: string) => (path.startsWith(apiUrl) ? path : `${apiUrl}${path}`);
+	const urlOf = (path: string) => (/^https?:\/\//.test(path) ? path : `${apiUrl}${path}`);
 
-	/** `path` is under the API, or a full URL GitHub returned for a next page. */
+	/** `path` is under the API, or a full URL: one GitHub returned for a next page, or its GraphQL endpoint. */
 	async function call(path: string, init: RequestInit & { accept?: string; etag?: string } = {}): Promise<Response> {
 		const { accept, etag, ...request } = init;
 		const response = await fetch(urlOf(path), {
@@ -475,6 +479,33 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				if (!(error instanceof GitHubError && error.status === 422 && comments.length)) throw error;
 				await post(path, { ...review, body: foldComments(body, comments) });
 			}
+		},
+		async answerComment(url, comment, body, resolve) {
+			const { repo, number } = pullOf(url);
+			const [kind, raw] = comment.split('-');
+			const commentId = Number(raw);
+			if (kind !== 'line' || !Number.isInteger(commentId)) {
+				// Only a line comment has a thread; anything else is answered on the pull request, quoting what it answers.
+				await post(`/repos/${repo}/issues/${number}/comments`, { body });
+				return;
+			}
+			await post(`/repos/${repo}/pulls/${number}/comments/${commentId}/replies`, { body });
+			if (!resolve) return;
+			// Resolving a thread is only in GraphQL: find the thread whose first comment this is.
+			const [owner, name] = repo.split('/');
+			const graphql = <T>(query: string, variables: Record<string, unknown>) =>
+				json<{ data?: T; errors?: Array<{ message: string }> }>(graphqlUrl(apiUrl), { method: 'POST', body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(TIMEOUT_MS) }).then((answer) => {
+					if (answer.errors?.length) throw new GitHubError(422, `GitHub GraphQL: ${answer.errors.map((error) => error.message).join('; ').slice(0, 300)}`);
+					return answer.data as T;
+				});
+			type Threads = { repository: { pullRequest: { reviewThreads: { nodes: Array<{ id: string; isResolved: boolean; comments: { nodes: Array<{ databaseId: number }> } }> } } } };
+			const found = await graphql<Threads>(
+				'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}',
+				{ owner, name, number: Number(number) },
+			);
+			const thread = found.repository.pullRequest.reviewThreads.nodes.find((node) => node.comments.nodes[0]?.databaseId === commentId);
+			if (!thread || thread.isResolved) return;
+			await graphql('mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}', { id: thread.id });
 		},
 	};
 }

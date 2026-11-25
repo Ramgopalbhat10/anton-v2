@@ -174,6 +174,8 @@ export type GitHost = {
 	blob(fullName: string, sha: string): Promise<Uint8Array>;
 	/** As Anton's account, never approving or blocking. Comments the host cannot place on the diff are folded into the summary. */
 	postReview(url: string, review: ReviewInput): Promise<void>;
+	/** Answers a comment (`PullRequestComment.id`) where it was made: in a line comment's thread, which `resolve` then marks resolved, else on the pull request. */
+	answerComment?(url: string, comment: string, body: string, resolve: boolean): Promise<void>;
 	accountName(): Promise<string | null>;
 	listRepos(): Promise<string[]>;
 	searchRepos(query: string, limit: number): Promise<RepoHit[]>;
@@ -189,7 +191,8 @@ export type Issue = { number: number; title: string; body: string; url: string }
 export type CheckResult = { name: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; summary: string; url: string };
 
 /** Only from people who can push to the repo and from apps installed on it. */
-export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string };
+/** `replyTo`: for a reply in a line comment's thread, the id of the comment that started it. */
+export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string; replyTo?: string | null };
 
 /** `line` is in the new version of the file. */
 export type ReviewComment = { path: string; line: number; body: string };

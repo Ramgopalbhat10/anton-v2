@@ -42,11 +42,14 @@ export type GateState = {
 	/** The change the last bug review before a push was asked for, and whether the reply in hand asked for one (`pre-push-review.ts`). */
 	bugsReviewed?: string;
 	bugsAsked?: boolean;
+	/** Review comments answered with answer_review_comment this reply, and whether the reply was sent back for the rest. */
+	answered?: string[];
+	answersAsked?: boolean;
 	/** The user was told a push failed; cleared with the error once one goes through. */
 	pushFailed?: boolean;
 };
 
-export type GateName = 'todo' | 'stall' | 'jobs' | 'check' | 'review' | 'completion' | 'bugs' | 'push';
+export type GateName = 'todo' | 'stall' | 'jobs' | 'check' | 'review' | 'completion' | 'bugs' | 'answers' | 'push';
 
 /** `changed` and `worked` are set when the reply next comes to an end. */
 export type SendBack = { gate: GateName; calls: number; said: number; changed?: boolean; worked?: boolean; points?: string; before?: string };

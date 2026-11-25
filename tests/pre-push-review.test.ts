@@ -116,3 +116,13 @@ test('a reply answering pull request comments is left to the pull request re-rev
 	assert.ok(await prePushReview('c', deps(CODE)), 'a reply the user asked for is still reviewed');
 	assert.match(REVIEW_SCOPE, /authorization check, guard or approval step too, whatever the severity/);
 });
+
+test('answers round-trip, and the comment ids are read from the follow-up message', async () => {
+	const { answerBody, answerOf, commentIdsIn } = await import('../src/core/review-follow-up.ts');
+	assert.deepEqual(answerOf(answerBody('declined', ' Out of scope: the user chose it. ')), { verdict: 'declined', note: 'Out of scope: the user chose it.' });
+	assert.deepEqual(answerOf(answerBody('question', 'Keep both?')), { verdict: 'question', note: 'Keep both?' });
+	assert.equal(answerOf('**Fixed:** looks like one but has no mark'), null);
+	const text = 'New comments on your pull request (u):\n1. [line-12] @a on x.ts: one\n2. [review-3] @a: two\n   3. [line-9] quoted, not listed';
+	assert.deepEqual(commentIdsIn(text), ['line-12', 'review-3']);
+	assert.deepEqual(commentIdsIn(undefined), []);
+});
