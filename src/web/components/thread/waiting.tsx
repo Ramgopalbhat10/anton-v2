@@ -65,8 +65,10 @@ export const Waiting = memo(function Waiting({ sessionId, queued, phase, tail }:
 	const running = (useSubagentRuns(sessionId).data?.runs ?? []).filter((run) => run.status === 'running');
 	const stop = useStopRun(sessionId);
 	// The Reviewer starts after the reply has ended, so no steps card or streaming text of the reply says what it does.
-	const reviewing = useQuery(taskQueries.now(sessionId)).data?.now?.by === 'reviewer';
-	if (!queued || !running.length) return tail === 'steps' && !reviewing ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
+	const now = useQuery(taskQueries.now(sessionId)).data?.now;
+	const reviewing = now?.by === 'reviewer';
+	// A stopping reply reads nothing more, so it no longer offers to stop its subagents.
+	if (!queued || !running.length || now?.what === 'stopping') return tail === 'steps' && !reviewing ? null : <NowLine sessionId={sessionId} phase={phase} quiet={tail === 'text'} />;
 	const names = [...new Set(running.map((run) => lookOf(run.agent).label.toLowerCase()))];
 	const who = running.length === 1 ? `the ${names[0]} agent` : `${running.length} agents`;
 	return (

@@ -107,6 +107,8 @@ test('one subagent is stopped on its own: its task call answers with what it had
 	const call = subagentStopInterceptor({ type: 'task', taskId: 'sub-s' }, {}, () => work);
 	assert.equal(await stopSubagent('task-s', 'sub-s'), true);
 	const answer = (await call) as { text: string };
+	const [stopping] = await subagentRuns('task-s');
+	assert.deepEqual([stopping.status, stopping.result], ['stopped', answer.text], 'shown stopped at once, before the runtime ends the run');
 	assert.match(answer.text, /^The user stopped this subagent before it finished\. Do not start it again unless they ask/);
 	assert.match(answer.text, /browser subagent, stopped: "Check the Library page"\. 1 steps over/);
 	assert.match(answer.text, /- bash sleep 12 \(running\)/);
@@ -128,12 +130,20 @@ test('stopping the whole reply ends its running subagents as stopped, not failed
 	const { noteRepliesStopping } = await import('../src/services/tasks/subagent-runs.ts');
 	const at = { instanceId: 'task-a', taskId: 'sub-a' };
 	recordSubagentEvent({ type: 'task_start', ...at, agent: 'tester', prompt: 'Run the tests' });
+	recordSubagentEvent({ type: 'tool_start', ...at, toolName: 'bash', toolCallId: 'a1', args: { command: 'npm test' } });
 	await settle();
+	const told: unknown[] = [];
+	const stop = onChange((change) => told.push(change));
 	noteRepliesStopping('task-a');
-	recordSubagentEvent({ type: 'task', ...at, isError: true, result: 'This operation was aborted' });
+	stop();
+	// Ended as the stop is pressed: the runtime's own end comes only once the run lets go of its step.
+	let [run] = await subagentRuns('task-a');
+	assert.deepEqual([run.status, run.result, run.steps[0].state], ['stopped', 'Stopped with the reply.', 'done']);
+	assert.deepEqual(told, [{ kind: 'task', id: 'task-a', what: 'subagents' }], 'open pages are told at once, not after the usual pause');
+	recordSubagentEvent({ type: 'task', ...at, isError: true, result: 'This operation was aborted', durationMs: 3000 });
 	await settle();
-	const [run] = await subagentRuns('task-a');
-	assert.deepEqual([run.status, run.result], ['stopped', 'Stopped with the reply.']);
+	[run] = await subagentRuns('task-a');
+	assert.deepEqual([run.status, run.result, run.durationMs], ['stopped', 'Stopped with the reply.', 3000]);
 });
 
 test("the agent reads its subagents' runs as a short report", async () => {

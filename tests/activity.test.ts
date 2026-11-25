@@ -93,3 +93,15 @@ test('work that follows a reply waits for it to settle, and runs at once for a t
 	recordAgentEvent({ type: 'submission_settled', instanceId: 'w', submissionId: 's3' });
 	assert.deepEqual(ran, ['idle-task', 'w'], 'it runs once');
 });
+
+test("a stop's answer waits for the reply to settle, and no longer than it is allowed", async () => {
+	const { untilIdle } = await import('../src/services/tasks/activity.ts');
+	assert.equal(await untilIdle('never-ran', 50), true);
+	recordAgentEvent({ type: 'submission_running', instanceId: 'u', submissionId: 's1' });
+	const settled = untilIdle('u', 1000);
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'u', submissionId: 's1' });
+	assert.equal(await settled, true);
+	recordAgentEvent({ type: 'submission_running', instanceId: 'u', submissionId: 's2' });
+	assert.equal(await untilIdle('u', 30), false, 'a reply still running past the wait');
+	recordAgentEvent({ type: 'submission_settled', instanceId: 'u', submissionId: 's2' });
+});

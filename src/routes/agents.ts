@@ -10,11 +10,10 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { getSpace } from '../db/spaces.ts';
 import { isIncognitoId } from '../core/incognito.ts';
 import { mobileApi } from './mobile.ts';
-import { noteSending, noteStopped, setAgentAbort } from '../services/tasks/activity.ts';
+import { noteSending, noteStopped, setAgentAbort, untilIdle } from '../services/tasks/activity.ts';
 import { MAX_UPLOAD_BYTES } from '../services/artifacts/files.ts';
 import { primeIncognitoModel, forgetModelChoice } from '../services/tasks/sessions.ts';
 import { isRestoring } from '../services/git/restore.ts';
-import { noteRepliesStopping } from '../services/tasks/subagent-runs.ts';
 import { primeAgent, primeIncognito, releaseIncognito } from '../services/tasks/agent-runner.ts';
 import { resetFollowUps } from '../services/git/follow-ups.ts';
 import { primeCoordinator } from '../services/projects/coordinator.ts';
@@ -45,11 +44,16 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 	}
 	if (c.error || c.res.status >= 400) turnedAway();
 });
-// Stop: its running subagents end as stopped, not failed, and the thread waits on the user.
+/** How long Stop's answer waits for the reply to settle, so the page that pressed it can trust a read made after it. */
+const STOP_SETTLE_MS = 10_000;
+
+// Stop: its running subagents end as stopped, not failed, and the thread waits on the user. The answer comes once the
+// reply has settled, so a page whose live stream fell behind reads the conversation again and leaves the running state.
 app.post('/api/agents/coder/:id/abort', async (c, next) => {
-	await noteStopped(c.req.param('id'));
-	noteRepliesStopping(c.req.param('id'));
+	const id = c.req.param('id');
+	await noteStopped(id);
 	await next();
+	if (c.res.ok) await untilIdle(id, STOP_SETTLE_MS);
 });
 const agents = createAgentRouter(Coder);
 app.route('/api/agents/coder', agents as never);
