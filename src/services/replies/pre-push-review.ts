@@ -6,6 +6,7 @@ import { generalSettings } from '../models/general.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { patchFiles } from './finish-review.ts';
 import { changeGate, gate, loadGate } from './gate-state.ts';
+import { reviewerRan, startReviewerRuns } from './reviewer-runs.ts';
 
 /*
  * Anton's pull request reviewer used to be the first to ask what a change breaks, after the push. Each finding then cost a
@@ -43,6 +44,7 @@ const defaults: Deps = {
 };
 
 export function startPrePushReview(id: string): void {
+	startReviewerRuns(id);
 	changeGate(id, (state) => {
 		state.bugsAsked = false;
 	});
@@ -52,7 +54,8 @@ export const bugReviewMessage = (from: string, pushed: boolean) =>
 	[
 		'Before Anton pushes your change, have it reviewed with fresh eyes for what it could break.',
 		`Start the reviewer subagent with a brief that says in two or three sentences what the change is for, and that it is \`git diff ${from.slice(0, 12)}\` in the repository${pushed ? ' (what changed since your last push)' : ''}.`,
-		'It reports problems with a severity. Fix each critical, high or medium one you confirm in the code, with a test that covers it, and commit; leave low ones out of this reply and name them in a line. Then end your reply: Anton pushes it then.',
+		'It reports problems with a severity. Fix each critical, high or medium one you confirm in the code, with a test that covers it, and commit; leave low ones out of this reply and name them in a line. ' +
+			'Do not build a new feature, data model or approval flow to answer a finding: name it in your reply as a question for the user. It reviews once a reply, so do not ask it again; end your reply: Anton pushes it then.',
 		'If you cannot start the subagent, read that diff yourself the same way: callers and state it touches, ordering and timing, error and failure paths, input limits, and data in the shape the real system produces.',
 	].join('\n');
 
@@ -67,7 +70,8 @@ export async function prePushReview(id: string, deps: Deps = defaults): Promise<
 	if (!change || !patch) return null;
 	const digest = createHash('sha256').update(patch).digest('hex');
 	// The fixes made for the review asked in this reply count as reviewed, so a later reply that changes nothing is not held.
-	if (bugsAsked) {
+	// A reply whose agent already had the reviewer read its change is not asked again.
+	if (bugsAsked || reviewerRan(id)) {
 		changeGate(id, (state) => {
 			state.bugsReviewed = digest;
 		});

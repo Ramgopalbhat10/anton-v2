@@ -65,7 +65,8 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 		}),
 		'For each one: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
 			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
-			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it.',
+			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it. ' +
+			'Do not build a new feature, data model or approval flow to answer a comment: say in your reply that it needs the user\'s decision.',
 		'Then call open_pull_request to update the pull request. If you disagree with one, say why in your reply.',
 	].join('\n');
 }

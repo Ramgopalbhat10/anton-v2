@@ -5,7 +5,8 @@ import { agentKeepsContext, COMPACTION_SUMMARY_EFFORT, compactionFor } from '../
 import { OUTPUTS, repoInstructionsPrompt } from './prompts.ts';
 import { useRepoSnapshot } from './tools/snapshot.ts';
 import { useRunScript } from './tools/run-script.ts';
-import { REVIEW_RUBRIC } from '../../services/git/code-review.ts';
+import { REVIEW_RUBRIC, REVIEW_SCOPE } from '../../services/git/code-review.ts';
+import { reviewerRan } from '../../services/replies/reviewer-runs.ts';
 
 /**
  * Prod, Nov 2026, 106 explorer runs: median 7 steps and 140k tokens, p90 11 steps and 270k; the runs past that read
@@ -54,6 +55,7 @@ function ChangeReviewer() {
 		'You are the reviewer specialist. You review a change before it is pushed, with fresh eyes: you have not seen how it was written.',
 		'Read the diff your brief names with git diff, then the surrounding code, callers and tests you need to judge it. You may run read-only commands and the tests; change no files, and do not commit or push.',
 		REVIEW_RUBRIC,
+		REVIEW_SCOPE,
 		'Report each problem most severe first, each as its severity (critical, high, medium or low), file and line, the problem, why it matters and how to fix it; then say in one line what you checked. With no problems, say so in one line. Keep it to about 400 words.',
 	].join(' ');
 }
@@ -142,8 +144,9 @@ export function useTaskSubagents(id: string) {
 	useSubagent(withSettingsModel(id, taskTester, 'tester'));
 	const reviewer = defineSubagent({
 		name: 'reviewer',
-		description: 'Reviews a change with fresh eyes before it is pushed, read-only, and answers with the problems it confirmed, each with a severity. It starts without this conversation: brief it with what the change is for and the git diff range to read.',
+		description: 'Reviews a change with fresh eyes before it is pushed, read-only, once a reply, and answers with the problems it confirmed, each with a severity. It starts without this conversation: brief it with what the change is for and the git diff range to read.',
 		agent: () => `${ChangeReviewer()}${repoInstructionsPrompt(repoInstructionsFor(id))}`,
 	});
-	useSubagent(withSettingsModel(id, reviewer, 'reviewer'));
+	// Once a reply: past that, what it finds goes to the user rather than into another round.
+	if (!reviewerRan(id)) useSubagent(withSettingsModel(id, reviewer, 'reviewer'));
 }

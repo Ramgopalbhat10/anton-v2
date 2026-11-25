@@ -24,8 +24,13 @@ export const REVIEW_RUBRIC = [
 	'Leave out style, naming and matters of taste unless REVIEW.md asks for them. Confirm each problem in the code before you report it, and drop anything you are not sure of.',
 ].join(' ');
 
+/** A review that asks for a new subsystem turns one change into many rounds; that is the user's call, not a fix. */
+export const REVIEW_SCOPE =
+	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user, with low severity unless the change as written can be exploited or loses data.';
+
 export const REVIEW_GUIDE = [
 	REVIEW_RUBRIC,
+	REVIEW_SCOPE,
 	'Finish by calling post_review once. Put each finding on the line it is about, a line of the new file that the change added or modified, and say how to fix it. With no findings, call it with an empty list.',
 	'When this conversation has an earlier review of this pull request, this one is a re-review: read the commits since the head you last reviewed and the code they touch, not the whole change again. ' +
 		'Report an earlier problem again only if it is still there, and a new problem in code your earlier review already read only if it is high or critical.',
