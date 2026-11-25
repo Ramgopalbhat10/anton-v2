@@ -161,7 +161,7 @@ export type ThreadInput = {
 
 const NO_REPO = new Set(['none', 'no repository', 'chat']);
 
-async function repoFor(space: Space, input: ThreadInput): Promise<string | undefined> {
+export async function repoFor(space: Space, input: ThreadInput): Promise<string | undefined> {
 	if (input.projectId === null) return undefined;
 	if (input.projectId) {
 		if (!space.repoIds.includes(input.projectId)) throw new InvalidInputError('That repository is not in this project');

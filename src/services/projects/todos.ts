@@ -11,7 +11,7 @@ import { projectAttachment, projectPictures } from '../artifacts/attachments.ts'
 import { findModel } from '../models/models.ts';
 import { coordinatorModel } from './coordinator.ts';
 import { listSpaceFiles } from './space-files.ts';
-import { nudgeThread, spaceRepos, startThread, type ThreadInput } from './spaces.ts';
+import { nudgeThread, repoFor, spaceRepos, startThread, type ThreadInput } from './spaces.ts';
 import { hostRunnerAvailable } from '../tasks/runners.ts';
 import { threadStarted } from './thread-reports.ts';
 import { type RepoPlan, todoThreadPlan } from './thread-repos.ts';
@@ -136,9 +136,25 @@ export async function linkTodoToThread(spaceId: string, todoId: string, sessionI
 	return (await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: todo.assignee ?? 'thread', completedAt: null }))!;
 }
 
-export type TodoHandoffs = { entries: { id: string; text: string }[]; latestIsHandoff: boolean };
+export type TodoHandoffs = { entries: { id: string; text: string; host?: string }[]; latestIsHandoff: boolean };
 
-export async function coordinatorTodo(spaceId: string, { entries, latestIsHandoff }: TodoHandoffs, ref?: string): Promise<{ todo: SpaceTodo; text?: string } | null> {
+// Security: a handoff's text can be typed or sent by a link, so only the board's own start may let the coordinator run a to-do on this server.
+const hostHandoffs = new Map<string, string>();
+
+/** The full id of a This server to-do the board just handed to the coordinator, once, for the delivery that carries it. */
+export function takeHostHandoff(shortId: string): string | undefined {
+	const id = hostHandoffs.get(shortId);
+	hostHandoffs.delete(shortId);
+	return id;
+}
+
+/** Threads of a This server to-do start or hear from the coordinator only for the board handoff of that to-do in the same reply. */
+export function assertHostHandoff(linked: { todo: SpaceTodo; host?: string } | null): void {
+	if (linked?.todo.runOn === 'host' && linked.host !== linked.todo.id)
+		throw new ConflictError('This to-do runs on this server, so only the user can start it: from the board, or by handing it to you from the board.');
+}
+
+export async function coordinatorTodo(spaceId: string, { entries, latestIsHandoff }: TodoHandoffs, ref?: string): Promise<{ todo: SpaceTodo; text?: string; host?: string } | null> {
 	const wanted = ref ? todoRef(ref) : null;
 	const fullId = wanted?.startsWith('todo_') ? wanted : null;
 	const infer = entries.length === 1 && latestIsHandoff;
@@ -149,7 +165,7 @@ export async function coordinatorTodo(spaceId: string, { entries, latestIsHandof
 	const id = handoff?.id ?? ref;
 	if (!id) return null;
 	const todo = handoff && fullId && !infer ? await existingTodo(spaceId, fullId) : await findTodo(spaceId, id);
-	return { todo, text: handoff?.text };
+	return { todo, text: handoff?.text, host: handoff?.host };
 }
 
 /** A thread given no repository goes to the to-do's first tagged one that is still in the project. */
@@ -157,6 +173,11 @@ export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 
 	const unnamed = input.projectId === undefined && !input.repo?.trim();
 	const space = unnamed && todo.repos.length ? await getSpace(todo.spaceId) : null;
 	const tagged = space ? todo.repos.find((id) => space.repoIds.includes(id)) : undefined;
+	if (todo.runOn === 'host' && todo.repos.length && !tagged) {
+		const project = await getSpace(todo.spaceId);
+		const chosen = project ? await repoFor(project, input) : undefined;
+		if (chosen && !todo.repos.includes(chosen)) throw new InvalidInputError("This to-do runs on this server, so its threads work only in the repositories tagged on it.");
+	}
 	const thread = await startThread(todo.spaceId, { ...input, ...(tagged ? { projectId: tagged } : {}), model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined, runOn: todo.runOn }, { wait: false });
 	return { thread, todo: await linkTodoToThread(todo.spaceId, todo.id, thread.id) };
 }
@@ -185,9 +206,11 @@ async function startTodoThreadIn(todo: SpaceTodo, entry: RepoPlan, files: Attach
 }
 
 /** For `set_repo`: a thread of the same to-do in each of these repositories, after the user picked them in another thread. */
-export async function startTodoThreadsIn(todoId: string, repos: Project[], from: string): Promise<Session[]> {
+export async function startTodoThreadsIn(todoId: string, repos: Project[], from: string, fromThread: string): Promise<Session[]> {
 	const todo = await getSpaceTodo(todoId);
 	if (!todo) throw new NotFoundError('To-do not found');
+	if (((await getSessionRecord(fromThread))?.runOn ?? 'sandbox') !== todo.runOn)
+		throw new ConflictError(`This to-do now runs ${todo.runOn === 'host' ? 'on this server' : 'in a sandbox'}, unlike this thread, so it cannot start its threads. Ask the user to start them from the board.`);
 	const files = await attachedFiles(todo.spaceId, todo);
 	const threads: Session[] = [];
 	for (const project of repos) {
@@ -219,7 +242,9 @@ export async function startTodo(spaceId: string, todoId: string, target: 'thread
 	const { images, note } = await projectPictures(spaceId, spaceId, message, await coordinatorModel(space));
 	await checkThreadModel(todo.threadModel);
 	await updateSpaceTodo(todo.id, { status: 'in_progress', assignee: 'coordinator' });
+	if (todo.runOn === 'host') hostHandoffs.set(shortTodoId(todo.id), todo.id);
 	const submissionId = await sendToAgent(spaceId, note ? `${message}\n\n${note}` : message, 'coordinator', images).catch(async (error: unknown) => {
+		hostHandoffs.delete(shortTodoId(todo.id));
 		await updateSpaceTodo(todo.id, { status: 'open', assignee: null });
 		throw error;
 	});

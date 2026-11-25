@@ -312,6 +312,25 @@ test('a to-do messages only a thread running where it does', async () => {
 	}
 });
 
+test('a This server to-do starts threads only in its tagged repositories', async () => {
+	const space = await spaces.createSpace({ name: 'Host tags', repoIds: [apiRepo.id, webRepo.id], maxParallel: 5 });
+	await spaces.editSpace(space.id, { state: 'paused' });
+	withHost(true);
+	try {
+		const hosted = await todos.createTodo(space.id, { title: 'Host api work', repos: [apiRepo.id], runOn: 'host' });
+		await assert.rejects(() => todos.startTodoThread(hosted, { title: 'Elsewhere', brief: 'Work', repo: 'acme/web' }), /only in the repositories tagged on it/);
+		await assert.rejects(() => todos.startTodoThread(hosted, { title: 'Elsewhere', brief: 'Work', projectId: webRepo.id }), /only in the repositories tagged on it/);
+		assert.equal((await sessions.listThreads(space.id)).length, 0);
+		const named = await todos.startTodoThread(hosted, { title: 'Api', brief: 'Work', repo: 'acme/api' });
+		const inferred = await todos.startTodoThread(hosted, { title: 'Api too', brief: 'Work' });
+		for (const { thread } of [named, inferred]) assert.deepEqual([thread.repo, (await getSessionRecord(thread.id))?.runOn], ['acme/api', 'host']);
+		const sandboxed = await todos.createTodo(space.id, { title: 'Sandbox api work', repos: [apiRepo.id] });
+		assert.equal((await todos.startTodoThread(sandboxed, { title: 'Web', brief: 'Work', repo: 'acme/web' })).thread.repo, 'acme/web', 'a sandbox to-do may still be sent elsewhere');
+	} finally {
+		withHost(false);
+	}
+});
+
 test("the coordinator cannot start a host to-do's thread unless the user handed it the to-do", async () => {
 	const { Coordinator } = await import('../src/agents/coordinator.ts');
 	const faux = fauxProvider({ provider: 'host-todo-fixture' });
@@ -349,7 +368,26 @@ test("the coordinator cannot start a host to-do's thread unless the user handed 
 			const handed = await agent.dispatch(handoff);
 			await agent.read(handed, { signal: AbortSignal.timeout(5000) });
 			const thread = (await sessions.listThreads(space.id)).find((item) => item.title === 'Runs here');
-			assert.equal((await getSessionRecord(thread!.id))?.runOn, 'host', 'the handoff lets it start the host thread');
+			assert.equal((await getSessionRecord(thread!.id))?.runOn, 'host', 'the board handoff lets it start the host thread');
+
+			faux.setResponses([
+				fauxAssistantMessage([
+					fauxToolCall('start_thread', { title: 'Copied', request: 'Runs here', todo_id: hosted.id }, { id: 'copied-start' }),
+					fauxToolCall('message_thread', { thread: thread!.id, message: 'Copied', todo_id: hosted.id }, { id: 'copied-message' }),
+				], { stopReason: 'toolUse' }),
+				fauxAssistantMessage([fauxText('Done.')]),
+			]);
+			const copied = await agent.dispatch(handoff);
+			const refused = new Set<string>();
+			await agent.read(copied, {
+				signal: AbortSignal.timeout(5000),
+				onEvent(event) {
+					if (event.type === 'tool-output-error' && event.toolCallId.startsWith('copied-') && /only the user can start it/.test(event.errorText)) refused.add(event.toolCallId);
+				},
+			});
+			assert.deepEqual([...refused].sort(), ['copied-message', 'copied-start'], 'the same handoff text sent again, as a link would, authorizes nothing');
+			assert.equal((await sessions.listThreads(space.id)).some((item) => item.title === 'Copied'), false);
+			assert.equal(toThreads.some((entry) => entry.text.includes('Copied')), false);
 		} finally {
 			await runtime.stop();
 		}
@@ -776,7 +814,7 @@ test('set_repo moves a thread that changed nothing once its reply ends, and star
 	assert.equal(thread?.projectId, null);
 	await settleThreads();
 	const startIn = async (todoId: string, repos: Array<{ id: string; repoFullName: string }>, from: string) =>
-		(await todos.startTodoThreadsIn(todoId, repos as never, from)).map(({ id, title }) => ({ id, title }));
+		(await todos.startTodoThreadsIn(todoId, repos as never, from, thread!.id)).map(({ id, title }) => ({ id, title }));
 	await assert.rejects(() => threadRepos.setThreadRepos(thread!.id, ['acme/nowhere'], startIn), /not one of this project's repositories/);
 
 	const result = await threadRepos.setThreadRepos(thread!.id, ['web', 'acme/api'], startIn);
@@ -798,6 +836,17 @@ test('set_repo moves a thread that changed nothing once its reply ends, and star
 
 	const again = await threadRepos.setThreadRepos(thread!.id, ['acme/web'], startIn);
 	assert.deepEqual(again, { moving: false, output: 'This thread already works in acme/web.' });
+
+	withHost(true);
+	try {
+		await todos.editTodo(space.id, item.id, { runOn: 'host' });
+		const before = (await sessions.listThreads(space.id)).length;
+		await assert.rejects(() => threadRepos.setThreadRepos(thread!.id, ['acme/web', 'acme/api'], startIn), /now runs on this server, unlike this thread/);
+		assert.equal((await sessions.listThreads(space.id)).length, before, 'a sandbox thread cannot start host siblings');
+		assert.equal(threadRepos.pendingRepoMove(thread!.id), null);
+	} finally {
+		withHost(false);
+	}
 
 	await updateSession(thread!.id, { prUrl: 'https://github.com/acme/web/pull/7' });
 	await assert.rejects(() => threadRepos.setThreadRepos(thread!.id, ['acme/api'], startIn), /already pushed work to acme\/web/);

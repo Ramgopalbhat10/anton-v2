@@ -8,7 +8,7 @@ import { fullResultTool } from '../services/context/tool-results.ts';
 import { coordinatorBrief, threadActivity, threadLine } from '../services/projects/coordinator.ts';
 import { rememberForSpace } from '../services/projects/memory.ts';
 import { findThread, nudgeThread, startThread, editSpace, spaceView } from '../services/projects/spaces.ts';
-import { coordinatorTodo, createTodo, messageTodoThread, startTodoThread, type TodoHandoffs } from '../services/projects/todos.ts';
+import { assertHostHandoff, coordinatorTodo, createTodo, messageTodoThread, startTodoThread, takeHostHandoff, type TodoHandoffs } from '../services/projects/todos.ts';
 import { editSession, stopSession } from '../services/tasks/sessions.ts';
 import { readSpaceFileForAgent } from '../services/projects/space-files.ts';
 import { filesForThread, projectAttachment } from '../services/artifacts/attachments.ts';
@@ -97,8 +97,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
 				const todo = linked?.todo ?? null;
-				if (todo?.runOn === 'host' && linked?.text === undefined)
-					throw new Error('This to-do runs on this server, so only the user can start it: from the board, or by handing it to you.');
+				assertHostHandoff(linked);
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
@@ -138,6 +137,7 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const target = await findThread(spaceId, data.thread);
 				const linked = await coordinatorTodo(spaceId, handoffs(), data.todo_id);
 				const todo = linked?.todo ?? null;
+				assertHostHandoff(linked);
 				const message = await withFiles(spaceId, data.message, todoThreadFiles(todo, data.files), linked?.text ?? answering);
 				if (todo) await messageTodoThread(todo, target.id, message);
 				else await nudgeThread(spaceId, target.id, message);
@@ -270,11 +270,12 @@ function useProjectState(id: string, delivery: ReturnType<typeof useDelivery>): 
 	useAgentStart(({ append }) => {
 		// Reset on the first delivery, not a join or a replay whose delivery hook was already committed.
 		const text = handoffId && delivery.kind === 'user' ? splitAttachments(delivery.body).text : '';
+		const host = handoffId ? takeHostHandoff(handoffId) : undefined;
 		setHandoffs((current) => {
 			const entries = startsResponse ? [] : current.entries;
 			// Flue can call the tools from this render before rendering again with the saved state.
 			activeHandoffs = {
-				entries: handoffId ? [...entries.filter(({ id }) => id !== handoffId), { id: handoffId, text }] : entries,
+				entries: handoffId ? [...entries.filter(({ id }) => id !== handoffId), { id: handoffId, text, ...(host ? { host } : {}) }] : entries,
 				latestIsHandoff: Boolean(handoffId),
 			};
 			return activeHandoffs;
