@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import type { RuntimeConversationOptions, RuntimeEvent, RuntimeTool, RuntimeToolOutput, SubscriptionModel } from '../src/core/ports.ts';
 import type { AcpTransport } from '../src/providers/acp/client.ts';
 import { devinAgent } from '../src/providers/acp/devin.ts';
-import { acpRuntime, type AcpAccount, type AcpProcess } from '../src/providers/acp/runtime.ts';
+import { acpRuntime, steerTiming, toolCatalog, type AcpAccount, type AcpProcess } from '../src/providers/acp/runtime.ts';
+import { cut } from '../src/providers/acp/mcp.ts';
 
 function queue<T>() {
 	const items: T[] = [];
@@ -830,7 +831,10 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
 	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
 	const prompt = parse(acp.sent).find((m) => m.method === 'session/prompt')!.params as { prompt: { text?: string }[] };
-	assert.match(prompt.prompt[0]?.text ?? '', /<instructions>\nBe brief\.\n\n.*cannot see the repository.*\n<\/instructions>/);
+	const opening = prompt.prompt[0]?.text ?? '';
+	assert.match(opening, /^<instructions>\nYou are working for Anton\./);
+	assert.match(opening, /cannot see the repository/);
+	assert.match(opening, /Anton's tools \(MCP server "anton"\):\n- mcp__anton__read\(path\?\): Read a file\n\nBe brief\.\n<\/instructions>$/);
 	assert.equal(prompt.prompt[1]?.text, 'hi');
 
 	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 900, method: 'fs/read_text_file', params: { sessionId: 's', path: '/work/src/a.ts' } }));
@@ -842,4 +846,61 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 	const json = seen.find((e): e is Extract<RuntimeEvent, { type: 'block_delta' }> => e.type === 'block_delta' && Boolean(e.json));
 	assert.equal(json?.json, '{"path":"src/a.ts","limit":2000}');
 	conv.close();
+});
+
+async function started(acp: ReturnType<typeof fakeChannel>, conv: { send(content: { type: 'text'; text: string }[]): void }) {
+	conv.send([{ type: 'text', text: 'add highlighting' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', { sessionId: 's', configOptions: [] });
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+}
+
+test('a message no tool result carries cancels the turn, and the same reply goes on with it', async (t) => {
+	const saved = { ...steerTiming };
+	Object.assign(steerTiming, { steerMs: 30, watchMs: 10 });
+	t.after(() => Object.assign(steerTiming, saved));
+	const { acp, conv, seen } = rig(async () => ({ content: [], isError: false }));
+	await started(acp, conv);
+	acp.incoming.push(chunk('s', 'agent_thought_chunk', 'thinking about Shiki'));
+	await until(() => seen.some((e) => e.type === 'block_delta'), 'thinking');
+	conv.send([{ type: 'text', text: "Doesn't pierre diffs handle the highlighting?" }]);
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/cancel'), 'session/cancel');
+	await answer(acp, 'session/prompt', { stopReason: 'cancelled' });
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/prompt').length === 2, 'the second prompt');
+	const second = parse(acp.sent).filter((m) => m.method === 'session/prompt')[1]!.params as { prompt: { text?: string }[] };
+	assert.match(second.prompt[0]?.text ?? '', /stopped your turn[\s\S]*<user_message>\nDoesn't pierre diffs handle the highlighting\?\n<\/user_message>/);
+	assert.equal(seen.filter((e) => e.type === 'message_stop' || e.type === 'turn_end').length, 0, 'the reply has not ended');
+	await answer(acp, 'session/prompt', { stopReason: 'end_turn' });
+	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
+	assert.equal(seen.filter((e) => e.type === 'turn_end').length, 1);
+	conv.close();
+});
+
+test('a message that comes as the turn ends goes on in the same reply, not a prompt nothing reads', async () => {
+	const { acp, conv, seen } = rig(async () => ({ content: [], isError: false }));
+	await started(acp, conv);
+	conv.send([{ type: 'text', text: 'also cover deletions' }]);
+	await answer(acp, 'session/prompt', { stopReason: 'end_turn' });
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/prompt').length === 2, 'the second prompt');
+	const second = parse(acp.sent).filter((m) => m.method === 'session/prompt')[1]!.params as { prompt: { text?: string }[] };
+	assert.match(second.prompt[0]?.text ?? '', /also cover deletions/);
+	assert.equal(seen.filter((e) => e.type === 'turn_end').length, 0);
+	await answer(acp, 'session/prompt', { stopReason: 'end_turn' });
+	await until(() => seen.some((e) => e.type === 'turn_end'), 'turn_end');
+	conv.close();
+});
+
+test('the tool list names each tool as the agent calls it, with its arguments and first sentence', () => {
+	const tools = [
+		{ name: 'check_preview', description: 'Check a port through Preview. Long details follow.', inputSchema: { type: 'object', properties: { port: { type: 'number' } }, required: ['port'] } },
+		{ name: 'check_job', description: 'A job status', inputSchema: { type: 'object', properties: { job: {}, wait: {} }, required: ['job'] } },
+	];
+	assert.equal(
+		toolCatalog(tools, devinAgent),
+		'Anton\'s tools (MCP server "anton"):\n- mcp__anton__check_preview(port): Check a port through Preview.\n- mcp__anton__check_job(job, wait?): A job status',
+	);
+	assert.equal(cut('First sentence here. Second sentence runs on.', 30), 'First sentence here.');
+	assert.equal(cut('No stop anywhere in this long text', 10), 'No stop a…');
+	assert.equal(cut('short', 20), 'short');
 });

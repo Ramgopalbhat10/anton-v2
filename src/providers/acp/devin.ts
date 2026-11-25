@@ -112,6 +112,10 @@ export const devinAgent: AcpAgent = {
 	// devin acp --model presets each new session's default, sparing the ~seconds-long set_config_option.
 	modelArgs: (model) => ['--model', model],
 	mcpServerName: 'anton',
+	mcpToolName: (tool) => `mcp__anton__${tool}`,
+	// Devin lists MCP tools only when it looks, and a listing of Anton's whole toolset came back cut, with the rest in a
+	// file in its own container that it could not open; the tool list in its instructions names every tool either way.
+	mcpDescriptionChars: 300,
 	modelConfigId: 'model',
 	modelMetaImages: 'cognition.ai/supportsImages',
 	// Devin's own turn stats, logged beside Anton's wall-clock timings: its ttft

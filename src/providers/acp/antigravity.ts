@@ -106,6 +106,7 @@ export function antigravityAgent(opts: { credentialFile: string; client?: OAuthC
 		linkPort: 47910,
 		command: ['agy', 'acp'],
 		mcpServerName: 'anton',
+		mcpToolName: (tool) => `mcp_anton_${tool}`,
 		modelConfigId: 'model',
 		// thought_level is agy's effort dial (low/medium/high/xhigh); Anton's 'off'/'minimal'/'max' clamp onto its ends.
 		effortConfigId: 'thought_level',
