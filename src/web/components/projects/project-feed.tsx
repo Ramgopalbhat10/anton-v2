@@ -484,22 +484,56 @@ function linkedFiles(parts: FlueConversationPart[], resolve: (href: string) => V
 	return items;
 }
 
-/**
- * Whether a reply only answered reports on threads deleted since (not moved): it then reads as history, faded until pointed at, rather than as news.
- * Its words stay: they were true when written, and the coordinator still remembers them.
- */
-function useAboutDeletedOnly(reports: Report[], threads: Session[], shown: Block[], live: boolean): boolean {
-	const gone = useMemo(() => (threadsLoaded(threads) ? reports.flatMap((report) => (byPrefix(threads, report.id) ? [] : [report.id])) : []), [reports, threads]);
-	const allGone = !live && reports.length > 0 && gone.length === reports.length;
-	const anyMoved = useCallback((data: { sessions: Session[] }) => gone.some((id) => byPrefix(data.sessions, id)), [gone]);
-	const moved = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, select: anyMoved, enabled: allGone }).data;
-	// A reply that also started a thread still in the project is news.
-	const startsLive = shown.some((block) => block.kind === 'dispatch' && block.parts.some((part) => {
-		const id = threadIdIn(part);
-		return !id || byPrefix(threads, id);
-	}));
-	return allGone && moved === false && !startsLive;
+const TARGETED = new Set(['message_thread', 'resolve_thread', 'stop_thread']);
+
+/** The threads a reply had to do with: those whose reports it answered, it started, or it messaged, resolved or stopped. Null when one it started has no id (still starting, or failed), so it counts as news. */
+function threadsOf(message: FlueConversationMessage, reports: Report[]): string[] | null {
+	const ids = reports.map((report) => report.id);
+	for (const part of message.parts) {
+		if (part.type !== 'dynamic-tool') continue;
+		if (part.toolName === 'start_thread') {
+			const id = threadIdIn(part);
+			if (!id) return null;
+			ids.push(id);
+		} else if (TARGETED.has(part.toolName)) {
+			const id = field(part.input, 'thread').replace(/^\[|\]$|^id:/g, '');
+			if (id) ids.push(id);
+		}
+	}
+	return ids;
 }
+
+/**
+ * The messages that were only about threads deleted since (not moved to another project): each reply whose threads are all gone, and the messages of yours it answered.
+ * They read as history, faded until pointed at, rather than as news. Their words stay: they were true when written, and the coordinator still has them.
+ */
+function aboutDeletedOnly(
+	messages: FlueConversationMessage[],
+	settlements: UseFlueAgentResult['settlements'],
+	carried: Map<string, Report[]>,
+	everyTask: Session[] | undefined,
+	live: FlueConversationMessage | undefined,
+): Set<string> {
+	const faded = new Set<string>();
+	if (!everyTask) return faded;
+	const answeredBy = new Map(settlements.map((settlement) => [settlement.submissionId, settlement.answeredBySubmissionId ?? settlement.submissionId]));
+	const fadedSubmissions = new Set<string>();
+	for (const message of messages) {
+		if (message.role !== 'assistant' || message.settlement || message === live) continue;
+		const ids = threadsOf(message, carried.get(message.id) ?? NO_REPORTS);
+		if (!ids?.length || ids.some((id) => byPrefix(everyTask, id))) continue;
+		faded.add(message.id);
+		if (message.submissionId) fadedSubmissions.add(message.submissionId);
+	}
+	for (const message of messages) {
+		if (message.role !== 'user' || !message.submissionId) continue;
+		if (fadedSubmissions.has(answeredBy.get(message.submissionId) ?? message.submissionId)) faded.add(message.id);
+	}
+	return faded;
+}
+
+const FADED = 'opacity-60 transition-opacity duration-(--t-fast) focus-within:opacity-100 hover:opacity-100';
+const FADED_TITLE = 'About a thread since deleted';
 
 const CoordinatorMessage = memo(function CoordinatorMessage({
 	message,
@@ -509,9 +543,12 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 	resolveFile,
 	reports = NO_REPORTS,
 	before,
+	stale = false,
 }: {
 	message: FlueConversationMessage;
 	live: boolean;
+	/** Only about threads deleted since: faded. */
+	stale?: boolean;
 	space: Space;
 	threads: Session[];
 	resolveFile: (href: string) => ViewerItem | null;
@@ -536,14 +573,13 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 		return [...named.values()];
 	}, [reports, threads, loaded]);
 	const { blocks: shown, lead } = useMemo(() => chipReports(blocks(message.parts.filter(shownPart), before), reported), [message.parts, before, reported]);
-	const stale = useAboutDeletedOnly(reports, threads, shown, live);
 	const firstText = shown.find((block) => block.kind === 'text')?.key;
 	if (parts.length === 0 && !live && !reports.length) return null;
 	return (
 		<OutputLinks.Provider value={outputLinks}>
 		<div
-			className={cn('flex flex-col gap-2.5', stale && 'opacity-60 transition-opacity duration-(--t-fast) focus-within:opacity-100 hover:opacity-100')}
-			title={stale ? 'About a thread since deleted' : undefined}
+			className={cn('flex flex-col gap-2.5', stale && FADED)}
+			title={stale ? FADED_TITLE : undefined}
 		>
 			{shown.some((block) => block.kind === 'text') ? null : <ReportLines reports={reports} threads={threads} />}
 			{shown.map((block) => {
@@ -576,7 +612,7 @@ const CoordinatorMessage = memo(function CoordinatorMessage({
 		</div>
 		</OutputLinks.Provider>
 	);
-}, (prev, next) => prev.message === next.message && prev.live === next.live && prev.space === next.space && prev.threads === next.threads && prev.resolveFile === next.resolveFile && prev.before === next.before && sameReports(prev.reports, next.reports));
+}, (prev, next) => prev.message === next.message && prev.live === next.live && prev.stale === next.stale && prev.space === next.space && prev.threads === next.threads && prev.resolveFile === next.resolveFile && prev.before === next.before && sameReports(prev.reports, next.reports));
 
 const NO_REPORTS: Report[] = [];
 const sameReports = (a: Report[] = NO_REPORTS, b: Report[] = NO_REPORTS) => a === b || (a.length === b.length && a.every((report, index) => report === b[index]));
@@ -906,6 +942,12 @@ export function ProjectFeed({
 	const newThread = useCallback(() => setStarting(true), [setStarting]);
 	const answered = useMemo(() => answeredReports(messages, agent.settlements), [messages, agent.settlements]);
 	const joined = useJoinedTodoHandoffs(space.id, messages, agent.settlements, liveAssistant);
+	// Every task, not only this project's: a thread moved to another project is not gone. Read only once the project's own list is in.
+	const everyTask = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, enabled: threadsLoaded(threads) }).data?.sessions;
+	const faded = useMemo(
+		() => aboutDeletedOnly(messages, agent.settlements, answered.carried, threadsLoaded(threads) ? everyTask : undefined, liveAssistant),
+		[messages, agent.settlements, answered.carried, threads, everyTask, liveAssistant],
+	);
 	const resolveFile = useThreadFileResolver(threads);
 	const { pending, onPending, rises } = useSends();
 	const sendingTodo = handoffs.findLast((entry) => entry.state === 'sending');
@@ -950,15 +992,18 @@ export function ProjectFeed({
 								</ActionRow>
 							);
 						}
-						if (message.role === 'user')
+						if (message.role === 'user') {
+							const entry = <UserEntry message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />;
+							if (faded.has(message.id)) return <div key={message.id} title={FADED_TITLE} className={cn('flex flex-col gap-5 empty:hidden', FADED)}>{entry}</div>;
 							return rises(message.id, false) ? (
 								<div key={message.id} className="in-sent flex flex-col gap-5">
-									<UserEntry message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />
+									{entry}
 								</div>
 							) : (
-								<UserEntry key={message.id} message={message} threads={threads} composer={space.id} answered={answered.folded.has(message.id)} />
+								<Fragment key={message.id}>{entry}</Fragment>
 							);
-						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} reports={answered.carried.get(message.id)} before={joined.byReply.get(message.id)} />;
+						}
+						return <CoordinatorMessage key={message.id} message={message} live={message === liveAssistant} space={space} threads={threads} resolveFile={resolveFile} reports={answered.carried.get(message.id)} before={joined.byReply.get(message.id)} stale={faded.has(message.id)} />;
 					})}
 					{pending ? <PendingMessage pending={pending} /> : null}
 					<div role="status" className={status || waiting.length ? 'flex flex-col gap-2' : 'sr-only'}>

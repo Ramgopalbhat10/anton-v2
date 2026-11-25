@@ -375,7 +375,7 @@ describe('threads', () => {
 		expect(within(waiting).getByRole('button', { name: 'Pick a name' })).toBeTruthy();
 	});
 
-	it('shows a deleted thread the coordinator names as deleted, fades a reply only about it, and keeps a moved thread’s chip', async () => {
+	it('shows a deleted thread the coordinator names as deleted, fades the messages only about it, and keeps a moved thread’s chip', async () => {
 		api.sessions.mockResolvedValue({ sessions: [...threads, thread({ id: 'moved-away', title: 'Moved work', spaceId: 'space_2' })] });
 		const report = (id: string, title: string) => ({ id: `r-${id}`, role: 'user', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text: `<thread-reports>\n<thread id="${id}" title="${title}" state="idle"/>\n</thread-reports>` }] });
 		const reply = (id: string, text: string) => ({ id: `a-${id}`, role: 'assistant', display: 'visible', submissionId: `s-${id}`, parts: [{ type: 'text', text }] });
@@ -395,8 +395,11 @@ describe('threads', () => {
 		expect(within(gone).getByText('Gone thread').className).toContain('line-through');
 		expect(gone.textContent).toContain('(deleted)');
 		await waitFor(() => expect(gone.closest('[title="About a thread since deleted"]')).toBeTruthy());
-		// The card the coordinator started it with stays, as a deleted row.
-		expect(screen.getByText('Deleted').closest('[title="This thread was deleted"]')?.textContent).toContain('Gone thread');
+		// The card the coordinator started it with stays, as a deleted row; that reply and your message it answered fade too, as they were only about it.
+		const row = screen.getByText('Deleted').closest('[title="This thread was deleted"]') as HTMLElement;
+		expect(row.textContent).toContain('Gone thread');
+		expect(row.closest('[title="About a thread since deleted"]')).toBeTruthy();
+		expect(screen.getByText('Split it up').closest('[title="About a thread since deleted"]')).toBeTruthy();
 		const moved = screen.getByText(/is done/).closest('p') as HTMLElement;
 		expect(await within(moved).findByRole('button', { name: 'Moved work' })).toBeTruthy();
 		expect(moved.closest('[title="About a thread since deleted"]')).toBeNull();
