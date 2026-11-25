@@ -2,21 +2,20 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import type { Session } from '@/lib/api/sessions';
 
-/** A delete you asked for in this page, as its notice shows it. */
-export type Deletion = { id: string; title: string; thread: boolean; state: 'deleting' | 'deleted' | 'failed'; error: string | null };
+/** A delete that failed: the task is back in its lists, and this says why. */
+export type FailedDeletion = { id: string; title: string; error: string };
 
 /** Hidden from every list at once; `true` once the server answered, so the id is let go when the server stops listing it. */
 const hidden = new Map<string, boolean>();
-const notices = new Map<string, Deletion>();
-let shown: Deletion[] = [];
+const failures = new Map<string, FailedDeletion>();
+let shown: FailedDeletion[] = [];
 const listeners = new Set<() => void>();
 
-const DONE_SHOWN_MS = 4_000;
 /** The server answers a slow delete before it is finished; one that then failed shows again after this, rather than stay hidden for good. */
 const HIDDEN_AFTER_ANSWER_MS = 5 * 60_000;
 
 function changed() {
-	shown = [...notices.values()];
+	shown = [...failures.values()];
 	for (const listener of listeners) listener();
 }
 
@@ -25,12 +24,12 @@ function subscribe(listener: () => void) {
 	return () => void listeners.delete(listener);
 }
 
-export function useDeletions(): Deletion[] {
+export function useFailedDeletions(): FailedDeletion[] {
 	return useSyncExternalStore(subscribe, () => shown);
 }
 
-export function dismissDeletion(id: string) {
-	if (notices.delete(id)) changed();
+export function dismissFailure(id: string) {
+	if (failures.delete(id)) changed();
 }
 
 /** A server's list of tasks without those this page is deleting, which it lists until its delete finishes. */
@@ -44,16 +43,14 @@ export function withoutDeleting(sessions: Session[]): Session[] {
 type List = { sessions: Session[] };
 
 /**
- * Deletes a task or thread with no wait: it leaves every list now, and a notice follows the delete, which stops its sandbox and keeps its files first.
+ * Deletes a task or thread with no wait: it leaves every list now, as a rename or a pin shows at once, while the server stops its sandbox and keeps its files.
  * A delete that fails puts it back where it was and says why.
  */
 export function deleteInBackground(queryClient: QueryClient, session: Session, remove: () => Promise<void>): void {
 	const { id } = session;
 	if (hidden.has(id)) return;
-	const thread = Boolean(session.spaceId);
 	hidden.set(id, false);
-	notices.set(id, { id, title: session.title, thread, state: 'deleting', error: null });
-	changed();
+	if (failures.delete(id)) changed();
 	const before = queryClient.getQueryData<List>(['sessions'])?.sessions ?? [];
 	const at = before.findIndex((item) => item.id === id);
 	const removed = at >= 0 ? before[at] : session;
@@ -62,11 +59,6 @@ export function deleteInBackground(queryClient: QueryClient, session: Session, r
 		() => {
 			hidden.set(id, true);
 			setTimeout(() => hidden.delete(id), HIDDEN_AFTER_ANSWER_MS);
-			notices.set(id, { id, title: session.title, thread, state: 'deleted', error: null });
-			changed();
-			setTimeout(() => {
-				if (notices.get(id)?.state === 'deleted') dismissDeletion(id);
-			}, DONE_SHOWN_MS);
 			queryClient.removeQueries({ queryKey: ['session', id], exact: true });
 			void queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			// Its files show in the project's Library, in a folder named for it.
@@ -77,7 +69,7 @@ export function deleteInBackground(queryClient: QueryClient, session: Session, r
 		},
 		(error: unknown) => {
 			hidden.delete(id);
-			notices.set(id, { id, title: session.title, thread, state: 'failed', error: error instanceof Error ? error.message : String(error) });
+			failures.set(id, { id, title: session.title, error: error instanceof Error ? error.message : String(error) });
 			changed();
 			queryClient.setQueryData<List>(['sessions'], (data) => {
 				if (!data || data.sessions.some((item) => item.id === id)) return data;

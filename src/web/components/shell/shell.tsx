@@ -30,7 +30,7 @@ import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/thread/starting-task';
 import { ProjectSettingsModal } from '@/components/projects/project-settings-modal';
 import { SettingsModal } from '@/components/settings/modal';
-import { DeletionNotices } from '@/components/shell/deletion-notices';
+import { DeletionFailures } from '@/components/shell/deletion-failures';
 import { cn } from '@/lib/utils';
 import { taskQueries } from '@/lib/task-queries';
 import { useViewer } from '@/lib/viewer';
@@ -178,7 +178,7 @@ export function AppShell() {
 					<ProjectSettingsModal />
 				</ErrorBoundary>
 				<TaskNotifications />
-				<DeletionNotices />
+				<DeletionFailures className={FLOATING} />
 			</div>
 		</NavContext.Provider>
 	);
