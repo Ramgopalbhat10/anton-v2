@@ -126,6 +126,10 @@ const fakeHost: GitHost = {
 	},
 	postReview: async (url, review) => void reviews.push({ url, ...review }),
 	answerComment: async (url, comment, body, resolve) => void answers.push({ url, comment, body, resolve }),
+	reviewThreads: async () => [
+		{ id: 'line-2', path: 'README.md', line: 1, resolved: false, outdated: true, comments: [{ author: 'ada', body: '**Bug · medium**\n\nSays reviewed twice.', at: '1' }, { author: 'ada', body: '**Not changed:** It does not.\n\n<!-- anton-answer -->', at: '2' }] },
+		{ id: 'line-3', path: 'src/a.ts', line: 4, resolved: true, outdated: false, comments: [{ author: 'ada', body: 'Old one.', at: '1' }] },
+	],
 	accountName: async () => 'Ada Lovelace',
 	listRepos: async () => ['acme/demo', 'acme/removed', 'acme/other'],
 	searchRepos: async () => [],
@@ -1316,7 +1320,14 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	assert.equal(answers[0].resolve, true);
 	assert.match(answers[0].body, /^\*\*Not changed:\*\* The readme says it once\./);
 	await assert.rejects(() => answerReviewComment(session.id, { comment: 'nope', verdict: 'fixed', note: 'x' }), /Unknown comment/);
-	assert.match(await answerReviewComment(session.id, { comment: 'line-2', verdict: 'question', note: 'Keep both headings?' }), /stays open/);
+	const { readReviewThreads } = await import('../src/services/git/review-answers.ts');
+	const open = await readReviewThreads(session.id);
+	assert.match(open, /^\[line-2\] README\.md:1 \(open, outdated: its lines have changed since\)\n  @ada: \*\*Bug · medium\*\*/);
+	assert.match(open, /@ada: \*\*Not changed:\*\* It does not\.$/m, 'answers read as text, without their mark');
+	assert.doesNotMatch(open, /Old one/);
+	assert.match(open, /1 resolved thread not shown; pass all to see them\./);
+	assert.match(await readReviewThreads(session.id, { all: true }), /\[line-3\] src\/a\.ts:4 \(resolved\)\n  @ada: Old one\./);
+	assert.match(await answerReviewComment(session.id, { comment: 'line-2', verdict: 'question', note: 'Keep both headings?' }), /stays open[\s\S]*ask tool, with two to four options/);
 	assert.equal(answers[1].resolve, false, 'a question for the user leaves its thread open');
 	answers.length = 0;
 	const answer = { id: 'line-9', author: 'ada', body: '**Not changed:** The readme says it once.\n\n<!-- anton-answer -->', path: 'README.md', line: 1, at: '2', replyTo: 'line-2' };

@@ -34,7 +34,7 @@ test('a reply about to push a code change is asked once for a fresh-eyes review 
 	assert.match(asked ?? '', /`git diff base01234567`/, 'the brief names the range to read');
 	assert.match(asked ?? '', /critical, high or medium/);
 	assert.match(asked ?? '', /Do not build a new feature, data model, approval flow, or authorization check or guard to answer a finding, whatever its severity/, 'a design question goes to the user, not into the change');
-	assert.match(asked ?? '', /do not ask it again/);
+	assert.match(asked ?? '', /do not start it again/);
 	assert.doesNotMatch(asked ?? '', /since your last push/);
 	assert.match(asked ?? '', /If you cannot start the subagent/, 'a runtime without subagents reviews it itself');
 	assert.equal(await prePushReview('a', deps(`${CODE}+fixed\n`)), null, 'once a reply, so its fixes are not reviewed again before the push');

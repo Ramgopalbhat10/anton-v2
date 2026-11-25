@@ -214,6 +214,32 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 	/** A branch name as a ref path: each segment encoded, slashes kept. */
 	const refPath = (branch: string) => `heads/${branch.split('/').map(encodeURIComponent).join('/')}`;
 
+	/** Review threads and resolving them are only in GitHub's GraphQL API. */
+	async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+		const answer = await json<{ data?: T; errors?: Array<{ message: string }> }>(graphqlUrl(apiUrl), { method: 'POST', body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(TIMEOUT_MS) });
+		if (answer.errors?.length) throw new GitHubError(422, `GitHub GraphQL: ${answer.errors.map((error) => error.message).join('; ').slice(0, 300)}`);
+		return answer.data as T;
+	}
+
+	type ThreadNode = {
+		id: string;
+		isResolved: boolean;
+		isOutdated: boolean;
+		path: string;
+		line: number | null;
+		originalLine: number | null;
+		comments: { nodes: Array<{ databaseId: number; author: { login: string } | null; body: string | null; createdAt: string }> };
+	};
+
+	async function threadsOf(repo: string, number: string): Promise<ThreadNode[]> {
+		const [owner, name] = repo.split('/');
+		const found = await graphql<{ repository: { pullRequest: { reviewThreads: { nodes: ThreadNode[] } } } }>(
+			'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved isOutdated path line originalLine comments(first:30){nodes{databaseId author{login} body createdAt}}}}}}}',
+			{ owner, name, number: Number(number) },
+		);
+		return found.repository.pullRequest.reviewThreads.nodes;
+	}
+
 	async function branchHead(repo: string, branch: string): Promise<string | null> {
 		const ref = await json<{ object: { sha: string } }>(`/repos/${repo}/git/ref/${refPath(branch)}`).catch(notFound);
 		return ref?.object.sha ?? null;
@@ -492,20 +518,20 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 			await post(`/repos/${repo}/pulls/${number}/comments/${commentId}/replies`, { body });
 			if (!resolve) return;
 			// Resolving a thread is only in GraphQL: find the thread whose first comment this is.
-			const [owner, name] = repo.split('/');
-			const graphql = <T>(query: string, variables: Record<string, unknown>) =>
-				json<{ data?: T; errors?: Array<{ message: string }> }>(graphqlUrl(apiUrl), { method: 'POST', body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(TIMEOUT_MS) }).then((answer) => {
-					if (answer.errors?.length) throw new GitHubError(422, `GitHub GraphQL: ${answer.errors.map((error) => error.message).join('; ').slice(0, 300)}`);
-					return answer.data as T;
-				});
-			type Threads = { repository: { pullRequest: { reviewThreads: { nodes: Array<{ id: string; isResolved: boolean; comments: { nodes: Array<{ databaseId: number }> } }> } } } };
-			const found = await graphql<Threads>(
-				'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}',
-				{ owner, name, number: Number(number) },
-			);
-			const thread = found.repository.pullRequest.reviewThreads.nodes.find((node) => node.comments.nodes[0]?.databaseId === commentId);
+			const thread = (await threadsOf(repo, number)).find((node) => node.comments.nodes[0]?.databaseId === commentId);
 			if (!thread || thread.isResolved) return;
 			await graphql('mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}', { id: thread.id });
+		},
+		async reviewThreads(url) {
+			const { repo, number } = pullOf(url);
+			return (await threadsOf(repo, number)).map((node) => ({
+				id: `line-${node.comments.nodes[0]?.databaseId ?? 0}`,
+				path: node.path,
+				line: node.line ?? node.originalLine ?? null,
+				resolved: node.isResolved,
+				outdated: node.isOutdated,
+				comments: node.comments.nodes.map((comment) => ({ author: comment.author?.login ?? 'someone', body: (comment.body ?? '').trim(), at: comment.createdAt })),
+			}));
 		},
 	};
 }

@@ -1,5 +1,5 @@
 import type { IconComponent } from '@/lib/icons';
-import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from '@/lib/icons';
+import { AppWindow, Bot, Braces, Camera, FileMinus, FilePlus, FileText, FolderSearch, GitPullRequest, Globe, Hourglass, ImagePlus, LayoutPanelTop, MessageCircleQuestion, MessageSquare, Monitor, Pencil, Plug, Search, SquareTerminal, Wrench, Zap } from '@/lib/icons';
 import type { ReactNode } from 'react';
 import { GMAIL, MCP } from '@/components/marks/brand-marks';
 import { type PatchedFile, patchedFiles } from '../../../core/apply-patch';
@@ -305,6 +305,13 @@ export function describeTool(part: ToolCall): { icon: IconComponent; body: React
 				),
 			};
 		}
+		case 'answer_review_comment': {
+			const verdict = field(input, 'verdict');
+			const said = verdict === 'fixed' ? 'Answered a review comment: fixed' : verdict === 'declined' ? 'Answered a review comment: not changed' : 'Asked you about a review comment';
+			return { icon: MessageSquare, body: <>{said}</> };
+		}
+		case 'read_review_comments':
+			return { icon: MessageSquare, body: <>Read the review threads</> };
 		case 'screenshot':
 			return {
 				icon: Camera,
@@ -431,6 +438,8 @@ export function toolTone(toolName: string, failed: boolean): string {
 		case 'computer':
 			return 'var(--data-3)';
 		case 'open_pull_request':
+		case 'answer_review_comment':
+		case 'read_review_comments':
 			return 'var(--data-4)';
 		case 'task':
 			return 'var(--data-5)';

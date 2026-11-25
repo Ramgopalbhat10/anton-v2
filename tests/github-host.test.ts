@@ -300,3 +300,45 @@ test('an answer to a line comment goes into its thread and resolves it; any othe
 	await host.answerComment!('https://github.com/acme/demo/pull/7', 'review-5', 'Fixed.', true);
 	assert.deepEqual(calls.map((call) => call.url), [`${API}/repos/acme/demo/issues/7/comments`]);
 });
+
+test('review threads read from GraphQL carry the id answers take, their replies and whether they are resolved', async () => {
+	globalThis.fetch = (async () =>
+		new Response(
+			JSON.stringify({
+				data: {
+					repository: {
+						pullRequest: {
+							reviewThreads: {
+								nodes: [
+									{
+										id: 'T1',
+										isResolved: false,
+										isOutdated: true,
+										path: 'src/a.ts',
+										line: null,
+										originalLine: 7,
+										comments: { nodes: [{ databaseId: 42, author: { login: 'ada' }, body: ' Off by one. ', createdAt: '2026-11-25T10:00:00Z' }, { databaseId: 43, author: null, body: 'Fixed.', createdAt: '2026-11-25T11:00:00Z' }] },
+									},
+								],
+							},
+						},
+					},
+				},
+			}),
+			{ status: 200 },
+		)) as typeof fetch;
+	const threads = await githubHost({ token: 't', apiUrl: API }).reviewThreads!('https://github.com/acme/demo/pull/7');
+	assert.deepEqual(threads, [
+		{
+			id: 'line-42',
+			path: 'src/a.ts',
+			line: 7,
+			resolved: false,
+			outdated: true,
+			comments: [
+				{ author: 'ada', body: 'Off by one.', at: '2026-11-25T10:00:00Z' },
+				{ author: 'someone', body: 'Fixed.', at: '2026-11-25T11:00:00Z' },
+			],
+		},
+	]);
+});

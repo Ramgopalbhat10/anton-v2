@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { queuePullRequest } from '../../../services/replies/push-gate.ts';
 import { noteWorkspace } from '../../../services/tasks/agent-runner.ts';
 import { mergeBaseBranch } from '../../../services/git/base-merge.ts';
-import { answerReviewComment } from '../../../services/git/review-answers.ts';
+import { answerReviewComment, readReviewThreads } from '../../../services/git/review-answers.ts';
 import { VERDICTS } from '../../../core/review-follow-up.ts';
 
 export function useOpenPullRequest(id: string) {
@@ -47,7 +47,7 @@ export function useAnswerReviewComment(id: string) {
 			name: 'answer_review_comment',
 			description:
 				'Answer one review comment on your pull request where it was made, by the id in brackets from the list of comments. ' +
-				'fixed: say what you changed. declined: say why the comment does not hold or is out of scope; a reviewer can be wrong. question: say what the user must decide. ' +
+				'fixed: say what you changed. declined: say why the comment does not hold or is out of scope; a reviewer can be wrong. question: say what the user must decide, then ask them with the ask tool as the last step of your reply. ' +
 				'Fixed and declined threads are marked resolved; the next review reads your answers.',
 			input: v.object({
 				comment: v.pipe(v.string(), v.description('The comment id in brackets, such as line-123')),
@@ -56,6 +56,23 @@ export function useAnswerReviewComment(id: string) {
 			}),
 			async run({ data }) {
 				return { output: await answerReviewComment(id, data) };
+			},
+		}),
+	);
+}
+
+export function useReadReviewComments(id: string) {
+	useTool(
+		defineTool({
+			name: 'read_review_comments',
+			description:
+				"Read your pull request's review threads with their replies and whether each is resolved or outdated, by the id answer_review_comment takes. " +
+				'Open threads by default. Use it to see what earlier rounds raised and how they were answered before you fix or answer anything.',
+			input: v.object({
+				all: v.optional(v.pipe(v.boolean(), v.description('Include resolved threads too'))),
+			}),
+			async run({ data }) {
+				return { output: await readReviewThreads(id, data) };
 			},
 		}),
 	);
