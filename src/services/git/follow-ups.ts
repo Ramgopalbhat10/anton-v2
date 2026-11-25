@@ -63,7 +63,8 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
 			return `${index + 1}. @${comment.author}${where}: ${comment.body.replace(/\n/g, '\n   ')}`;
 		}),
-		'For each one: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
+		'For each one, first check it against the code and what the user asked for: a reviewer can be wrong, and one that is wrong, or rests on a risk the code already accepts elsewhere, gets a one-line reason in your reply instead of a fix. ' +
+			'For the rest: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
 			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
 			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it. ' +
 			'Do not build a new feature, data model or approval flow to answer a comment: say in your reply that it needs the user\'s decision.',

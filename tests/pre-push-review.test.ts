@@ -79,3 +79,19 @@ test('reviews treat a fix that needs new design as a question for the user', asy
 	assert.ok(REVIEW_GUIDE.includes(REVIEW_SCOPE), 'the pull request reviewer keeps to it too');
 	assert.match(REVIEW_SCOPE, /design question for the user/);
 });
+
+test("the reviewer judges the change against the user's own request, and by the trust the code already gives", async () => {
+	const { reviewerRequest } = await import('../src/agents/coder/subagents.ts');
+	const { REVIEW_GUIDE, REVIEW_TRUST } = await import('../src/services/git/code-review.ts');
+	const { bugReviewMessage } = await import('../src/services/replies/pre-push-review.ts');
+	assert.equal(reviewerRequest(undefined), '');
+	assert.equal(reviewerRequest('  '), '');
+	const brief = reviewerRequest('Add a sandbox option to project to-dos.');
+	assert.match(brief, /<request>\nAdd a sandbox option to project to-dos\.\n<\/request>/);
+	assert.match(brief, /adds requirements the request does not make/);
+	const long = reviewerRequest('x'.repeat(5_000));
+	assert.ok(long.length < 3_500 && long.includes('…'), 'a long request is clipped');
+	assert.ok(REVIEW_GUIDE.includes(REVIEW_TRUST), 'the pull request reviewer has the same rule');
+	assert.match(REVIEW_TRUST, /already allows adds no new risk/);
+	assert.match(bugReviewMessage('base0123456789abcdef', false), /a reviewer can be wrong/);
+});

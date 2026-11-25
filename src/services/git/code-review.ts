@@ -24,12 +24,23 @@ export const REVIEW_RUBRIC = [
 	'Leave out style, naming and matters of taste unless REVIEW.md asks for them. Confirm each problem in the code before you report it, and drop anything you are not sure of.',
 ].join(' ');
 
+/**
+ * Prod, Nov 2026: a to-do's "run on this server" option was rated High because the coordinator could pick it, though any
+ * thread can already be started on the server with no approval; the agent built an approval flow, and two more reviews
+ * found holes in it. Judging a change by the trust the code already gives the same thing stops that at the first round.
+ */
+export const REVIEW_TRUST =
+	'Judge risk by the trust the code base already gives: before reporting that someone or something could reach a setting, action or data, see how the existing code treats the same thing elsewhere. ' +
+	'A change that follows what the code already allows adds no new risk; report that existing pattern at most once, as low. ' +
+	"The project's own users and the choices they make in its interface or settings are trusted (its README or docs say who uses it), so a threat that needs their access or overrides their own choice is not a finding.";
+
 /** A review that asks for a new subsystem turns one change into many rounds; that is the user's call, not a fix. */
 export const REVIEW_SCOPE =
 	'Judge the change against what it set out to do. When fixing a problem would take a new feature, data model, permission or approval flow, or a different design rather than a change to the code under review, report it once as a design question for the user, with low severity unless the change as written can be exploited or loses data.';
 
 export const REVIEW_GUIDE = [
 	REVIEW_RUBRIC,
+	REVIEW_TRUST,
 	REVIEW_SCOPE,
 	'Finish by calling post_review once. Put each finding on the line it is about, a line of the new file that the change added or modified, and say how to fix it. With no findings, call it with an empty list.',
 	'When this conversation has an earlier review of this pull request, this one is a re-review: read the commits since the head you last reviewed and the code they touch, not the whole change again. ' +
