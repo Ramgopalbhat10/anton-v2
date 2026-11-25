@@ -127,7 +127,7 @@ function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenti
 	const cacheText = useMemo(() => diffText(file), [file]);
 	const cacheHash = useMemo(() => hashText(cacheText), [cacheText]);
 	const colored = useQuery({
-		queryKey: ['highlight-diff', file.path, file.lines.length, cacheHash],
+		queryKey: ['highlight-diff', file.path, cacheText.length, cacheHash],
 		queryFn: () => highlightDiff(file.lines, file.path),
 		enabled: file.lines.length > 0,
 		staleTime: Number.POSITIVE_INFINITY,
