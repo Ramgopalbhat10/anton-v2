@@ -1,16 +1,18 @@
-import type { Project, Session } from '../../core/types.ts';
+import type { Project, RunOn, Session } from '../../core/types.ts';
 import { threadBrief } from '../../core/briefs.ts';
 import { type AttachedFile, withAttachments } from '../../core/attachments.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { MAX_TODO_ATTACHMENTS, MAX_TODO_DESCRIPTION, MAX_TODO_TITLE, shortTodoId, todoBrief, todoRef, todoStartMessage, type SpaceTodo, type SpaceTodoStatus, type TodoAttachment } from '../../core/space-todos.ts';
 import { getSpace, touchSpace } from '../../db/spaces.ts';
 import { deleteSpaceTodoRecord, getSpaceTodo, insertSpaceTodo, linkTodoThreadRecord, listSpaceTodos, updateSpaceTodo } from '../../db/space-todos.ts';
+import { getSessionRecord } from '../../db/sessions.ts';
 import { sendToAgent } from '../tasks/agent-runner.ts';
 import { projectAttachment, projectPictures } from '../artifacts/attachments.ts';
 import { findModel } from '../models/models.ts';
 import { coordinatorModel } from './coordinator.ts';
 import { listSpaceFiles } from './space-files.ts';
 import { nudgeThread, spaceRepos, startThread, type ThreadInput } from './spaces.ts';
+import { hostRunnerAvailable } from '../tasks/runners.ts';
 import { threadStarted } from './thread-reports.ts';
 import { type RepoPlan, todoThreadPlan } from './thread-repos.ts';
 
@@ -69,7 +71,7 @@ export async function findTodo(spaceId: string, ref: string): Promise<SpaceTodo>
 	return found;
 }
 
-type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[] };
+type TodoFields = { title: string; description?: string; attachments?: TodoAttachment[]; threadModel?: SpaceTodo['threadModel']; repos?: string[]; runOn?: RunOn };
 
 /** Each once, in the order picked, and only the project's own. */
 async function projectRepos(spaceId: string, repos: string[] | undefined): Promise<string[] | undefined> {
@@ -79,6 +81,10 @@ async function projectRepos(spaceId: string, repos: string[] | undefined): Promi
 	const outside = unique.find((id) => !space.repoIds.includes(id));
 	if (outside) throw new InvalidInputError('That repository is not in this project');
 	return unique;
+}
+
+function checkRunOn(runOn: RunOn | undefined): void {
+	if (runOn === 'host' && !hostRunnerAvailable()) throw new InvalidInputError('Every task already runs on this server.');
 }
 
 async function checkThreadModel(choice: SpaceTodo['threadModel'] | undefined): Promise<void> {
@@ -94,7 +100,8 @@ export async function createTodo(spaceId: string, input: TodoFields & { createdB
 	const attachments = await libraryFiles(spaceId, input.attachments ?? []);
 	await checkThreadModel(input.threadModel);
 	const repos = await projectRepos(spaceId, input.repos);
-	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, threadModel: input.threadModel, repos, createdBy: input.createdBy ?? 'user' });
+	checkRunOn(input.runOn);
+	const todo = await insertSpaceTodo({ spaceId, title: cleanTitle(input.title), description, attachments, threadModel: input.threadModel, repos, runOn: input.runOn, createdBy: input.createdBy ?? 'user' });
 	await touchSpace(spaceId);
 	return todo;
 }
@@ -105,12 +112,14 @@ export async function editTodo(spaceId: string, todoId: string, change: Partial<
 	const attachments = change.attachments === undefined ? undefined : await libraryFiles(spaceId, change.attachments);
 	await checkThreadModel(change.threadModel);
 	const repos = await projectRepos(spaceId, change.repos);
+	checkRunOn(change.runOn);
 	return (await updateSpaceTodo(todoId, {
 		...(change.title !== undefined ? { title: cleanTitle(change.title) } : {}),
 		...(change.description !== undefined ? { description: change.description.trim() } : {}),
 		...(attachments !== undefined ? { attachments } : {}),
 		...(change.threadModel !== undefined ? { threadModel: change.threadModel } : {}),
 		...(repos !== undefined ? { repos } : {}),
+		...(change.runOn !== undefined ? { runOn: change.runOn } : {}),
 		...(change.status === 'open' ? { status: 'open', assignee: null, completedAt: null } : {}),
 		...(change.status === 'done' ? { status: 'done', completedAt: new Date().toISOString() } : {}),
 	}))!;
@@ -144,16 +153,18 @@ export async function coordinatorTodo(spaceId: string, { entries, latestIsHandof
 }
 
 /** A thread given no repository goes to the to-do's first tagged one that is still in the project. */
-export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning'>): Promise<{ todo: SpaceTodo; thread: Session }> {
+export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 'model' | 'reasoning' | 'runOn'>): Promise<{ todo: SpaceTodo; thread: Session }> {
 	const unnamed = input.projectId === undefined && !input.repo?.trim();
 	const space = unnamed && todo.repos.length ? await getSpace(todo.spaceId) : null;
 	const tagged = space ? todo.repos.find((id) => space.repoIds.includes(id)) : undefined;
-	const thread = await startThread(todo.spaceId, { ...input, ...(tagged ? { projectId: tagged } : {}), model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined }, { wait: false });
+	const thread = await startThread(todo.spaceId, { ...input, ...(tagged ? { projectId: tagged } : {}), model: todo.threadModel?.model, reasoning: todo.threadModel?.reasoning ?? undefined, runOn: todo.runOn }, { wait: false });
 	return { thread, todo: await linkTodoToThread(todo.spaceId, todo.id, thread.id) };
 }
 
 export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string): Promise<void> {
 	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
+	if (todo.runOn === 'host' && (await getSessionRecord(threadId))?.runOn !== 'host')
+		throw new ConflictError('This to-do runs on this server. Use start_thread with its todo_id instead of messaging a thread in a sandbox.');
 	await nudgeThread(todo.spaceId, threadId, message);
 	await linkTodoToThread(todo.spaceId, todo.id, threadId);
 }

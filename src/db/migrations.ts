@@ -203,6 +203,8 @@ export const migrations: string[][] = [
 	[`ALTER TABLE space_todos ADD COLUMN repos_json TEXT NOT NULL DEFAULT '[]'`],
 	// 51: when the user stopped the thread's reply, until its next reply starts.
 	[`ALTER TABLE sessions ADD COLUMN stopped_at TEXT`],
+	// 52: where a to-do's thread runs its commands; NULL in a sandbox, like sessions.run_on.
+	[`ALTER TABLE space_todos ADD COLUMN run_on TEXT`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

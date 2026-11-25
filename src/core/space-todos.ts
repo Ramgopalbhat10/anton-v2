@@ -1,4 +1,4 @@
-import type { AgentModel } from './types.ts';
+import type { AgentModel, RunOn } from './types.ts';
 
 /** A project to-do waits in `open`; starting it (a thread, or the coordinator) makes it `in_progress`; its threads resolving make it `done`. */
 export const SPACE_TODO_STATUSES = ['open', 'in_progress', 'done'] as const;
@@ -22,6 +22,8 @@ export type SpaceTodo = {
 	threadModel: AgentModel | null;
 	/** Project repositories (their ids) the user tagged it with: a thread started from it works in each. None lets Anton pick one. */
 	repos: string[];
+	/** Where a thread started from it runs its commands, as the composer's Run on. */
+	runOn: RunOn;
 	status: SpaceTodoStatus;
 	/** Who took it on: null while open, `coordinator` until it links a thread, `thread` once one works on it. */
 	assignee: 'coordinator' | 'thread' | null;

@@ -169,7 +169,7 @@ const space = (id: string, name: string, goal: string, state: string, repoIds: s
 	updatedAt: ago(30),
 });
 const todo = (id: string, title: string, description: string, patch: Partial<SpaceTodo> = {}): SpaceTodo => ({
-	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, repos: [], status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
+	id, spaceId: 'space-billing', title, description, attachments: [], threadModel: null, repos: [], runOn: 'sandbox', status: 'open', assignee: null, createdBy: 'user', threads: 0, createdAt: ago(60 * 5), updatedAt: ago(60 * 5), completedAt: null, ...patch,
 });
 const billingTodos = [
 	todo('todo-proration', 'Prorate mid-cycle plan changes', 'Charge the difference the day a plan changes, not at renewal.', {

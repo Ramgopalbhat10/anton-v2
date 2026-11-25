@@ -1,5 +1,5 @@
 import type { Reasoning } from '../../core/ports.ts';
-import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Project, type Session } from '../../core/types.ts';
+import { HELPER_AGENTS, type AgentModel, type HelperAgent, type Project, type RunOn, type Session } from '../../core/types.ts';
 import { announce } from '../../core/changes.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { THREAD_STATES, type ThreadState } from '../../core/thread-state.ts';
@@ -154,6 +154,7 @@ export type ThreadInput = {
 	repo?: string;
 	model?: string;
 	reasoning?: Reasoning;
+	runOn?: RunOn;
 	planMode?: boolean;
 	automationId?: string;
 };
@@ -205,6 +206,7 @@ export async function startThread(spaceId: string, input: ThreadInput, { wait = 
 		brief,
 		model: input.model ?? space.threadModel ?? undefined,
 		reasoning: input.reasoning ?? (input.model ? undefined : (space.threadReasoning ?? undefined)),
+		runOn: input.runOn,
 		planMode: input.planMode,
 	});
 	await touchSpace(spaceId);

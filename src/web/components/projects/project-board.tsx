@@ -1,17 +1,18 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog } from 'radix-ui';
-import { CircleCheck, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Trash2, Waypoints, X } from '@/lib/icons';
+import { CircleCheck, Cloud, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Server, Trash2, Waypoints, X } from '@/lib/icons';
 import { type FormEvent, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
 import { ModelPicker } from '@/components/composer/model-picker';
+import { HOST_NOTE, PROVIDER_NAMES } from '@/components/composer/composer-plus';
 import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
 import { AREA } from '@/components/settings/repo-settings';
 import { FIELD } from '@/components/settings/parts';
 import { api } from '@/lib/api';
-import { repoShort, type Session } from '@/lib/api/sessions';
+import { repoShort, type RunOn, type Session } from '@/lib/api/sessions';
 import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@/lib/api/spaces';
 import { imageFile } from '@/lib/attachments';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
@@ -115,12 +116,42 @@ function TodoRepoPicker({ repos, value, onChange }: { repos: Repos; value: strin
 	);
 }
 
+/** Where the to-do's thread runs; the whole row hides when this server is not a place of its own. */
+function TodoRunOnPicker({ container, value, onChange }: { container: HTMLDivElement | null; value: RunOn; onChange: (next: RunOn) => void }) {
+	const runners = useQuery({ queryKey: ['runners'], queryFn: api.runners, staleTime: 5 * 60_000 });
+	if (!runners.data?.host) return null;
+	const sandbox = PROVIDER_NAMES[runners.data.sandbox] ?? runners.data.sandbox;
+	return (
+		<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+			<span className="text-small font-medium text-(--text-2)">Run on</span>
+			<FloatingLayerContainer.Provider value={container}>
+				<Menu>
+					<MenuTrigger asChild>
+						<PickerChip icon={value === 'host' ? Server : Cloud} label={value === 'host' ? 'This server' : 'Sandbox'} aria-label={`Run on: ${value === 'host' ? 'This server' : 'Sandbox'}`} />
+					</MenuTrigger>
+					<MenuContent align="end" className="w-[260px]">
+						<MenuItem role="menuitemradio" aria-checked={value === 'sandbox'} checked={value === 'sandbox'} icon={Cloud} onSelect={() => onChange('sandbox')}>
+							Sandbox <span className="text-(--text-3)">· {sandbox}</span>
+						</MenuItem>
+						<MenuItem role="menuitemradio" aria-checked={value === 'host'} checked={value === 'host'} icon={Server} onSelect={() => onChange('host')}>
+							This server
+						</MenuItem>
+						<MenuSeparator />
+						<p className="m-0 px-2 pt-0.5 pb-1 text-micro leading-[15px] text-pretty text-(--text-3)">{HOST_NOTE}</p>
+					</MenuContent>
+				</Menu>
+			</FloatingLayerContainer.Provider>
+		</div>
+	);
+}
+
 function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string; repos: Repos; todo: SpaceTodo | null; onSave: (draft: TodoDraft) => void; onClose: () => void }) {
 	const [title, setTitle] = useState(todo?.title ?? '');
 	const [description, setDescription] = useState(todo?.description ?? '');
 	const [threadModel, setThreadModel] = useState<SpaceTodo['threadModel']>(todo?.threadModel ?? null);
 	// Tags for repositories since removed from the project are dropped on the next save.
 	const [tagged, setTagged] = useState<string[]>(() => taggedRepos(repos, todo?.repos ?? []).map((repo) => repo.id));
+	const [runOn, setRunOn] = useState<RunOn>(todo?.runOn ?? 'sandbox');
 	const [dialog, setDialog] = useState<HTMLDivElement | null>(null);
 	const [kept, setKept] = useState<TodoAttachment[]>(todo?.attachments ?? []);
 	const attachments = useAttachments({ overflowImagesAsFiles: true });
@@ -130,7 +161,7 @@ function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		if (!ready) return;
-		onSave({ title, description, threadModel, repos: tagged, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
+		onSave({ title, description, threadModel, repos: tagged, runOn, kept, uploads: [...attachments.images.map(imageFile), ...attachments.files.map((file) => file.file)] });
 		onClose();
 	};
 	return (
@@ -178,6 +209,7 @@ function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string
 									</FloatingLayerContainer.Provider>
 								</div>
 							) : null}
+							<TodoRunOnPicker container={dialog} value={runOn} onChange={setRunOn} />
 							{kept.length || attachments.count || attachments.reading ? (
 								// Saved files and new ones in one row; the tray's own row dissolves into it.
 								<div className="flex flex-wrap items-center gap-1.5">
@@ -248,6 +280,12 @@ function TodoCard({ spaceId, repos, todo, saves, onEdit, onOpenCoordinator, onHa
 						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={tagged.map((repo) => repo.repoFullName).join('\n')}>
 							<Icon icon={FolderGit2} size={11} className="shrink-0" />
 							<span className="min-w-0 truncate">{tagged.map(repoName).join(', ')}</span>
+						</span>
+					) : null}
+					{todo.runOn === 'host' ? (
+						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)">
+							<Icon icon={Server} size={11} className="shrink-0" />
+							<span className="min-w-0 truncate">This server</span>
 						</span>
 					) : null}
 					{todo.attachments.length ? (

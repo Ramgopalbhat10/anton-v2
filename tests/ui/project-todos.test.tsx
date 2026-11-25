@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
 	editSpaceTodo: vi.fn(async (_spaceId: string, todoId: string, change: Record<string, unknown>) => makeTodo({ id: todoId, ...change })),
 	deleteSpaceTodo: vi.fn(async () => undefined),
 	startSpaceTodo: vi.fn(async (): Promise<{ todo: SpaceTodo; submissionId?: string }> => ({ todo: makeTodo({ id: 'todo_open', status: 'in_progress' }) })),
+	runners: vi.fn(async () => ({ sandbox: 'modal' as string, host: false })),
 	attachToProject: vi.fn(async (_spaceId: string, file: File) => ({ name: file.name, path: file.name, kind: 'Text', size: file.size, text: 'hello', cut: null })),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
@@ -77,6 +78,7 @@ function makeTodo(patch: Partial<SpaceTodo>): SpaceTodo {
 		attachments: [],
 		threadModel: null,
 		repos: [],
+		runOn: 'sandbox',
 	status: 'open',
 	assignee: null,
 	createdBy: 'user',
@@ -459,7 +461,7 @@ describe('the To do column on the project board', () => {
 		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'Write the docs');
 		await userEvent.type(screen.getByRole('textbox', { name: 'Description' }), 'For the new CLI');
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
-		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null, repos: [] }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Write the docs', description: 'For the new CLI', attachments: [], threadModel: null, repos: [], runOn: 'sandbox' }));
 
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Hand to the coordinator' }));
@@ -468,6 +470,29 @@ describe('the To do column on the project board', () => {
 		await userEvent.click(within(column).getByRole('button', { name: 'Actions for Backlog item' }));
 		await userEvent.click(await screen.findByRole('menuitem', { name: 'Start a thread' }));
 		await waitFor(() => expect(api.startSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_open', 'thread'));
+	});
+
+	it('offers Run on This server in the to-do dialog when a host runner is available', async () => {
+		api.runners.mockResolvedValueOnce({ sandbox: 'modal', host: true });
+		renderWithRouter(() => <ProjectBoard space={space} threads={threads} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />);
+		const column = await screen.findByRole('region', { name: 'To do' });
+		await userEvent.click(within(column).getByRole('button', { name: 'New to-do' }));
+		await userEvent.type(await screen.findByRole('textbox', { name: 'Title' }), 'On the server');
+		await userEvent.click(await screen.findByRole('button', { name: 'Run on: Sandbox' }));
+		await userEvent.click(await screen.findByRole('menuitemradio', { name: 'This server' }));
+		expect(await screen.findByRole('button', { name: 'Run on: This server' })).toBeTruthy();
+		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+		await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'On the server', description: '', attachments: [], threadModel: null, repos: [], runOn: 'host' }));
+	});
+
+	it('hides the Run on row in the to-do dialog without a host runner', async () => {
+		renderWithRouter(() => <ProjectBoard space={space} threads={threads} todos={[]} onNewThread={() => undefined} onOpenCoordinator={() => undefined} onHandTodo={() => undefined} />);
+		const column = await screen.findByRole('region', { name: 'To do' });
+		await userEvent.click(within(column).getByRole('button', { name: 'New to-do' }));
+		await screen.findByRole('dialog', { name: 'New to-do' });
+		await waitFor(() => expect(api.runners).toHaveBeenCalled());
+		expect(screen.queryByRole('button', { name: /Run on:/ })).toBeNull();
+		expect(screen.queryByText('Run on')).toBeNull();
 	});
 
 	it("attaches files to a to-do in the project's Library, shows them on its card, and lets an edit drop one", async () => {
@@ -500,7 +525,7 @@ describe('the To do column on the project board', () => {
 		expect(await screen.findByText('crash.log')).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
 		await waitFor(() =>
-			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null, repos: [] }),
+			expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', { title: 'Read the log', description: '', attachments: [{ name: 'crash.log', path: 'crash.log', kind: 'Text', size: 5 }], threadModel: null, repos: [], runOn: 'sandbox' }),
 		);
 		expect(api.attachToProject).toHaveBeenCalledTimes(1);
 

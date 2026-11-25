@@ -54,7 +54,7 @@ const fakeCatalog: ModelCatalog = {
 };
 
 const { useDatabase } = await import('../src/db/client.ts');
-const { setProviders } = await import('../src/providers/index.ts');
+const { getProviders, setProviders } = await import('../src/providers/index.ts');
 const { diskStore } = await import('../src/providers/disk/store.ts');
 const { localSandboxProvider } = await import('../src/providers/local/sandbox.ts');
 const { addProject } = await import('../src/services/projects/projects.ts');
@@ -88,6 +88,8 @@ const fakeDecisions: DecisionModel = {
 };
 
 setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog, decisions: fakeDecisions });
+/** A second local runner standing in for this server; `on` false puts the choice back to sandboxes only. */
+const withHost = (on: boolean) => setProviders({ ...getProviders(), host: on ? localSandboxProvider(path.join(dir, 'host')) : null });
 
 const toThreads: Array<{ id: string; text: string }> = [];
 const toCoordinator: Array<{ id: string; text: string; images?: Array<{ filename?: string; mimeType: string }> }> = [];
@@ -113,6 +115,7 @@ beforeEach(() => {
 	catalog = fullCatalog;
 	repoAnswer = null;
 	repoQuestions.length = 0;
+	withHost(false);
 });
 
 const apiRepo = await addProject('acme/api');
@@ -218,6 +221,7 @@ test('the model migration leaves pre-existing to-dos on the project default', as
 		await db.execute("INSERT INTO space_todos (id, space_id, title, created_at, updated_at) VALUES ('legacy', 'project', 'Legacy to-do', '', '')");
 		await migrate(db);
 		assert.equal((await db.execute("SELECT thread_model_json FROM space_todos WHERE id = 'legacy'")).rows[0]?.thread_model_json, null);
+		assert.equal((await db.execute("SELECT run_on FROM space_todos WHERE id = 'legacy'")).rows[0]?.run_on, null, 'a pre-existing to-do runs in a sandbox');
 	} finally {
 		db.close();
 	}
@@ -233,7 +237,7 @@ test('the to-do write schemas copy only supported fields at every level', () => 
 	assert.deepEqual(v.parse(EDIT_TODO, { ...values, status: 'done' }), { ...safe, status: 'done' });
 	assert.deepEqual(v.parse(EDIT_TODO, { threadModel: null }), { threadModel: null });
 	for (const schema of [CREATE_TODO, EDIT_TODO]) {
-		for (const wrongType of [{ title: extra }, { description: extra }, { attachments: [{ ...attachment, size: extra }] }, { threadModel: { ...threadModel, model: extra } }]) {
+		for (const wrongType of [{ title: extra }, { description: extra }, { attachments: [{ ...attachment, size: extra }] }, { threadModel: { ...threadModel, model: extra } }, { runOn: 'elsewhere' }]) {
 			assert.equal(v.safeParse(schema, { title: values.title, ...wrongType }).success, false);
 		}
 	}
@@ -258,6 +262,36 @@ test('a to-do model is round-tripped on create and edit, kept on unrelated edits
 	assert.deepEqual((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, changed);
 	assert.equal((await call('PATCH', tail, { threadModel: null })).threadModel, null);
 	assert.equal((await call<{ todos: SpaceTodo[] }>('GET', '')).todos[0].threadModel, null);
+});
+
+test('a to-do runs on this server once a host runner is available: saved on create and edit, and its thread started there', async () => {
+	const space = await spaces.createSpace({ name: 'Todo run on', repoIds: [apiRepo.id] });
+	const url = `/api/spaces/${space.id}/todos`;
+	const call = async <T = SpaceTodo>(method: string, tail: string, payload?: unknown): Promise<T> => {
+		const response = await spaceRoutes.request(`${url}${tail}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+		assert.equal(response.status, 200);
+		return response.json() as Promise<T>;
+	};
+
+	await assert.rejects(() => todos.createTodo(space.id, { title: 'On the server', runOn: 'host' }), /already runs on this server/);
+	const rejected = await spaceRoutes.request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'On the server', runOn: 'host' }) });
+	assert.notEqual(rejected.status, 200);
+	const sandboxed = await call('POST', '', { title: 'In a sandbox' });
+	assert.equal(sandboxed.runOn, 'sandbox');
+	await assert.rejects(() => todos.editTodo(space.id, sandboxed.id, { runOn: 'host' }), /already runs on this server/);
+
+	withHost(true);
+	try {
+		const item = await call('POST', '', { title: 'On the server', runOn: 'host' });
+		assert.equal(item.runOn, 'host');
+		assert.equal((await call('PATCH', `/${item.id}`, { runOn: 'sandbox' })).runOn, 'sandbox');
+		assert.equal((await call('PATCH', `/${item.id}`, { runOn: 'host' })).runOn, 'host');
+
+		const { thread } = await todos.startTodo(space.id, item.id, 'thread');
+		assert.equal((await getSessionRecord(thread!.id))?.runOn, 'host');
+	} finally {
+		withHost(false);
+	}
 });
 
 test('an unavailable to-do model blocks a coordinator handoff without admitting it or changing the to-do', async () => {
