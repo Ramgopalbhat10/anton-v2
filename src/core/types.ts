@@ -73,6 +73,8 @@ export type Session = {
 	plan: string | null;
 	spaceId: string | null;
 	resolvedAt: string | null;
+	/** Set when the user stops a reply partway, and cleared when the next one starts: the thread waits on them to resume or resolve it. */
+	stoppedAt: string | null;
 	/** While the thread waits for a free slot; null once it has started. */
 	brief: string | null;
 	lastReply: string | null;

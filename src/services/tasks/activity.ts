@@ -4,6 +4,7 @@ import { stopRepoCheck } from '../sandbox/repo-check.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { logProblem } from '../../core/log.ts';
 import { noteRepliesStopping } from './subagent-runs.ts';
+import { updateSession } from '../../db/sessions.ts';
 
 /** In memory only: after a restart the runtime re-emits `submission_running` for each response it recovers. */
 const inFlight = new Map<string, Set<string>>();
@@ -82,8 +83,15 @@ export function setAgentAbort(abort: Abort): void {
 	abortAgent = abort;
 }
 
+/** Written before the reply ends, so the end-of-reply check sees a stopped thread and never judges it done. */
+export async function noteStopped(id: string): Promise<void> {
+	if (!isWorking(id)) return;
+	await updateSession(id, { stoppedAt: new Date().toISOString() }).catch((error: unknown) => logProblem('warn', 'Could not record the stop', error, id));
+}
+
 export async function stopAgent(id: string): Promise<void> {
 	if (!inFlight.has(id)) return;
+	await noteStopped(id);
 	noteRepliesStopping(id);
 	// Its suites and builds stop with it, so a stopped reply leaves nothing running in the sandbox.
 	void stopReplyJobs(id).catch((error: unknown) => logProblem('warn', 'Could not stop the background jobs', error, id));

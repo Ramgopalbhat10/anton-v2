@@ -10,7 +10,7 @@ import { getSessionRecord } from '../db/sessions.ts';
 import { getSpace } from '../db/spaces.ts';
 import { isIncognitoId } from '../core/incognito.ts';
 import { mobileApi } from './mobile.ts';
-import { noteSending, setAgentAbort } from '../services/tasks/activity.ts';
+import { noteSending, noteStopped, setAgentAbort } from '../services/tasks/activity.ts';
 import { MAX_UPLOAD_BYTES } from '../services/artifacts/files.ts';
 import { primeIncognitoModel, forgetModelChoice } from '../services/tasks/sessions.ts';
 import { isRestoring } from '../services/git/restore.ts';
@@ -45,8 +45,9 @@ app.post('/api/agents/coder/:id', async (c, next) => {
 	}
 	if (c.error || c.res.status >= 400) turnedAway();
 });
-// Stop: its running subagents end as stopped, not failed.
+// Stop: its running subagents end as stopped, not failed, and the thread waits on the user.
 app.post('/api/agents/coder/:id/abort', async (c, next) => {
+	await noteStopped(c.req.param('id'));
 	noteRepliesStopping(c.req.param('id'));
 	await next();
 });

@@ -108,6 +108,7 @@ export function draftSession(draft: {
 		spaceId: draft.spaceId ?? null,
 		threadState: 'working',
 		resolvedAt: null,
+		stoppedAt: null,
 		brief: null,
 		lastReply: null,
 		review: null,

@@ -22,9 +22,9 @@ import { cacheStartedTodo, canStartTodo, todoIsUnsaved, todoThreadStartKey, type
 const COLUMNS: Array<{ id: string; label: string; glyph: GlyphKind; kinds: GlyphKind[] }> = [
 	{ id: 'needs', label: 'Needs you', glyph: 'waiting', kinds: ['waiting', 'failed'] },
 	{ id: 'working', label: 'Working', glyph: 'working', kinds: ['working', 'queued'] },
-	{ id: 'review', label: 'Ready for review', glyph: 'review', kinds: ['review', 'landing'] },
-	// Idle threads finished their turn without resolving; both rest in the last column.
-	{ id: 'done', label: 'Done', glyph: 'resolved', kinds: ['idle', 'resolved'] },
+	// Idle threads finished their reply without resolving, so they wait for you to look as much as an open pull request does.
+	{ id: 'review', label: 'Ready for review', glyph: 'review', kinds: ['review', 'landing', 'idle'] },
+	{ id: 'done', label: 'Done', glyph: 'resolved', kinds: ['resolved'] },
 ];
 
 const KIND_ORDER = COLUMNS.flatMap((column) => column.kinds);

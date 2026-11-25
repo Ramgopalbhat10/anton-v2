@@ -36,7 +36,7 @@ export function reportLine(thread: Session, state: ThreadState, started?: Starte
 	const pr = thread.prUrl && thread.pullRequest ? ` pr="#${prNumber(thread.prUrl) ?? '?'} ${thread.pullRequest.state}${thread.pullRequest.checks ? `, checks ${thread.pullRequest.checks}` : ''}"` : '';
 	const asks = state === 'waiting' && thread.asking ? ` asks="${attr(thread.asking)}"` : '';
 	const said = (thread.lastReply ?? '').slice(0, 600).trim();
-	const failed = thread.status === 'error' && thread.errorMessage ? `Failed: ${thread.errorMessage}` : '';
+	const failed = thread.status === 'error' && thread.errorMessage ? `Failed: ${thread.errorMessage}` : thread.stoppedAt && state === 'waiting' ? 'The user stopped this reply before it finished.' : '';
 	const why = started?.by === 'routine' ? `Started by the routine that runs ${started.routine}.` : started?.by === 'you' ? clip(splitAttachments(started.brief).text, 600) : '';
 	const text = failed || said || why;
 	const by = started ? ` started="${started.by}"` : '';
@@ -151,6 +151,7 @@ export function noteReplyOutcome(event: RunEvent): void {
 async function replyRunning(id: string): Promise<void> {
 	const record = await getSessionRecord(id);
 	if (record?.failed) await updateSession(id, { failed: false, errorMessage: null });
+	if (record?.stoppedAt) await updateSession(id, { stoppedAt: null });
 }
 
 export async function threadFailed(id: string, message: string): Promise<void> {

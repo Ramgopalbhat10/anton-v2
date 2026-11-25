@@ -12,6 +12,7 @@ const base = {
 	prUrl: null,
 	resolvedAt: null,
 	brief: null,
+	stoppedAt: null,
 };
 const pr = (state: 'open' | 'draft' | 'merged' | 'closed', extra: { checks?: 'passed' | 'failed' | 'pending' | null; approved?: boolean } = {}) => ({
 	prUrl: 'https://github.com/acme/api/pull/1',
@@ -34,4 +35,9 @@ test('a thread is in the first state whose rule holds', () => {
 	assert.equal(threadState({ ...base, ...pr('merged') }), 'idle');
 	assert.equal(threadState({ ...base, working: true, asking: 'Which one?' }), 'working', 'working wins over an old question');
 	assert.equal(threadState({ ...base, working: true, resolvedAt: '2026-01-01T00:00:00Z' }), 'resolved');
+	const stopped = '2026-01-01T00:00:00Z';
+	assert.equal(threadState({ ...base, stoppedAt: stopped }), 'waiting', 'a reply the user stopped waits on them, not Idle');
+	assert.equal(threadState({ ...base, ...pr('open'), stoppedAt: stopped }), 'waiting', 'even with a pull request open');
+	assert.equal(threadState({ ...base, working: true, stoppedAt: stopped }), 'working', 'the next reply is working');
+	assert.equal(threadState({ ...base, stoppedAt: stopped, resolvedAt: stopped }), 'resolved', 'resolving it still ends it');
 });

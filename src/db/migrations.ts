@@ -201,6 +201,8 @@ export const migrations: string[][] = [
 	[`ALTER TABLE space_todos ADD COLUMN thread_model_json TEXT`],
 	// 50: the project repositories a to-do is tagged with (their ids); none lets Anton pick one when it starts.
 	[`ALTER TABLE space_todos ADD COLUMN repos_json TEXT NOT NULL DEFAULT '[]'`],
+	// 51: when the user stopped the thread's reply, until its next reply starts.
+	[`ALTER TABLE sessions ADD COLUMN stopped_at TEXT`],
 ];
 
 export async function migrate(db: Client, upTo = migrations.length): Promise<void> {

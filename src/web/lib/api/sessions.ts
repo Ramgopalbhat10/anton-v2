@@ -56,6 +56,8 @@ export type Session = {
 	spaceId?: string | null;
 	threadState?: ThreadState | null;
 	resolvedAt?: string | null;
+	/** Set while a reply the user stopped is the thread's last. */
+	stoppedAt?: string | null;
 	/** The brief a queued thread starts with once a slot frees. */
 	brief?: string | null;
 	/** In the task list, the texts cut to a row's length; `GET /api/sessions/:id` sends them whole. */

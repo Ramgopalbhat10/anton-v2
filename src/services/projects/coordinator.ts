@@ -37,6 +37,7 @@ export function threadLine(thread: Session): string {
 		parts.push(`PR #${prNumber(thread.prUrl) ?? '?'}${pr ? ` ${pr.state}${pr.checks ? `, checks ${pr.checks}` : ''}${pr.approved ? ', approved' : ''}` : ''}`);
 	}
 	if (thread.status === 'error' && thread.errorMessage) parts.push(`failed: ${clip(thread.errorMessage, 160)}`);
+	else if (thread.stoppedAt && thread.threadState === 'waiting') parts.push('stopped by the user before it finished');
 	if (thread.asking) parts.push(`asks: "${clip(thread.asking, 200)}"`);
 	else if (thread.brief) parts.push(`brief: "${clip(thread.brief, 160)}"`);
 	else if (thread.lastReply) parts.push(`last said: "${clip(thread.lastReply, 200)}"`);

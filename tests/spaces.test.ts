@@ -649,6 +649,43 @@ test('a reply is judged once it has settled, and any task can be done, not only 
 	}
 });
 
+test('a reply the user stops leaves its thread waiting on them, never judged done or swept, until the next reply', async () => {
+	const { noteStopped, recordAgentEvent } = await import('../src/services/tasks/activity.ts');
+	setProviders({
+		sandbox: localSandboxProvider(path.join(dir, 'data')),
+		store: diskStore(path.join(dir, 'data', 'objects')),
+		git: fakeHost,
+		models: fakeCatalog,
+		decisions: {
+			name: 'fake',
+			decide: async (_state, questions) => ({ answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { yes: key === 'finished' ? 0.9 : 0.1 }])), inputTokens: 1, cost: 0 }),
+		},
+	});
+	try {
+		const space = await spaces.createSpace({ name: 'Stopped', repoIds: [] });
+		const thread = await spaces.startThread(space.id, { title: 'Half done', brief: 'Build it' });
+		await noteStopped(thread.id);
+		assert.equal((await getSessionRecord(thread.id))?.stoppedAt, null, 'stopping an idle thread records nothing');
+		recordAgentEvent({ type: 'submission_running', instanceId: thread.id, submissionId: 'reply' });
+		await noteStopped(thread.id);
+		recordAgentEvent({ type: 'submission_settled', instanceId: thread.id, submissionId: 'reply' });
+		// The decision model would call this reply finished; a stop means it was not.
+		await reports.threadFinished(thread.id, 'Wrote half of it.');
+		const stopped = await sessions.getSession(thread.id);
+		assert.equal(stopped.resolvedAt, null);
+		assert.equal(stopped.threadState, 'waiting', 'Needs you, not Idle or Done');
+		assert.match(reports.reportLine(stopped, 'waiting'), /stopped this reply/);
+		await reports.resolveIdleThreads(Date.now() + reports.IDLE_RESOLVE_MS * 2);
+		assert.equal((await getSessionRecord(thread.id))?.resolvedAt, null, 'the idle sweep leaves it');
+		// The next reply clears it.
+		reports.noteReplyOutcome({ type: 'submission_running', instanceId: thread.id, agentName: 'Coder' });
+		for (let tries = 0; (await getSessionRecord(thread.id))?.stoppedAt && tries < 200; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+		assert.equal((await getSessionRecord(thread.id))?.stoppedAt, null);
+	} finally {
+		setProviders({ sandbox: localSandboxProvider(path.join(dir, 'data')), store: diskStore(path.join(dir, 'data', 'objects')), git: fakeHost, models: fakeCatalog });
+	}
+});
+
 test('a thread finishing its reply frees its slot for a queued one at once', async () => {
 	const { recordAgentEvent } = await import('../src/services/tasks/activity.ts');
 	const space = await spaces.createSpace({ name: 'One at a time', repoIds: [], maxParallel: 1 });
