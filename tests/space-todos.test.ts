@@ -294,6 +294,70 @@ test('a to-do runs on this server once a host runner is available: saved on crea
 	}
 });
 
+test('a to-do messages only a thread running where it does', async () => {
+	const space = await spaces.createSpace({ name: 'Todo runner match', repoIds: [apiRepo.id] });
+	const sandboxed = await todos.createTodo(space.id, { title: 'Sandbox to-do' });
+	const sandboxThread = await spaces.startThread(space.id, { title: 'Sandbox thread', brief: 'Work' });
+	withHost(true);
+	try {
+		const hosted = await todos.createTodo(space.id, { title: 'Host to-do', runOn: 'host' });
+		const hostThread = await spaces.startThread(space.id, { title: 'Host thread', brief: 'Work', runOn: 'host' });
+		await assert.rejects(() => todos.messageTodoThread(sandboxed, hostThread.id, 'Note'), /runs in a sandbox/);
+		await assert.rejects(() => todos.messageTodoThread(hosted, sandboxThread.id, 'Note'), /runs on this server/);
+		await todos.messageTodoThread(sandboxed, sandboxThread.id, 'Note');
+		await todos.messageTodoThread(hosted, hostThread.id, 'Note');
+		assert.deepEqual(toThreads.filter(({ text }) => text === 'Note').map(({ id }) => id).sort(), [hostThread.id, sandboxThread.id].sort());
+	} finally {
+		withHost(false);
+	}
+});
+
+test("the coordinator cannot start a host to-do's thread unless the user handed it the to-do", async () => {
+	const { Coordinator } = await import('../src/agents/coordinator.ts');
+	const faux = fauxProvider({ provider: 'host-todo-fixture' });
+	const coordinatorModel = `${faux.provider.id}/${faux.getModel().id}`;
+	catalog = Promise.resolve([...allModels, model(coordinatorModel)]);
+	const space = await spaces.createSpace({ name: 'Host to-do guard' });
+	await spaces.editSpace(space.id, { coordinatorModel, threadModel: 'openrouter/test/default', state: 'paused' });
+	withHost(true);
+	try {
+		const hosted = await todos.createTodo(space.id, { title: 'Runs here', runOn: 'host' });
+		await todos.startTodo(space.id, hosted.id, 'coordinator');
+		const handoff = toCoordinator[0].text;
+		const runtime = await start({ agents: [Coordinator], providers: [faux.provider] });
+		try {
+			const agent = init(Coordinator, { id: space.id });
+			const errors: string[] = [];
+			faux.setResponses([
+				fauxAssistantMessage([fauxToolCall('start_thread', { title: 'Sneaky', request: 'Runs here', todo_id: hosted.id, approved: true }, { id: 'no-handoff' })], { stopReason: 'toolUse' }),
+				fauxAssistantMessage([fauxText('Done.')]),
+			]);
+			const plain = await agent.dispatch('Start it please');
+			await agent.read(plain, {
+				signal: AbortSignal.timeout(5000),
+				onEvent(event) {
+					if (event.type === 'tool-output-error') errors.push(event.errorText);
+				},
+			});
+			assert.ok(errors.some((text) => /only the user can start it/.test(text)), 'a bare todo_id is refused');
+			assert.equal((await sessions.listThreads(space.id)).some((thread) => thread.title === 'Sneaky'), false);
+
+			faux.setResponses([
+				fauxAssistantMessage([fauxToolCall('start_thread', { title: 'Runs here', request: 'Runs here', todo_id: hosted.id }, { id: 'with-handoff' })], { stopReason: 'toolUse' }),
+				fauxAssistantMessage([fauxText('Started.')]),
+			]);
+			const handed = await agent.dispatch(handoff);
+			await agent.read(handed, { signal: AbortSignal.timeout(5000) });
+			const thread = (await sessions.listThreads(space.id)).find((item) => item.title === 'Runs here');
+			assert.equal((await getSessionRecord(thread!.id))?.runOn, 'host', 'the handoff lets it start the host thread');
+		} finally {
+			await runtime.stop();
+		}
+	} finally {
+		withHost(false);
+	}
+});
+
 test('an unavailable to-do model blocks a coordinator handoff without admitting it or changing the to-do', async () => {
 	const space = await spaces.createSpace({ name: 'Delisted to-do model' });
 	const threadModel = { model: 'openrouter/test/cheap#sort=latency', reasoning: 'low' } as const;

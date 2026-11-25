@@ -163,8 +163,13 @@ export async function startTodoThread(todo: SpaceTodo, input: Omit<ThreadInput, 
 
 export async function messageTodoThread(todo: SpaceTodo, threadId: string, message: string): Promise<void> {
 	if (todo.threadModel) throw new ConflictError('This to-do has its own main thread model. Use start_thread with its todo_id instead of messaging an existing thread.');
-	if (todo.runOn === 'host' && (await getSessionRecord(threadId))?.runOn !== 'host')
-		throw new ConflictError('This to-do runs on this server. Use start_thread with its todo_id instead of messaging a thread in a sandbox.');
+	const runOn = (await getSessionRecord(threadId))?.runOn ?? 'sandbox';
+	if (runOn !== todo.runOn)
+		throw new ConflictError(
+			todo.runOn === 'host'
+				? 'This to-do runs on this server. Use start_thread with its todo_id instead of messaging a thread in a sandbox.'
+				: 'This to-do runs in a sandbox. Use start_thread with its todo_id instead of messaging a thread on this server.',
+		);
 	await nudgeThread(todo.spaceId, threadId, message);
 	await linkTodoToThread(todo.spaceId, todo.id, threadId);
 }

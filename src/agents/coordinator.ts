@@ -97,6 +97,8 @@ function useCoordinatorTools(spaceId: string, answering: string, handoffs: () =>
 				const brief = threadBrief(data.request, data.context, data.part);
 				// Its card shows as soon as it has a slot; the brief reaches it behind this answer.
 				const todo = linked?.todo ?? null;
+				if (todo?.runOn === 'host' && linked?.text === undefined)
+					throw new Error('This to-do runs on this server, so only the user can start it: from the board, or by handing it to you.');
 				const input = { title: data.title, brief: await withFiles(spaceId, brief, todoThreadFiles(todo, data.files), source), repo: data.repo };
 				const started = todo ? (await startTodoThread(todo, input)).thread : await startThread(spaceId, input, { wait: false });
 				const queued = started.threadState === 'queued';
