@@ -1,4 +1,5 @@
 import { announce } from '../../core/changes.ts';
+import { noteReviewerRun } from '../replies/reviewer-runs.ts';
 import { unrouted } from '../../core/model-route.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 import { logProblem } from '../../core/log.ts';
@@ -136,6 +137,7 @@ const delegation = (instanceId: string, prompt: string) => `${instanceId}\n${pro
 /** Runs in the event observer; never throws. */
 export function recordSubagentEvent(event: Event): void {
 	if (!event.instanceId) return;
+	if (event.type === 'task_start' && event.agent === 'reviewer') noteReviewerRun(event.instanceId);
 	if (event.type === 'tool_start' && event.toolName === 'task' && event.toolCallId) {
 		const args = (event.args ?? {}) as { prompt?: unknown; description?: unknown };
 		if (typeof args.prompt === 'string') {

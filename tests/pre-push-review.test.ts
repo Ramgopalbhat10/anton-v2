@@ -10,6 +10,8 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { changeGate } = await import('../src/services/replies/gate-state.ts');
 const { prePushReview, startPrePushReview } = await import('../src/services/replies/pre-push-review.ts');
+const { reviewerRan } = await import('../src/services/replies/reviewer-runs.ts');
+const { recordSubagentEvent } = await import('../src/services/tasks/subagent-runs.ts');
 
 const CODE = 'diff --git a/src/sort.ts b/src/sort.ts\n+export function sortBy(keys: string[]) {}\n';
 const DOCS = 'diff --git a/docs/sorting.md b/docs/sorting.md\n+Sorting\ndiff --git a/README.md b/README.md\n+More\n';
@@ -31,6 +33,8 @@ test('a reply about to push a code change is asked once for a fresh-eyes review 
 	assert.match(asked ?? '', /reviewer subagent/);
 	assert.match(asked ?? '', /`git diff base01234567`/, 'the brief names the range to read');
 	assert.match(asked ?? '', /critical, high or medium/);
+	assert.match(asked ?? '', /Do not build a new feature, data model or approval flow/, 'a design question goes to the user, not into the change');
+	assert.match(asked ?? '', /do not ask it again/);
 	assert.doesNotMatch(asked ?? '', /since your last push/);
 	assert.match(asked ?? '', /If you cannot start the subagent/, 'a runtime without subagents reviews it itself');
 	assert.equal(await prePushReview('a', deps(`${CODE}+fixed\n`)), null, 'once a reply, so its fixes are not reviewed again before the push');
@@ -52,4 +56,26 @@ test('documentation, a stopped machine and reviews turned off are never held for
 	assert.equal(await prePushReview('b', deps(CODE)), null);
 	reviews = true;
 	assert.ok(await prePushReview('b', deps(CODE)));
+});
+
+test('the reviewer subagent runs once a reply, and a reply whose agent already ran it is not asked again', async () => {
+	startPrePushReview('c');
+	assert.equal(reviewerRan('c'), false);
+	recordSubagentEvent({ type: 'task_start', instanceId: 'c', taskId: 'task-explore', agent: 'explorer', prompt: 'Find the router' });
+	assert.equal(reviewerRan('c'), false, 'other subagents do not count');
+	recordSubagentEvent({ type: 'task_start', instanceId: 'c', taskId: 'task-review', agent: 'reviewer', prompt: 'Review git diff' });
+	assert.equal(reviewerRan('c'), true);
+	queue('c');
+	assert.equal(await prePushReview('c', deps(CODE)), null);
+	startPrePushReview('c');
+	assert.equal(reviewerRan('c'), false, 'a new reply may have it again');
+	queue('c');
+	assert.equal(await prePushReview('c', deps(CODE)), null, 'the change it read counts as reviewed');
+	assert.ok(await prePushReview('c', deps(`${CODE}+changed after\n`)));
+});
+
+test('reviews treat a fix that needs new design as a question for the user', async () => {
+	const { REVIEW_GUIDE, REVIEW_SCOPE } = await import('../src/services/git/code-review.ts');
+	assert.ok(REVIEW_GUIDE.includes(REVIEW_SCOPE), 'the pull request reviewer keeps to it too');
+	assert.match(REVIEW_SCOPE, /design question for the user/);
 });
