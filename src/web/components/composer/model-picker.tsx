@@ -656,7 +656,7 @@ export const ModelPicker = memo(function ModelPicker({
 					{selected ? <ModelMark model={selected} size={16} /> : !emptyLabel || (models.isPending && value.model) ? <Spinner size={12} tone="neutral" /> : null}
 					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : emptyLabel ? value.model || emptyLabel : 'Model'}</span>
 					{options?.chosen.context ? (
-						<span className="in-num rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2)" title={`${tokens(selected!.contextLength)} context`}>
+						<span className="in-num hidden rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2) sm:inline" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
 						</span>
 					) : null}

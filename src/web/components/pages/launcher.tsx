@@ -338,7 +338,7 @@ export function Launcher() {
 								onCancel={() => setAdding(false)}
 							/>
 						) : null}
-						{prompt.trim() || needsSetup ? null : <Starters chat={chat} onPick={setPrompt} />}
+						{needsSetup ? null : <Starters chat={chat} onPick={setPrompt} />}
 					</div>
 
 					<HomeDashboard />

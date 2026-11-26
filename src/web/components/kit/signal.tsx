@@ -340,14 +340,14 @@ export function PickerChip({
 		<button
 			type="button"
 			className={cn(
-				'sg-press flex shrink-0 items-center gap-[5px] rounded-control font-medium whitespace-nowrap text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
+				'sg-press flex min-w-0 shrink items-center gap-[5px] rounded-control font-medium whitespace-nowrap text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
 				height === 28 ? 'h-7 px-2' : 'h-6 px-[7px]',
 			)}
 			{...rest}
 		>
-			<Icon icon={icon} size={13} className="text-(--text-3)" />
-			<span className="text-small">{label}</span>
-			<Icon icon={ChevronDown} size={12} className="text-(--text-3)" />
+			<Icon icon={icon} size={13} className="shrink-0 text-(--text-3)" />
+			<span className="min-w-0 truncate text-small">{label}</span>
+			<Icon icon={ChevronDown} size={12} className="shrink-0 text-(--text-3)" />
 		</button>
 	);
 }
