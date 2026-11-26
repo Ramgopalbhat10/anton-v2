@@ -565,7 +565,7 @@ describe('threads', () => {
 		api.editSpace.mockResolvedValueOnce({ ...space, coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' });
 		const agent = { messages: [], status: 'idle', historyReady: true, error: undefined, failedSends: [], settlements: [], sendMessage: vi.fn(), refresh: () => {} };
 		withRouter(() => <ProjectFeed space={{ ...space, coordinatorModel: gateway.id, coordinatorReasoning: 'low' }} agent={agent as never} threads={[]} onStartingChange={() => {}} />);
-		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(await screen.findByRole('button', { name: /^Model and reasoning/ }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
 		await waitFor(() => expect(api.editSpace).toHaveBeenCalledWith('space_1', { coordinatorModel: `${gateway.id}#sort=price`, coordinatorReasoning: 'low' }));
@@ -574,7 +574,7 @@ describe('threads', () => {
 	it('keeps routing local to a new thread and submits it without changing project defaults', async () => {
 		api.models.mockResolvedValueOnce({ models: [gateway], default: gateway.id } as never);
 		withRouter(() => <NewThreadForm space={{ ...space, threadModel: `${gateway.id}#sort=price` }} onDone={() => {}} />);
-		await userEvent.click(await screen.findByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(await screen.findByRole('button', { name: /^Model and reasoning/ }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: Price' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
 		await userEvent.keyboard('{Escape}');
@@ -589,7 +589,7 @@ describe('threads', () => {
 		api.spaceAutomations.mockResolvedValueOnce({ automations: [] });
 		withRouter(() => <ProjectRoutines space={space} threads={[]} />);
 		await userEvent.click(await screen.findByRole('button', { name: 'New routine' }));
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
 		await userEvent.keyboard('{Escape}');

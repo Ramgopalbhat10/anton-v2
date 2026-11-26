@@ -100,7 +100,7 @@ describe('new task composer', () => {
 			[['general-settings'], { reasoning: null, planMode: false }],
 			[['commands'], { commands: [] }],
 		]);
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Throughput/ }));
 		await userEvent.keyboard('{Escape}');
@@ -115,7 +115,7 @@ describe('new task composer', () => {
 			[['models'], { models: [gateway, { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' }], default: `${gateway.id}#sort=price` }],
 			[['general-settings'], { reasoning: null, planMode: false }], [['commands'], { commands: [] }],
 		]);
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('option', { name: /Plan/ }));
 		await userEvent.keyboard('{Escape}');

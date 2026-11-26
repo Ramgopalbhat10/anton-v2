@@ -30,6 +30,12 @@
 .sg-btn:active {
 	transform: scale(0.97);
 }
+.sg-btn:disabled,
+.sg-btn:disabled:hover,
+.sg-btn:disabled:active {
+	opacity: 0.45;
+	transform: none;
+}
 .sg-btn svg {
 	opacity: 0.85;
 }

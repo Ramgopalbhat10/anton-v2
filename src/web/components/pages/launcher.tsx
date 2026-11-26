@@ -226,8 +226,10 @@ export function Launcher() {
 		setBranch('');
 	}
 
+	const hasContent = prompt.trim().length > 0 || attachments.images.length > 0 || attachments.files.length > 0;
+
 	async function start() {
-		if (starting || !projects.isSuccess) return;
+		if (starting || !projects.isSuccess || !hasContent) return;
 		setStarting(true);
 		// Saved commands are read only for a prompt that starts with one, so any other opens its task without a round trip.
 		const saved = prompt.trim().startsWith('/') ? await queryClient.fetchQuery({ queryKey: ['commands'], queryFn: api.commands, staleTime: 60_000 }).catch(() => ({ commands: [] })) : { commands: [] };
@@ -306,7 +308,7 @@ export function Launcher() {
 									type="submit"
 									aria-label={chat ? 'Start chat' : 'Start task'}
 									title={chat ? 'Start chat (⌘↵)' : 'Start task (⌘↵)'}
-									disabled={starting || !projects.isSuccess || blind}
+									disabled={starting || !projects.isSuccess || blind || !hasContent}
 									className="sg-btn sg-btn--inverse sg-icon-btn"
 								>
 									<Icon icon={ArrowUp} size={15} />

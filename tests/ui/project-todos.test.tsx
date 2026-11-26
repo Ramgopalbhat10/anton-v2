@@ -541,7 +541,7 @@ describe('the To do column on the project board', () => {
 			renderWithRouter(() => <LiveBoard />);
 			await userEvent.click(await screen.findByRole('button', { name: /^Fix OAuth redirect/ }));
 			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
-			const picker = edit.getByRole('button', { name: 'Main thread model' });
+			const picker = edit.getByRole('button', { name: /^Main thread model/ });
 			await userEvent.click(picker);
 			await userEvent.click(screen.getByRole('textbox', { name: 'Search models' }));
 			expect(await screen.findByText('No models match.')).toBeTruthy();
@@ -553,7 +553,7 @@ describe('the To do column on the project board', () => {
 			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
 			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', item.id, { title: 'Tidy the redirect', description: item.description, attachments: [] }));
 			await userEvent.click(await screen.findByRole('button', { name: /^Tidy the redirect/ }));
-			expect(within(await screen.findByRole('dialog', { name: 'Edit to-do' })).getByRole('button', { name: 'Main thread model' }).textContent).toContain('openrouter/test/delisted');
+			expect(within(await screen.findByRole('dialog', { name: 'Edit to-do' })).getByRole('button', { name: /^Main thread model/ }).textContent).toContain('openrouter/test/delisted');
 		});
 
 		it('sets a model and effort when adding a to-do, then reopens and clears the saved choice', async () => {
@@ -562,7 +562,7 @@ describe('the To do column on the project board', () => {
 			renderWithRouter(() => <LiveBoard />);
 			await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
 			await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Pick a model');
-			const trigger = screen.getByRole('button', { name: 'Main thread model' });
+			const trigger = screen.getByRole('button', { name: /^Main thread model/ });
 			expect(trigger.textContent).toContain('Project default');
 			await userEvent.click(trigger);
 			await userEvent.click(await screen.findByRole('option', { name: /Compact model/ }));
@@ -573,9 +573,9 @@ describe('the To do column on the project board', () => {
 			await waitFor(() => expect(api.createSpaceTodo).toHaveBeenCalledWith('space_1', expect.objectContaining({ threadModel: { model: model.id, reasoning: 'low' } })));
 			await userEvent.click(await screen.findByRole('button', { name: /^Pick a model/ }));
 			const edit = within(await screen.findByRole('dialog', { name: 'Edit to-do' }));
-			expect(edit.getByRole('button', { name: 'Main thread model' }).textContent).toContain('Compact model');
+			expect(edit.getByRole('button', { name: /^Main thread model/ }).textContent).toContain('Compact model');
 			await userEvent.click(edit.getByRole('button', { name: 'Use project default' }));
-			expect(edit.getByRole('button', { name: 'Main thread model' }).textContent).toContain('Project default');
+			expect(edit.getByRole('button', { name: /^Main thread model/ }).textContent).toContain('Project default');
 			await userEvent.click(edit.getByRole('button', { name: 'Save' }));
 			await waitFor(() => expect(api.editSpaceTodo).toHaveBeenCalledWith('space_1', 'todo_new', expect.objectContaining({ threadModel: null })));
 		});

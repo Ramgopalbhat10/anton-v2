@@ -57,7 +57,7 @@ describe('General settings', () => {
 			backgroundModels: { webDigest: gateway.id, vision: gateway.id, compaction: gateway.id },
 			backgroundReasoning: { webDigest: 'low', vision: 'low', compaction: 'low' } };
 		page(settings, [gateway, { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' }]);
-		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[callers.indexOf(caller)]);
+		await userEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ }))[callers.indexOf(caller)]);
 		if (caller === 'title') {
 			expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
 			expect(screen.queryByRole('radiogroup', { name: 'Reasoning effort' })).toBeNull();
@@ -81,7 +81,7 @@ describe('General settings', () => {
 			{ ...base, id: `${base.id}[1m]`, contextLength: 1_000_000, variant: { of: base.id, context: '1m', fast: false } },
 			{ ...base, id: `${base.id}[1m][fast]`, contextLength: 1_000_000, variant: { of: base.id, context: '1m', fast: true } },
 		]);
-		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[2]);
+		await userEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ }))[2]);
 		await userEvent.click(screen.getByRole('radio', { name: /1M/ }));
 		await userEvent.click(screen.getByRole('switch', { name: 'Fast mode' }));
 		await userEvent.keyboard('{Escape}');
@@ -159,7 +159,7 @@ describe('General settings', () => {
 		};
 		page(settings, [summarizer]);
 		// The compaction model's picker is the last on the page.
-		fireEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' })).at(-1)!);
+		fireEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ })).at(-1)!);
 		const effort = await screen.findByRole('radiogroup', { name: 'Reasoning effort' });
 		expect(within(effort).getByRole('radio', { checked: true }).textContent).toBe('High');
 		fireEvent.click(within(effort).getByRole('radio', { name: 'Low' }));

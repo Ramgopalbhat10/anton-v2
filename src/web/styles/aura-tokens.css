@@ -65,8 +65,8 @@
 	/* Icons use the same levels as text. */
 	--text: var(--n-900);
 	--text-2: var(--n-700);
-	--text-3: var(--n-600);
-	--text-4: var(--n-500);
+	--text-3: #91919a;
+	--text-4: #7d7d86;
 	--text-inverse: var(--n-50);
 
 	/* Accent: an action, or live agent work. Nothing else. */
@@ -160,8 +160,8 @@
 
 	--text: #18181b;
 	--text-2: #52525b;
-	--text-3: #71717a;
-	--text-4: #a1a1aa;
+	--text-3: #61616a;
+	--text-4: #71717a;
 	--text-inverse: #fafafa;
 
 	--accent: var(--a-600);
@@ -171,7 +171,7 @@
 	--accent-line: rgba(90, 93, 224, 0.35);
 
 	--ok: #16a36a;
-	--warn: #c98300;
+	--warn: #9a6200;
 	--bad: #dc3a40;
 	--merged: #8b5cf6;
 	--conflict: #e8692a;
