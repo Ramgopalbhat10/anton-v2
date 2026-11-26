@@ -50,6 +50,8 @@ test('descriptor exposes the agy ACP contract', async () => {
 	assert.equal(agent.auth.credentialFile, file);
 	assert.equal(agent.linkPort, 47910);
 	assert.equal(agent.effortConfigId, 'thought_level');
+	// No agy level is 'off': it only reaches a model with no levels, which must get no thought_level at all.
+	assert.deepEqual(agent.effortMap, { minimal: 'low', max: 'xhigh' });
 	assert.deepEqual(agent.sessionConfig, { mode: 'auto' });
 });
 
