@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { Acquired, ExecOptions, ExecResult, Machine, MachineOrigin, Pty, SandboxProvider } from '../../core/ports.ts';
 import { fileError, reasonOf } from '../../core/machine-fs.ts';
 import { quote } from '../../core/shell.ts';
+import { previewAddress } from '../../core/preview-proxy.ts';
 import { runProcess } from '../shell-process.ts';
 
 const RUNNING_MARKER = '.anton-running';
@@ -90,7 +91,8 @@ function localMachine(root: string): Machine {
 			await writeFile(path.resolve(root, file), content).catch((error: unknown) => Promise.reject(fileError('write', file, reasonOf(error))));
 			return true;
 		},
-		previewUrl: async (port) => `http://localhost:${port}`,
+		// Behind a tunnel, Anton serves each preview port on a hostname of its own (src/core/preview-proxy.ts).
+		previewUrl: async (port) => previewAddress(port) ?? `http://localhost:${port}`,
 		// Only the browser on this computer reaches it: the desktop listens on this computer's own address (ANTON_SCREEN_BIND).
 		socketUrl: async (port) => `ws://localhost:${port}`,
 		async openPty({ cols, rows, cwd, env }): Promise<Pty> {
