@@ -671,37 +671,42 @@ class AcpConversation implements RuntimeConversation {
 		}, HANDSHAKE_MS)) as SessionInfo;
 		if (!session.sessionId) throw new Error(`${this.agent.name} opened no session`);
 		this.sessionId = session.sessionId;
-		await this.applyModel(session.configOptions);
-		await this.applySessionConfig(session.configOptions);
+		// Switching the model can change the other options (agy offers no thought_level values for its
+		// orchestrators), so the rest are checked against what the agent reports after the switch.
+		const configOptions = await this.applyModel(session.configOptions);
+		await this.applySessionConfig(configOptions);
 		this.setupMs = Date.now() - t0 - this.spawnMs;
 		this.chunk('thinking', `\n[${this.agent.name}] session ready in ${((this.spawnMs + this.setupMs) / 1000).toFixed(1)}s\n`);
 	}
 
-	private async applyModel(configOptions: ConfigOption[] | undefined): Promise<void> {
+	/** The session's config options after the model is set: the agent's updated list when it returns one. */
+	private async applyModel(configOptions: ConfigOption[] | undefined): Promise<ConfigOption[] | undefined> {
 		const model = this.options.model;
-		if (!model || !Array.isArray(configOptions)) return;
-		await this.setOption(configOptions, this.agent.modelConfigId, model);
+		if (!model || !Array.isArray(configOptions)) return configOptions;
+		return (await this.setOption(configOptions, this.agent.modelConfigId, model)) ?? configOptions;
 	}
 
 	/** effort (mapped through the descriptor's effortMap) and sessionConfig entries, each only when the option exists, accepts the value and differs. */
 	private async applySessionConfig(configOptions: ConfigOption[] | undefined): Promise<void> {
 		if (!Array.isArray(configOptions)) return;
+		let current = configOptions;
 		const wanted: [string, string | undefined][] = [];
 		const effort = this.options.effort;
 		if (effort && this.agent.effortConfigId) wanted.push([this.agent.effortConfigId, this.agent.effortMap?.[effort] ?? effort]);
 		for (const [id, value] of Object.entries(this.agent.sessionConfig ?? {})) wanted.push([id, value]);
-		for (const [id, value] of wanted) if (value) await this.setOption(configOptions, id, value);
+		for (const [id, value] of wanted) if (value) current = (await this.setOption(current, id, value)) ?? current;
 	}
 
-	private async setOption(configOptions: ConfigOption[], id: string, value: string): Promise<void> {
+	/** Sets one option when it exists, accepts the value and differs; returns the agent's updated options when it sends them. */
+	private async setOption(configOptions: ConfigOption[], id: string, value: string): Promise<ConfigOption[] | undefined> {
 		const option = configOptions.find((o) => (o.id ?? o.configId) === id);
-		if (!option) return;
+		if (!option) return undefined;
 		const values = option.options ?? [];
-		if (values.length && !values.some((v) => v.value === value)) return;
+		if (values.length && !values.some((v) => v.value === value)) return undefined;
 		// The option already reports the value in use; setting it again makes the agent
 		// reconfigure the session (seconds on Devin), so only send the RPC when it differs.
-		if (option.currentValue === value) return;
-		await this.acp!.request(
+		if (option.currentValue === value) return undefined;
+		const result = (await this.acp!.request(
 			'session/set_config_option',
 			{
 				sessionId: this.sessionId,
@@ -709,7 +714,8 @@ class AcpConversation implements RuntimeConversation {
 				value,
 			},
 			HANDSHAKE_MS,
-		);
+		)) as { configOptions?: ConfigOption[] } | null | undefined;
+		return Array.isArray(result?.configOptions) ? result.configOptions : undefined;
 	}
 
 	/**

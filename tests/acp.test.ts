@@ -377,6 +377,40 @@ test('effort and session config options are applied after session/new, only when
 	conv.close();
 });
 
+test('effort is checked against the options the agent reports after the model switch', async () => {
+	// agy: session/new lists the default model's levels; an orchestrator offers none once it is chosen.
+	const agent = { ...devinAgent, effortConfigId: 'thought_level', sessionConfig: { mode: 'auto' } };
+	const { acp, conv } = rig(async () => ({ content: [], isError: false }), 'gemini-pro-orchestrator-neon', agent, 'low');
+	conv.send([{ type: 'text', text: 'hi' }]);
+	await answer(acp, 'initialize', { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
+	await answer(acp, 'authenticate', {});
+	await answer(acp, 'session/new', {
+		sessionId: 's',
+		configOptions: [
+			{ id: 'model', currentValue: 'gemini-4-neon', options: [{ value: 'gemini-4-neon' }, { value: 'gemini-pro-orchestrator-neon' }] },
+			{ id: 'thought_level', currentValue: 'high', options: [{ value: 'low' }, { value: 'high' }] },
+			{ id: 'mode', currentValue: 'default', options: [{ value: 'default' }, { value: 'auto' }] },
+		],
+	});
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/set_config_option').length === 1, 'model write');
+	await answer(acp, 'session/set_config_option', {
+		configOptions: [
+			{ id: 'model', currentValue: 'gemini-pro-orchestrator-neon', options: [{ value: 'gemini-4-neon' }, { value: 'gemini-pro-orchestrator-neon' }] },
+			{ id: 'thought_level', currentValue: 'unspecified', options: [{ value: 'unspecified' }] },
+			{ id: 'mode', currentValue: 'default', options: [{ value: 'default' }, { value: 'auto' }] },
+		],
+	});
+	await until(() => parse(acp.sent).filter((m) => m.method === 'session/set_config_option').length === 2, 'mode write');
+	await answer(acp, 'session/set_config_option', {});
+	await until(() => parse(acp.sent).some((m) => m.method === 'session/prompt'), 'session/prompt');
+	const writes = parse(acp.sent).filter((m) => m.method === 'session/set_config_option').map((m) => m.params as Record<string, unknown>);
+	assert.deepEqual(writes, [
+		{ sessionId: 's', configId: 'model', value: 'gemini-pro-orchestrator-neon' },
+		{ sessionId: 's', configId: 'mode', value: 'auto' },
+	]);
+	conv.close();
+});
+
 test('an effort the option does not accept, and one already current, send nothing', async () => {
 	const agent = { ...devinAgent, effortConfigId: 'thought_level' };
 	const { acp, conv } = rig(async () => ({ content: [], isError: false }), 'swe-2-high', agent, 'max');
