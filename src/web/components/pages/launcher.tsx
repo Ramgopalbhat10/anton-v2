@@ -277,8 +277,8 @@ export function Launcher() {
 				</Btn>
 			</TopBar>
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-6">
-				<div className="mx-auto flex max-w-[760px] flex-col gap-11 pt-8 md:pt-[min(11vh,88px)]">
-					<div className="flex w-full flex-col gap-3">
+				<div className="mx-auto flex w-full max-w-[1120px] flex-col gap-10 pt-8 md:pt-[min(9vh,72px)]">
+					<div className="flex w-full max-w-[760px] flex-col gap-3 self-center">
 						<div className="mb-2 flex flex-col gap-1">
 							<h1 className="m-0 text-h1 leading-[30px] font-semibold tracking-[-0.02em] text-(--text)">{greeting(profile.data?.name)}</h1>
 							<p className="m-0 text-body-lg leading-5 text-(--text-2)">

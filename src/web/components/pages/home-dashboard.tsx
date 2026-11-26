@@ -10,11 +10,11 @@ import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
 import { dollars, when } from '@/lib/format';
 import { activeAt, repoName } from '@/lib/task-view';
-import { stateOf, useSpaceName } from '@/lib/spaces';
+import { stateOf, threadLine, useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 const DAY = 86_400_000;
-/** Days the strip's bars cover; the newest seven are this week. */
+/** Days the outcome instrument covers; the newest seven are this week. */
 const DAYS = 14;
 const SHOWN = 5;
 
@@ -35,6 +35,18 @@ function nextStep(session: Session): string {
 	return 'Open';
 }
 
+function attentionTone(session: Session): 'danger' | 'warning' | 'accent' {
+	if (session.status === 'error' || session.pullRequest?.checks === 'failed' || session.pullRequest?.conflicts) return 'danger';
+	if (session.plan) return 'accent';
+	return 'warning';
+}
+
+const TONE_CLASS = {
+	danger: 'bg-(--bad-soft) text-(--bad)',
+	warning: 'bg-(--warn-soft) text-(--warn)',
+	accent: 'bg-(--accent-soft) text-(--accent-text)',
+} as const;
+
 function TaskLink({ session, children, className }: { session: Session; children: ReactNode; className?: string }) {
 	return session.spaceId ? (
 		<Link to="/projects/$spaceId/threads/$threadId" params={{ spaceId: session.spaceId, threadId: session.id }} className={className}>
@@ -47,11 +59,10 @@ function TaskLink({ session, children, className }: { session: Session; children
 	);
 }
 
-function Heading({ title, aside, children }: { title: string; aside?: ReactNode; children?: ReactNode }) {
+function DeckHeading({ title, children }: { title: string; children?: ReactNode }) {
 	return (
-		<div className="mb-2 flex h-5 items-center gap-2">
-			<h2 className="m-0 text-body-lg leading-5 font-semibold text-(--text)">{title}</h2>
-			{aside}
+		<div className="flex h-10 shrink-0 items-center gap-2 px-3.5">
+			<h3 className="m-0 text-body font-semibold text-(--text)">{title}</h3>
 			<span className="flex-1" />
 			{children}
 		</div>
@@ -60,8 +71,8 @@ function Heading({ title, aside, children }: { title: string; aside?: ReactNode;
 
 const MORE = 'inline-flex items-center gap-1 rounded-inner text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
-function Where({ session }: { session: Session }) {
-	const spaceName = useSpaceName(session.spaceId);
+function Where({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
+	const spaceName = session.spaceId ? spaces?.find((space) => space.id === session.spaceId)?.name : undefined;
 	return (
 		<>
 			<span className="shrink-0">{spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')}</span>
@@ -75,123 +86,112 @@ function Where({ session }: { session: Session }) {
 	);
 }
 
-function CardRow({ session, note, children }: { session: Session; note?: string | null; children?: ReactNode }) {
+function AttentionRow({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
+	const tone = attentionTone(session);
 	return (
 		<TaskLink
 			session={session}
-			className="group/row flex h-11 min-w-0 items-center gap-2.5 px-3 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+			className="group/row flex min-h-12 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
 		>
 			<TaskStatusIcon session={session} size={14} />
-			<span className="flex min-w-0 flex-1 flex-col">
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate text-body leading-[18px] font-medium text-(--text)">{session.title}</span>
-				<span className="flex min-w-0 items-center gap-1.5 text-small leading-4 text-(--text-3)">{note ? <span className="truncate">{note}</span> : <Where session={session} />}</span>
+				<span className="truncate text-small leading-4 text-(--text-3)">{session.asking ?? session.errorMessage ?? <Where session={session} spaces={spaces} />}</span>
 			</span>
-			<PrStatus thread={session} />
-			{children}
+			<span className={cn('shrink-0 rounded-inner px-1.5 py-0.5 text-nano font-medium', TONE_CLASS[tone])}>{nextStep(session)}</span>
+			<span className="in-num hidden w-9 shrink-0 text-right text-small text-(--text-3) sm:inline">{when(activeAt(session))}</span>
 		</TaskLink>
 	);
 }
 
-const AGE = 'in-num w-7 shrink-0 text-right text-small text-(--text-3)';
-
-function NeedsYou({ sessions }: { sessions: Session[] }) {
-	const shown = sessions.slice(0, SHOWN);
+function LiveRow({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
+	const activity = threadLine(session);
 	return (
-		<section aria-label="Needs you">
-			<Heading title="Needs you" aside={<Badge tone="warning">{sessions.length}</Badge>}>
-				<Link to="/inbox" className={MORE}>
-					Open inbox <Icon icon={ArrowRight} size={12} />
-				</Link>
-				</Heading>
-				<div className="in-card flex flex-col overflow-hidden">
-				{shown.map((session) => (
-					<CardRow key={session.id} session={session} note={session.asking ?? session.errorMessage}>
-						<span aria-hidden className="shrink-0 rounded-inner bg-(--warn-soft) px-1.5 py-0.5 text-nano font-medium text-(--warn)">
-							{nextStep(session)}
-						</span>
-						<span className={AGE}>{when(activeAt(session))}</span>
-						</CardRow>
-					))}
-					{sessions.length > shown.length ? (
-						<Link to="/tasks" className="flex h-8 items-center gap-1 border-t border-(--line) px-3 text-small text-(--text-3) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus-inset)">
-						{sessions.length - shown.length} more in Tasks <Icon icon={ArrowRight} size={12} />
-						</Link>
-					) : null}
-				</div>
-			</section>
-		);
-	}
-
-function Running({ sessions }: { sessions: Session[] }) {
-	const shown = sessions.slice(0, SHOWN);
-	return (
-		<section aria-label="Running">
-			<Heading title="Running" aside={<StatusDot tone="accent" pulse />}>
-				{sessions.length > shown.length ? (
-					<Link to="/tasks" className={MORE}>
-						{sessions.length - shown.length} more <Icon icon={ArrowRight} size={12} />
-					</Link>
-				) : null}
-			</Heading>
-			<div className="in-card flex flex-col overflow-hidden">
-				{shown.map((session) => (
-					<CardRow key={session.id} session={session} note={session.lastReply}>
-						<span className="in-num shrink-0 text-small text-(--text-3)">
-							{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
-							{when(session.lastInputAt ?? session.createdAt)}
-						</span>
-					</CardRow>
-				))}
-			</div>
-		</section>
+		<TaskLink
+			session={session}
+			className="group/row flex min-h-12 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+		>
+			<StatusDot tone="accent" pulse className="ml-[3px]" />
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="truncate text-body leading-[18px] font-medium text-(--text)">{session.title}</span>
+				<span className="flex min-w-0 items-center gap-1.5 text-small leading-4 text-(--text-3)">
+					{activity ? <span className="truncate">{activity}</span> : <Where session={session} spaces={spaces} />}
+				</span>
+			</span>
+			<PrStatus thread={session} />
+			<span className="in-num shrink-0 text-right text-small text-(--text-3)">
+				{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
+				{when(session.lastInputAt ?? session.createdAt)}
+			</span>
+		</TaskLink>
 	);
 }
 
-function Recent({ sessions }: { sessions: Session[] }) {
+function QueueEmpty() {
 	return (
-		<section aria-label="Recent">
-			<Heading title="Recent">
-				<Link to="/tasks" className={MORE}>
-					All tasks <Icon icon={ArrowRight} size={12} />
-				</Link>
-			</Heading>
-			<div className="-mx-2 flex flex-col">
-				{sessions.map((session) => (
-					<TaskLink
-						key={session.id}
-						session={session}
-						className="group/row flex h-9 min-w-0 items-center gap-2.5 rounded-control px-2 outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
-					>
-						<TaskStatusIcon session={session} size={14} />
-						<span className="min-w-0 flex-1 truncate text-body text-(--text)">{session.title}</span>
-						<span className="hidden max-w-[40%] min-w-0 items-center gap-1.5 text-small text-(--text-3) sm:flex">
-							<Where session={session} />
-						</span>
-						<span className={AGE}>{when(activeAt(session))}</span>
-					</TaskLink>
-				))}
-			</div>
-		</section>
-	);
-}
-
-function Stat({ label, children }: { label: string; children: ReactNode }) {
-	return (
-		<div className="flex flex-col">
-			<span className="text-micro leading-4 text-(--text-3)">{label}</span>
-			<span className="in-num text-h3 leading-6 font-semibold text-(--text)">{children}</span>
+		<div className="flex min-h-16 flex-col justify-center px-3.5 py-3 text-small text-(--text-3)">
+			<span className="text-(--text-2)">Nothing needs your judgment.</span>
+			<span>Anton will surface questions, plans, failures, and conflicts here.</span>
 		</div>
 	);
 }
 
-function Strip({ sessions }: { sessions: Session[] }) {
+function NeedsYouDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
+	const shown = sessions.slice(0, SHOWN);
+	return (
+		<section aria-label="Needs you" className="border-b border-(--line)">
+			<DeckHeading title="Needs you">
+				<Badge tone={sessions.length ? 'warning' : 'neutral'}>{sessions.length}</Badge>
+				<Link to="/inbox" className={MORE}>
+					Open inbox <Icon icon={ArrowRight} size={12} />
+				</Link>
+			</DeckHeading>
+			<div className="border-t border-(--line)">
+				{shown.length ? shown.map((session) => <AttentionRow key={session.id} session={session} spaces={spaces} />) : <QueueEmpty />}
+			</div>
+		</section>
+	);
+}
+
+function RunningDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
+	const shown = sessions.slice(0, SHOWN);
+	return (
+		<section aria-label="Running">
+			<DeckHeading title="Running">
+				<StatusDot tone={sessions.length ? 'accent' : 'neutral'} pulse={sessions.length > 0} />
+				<span className="in-num text-small text-(--text-3)">{sessions.length}</span>
+			</DeckHeading>
+			<div className="border-t border-(--line)">
+				{shown.length ? (
+					shown.map((session) => <LiveRow key={session.id} session={session} spaces={spaces} />)
+				) : (
+					<div className="flex min-h-14 items-center px-3.5 text-small text-(--text-3)">Nothing is running right now.</div>
+				)}
+			</div>
+		</section>
+	);
+}
+
+function OutcomeStat({ label, value, detail }: { label: string; value: ReactNode; detail?: string }) {
+	return (
+		<div className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
+			<span className="text-micro leading-4 text-(--text-3)">{label}</span>
+			<span className="in-num truncate text-body-lg leading-5 font-semibold text-(--text)">{value}</span>
+			{detail ? <span className="truncate text-nano leading-3.5 text-(--text-4)">{detail}</span> : null}
+		</div>
+	);
+}
+
+function Outcomes({ sessions }: { sessions: Session[] }) {
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage, staleTime: 60_000 });
-	const { perDay, week, merged } = useMemo(() => {
+	const { perDay, week, merged, openPrs } = useMemo(() => {
 		const today = localDay(new Date());
 		const perDay = Array.from({ length: DAYS }, () => 0);
 		let week = 0;
 		let merged = 0;
+		let openPrs = 0;
 		for (const session of sessions) {
+			if (session.pullRequest?.state === 'open' || session.pullRequest?.state === 'draft') openPrs += 1;
 			const back = today - localDay(new Date(session.createdAt));
 			if (back < 0 || back >= DAYS) continue;
 			perDay[DAYS - 1 - back] += 1;
@@ -200,26 +200,28 @@ function Strip({ sessions }: { sessions: Session[] }) {
 				if (session.pullRequest?.state === 'merged') merged += 1;
 			}
 		}
-		return { perDay, week, merged };
+		return { perDay, week, merged, openPrs };
 	}, [sessions]);
 	const most = Math.max(1, ...perDay);
 	return (
-		<section aria-label="This week" className="flex items-center gap-5 rounded-card px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--line)]">
-			<Stat label="This week">
-				{week} {week === 1 ? 'task' : 'tasks'}
-			</Stat>
-			<Stat label="Merged">{merged}</Stat>
-			<Stat label="Spent this month">{usage.data ? dollars(usage.data.month) : '—'}</Stat>
-			<span className="flex-1" />
-			<div role="img" aria-label={`Tasks started on each of the last ${DAYS} days`} className="hidden h-7 items-end gap-[3px] sm:flex">
+		<section aria-label="This week" className="border-b border-(--line)">
+			<DeckHeading title="Outcomes">
+				<span className="text-small text-(--text-3)">14 days</span>
+			</DeckHeading>
+			<div className="grid grid-cols-3 divide-x divide-(--line) border-t border-(--line)">
+				<OutcomeStat label="Started" value={week} detail="this week" />
+				<OutcomeStat label="Merged" value={merged} detail={openPrs ? `${openPrs} open` : 'none open'} />
+				<OutcomeStat label="Spent" value={usage.data ? dollars(usage.data.month) : '—'} detail="this month" />
+			</div>
+			<div className="flex h-16 items-end gap-[3px] border-t border-(--line) px-3.5 pt-3 pb-3" role="img" aria-label={`Tasks started on each of the last ${DAYS} days`}>
 				{perDay.map((count, index) => {
 					const back = DAYS - 1 - index;
 					return (
 						<span
 							key={index}
 							title={`${count} ${count === 1 ? 'task' : 'tasks'} ${back === 0 ? 'today' : back === 1 ? 'yesterday' : `${back} days ago`}`}
-							className={cn('w-1.5 rounded-mark', back < 7 && count > 0 ? 'bg-(--accent)' : 'bg-(--bg-active)')}
-							style={{ height: 4 + Math.round((count / most) * 24) }}
+							className={cn('min-w-0 flex-1 rounded-mark', back < 7 && count > 0 ? 'bg-(--accent)' : 'bg-(--bg-active)')}
+							style={{ height: 5 + Math.round((count / most) * 30) }}
 						/>
 					);
 				})}
@@ -228,6 +230,94 @@ function Strip({ sessions }: { sessions: Session[] }) {
 	);
 }
 
+function stateColor(session: Session): string {
+	const state = stateOf(session);
+	if (state === 'waiting') return 'var(--warn)';
+	if (state === 'working' || state === 'queued') return 'var(--accent)';
+	if (state === 'review' || state === 'landing') return 'var(--ok)';
+	return 'var(--text-4)';
+}
+
+function WorkloadMap({ sessions }: { sessions: Session[] }) {
+	const spaces = useSpaces();
+	const lanes = useMemo(() => {
+		const groups = new Map<string, { key: string; label: string; sessions: Session[] }>();
+		for (const session of sessions) {
+			const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
+			const key = session.spaceId ?? session.repo ?? 'chat';
+			const label = space?.name ?? (session.repo ? repoName(session.repo) : 'Chat');
+			const group = groups.get(key) ?? { key, label, sessions: [] };
+			group.sessions.push(session);
+			groups.set(key, group);
+		}
+		return [...groups.values()]
+			.map((group) => ({
+				...group,
+				waiting: group.sessions.filter(needsYou).length,
+				running: group.sessions.filter(isRunning).length,
+				latest: Math.max(...group.sessions.map((session) => Date.parse(activeAt(session)) || 0)),
+			}))
+			.sort((a, b) => b.waiting + b.running - (a.waiting + a.running) || b.latest - a.latest)
+			.slice(0, 5);
+	}, [sessions, spaces.data]);
+	return (
+		<section aria-label="Workload map" className="flex min-h-0 flex-1 flex-col">
+			<DeckHeading title="Workload map">
+				<span className="flex items-center gap-2 text-nano text-(--text-3)">
+					<span className="flex items-center gap-1"><StatusDot color="var(--warn)" /> waiting</span>
+					<span className="flex items-center gap-1"><StatusDot color="var(--accent)" /> active</span>
+				</span>
+			</DeckHeading>
+			<div className="flex min-h-0 flex-1 flex-col border-t border-(--line)">
+				{lanes.map((lane) => (
+					<div key={lane.key} className="flex min-h-11 flex-1 items-center gap-3 px-3.5 py-2 not-first:border-t not-first:border-(--line)">
+						<div className="flex min-w-0 flex-1 flex-col gap-1">
+							<span className="truncate text-small font-medium text-(--text-2)">{lane.label}</span>
+							<span className="flex min-w-0 items-center gap-1" aria-label={`${lane.sessions.length} tasks in ${lane.label}`}>
+								{lane.sessions.slice(0, 12).map((session) => (
+									<span key={session.id} title={session.title} className="h-2.5 w-1.5 rounded-mark" style={{ background: stateColor(session) }} />
+								))}
+								{lane.sessions.length > 12 ? <span className="text-nano text-(--text-4)">+{lane.sessions.length - 12}</span> : null}
+							</span>
+						</div>
+						<span className="in-num shrink-0 text-small text-(--text-3)">{lane.sessions.length}</span>
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function RecentDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
+	return (
+		<section aria-label="Recent" className="border-t border-(--line) bg-(--bg-panel)">
+			<DeckHeading title="Recent">
+				<Link to="/tasks" className={MORE}>
+					All tasks <Icon icon={ArrowRight} size={12} />
+				</Link>
+			</DeckHeading>
+			<div className="grid border-t border-(--line) lg:grid-cols-5">
+				{sessions.map((session) => (
+					<TaskLink
+						key={session.id}
+						session={session}
+						className="group/row flex min-h-14 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset) lg:not-first:border-t-0 lg:not-first:border-l"
+					>
+						<TaskStatusIcon session={session} size={14} />
+						<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+							<span className="truncate text-small leading-4 font-medium text-(--text)">{session.title}</span>
+							<span className="flex min-w-0 items-center gap-1 text-micro leading-3.5 text-(--text-3)">
+								<Where session={session} spaces={spaces} />
+								<span className="text-(--text-4)">·</span>
+								<span className="in-num shrink-0">{when(activeAt(session))}</span>
+							</span>
+						</span>
+					</TaskLink>
+				))}
+			</div>
+		</section>
+	);
+}
 
 function FirstRun() {
 	const steps = [
@@ -268,6 +358,7 @@ export function homeSummary(sessions: Session[]): string {
 
 export function HomeDashboard() {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
+	const spaces = useSpaces();
 	const { needs, running, recent, all } = useMemo(() => {
 		const all = sessions.data?.sessions ?? [];
 		const byActive = [...all].sort((a, b) => activeAt(b).localeCompare(activeAt(a)));
@@ -279,11 +370,27 @@ export function HomeDashboard() {
 	if (!sessions.data) return null;
 	if (all.length === 0) return <FirstRun />;
 	return (
-		<div className="flex flex-col gap-7">
-			{needs.length ? <NeedsYou sessions={needs} /> : null}
-			{running.length ? <Running sessions={running} /> : null}
-			{recent.length ? <Recent sessions={recent} /> : null}
-			<Strip sessions={all} />
-		</div>
+		<section aria-label="Control deck" className="overflow-hidden rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line)]">
+			<div className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-b border-(--line) px-3.5 py-2">
+				<h2 className="m-0 text-body-lg leading-5 font-semibold text-(--text)">Control deck</h2>
+				<span className="text-small text-(--text-3)">Attention, active work, and outcomes in one scan</span>
+				<span className="flex-1" />
+				<span className="flex items-center gap-2 text-small text-(--text-3)">
+					<span className="flex items-center gap-1.5"><StatusDot color="var(--warn)" /> {needs.length} waiting</span>
+					<span className="flex items-center gap-1.5"><StatusDot color="var(--accent)" pulse={running.length > 0} /> {running.length} running</span>
+				</span>
+			</div>
+			<div className="grid lg:grid-cols-[minmax(0,1.42fr)_minmax(300px,0.82fr)]">
+				<div className="min-w-0">
+					<NeedsYouDeck sessions={needs} spaces={spaces.data?.spaces} />
+					<RunningDeck sessions={running} spaces={spaces.data?.spaces} />
+				</div>
+				<div className="flex min-w-0 flex-col border-t border-(--line) lg:border-t-0 lg:border-l">
+					<Outcomes sessions={all} />
+					<WorkloadMap sessions={all} />
+				</div>
+			</div>
+			{recent.length ? <RecentDeck sessions={recent} spaces={spaces.data?.spaces} /> : null}
+		</section>
 	);
 }
