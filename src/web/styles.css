@@ -238,12 +238,22 @@ textarea::placeholder {
 
 .settings-overlay {
 	background: var(--bg-scrim);
+}
+.settings-overlay[data-state='open'] {
 	animation: settings-fade var(--t) var(--ease);
+}
+.settings-overlay[data-state='closed'] {
+	animation: settings-fade-out var(--t-fast) var(--ease) forwards;
 }
 .settings-card {
 	--surface-fill: var(--bg-overlay);
 	background: var(--bg-overlay);
+}
+.settings-card[data-state='open'] {
 	animation: settings-rise var(--t-slow) var(--ease);
+}
+.settings-card[data-state='closed'] {
+	animation: settings-leave var(--t-fast) var(--ease) forwards;
 }
 @media (min-width: 768px) {
 	.settings-card {
@@ -256,15 +266,30 @@ textarea::placeholder {
 		opacity: 0;
 	}
 }
+@keyframes settings-fade-out {
+	to {
+		opacity: 0;
+	}
+}
 @keyframes settings-rise {
 	from {
 		opacity: 0;
 		scale: 0.985;
 	}
 }
+@keyframes settings-leave {
+	to {
+		opacity: 0;
+		scale: 0.985;
+	}
+}
 @media (prefers-reduced-motion: reduce) {
-	.settings-overlay,
-	.settings-card {
-		animation: none;
+	.settings-overlay[data-state='open'],
+	.settings-card[data-state='open'] {
+		animation: settings-fade 120ms var(--ease);
+	}
+	.settings-overlay[data-state='closed'],
+	.settings-card[data-state='closed'] {
+		animation: settings-fade-out 90ms var(--ease) forwards;
 	}
 }

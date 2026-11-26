@@ -39,8 +39,9 @@ export function useFold(box: () => HTMLElement | null, content: unknown, { lines
 	useEffect(() => {
 		if (!long) setOpen(false);
 	}, [long]);
+	const reduced = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 	const style: CSSProperties | undefined = heights
-		? { maxHeight: open ? heights.whole : heights.folded, transition: easing ? `max-height ${EASE_MS}ms ease-in` : undefined }
+		? { maxHeight: open ? heights.whole : heights.folded, transition: easing && !reduced ? `max-height ${EASE_MS}ms var(--ease)` : undefined }
 		: undefined;
 	return {
 		long,

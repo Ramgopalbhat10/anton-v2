@@ -150,6 +150,17 @@
 .sg-btn.is-loading {
 	pointer-events: none;
 }
+.sg-press {
+	transition:
+		background var(--t-fast),
+		color var(--t-fast),
+		box-shadow var(--t-fast),
+		opacity var(--t-fast),
+		transform var(--t) var(--ease);
+}
+.sg-press:not(:disabled, [aria-disabled='true'], .is-disabled):active {
+	transform: scale(0.97);
+}
 .sg-icon-btn {
 	padding: 0;
 	width: var(--h-md);
@@ -443,6 +454,14 @@
  visibility: visible;
  transition: grid-template-rows var(--t) var(--ease), opacity var(--t) var(--ease), visibility 0s;
 }
+@media (prefers-reduced-motion: reduce) {
+ .sg-disclosure {
+  transition: grid-template-rows 0ms, opacity 120ms var(--ease), visibility 0s 120ms;
+ }
+ .sg-disclosure[data-open='true'] {
+  transition: grid-template-rows 0ms, opacity 120ms var(--ease), visibility 0s;
+ }
+}
 
 .sg-draft:empty::before {
  content: attr(data-placeholder);
@@ -455,7 +474,7 @@
    narrows to its icon in step with the column; labels fade, the rest
    (.sg-nav-more) hides. On a phone it is a sheet over the page, slid in from
    the left. */
-.sg-nav { transition: transform var(--t-slow) var(--ease), visibility 0s; }
+.sg-nav { transition: transform var(--t-panel) var(--ease-panel), visibility 0s; }
 .sg-nav-expand, .sg-nav-dot { opacity: 0; visibility: hidden; }
 .sg-nav-scrim { transition: opacity var(--t-slow) var(--ease), visibility 0s; }
 .sg-nav-scrim[data-shown='false'] { opacity: 0; visibility: hidden; transition: opacity var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
@@ -471,15 +490,15 @@
   padding-left: env(safe-area-inset-left);
   box-shadow: var(--sh-3);
  }
- .sg-nav[data-open='false'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-slow) var(--ease), visibility 0s var(--t-slow); }
+ .sg-nav[data-open='false'] { transform: translateX(-100%); visibility: hidden; transition: transform var(--t-panel) var(--ease-panel), visibility 0s var(--t-panel); }
 }
 @media (min-width: 768px) {
- .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: var(--nav-w, 236px); overflow: hidden; transition: width var(--t-slow) var(--ease); }
+ .sg-nav-column { position: relative; display: flex; flex-shrink: 0; width: var(--nav-w, 236px); overflow: hidden; transition: width var(--t-panel) var(--ease-panel); }
  /* While its edge is dragged the column follows the pointer, not an easing. */
  .sg-nav-column:has(> [data-dragging]) { transition: none; user-select: none; }
  .sg-nav-column[data-collapsed='true'] { width: 48px; }
  /* Both shrink by the same 188px on the same curve, so a pin keeps its 8px from the column's edge all the way. */
- .sg-nav-pin { max-width: 100%; overflow: hidden; transition: max-width var(--t-slow) var(--ease), background var(--t-fast), box-shadow var(--t-fast); }
+ .sg-nav-pin { max-width: 100%; overflow: hidden; transition: max-width var(--t-panel) var(--ease-panel), background var(--t-fast), box-shadow var(--t-fast); }
  .sg-nav-label, .sg-nav-logo, .sg-nav-dot { transition: opacity var(--t) var(--ease); }
  .sg-nav-more { transition: opacity var(--t) var(--ease), visibility 0s; }
  .sg-nav[data-collapsed='true'] .sg-nav-pin { max-width: 32px; }
@@ -503,6 +522,7 @@
 	.sg-viewer-sheet { left: auto; }
 }
 .sg-workspace[data-resizing='true'] { user-select: none; }
+.sg-workspace[data-resizing='true'] > .sg-workspace-body, .sg-project-dock[data-resizing='true'] > .sg-project-dock-body { transition: none; }
 .sg-workspace-resizer::after {
  content: '';
  position: absolute;
@@ -517,13 +537,17 @@
 .sg-workspace[data-resizing='true'] .sg-workspace-resizer::after,
 .sg-project-dock[data-resizing='true'] .sg-workspace-resizer::after { opacity: 1; }
 @media (min-width: 768px) {
- .sg-workspace[data-expanded='false'][data-compact='false'] { flex: 0 0 var(--workspace-width, 46%); }
- /* Beside the conversation the workspace slides in and out from the right: its
-    column opens to its width while the panels inside keep theirs. */
-.sg-workspace[data-expanded='false'][data-compact='false'] > .sg-workspace-body { width: calc(var(--workspace-width, 46%) - 1px); }
+ .sg-workspace[data-compact='false'] { flex: 0 0 var(--workspace-width, 46%); border-color: transparent; }
+.sg-workspace[data-compact='false'] > .sg-workspace-body { position: absolute; inset-block: 0; right: 0; width: calc(var(--workspace-width, 46%) - 1px); background: var(--bg-panel); box-shadow: inset 1px 0 0 var(--line); }
+.sg-workspace[data-compact='false'][data-expanded='true'] { border-color: transparent; }
+.sg-workspace[data-compact='false'][data-expanded='true'] > .sg-workspace-body { z-index: 30; width: calc(var(--workspace-expanded-width, 100%) - 1px); }
+.sg-workspace[data-compact='false'][data-layout-motion='true'][data-resizing='false'] > .sg-workspace-body { transition: width var(--t-panel) var(--ease-panel); }
  .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='in'],
- .sg-workspace[data-compact='false'][data-narrow='true'][data-resizing='false'][data-slide='still'] { overflow: hidden; transition: flex-basis var(--t-slow) var(--ease); }
- .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='out'] { overflow: hidden; flex-basis: 0; transition: flex-basis var(--t-slow) var(--ease); }
+ .sg-workspace[data-expanded='false'][data-compact='false'][data-resizing='false'][data-slide='still'][data-layout-motion='true'] { transition: flex-basis var(--t-panel) var(--ease-panel); }
+ .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='in'] { overflow: hidden; }
+ .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='out'] { overflow: hidden; flex-basis: 0; transition: flex-basis var(--t-panel) var(--ease-panel); }
+ .sg-workspace[data-closing-expanded='true'][data-compact='false'][data-slide='out'] { overflow: visible; flex-basis: 0; transition: flex-basis var(--t-panel) var(--ease-panel); }
+ .sg-workspace[data-closing-expanded='true'][data-compact='false'][data-slide='out'] > .sg-workspace-body { width: 0; transition: width var(--t-panel) var(--ease-panel); }
  @starting-style {
   .sg-workspace[data-expanded='false'][data-compact='false'][data-slide='in'] { flex-basis: 0; }
  }
@@ -531,19 +555,19 @@
 
 @media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
  /* An already wide workspace has no column resize to animate. Slide the viewer over its panels instead. */
- .sg-workspace[data-narrow='false'][data-slide='still'] .sg-viewer-docked { transition: translate var(--t-slow) var(--ease); }
+ .sg-workspace[data-narrow='false'][data-slide='still'] .sg-viewer-docked { transition: translate var(--t-panel) var(--ease-panel); }
  @starting-style {
   .sg-workspace[data-narrow='false'][data-slide='still'] .sg-viewer-docked { translate: 100% 0; }
  }
 }
 
-/* Resizes by its left edge and slides like the task workspace: its column opens to its width while what is inside keeps its own. */
+/* Resizes by its left edge and slides like the task workspace: its column opens to its width while what is inside stays fixed at the right edge. */
 .sg-project-dock { flex: 0 0 var(--dock-width, 380px); }
 .sg-project-dock[data-resizing='true'] { user-select: none; }
-.sg-project-dock > .sg-project-dock-body { width: var(--dock-width, 380px); }
+.sg-project-dock > .sg-project-dock-body { position: absolute; inset-block: 0; right: 0; width: var(--dock-width, 380px); transition: width var(--t-panel) var(--ease-panel); }
 @media (min-width: 768px) {
- .sg-project-dock[data-slide='in'] { overflow: hidden; transition: flex-basis var(--t-slow) var(--ease); }
- .sg-project-dock[data-slide='out'] { overflow: hidden; flex-basis: 0; transition: flex-basis var(--t-slow) var(--ease); }
+ .sg-project-dock[data-slide='in'] { overflow: hidden; transition: flex-basis var(--t-panel) var(--ease-panel); }
+ .sg-project-dock[data-slide='out'] { overflow: hidden; flex-basis: 0; transition: flex-basis var(--t-panel) var(--ease-panel); }
  @starting-style {
   .sg-project-dock[data-slide='in'] { flex-basis: 0; }
  }
