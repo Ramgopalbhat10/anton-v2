@@ -845,7 +845,7 @@ export const ModelPicker = memo(function ModelPicker({
 							<ModelOptionsRow options={options} note={selected !== options.base ? selected?.description : undefined} onChange={choose} />
 						) : null}
 						{effort ? <div className="flex items-center gap-3 py-1.5 pr-2 pl-3">
-							<span className="in-caption w-12 shrink-0">Effort</span>
+							<span className="in-caption w-12 shrink-0" title="Higher thinking can be slower and cost more">Thinking</span>
 							<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
 						</div> : null}
 					</div>

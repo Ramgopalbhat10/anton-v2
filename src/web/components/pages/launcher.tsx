@@ -29,13 +29,13 @@ function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[];
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<PickerChip icon={value ? Folder : MessageSquare} label={value ? value.repoFullName.split('/').pop()! : 'No repository'} />
+				<PickerChip icon={value ? Folder : MessageSquare} label={value ? value.repoFullName.split('/').pop()! : 'General task'} aria-label={value ? `Repository: ${value.repoFullName}` : 'Task type: general task'} />
 			</MenuTrigger>
 			<MenuContent align="start" className="min-w-[240px]">
-				<MenuItem icon={MessageSquare} checked={!value} onSelect={() => onChange(NO_REPO)}>
-					No repository
+				<MenuItem icon={MessageSquare} checked={!value} hint="no code" onSelect={() => onChange(NO_REPO)}>
+					General task
 				</MenuItem>
-				{projects.length > 0 ? <MenuLabel>Repositories</MenuLabel> : null}
+				{projects.length > 0 ? <MenuLabel>Repositories change code and can open PRs</MenuLabel> : null}
 				{projects.map((project) => (
 					<MenuItem key={project.id} checked={project.id === value?.id} onSelect={() => onChange(project.id)}>
 						{project.repoFullName}
@@ -64,7 +64,7 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 	return (
 		<Menu>
 			<MenuTrigger asChild>
-				<PickerChip icon={GitBranch} label={value || 'main'} disabled={!project} />
+				<PickerChip icon={GitBranch} label={value || 'main'} disabled={!project} aria-label={`Branch: ${value || 'main'}`} />
 			</MenuTrigger>
 			<MenuContent align="start" className="max-h-[320px] min-w-[200px] overflow-y-auto">
 				{branches.isPending ? <MenuLabel>Loading branches</MenuLabel> : null}
@@ -254,8 +254,8 @@ export function Launcher() {
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
 			<TopBar crumbs={['Home']}>
-				<Btn size="sm" variant="ghost" icon={EyeOff} title="A chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })}>
-					Incognito
+				<Btn size="sm" variant="ghost" icon={EyeOff} title="Start a chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })}>
+					Private chat
 				</Btn>
 			</TopBar>
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-6">

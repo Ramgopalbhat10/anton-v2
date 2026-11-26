@@ -136,11 +136,11 @@ describe('new task composer', () => {
 		const box = screen.getByRole('textbox');
 		await userEvent.type(box, '@');
 		await screen.findByRole('option', { name: /server.ts/ });
-		await userEvent.click(screen.getByRole('button', { name: 'main' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Branch: main/ }));
 		await userEvent.click(screen.getByRole('menuitem', { name: 'feature/ui' }));
 		await screen.findByRole('option', { name: /view.ts/ });
 		expect(screen.queryByRole('option', { name: /server.ts/ })).toBeNull();
-		await userEvent.click(screen.getByRole('button', { name: 'demo' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Repository: acme\/demo/ }));
 		await userEvent.click(screen.getByRole('menuitem', { name: 'acme/other' }));
 		await screen.findByRole('option', { name: /repo.ts/ });
 		expect(screen.queryByRole('option', { name: /view.ts/ })).toBeNull();
@@ -148,13 +148,13 @@ describe('new task composer', () => {
 	});
 	it('starts a chat with no repository: no branch or plan mode, and the choice is remembered', async () => {
 		const { unmount } = setup();
-		expect(screen.getByRole('button', { name: 'Plan' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: /^Plan mode/ })).toBeTruthy();
 		expect(screen.queryByLabelText('How a task runs')).toBeNull();
-		await userEvent.click(screen.getByRole('button', { name: 'demo' }));
-		await userEvent.click(screen.getByRole('menuitem', { name: 'No repository' }));
-		expect(screen.getByRole('button', { name: 'No repository' })).toBeTruthy();
-		expect(screen.queryByRole('button', { name: 'main' })).toBeNull();
-		expect(screen.queryByRole('button', { name: 'Plan' })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: /^Repository: acme\/demo/ }));
+		await userEvent.click(screen.getByRole('menuitem', { name: /General task|Task type: general task/ }));
+		expect(screen.getByRole('button', { name: /General task|Task type: general task/ })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: /^Branch: main/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: /^Plan mode/ })).toBeNull();
 		expect(screen.queryByLabelText('How a chat runs')).toBeNull();
 		expect(screen.getByRole('button', { name: 'Research a topic on the web' })).toBeTruthy();
 		await userEvent.type(screen.getByRole('textbox'), 'What is new in React 19?');
@@ -167,10 +167,10 @@ describe('new task composer', () => {
 		localStorage.setItem('anton.project', 'none');
 		setup();
 		expect(screen.getByRole('button', { name: 'Start chat' })).toBeTruthy();
-		await userEvent.click(screen.getByRole('button', { name: 'No repository' }));
+		await userEvent.click(screen.getByRole('button', { name: /General task|Task type: general task/ }));
 		await userEvent.click(screen.getByRole('menuitem', { name: 'acme/demo' }));
 		expect(screen.getByRole('button', { name: 'Start task' })).toBeTruthy();
-		expect(screen.getByRole('button', { name: 'main' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: /^Branch: main/ })).toBeTruthy();
 	});
 	it('takes images and any other files, pasted, dropped or picked, and starts the task with them', async () => {
 		setup();
