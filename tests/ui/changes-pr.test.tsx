@@ -22,7 +22,7 @@ vi.mock('@/lib/highlight', () => ({
 }));
 
 const { GitTab } = await import('@/components/workspace/git-tab');
-const { HeaderChanges } = await import('@/components/shell/shell');
+const { HeaderChanges } = await import('@/components/shell/task-workspace');
 const { PullRequestCard } = await import('@/components/thread/reply-cards');
 const { PrTab } = await import('@/components/workspace/pr-tab');
 

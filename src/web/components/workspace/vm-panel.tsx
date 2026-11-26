@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AppWindow, ArrowLeft, Bot, Check, FileDiff, Files, GitPullRequest, Globe, History, Library, Loader, Maximize2, Minimize2, Monitor, PanelRight, Pin, Play, Plus, SquareTerminal } from '@/lib/icons';
+import { ArrowLeft, Check, Loader, Maximize2, Minimize2, PanelRight, Pin, Play, Plus } from '@/lib/icons';
 import { type ComponentType, lazy, memo, useState } from 'react';
 import { WorkspacePane } from '@/components/workspace/workspace-pane';
 import { LazyPart } from '@/components/kit/error-boundary';
@@ -13,21 +13,7 @@ import { togglePinnedPanel, usePinnedPanels } from '@/lib/pinned-panels';
 import { cn } from '@/lib/utils';
 import { DropdownMenu as MenuPrimitive } from 'radix-ui';
 import { taskQueries } from '@/lib/task-queries';
-
-export const panels = [
-	{ name: 'Changes', icon: FileDiff, desc: 'What the agent changed that GitHub does not have yet, as a diff' },
-	{ name: 'PR', icon: GitPullRequest, desc: "The thread's pull requests: checks, discussion, diff, and Merge" },
-	{ name: 'Agents', icon: Bot, desc: 'The subagents the agent hands work to, live, step by step' },
-	{ name: 'Terminal', icon: SquareTerminal, desc: 'The sandbox shell and its command output' },
-	{ name: 'Files', icon: Files, desc: 'Browse the repository on the task branch' },
-	{ name: 'Preview', icon: Globe, desc: 'The app the agent is running, live from the sandbox' },
-	{ name: 'Browser', icon: AppWindow, desc: 'A real browser for any site; pick elements or draw for the agent' },
-	{ name: 'Computer', icon: Monitor, desc: "Watch the agent test local apps on the sandbox's screen, or take over" },
-	{ name: 'Library', icon: Library, desc: 'Reports, screenshots and exports the agent saved' },
-	{ name: 'History', icon: History, desc: 'Earlier states of the files, to compare or restore' },
-] as const;
-
-export type PanelName = (typeof panels)[number]['name'];
+import { type PanelName, panels } from '@/components/workspace/panels';
 
 /**
  * Each panel takes only the task's id and keeps itself current, so it is memoized: streaming a reply never re-renders a

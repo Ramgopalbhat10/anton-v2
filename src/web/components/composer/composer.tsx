@@ -6,7 +6,7 @@ import { AttachmentTray, useAttachments } from '@/components/composer/attachment
 import { ComposerInput } from '@/components/composer/composer-input';
 import { ContextMeter } from '@/components/composer/context-meter';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import { type PendingChange, placeholders } from '@/components/thread/sent-text';
+import { type PendingChange, placeholders } from '@/components/thread/pending-send';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/kit/signal';
@@ -70,11 +70,12 @@ export const PlanToggle = memo(function PlanToggle({ on, onChange }: { on: boole
 			variant="ghost"
 			icon={ListChecks}
 			aria-pressed={on}
-			title={on ? 'Plan mode: the agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
+			aria-label={on ? 'Plan mode on: the agent proposes a plan and changes nothing until you approve it' : 'Plan mode off: turn on plan mode'}
+			title={on ? 'The agent proposes a plan and changes nothing until you approve it' : 'Turn on plan mode'}
 			onClick={() => onChange(!on)}
 			className={on ? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)] hover:bg-(--accent-soft) hover:text-(--accent-text)' : 'text-(--text-2)'}
 		>
-			Plan
+			{on ? 'Plan · approval' : 'Plan'}
 		</Btn>
 	);
 });

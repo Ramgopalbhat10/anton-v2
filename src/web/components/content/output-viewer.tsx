@@ -328,7 +328,7 @@ function ViewerPanel({ viewer, docked }: { viewer: ViewerState; docked: boolean 
 			aria-label={`Viewing ${nameOf(item.path)}`}
 			className={cn(
 				'@container/viewer flex min-h-0 min-w-0 flex-col overflow-hidden bg-(--bg-panel)',
-				docked ? 'sg-viewer-docked flex-1' : 'sg-viewer-sheet fixed z-40 rounded-card shadow-(--sh-2) motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]',
+				docked ? 'sg-viewer-docked flex-1' : 'sg-viewer-sheet fixed z-[var(--z-viewer)] rounded-card shadow-(--sh-2) motion-safe:duration-200 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-6 sm:w-[min(920px,max(480px,54vw))]',
 			)}
 		>
 			<header className="flex h-11 min-w-0 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-3 @min-[480px]/viewer:gap-2">

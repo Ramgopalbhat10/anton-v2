@@ -33,7 +33,7 @@ describe('Task peek', () => {
 			}),
 		);
 		const numbers = within(peek).getByLabelText('Numbers');
-		expect([...numbers.querySelectorAll('dt')].map((term) => `${term.textContent} ${term.nextSibling?.textContent}`)).toEqual(['Spend $0.40', 'Tokens 320K', expect.stringMatching(/^Active (\d+[mhd] ago|just now|on [A-Z][a-z]{2} \d{1,2}(, \d{4})?)$/)]);
+		expect([...numbers.querySelectorAll('dt')].map((term) => `${term.textContent} ${term.nextSibling?.textContent}`)).toEqual(['Spend $0.40', 'Tokens 320K', expect.stringMatching(/^Last active (\d+[mhd] ago|just now|on [A-Z][a-z]{2} \d{1,2}(, \d{4})?)$/)]);
 		expect(within(peek).getByText('acme/demo')).toBeTruthy();
 		expect(within(peek).getByText('anton/task-s1')).toBeTruthy();
 		const pull = within(peek).getByRole('link', { name: /#42/ });

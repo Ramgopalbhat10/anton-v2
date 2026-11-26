@@ -79,7 +79,7 @@ function CardRow({ session, note, children }: { session: Session; note?: string 
 	return (
 		<TaskLink
 			session={session}
-			className="group/row flex h-11 min-w-0 items-center gap-2.5 px-3 outline-none not-first:border-t not-first:border-(--line) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+			className="group/row flex h-11 min-w-0 items-center gap-2.5 px-3 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
 		>
 			<TaskStatusIcon session={session} size={14} />
 			<span className="flex min-w-0 flex-1 flex-col">
@@ -135,7 +135,7 @@ function Running({ sessions }: { sessions: Session[] }) {
 			</Heading>
 			<div className="in-card flex flex-col overflow-hidden">
 				{shown.map((session) => (
-					<CardRow key={session.id} session={session}>
+					<CardRow key={session.id} session={session} note={session.lastReply}>
 						<span className="in-num shrink-0 text-small text-(--text-3)">
 							{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
 							{when(session.lastInputAt ?? session.createdAt)}
@@ -160,7 +160,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 					<TaskLink
 						key={session.id}
 						session={session}
-						className="group/row flex h-9 min-w-0 items-center gap-2.5 rounded-control px-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
+						className="group/row flex h-9 min-w-0 items-center gap-2.5 rounded-control px-2 outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 					>
 						<TaskStatusIcon session={session} size={14} />
 						<span className="min-w-0 flex-1 truncate text-body text-(--text)">{session.title}</span>
@@ -228,6 +228,34 @@ function Strip({ sessions }: { sessions: Session[] }) {
 	);
 }
 
+
+function FirstRun() {
+	const steps = [
+		['Describe the outcome', 'Use plain language; attach files or images when they help.'],
+		['Watch Anton work', 'Follow the plan, terminal, files, and preview while it runs.'],
+		['Review the result', 'Check the diff, ask for changes, or open a pull request.'],
+	] as const;
+	return (
+		<section aria-label="How Anton works" className="in-card flex flex-col gap-4 px-4 py-4">
+			<div className="flex flex-col gap-1">
+				<h2 className="m-0 text-body-lg font-semibold text-(--text)">Start with one outcome</h2>
+				<p className="m-0 max-w-[56ch] text-small leading-5 text-(--text-2)">Anton works in an isolated branch and sandbox, keeps you in control of consequential actions, and returns work you can inspect before it lands.</p>
+			</div>
+			<ol className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-3">
+				{steps.map(([title, body], index) => (
+					<li key={title} className="flex min-w-0 gap-2.5 rounded-inner bg-(--bg-active) px-3 py-2.5">
+						<span aria-hidden className="in-num flex size-5 shrink-0 items-center justify-center rounded-full bg-(--accent-soft) text-nano font-semibold text-(--accent-text)">{index + 1}</span>
+						<span className="flex min-w-0 flex-col gap-0.5">
+							<span className="text-small font-medium text-(--text)">{title}</span>
+							<span className="text-small leading-4 text-(--text-3)">{body}</span>
+						</span>
+					</li>
+				))}
+			</ol>
+		</section>
+	);
+}
+
 export function homeSummary(sessions: Session[]): string {
 	const waiting = sessions.filter(needsYou).length;
 	const running = sessions.filter(isRunning).length;
@@ -248,7 +276,8 @@ export function HomeDashboard() {
 		const listed = new Set([...needs, ...running].map((session) => session.id));
 		return { needs, running, recent: byActive.filter((session) => !listed.has(session.id)).slice(0, SHOWN), all };
 	}, [sessions.data]);
-	if (!sessions.data || all.length === 0) return null;
+	if (!sessions.data) return null;
+	if (all.length === 0) return <FirstRun />;
 	return (
 		<div className="flex flex-col gap-7">
 			{needs.length ? <NeedsYou sessions={needs} /> : null}

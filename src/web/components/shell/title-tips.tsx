@@ -111,7 +111,7 @@ export function TitleTips() {
 		<div
 			ref={ref}
 			role="tooltip"
-			className="tip pointer-events-none fixed z-[100]"
+			className="tip pointer-events-none fixed z-[var(--z-tooltip)]"
 			data-instant={tip.instant || undefined}
 			style={{ left: tip.x + shift, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
 		>

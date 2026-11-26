@@ -174,7 +174,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
 	return (
 		<div
-			className="fixed inset-0 z-[200] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4"
+			className="fixed inset-0 z-[var(--z-modal)] flex items-start justify-center bg-(--bg-scrim) px-4 pt-[14vh] pb-4"
 			onMouseDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}

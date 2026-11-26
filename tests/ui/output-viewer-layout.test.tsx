@@ -4,8 +4,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OutputCards, OutputViewerHost } from '@/components/content/output-viewer';
-import { TaskWorkspace, type TaskPanels } from '@/components/shell/shell';
-import type { PanelName } from '@/components/workspace/vm-panel';
+import { TaskWorkspace, type TaskPanels } from '@/components/shell/task-workspace';
+import type { PanelName } from '@/components/workspace/panels';
 import { closeViewer } from '@/lib/viewer';
 import { session } from './render';
 

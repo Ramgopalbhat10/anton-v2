@@ -14,7 +14,7 @@ import { cacheStartedTodo, canStartTodo, todoThreadStartKey, useTodoSaves } from
 import { ProjectActivity, ProjectFiles, ProjectPullRequests, ProjectRoutines } from '@/components/projects/project-panel';
 import { SpaceMark } from '@/components/projects/project-sidebar';
 import { useModelName, useModels } from '@/lib/models';
-import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell/shell';
+import { startingPanels, TaskWorkspace, type TaskPanels } from '@/components/shell/task-workspace';
 import { Badge, Btn, EmptyState, Icon, IconBtn } from '@/components/kit/signal';
 import { useOnePane } from '@/lib/one-pane';
 import { useOlderTurns, useWindowedClient } from '@/lib/conversation-window';

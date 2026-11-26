@@ -656,7 +656,7 @@ export const ModelPicker = memo(function ModelPicker({
 					{selected ? <ModelMark model={selected} size={16} /> : !emptyLabel || (models.isPending && value.model) ? <Spinner size={12} tone="neutral" /> : null}
 					<span className="min-w-0 truncate text-small">{shown ? shortName(shown) : emptyLabel ? value.model || emptyLabel : 'Model'}</span>
 					{options?.chosen.context ? (
-						<span className="in-num rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2)" title={`${tokens(selected!.contextLength)} context`}>
+						<span className="in-num hidden rounded-inner bg-(--bg-active) px-1 py-px text-nano font-normal text-(--text-2) sm:inline" title={`${tokens(selected!.contextLength)} context`}>
 							{tokens(selected!.contextLength)}
 						</span>
 					) : null}
@@ -679,7 +679,7 @@ export const ModelPicker = memo(function ModelPicker({
 					sideOffset={6}
 					collisionPadding={12}
 					onKeyDown={onKeyDown}
-					className="@container/picker z-50 flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none"
+					className="@container/picker z-[var(--z-popover)] flex h-[min(440px,var(--radix-popover-content-available-height))] min-h-[240px] w-[min(380px,calc(100vw-24px))] in-pop flex-col overflow-hidden text-(--text) outline-none"
 				>
 					<div className="flex h-10 shrink-0 items-center gap-2 border-b border-(--line) pr-1.5 pl-3">
 						<Icon icon={Search} size={13} className="text-(--text-3)" />
@@ -845,7 +845,7 @@ export const ModelPicker = memo(function ModelPicker({
 							<ModelOptionsRow options={options} note={selected !== options.base ? selected?.description : undefined} onChange={choose} />
 						) : null}
 						{effort ? <div className="flex items-center gap-3 py-1.5 pr-2 pl-3">
-							<span className="in-caption w-12 shrink-0">Effort</span>
+							<span className="in-caption w-12 shrink-0" title="Higher thinking can be slower and cost more">Thinking</span>
 							<EffortTrack model={selected} value={reasoning} onChange={(level) => onChange({ reasoning: level })} />
 						</div> : null}
 					</div>

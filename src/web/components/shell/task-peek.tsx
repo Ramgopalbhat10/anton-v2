@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/kit/instrument';
 import { Icon } from '@/components/kit/signal';
 import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
+import { ModelLogo } from '@/components/marks/model-marks';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api/sessions';
 import { dollars, tokens, whenAgo } from '@/lib/format';
@@ -42,7 +43,7 @@ function Peek({ session }: { session: Session }) {
 	const stats = [
 		{ label: 'Spend', value: used > 0 ? dollars(cost) : '—' },
 		{ label: 'Tokens', value: used > 0 ? tokens(used) : '—', title: used > 0 ? `${inputTokens.toLocaleString()} in, ${outputTokens.toLocaleString()} out` : undefined },
-		{ label: 'Active', value: ago(activeAt(session)) },
+		{ label: 'Last active', value: ago(activeAt(session)) },
 	];
 	return (
 		<div className="flex flex-col gap-2.5">
@@ -81,7 +82,7 @@ function Peek({ session }: { session: Session }) {
 					{branchLabel(session)}
 				</Fact>
 				<Fact label="Model">
-					<span title={session.model}>{modelName(session.model)}</span>
+					<span className="inline-flex min-w-0 items-center gap-1.5"><ModelLogo model={session.model} size={14} /><span className="truncate" title={session.model}>{modelName(session.model)}</span></span>
 				</Fact>
 				<Fact label="Started" mono>
 					{ago(session.createdAt)}
@@ -111,7 +112,7 @@ export function TaskPeek({ session, disabled, children }: { session: Session; di
 					align="start"
 					sideOffset={12}
 					collisionPadding={12}
-					className="in-pop z-50 w-[300px] p-3 outline-none"
+					className="in-pop z-[var(--z-popover)] w-[300px] p-3 outline-none"
 				>
 					<Peek session={session} />
 				</HoverCard.Content>

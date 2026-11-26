@@ -8,6 +8,7 @@ import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
 import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
+import { type PendingChange, type PendingSend } from '@/components/thread/pending-send';
 
 export function RichText({ text }: { text: string }) {
 	const files = useContext(FileLinks);
@@ -70,12 +71,6 @@ export function SentText({ text, className }: { text: string; className?: string
 	);
 }
 
-/** A message shows at once while it is prepared. Its pictures and files show as they will once sent. */
-export type PendingSend = { text: string; attaching?: string; pictures?: SentPicture[]; files?: { name: string; size: number }[] };
-
-/** What a composer says of a message: on its way (`PendingSend`), shown by the conversation (`'sent'`), or neither. */
-export type PendingChange = PendingSend | 'sent' | null;
-
 /** The id the runtime's client gives a message this page sent, which it keeps once the conversation lists it. */
 const OWN_SEND = 'local:';
 
@@ -100,11 +95,7 @@ export function useSends() {
 	return { pending, onPending, rises };
 }
 
-/** What a message's attachments show as while it waits on them: the pictures from the bytes in hand, the files by name. */
-export const placeholders = (taken: { images: ImageAttachment[]; files: FileAttachment[] }): Pick<PendingSend, 'pictures' | 'files'> => ({
-	pictures: taken.images.map((image) => ({ src: image.preview, name: image.filename })),
-	files: taken.files.map((file) => ({ name: file.name, size: file.size })),
-});
+
 
 export function PendingMessage({ pending }: { pending: PendingSend }) {
 	const pictures = pending.pictures ?? [];

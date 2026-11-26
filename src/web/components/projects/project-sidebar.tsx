@@ -7,7 +7,7 @@ import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger,
 import { Disclosure } from '@/components/kit/disclosure';
 import { CompactViewItem, FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { TaskPeek } from '@/components/shell/task-peek';
-import { ThreadStateIcon } from '@/components/projects/thread-card';
+import { ThreadStateIcon } from '@/components/projects/thread-state-icon';
 import { Glyph } from '@/components/marks/thread-glyph';
 import { repoShort, type Session } from '@/lib/api/sessions';
 import type { Space, ThreadState } from '@/lib/api/spaces';

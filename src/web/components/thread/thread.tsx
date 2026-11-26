@@ -8,7 +8,7 @@ import { field } from '@/components/thread/tool-describe';
 import { Composer } from '@/components/composer/composer';
 import { ErrorBoundary } from '@/components/kit/error-boundary';
 import { FileLinks, Markdown, OutputLinks } from '@/components/content/markdown';
-import { type PendingChange, PendingMessage, SentText, useSends } from '@/components/thread/sent-text';
+import { PendingMessage, SentText, useSends } from '@/components/thread/sent-text';
 import { OutputCards } from '@/components/content/output-viewer';
 import { AskCard, ChangesCard, PullRequestCard, type ReplyPlace, ReplyActions } from '@/components/thread/reply-cards';
 import { ShowCard } from '@/components/thread/show-card';
@@ -45,6 +45,7 @@ import { CompactionMark, compactionsOf, UserMessage } from '@/components/thread/
 import { CopyResponse, ReplyUsageLine, usageOf } from '@/components/thread/reply-usage';
 import { AgentsBlock, Drawing, ImageBlock, Notice, PageBlock, SettlementNotice } from '@/components/thread/reply-blocks';
 import { Waiting } from '@/components/thread/waiting';
+import { type PendingChange, placeholders } from '@/components/thread/pending-send';
 
 /** The runtime lists a message sent while the agent works after the whole reply, so it says so rather than read as a message nobody answered. */
 const JOINING = 'Anton reads this between its steps';
