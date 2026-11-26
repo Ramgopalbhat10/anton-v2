@@ -38,10 +38,14 @@ async function askingNothing(id: string, comments: PullRequestComment[]): Promis
 	return comments.filter((_, index) => (yesOf(answers[index]?.asks) ?? 1) <= ASKS_NOTHING).map((comment) => comment.id);
 }
 
+const BLOCK_START = /^(?:#{1,6}\s|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|.*\|)/;
+
 function checksMessage(url: string, sha: string, failed: CheckResult[]): string {
 	return [
 		`Checks failed on your pull request (${url}) at ${sha.slice(0, 7)}:`,
+		'',
 		...failed.map((check) => `- ${check.name}: ${check.summary || 'failed'} (${check.url})`),
+		'',
 		'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
 	].join('\n');
 }
@@ -60,10 +64,20 @@ function conflictsMessage(url: string, base: string): string {
 function commentsMessage(url: string, comments: PullRequestComment[]): string {
 	return [
 		`${PR_COMMENTS_HEAD} (${url}):`,
+		'',
 		...comments.map((comment, index) => {
+			const prefix = `${index + 1}. `;
+			const indent = ' '.repeat(prefix.length);
 			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
-			return `${index + 1}. [${comment.id}] @${comment.author}${where}: ${comment.body.replace(/\n/g, '\n   ')}`;
+			const body = comment.body.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+			const indented = body
+				.split('\n')
+				.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line))
+				.join('\n');
+			const separator = BLOCK_START.test(body) ? `\n${indent}` : ' ';
+			return `${prefix}[${comment.id}] @${comment.author}${where}:${separator}${indented}`;
 		}),
+		'',
 		'For each one, first check it against the code and what the user asked for: a reviewer can be wrong, and one that is wrong, or rests on a risk the code already accepts elsewhere, gets a one-line reason in your reply instead of a fix. ' +
 			'For the rest: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
 			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +

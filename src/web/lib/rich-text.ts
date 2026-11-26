@@ -4,13 +4,13 @@ export type RichRange = { kind: RichKind; start: number; end: number };
 /** Links, a leading command, and `@` references that begin a word. */
 const RICH = /(https?:\/\/[^\s<>"'`]+)|(^\/[\w-]+(?=\s|$))|((?:^|(?<=\s))@[^\s@]+)/g;
 /** Punctuation that ends a sentence rather than a link or a path. */
-const TRAILING = /[.,;:!?'")\]}]+$/;
+export const TRAILING_PUNCTUATION = /[.,;:!?'")\]}]+$/;
 
 export function richRanges(text: string): RichRange[] {
 	const ranges: RichRange[] = [];
 	for (const match of text.matchAll(RICH)) {
 		const kind: RichKind = match[1] ? 'link' : match[2] ? 'command' : 'file';
-		const word = kind === 'command' ? match[0] : match[0].replace(TRAILING, '');
+		const word = kind === 'command' ? match[0] : match[0].replace(TRAILING_PUNCTUATION, '');
 		// A bare `@` or `http://` is not a reference yet.
 		if (word.length < (kind === 'link' ? 10 : 2)) continue;
 		ranges.push({ kind, start: match.index, end: match.index + word.length });

@@ -3,7 +3,7 @@ import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useState }
 const EASE_MS = 220;
 
 /** Text kept to a few lines until opened to its whole height (`cap`, a share of the window, stops it), then folded back. The height eases only on a toggle, so typing never waits on it. */
-export function useFold(box: () => HTMLElement | null, content: unknown, { lines, cap }: { lines: number; cap?: number }) {
+export function useFold(box: () => HTMLElement | null, content: unknown, { lines, cap, inner }: { lines: number; cap?: number; inner?: () => HTMLElement | null }) {
 	const [open, setOpen] = useState(false);
 	const [heights, setHeights] = useState<{ folded: number; whole: number; long: boolean } | null>(null);
 	const [easing, setEasing] = useState(false);
@@ -21,14 +21,16 @@ export function useFold(box: () => HTMLElement | null, content: unknown, { lines
 	useEffect(() => {
 		const element = box();
 		if (!element) return;
+		const innerElement = inner?.();
 		const observer = new ResizeObserver(measure);
 		observer.observe(element);
+		if (innerElement && innerElement !== element) observer.observe(innerElement);
 		window.addEventListener('resize', measure);
 		return () => {
 			observer.disconnect();
 			window.removeEventListener('resize', measure);
 		};
-	}, [box, measure]);
+	}, [box, inner, measure]);
 	useEffect(() => {
 		if (!easing) return;
 		const timer = setTimeout(() => setEasing(false), EASE_MS);

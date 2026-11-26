@@ -126,3 +126,42 @@ test('answers round-trip, and the comment ids are read from the follow-up messag
 	assert.deepEqual(commentIdsIn(text), ['line-12', 'review-3']);
 	assert.deepEqual(commentIdsIn(undefined), []);
 });
+
+test('follow-up messages separate Markdown lists and indent multiline, 10+ and block-starting comments', async () => {
+	const { nextFollowUp } = await import('../src/services/git/follow-ups.ts');
+	const { answersPrComments, commentIdsIn } = await import('../src/core/review-follow-up.ts');
+	const comments = Array.from({ length: 10 }, (_, index) => ({
+		id: `line-${index + 1}`,
+		author: 'reviewer',
+		path: `src/f${index + 1}.ts`,
+		line: index + 1,
+		at: '',
+		body:
+			index === 0
+				? '```ts\r\nconst x = 1;\r\n```'
+				: index === 1
+					? '- first\r\n- second'
+					: index === 9
+						? '\r\nFirst line\r\n\r\nSecond line\r\n'
+						: `Comment ${index + 1}`,
+	}));
+	const activity = {
+		state: 'open' as const,
+		headSha: 'abc1234',
+		conflicts: false,
+		checks: [{ name: 'test', status: 'failed' as const, summary: '1 failed', url: 'https://ci.test/1' }],
+		comments,
+	};
+	const { message } = nextFollowUp('https://github.com/acme/api/pull/7', activity, { sha: null, seen: [], sent: 0 });
+	assert.ok(message);
+	assert.doesNotMatch(message, /\r/);
+	assert.ok(message.includes('Checks failed on your pull request (https://github.com/acme/api/pull/7) at abc1234:\n\n- test: 1 failed (https://ci.test/1)\n\nFind the cause'));
+	assert.ok(message.includes('New comments on your pull request (https://github.com/acme/api/pull/7):\n\n1. [line-1] @reviewer on src/f1.ts line 1:\n   ```ts\n   const x = 1;\n   ```'));
+	assert.ok(message.includes('2. [line-2] @reviewer on src/f2.ts line 2:\n   - first\n   - second'));
+	assert.ok(message.includes('10. [line-10] @reviewer on src/f10.ts line 10: First line\n\n    Second line\n\nFor each one, first check'));
+	assert.ok(answersPrComments(message));
+	assert.deepEqual(
+		commentIdsIn(message),
+		comments.map((comment) => comment.id),
+	);
+});
