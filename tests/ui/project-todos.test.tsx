@@ -709,4 +709,93 @@ describe('the To do column on the project board', () => {
 		await userEvent.click(await screen.findByRole('button', { name: 'New to-do' }));
 		expect(await screen.findByRole('textbox', { name: 'Title' })).toBeTruthy();
 	});
+
+	it('shows repo and file tooltips on their exact triggers and a model icon popover beside the repo', async () => {
+		const model: ModelInfo = {
+			id: 'openrouter/anthropic/claude-sonnet-4',
+			name: 'Anthropic Claude Sonnet 4',
+			vendor: 'Anthropic',
+			description: 'Balanced coding model.',
+			createdAt: 0,
+			contextLength: 200_000,
+			maxOutput: 64_000,
+			price: { input: 3, output: 15 },
+			vision: true,
+			reasoning: ['low', 'medium', 'high'],
+			defaultReasoning: 'medium',
+		};
+		api.models.mockResolvedValue({ models: [model], default: model.id });
+		renderWithRouter(() => (
+			<ProjectBoard
+				space={space}
+				threads={threads}
+				todos={[
+					makeTodo({
+						id: 'todo_meta',
+						title: 'Audit tooltips',
+						repos: ['p1', 'p2'],
+						threadModel: { model: `${model.id}#via=anthropic`, reasoning: 'high' },
+						attachments: [
+							{ name: 'before.png', path: 'before.png', kind: 'PNG image', size: 1024 },
+							{ name: 'after.png', path: 'after.png', kind: 'PNG image', size: 2048 },
+						],
+					}),
+					makeTodo({
+						id: 'todo_delisted',
+						title: 'Legacy model task',
+						repos: [],
+						threadModel: { model: 'openrouter/test/retired#sort=latency', reasoning: null },
+					}),
+				]}
+				onNewThread={() => undefined}
+				onOpenCoordinator={() => undefined}
+				onHandTodo={() => undefined}
+			/>
+		));
+
+		const column = await screen.findByRole('region', { name: 'To do' });
+		const card = within(column).getByRole('article', { name: 'Audit tooltips' });
+
+		// Only the icon shows on the card; the model's name stays inside the popover.
+		expect(within(card).queryByText('Claude Sonnet 4')).toBeNull();
+		const repoTrigger = within(card).getByText('api, web').closest('[tabindex="0"]') as HTMLElement;
+		const filesTrigger = within(card).getByText('2 files').closest('[tabindex="0"]') as HTMLElement;
+		expect(repoTrigger.className).toContain('inline-flex');
+		expect(filesTrigger.className).toContain('inline-flex');
+
+		await userEvent.hover(repoTrigger);
+		await waitFor(() => expect(screen.getByRole('tooltip').textContent).toContain('acme/api\nacme/web'));
+		await userEvent.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+
+		await userEvent.hover(filesTrigger);
+		await waitFor(() => expect(screen.getByRole('tooltip').textContent).toContain('before.png\nafter.png'));
+		await userEvent.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+
+		// Model icon sits right next to the repo trigger in the same row and opens its detail popover on hover.
+		const modelTrigger = await within(card).findByLabelText(/Main thread model: Claude Sonnet 4, effort High, via anthropic/);
+		expect(modelTrigger.parentElement).toBe(repoTrigger.parentElement);
+		await userEvent.hover(modelTrigger);
+		await waitFor(() => {
+			expect(screen.getByText('Claude Sonnet 4')).toBeTruthy();
+			expect(screen.getByText('openrouter/anthropic/claude-sonnet-4')).toBeTruthy();
+			expect(screen.getByText('High')).toBeTruthy();
+			expect(screen.getByText('200K')).toBeTruthy();
+			expect(screen.getByText('$3 in · $15 out per 1M tokens')).toBeTruthy();
+			expect(screen.getByText('via anthropic')).toBeTruthy();
+			expect(screen.getByText('Balanced coding model.')).toBeTruthy();
+		});
+		await userEvent.unhover(modelTrigger);
+
+		// A delisted model with no tagged repo still renders its icon and fallback details on hover.
+		const delistedCard = within(column).getByRole('article', { name: 'Legacy model task' });
+		const delistedTrigger = await within(delistedCard).findByLabelText(/Main thread model: retired, effort The model default, sorted by latency/);
+		await userEvent.hover(delistedTrigger);
+		await waitFor(() => {
+			expect(screen.getByText('openrouter/test/retired')).toBeTruthy();
+			expect(screen.getByText('The model default')).toBeTruthy();
+			expect(screen.getByText('sorted by latency')).toBeTruthy();
+		});
+	});
 });
