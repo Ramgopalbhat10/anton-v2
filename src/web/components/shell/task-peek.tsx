@@ -1,4 +1,4 @@
-import { CircleAlert, ClipboardList, Clock, Cloud, Folder, GitBranch, GitPullRequest, MessageSquare, type IconComponent } from '@/lib/icons';
+import { CircleAlert, ClipboardList, Clock, Cloud, Folder, GitBranch, GitPullRequest, MessageSquare, Cpu, type IconComponent } from '@/lib/icons';
 import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/kit/instrument';
@@ -81,7 +81,7 @@ function Peek({ session }: { session: Session }) {
 				<Fact label={isChat(session) ? 'Sandbox' : 'Branch'} icon={isChat(session) ? Cloud : GitBranch} mono wrap>
 					<span title={branchLabel(session)}>{branchLabel(session)}</span>
 				</Fact>
-				<Fact label="Model">
+				<Fact label="Model" icon={Cpu}>
 					<span className="inline-flex min-w-0 items-center gap-1.5"><ModelLogo model={session.model} size={14} /><span className="truncate" title={session.model}>{modelName(session.model)}</span></span>
 				</Fact>
 				<Fact label="Started" icon={Clock} mono>
