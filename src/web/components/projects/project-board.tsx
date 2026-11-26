@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Dialog } from 'radix-ui';
+import { Dialog, Popover } from 'radix-ui';
 import { CircleCheck, Cloud, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Server, Trash2, Waypoints, X } from '@/lib/icons';
-import { type FormEvent, type ReactNode, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
 import { RUN_ON_NOTE, RUN_ON_PROVIDERS } from '@/components/composer/composer-plus';
 import { ModelPicker } from '@/components/composer/model-picker';
-import { HoverPeek } from '@/components/kit/hover-peek';
 import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
 import { ModelLogo } from '@/components/marks/model-marks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -268,6 +267,19 @@ function MetaTip({ label, children }: { label: string; children: ReactNode }) {
 
 function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel']> }) {
 	const models = useModels();
+	const [open, setOpen] = useState(false);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const openedByHover = useRef(false);
+	const clear = () => clearTimeout(timerRef.current);
+	const scheduleClose = () => {
+		clear();
+		timerRef.current = setTimeout(() => {
+			openedByHover.current = false;
+			setOpen(false);
+		}, 90);
+	};
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
 	const id = unrouted(choice.model);
 	const info = models.data?.models.find((model) => model.id === id);
 	const name = info ? shortName(info) : (id.split('/').pop() ?? id).replace(/^~/, '');
@@ -278,13 +290,67 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 	const billing = info ? (info.subscription ? `On your ${info.subscription} plan` : info.price.input === 0 && info.price.output === 0 ? 'Free' : `${dollars(info.price.input)} in · ${dollars(info.price.output)} out per 1M tokens`) : null;
 	const summary = `Main thread model: ${name}${showEffort ? `, effort ${effort}` : ''}${routeText ? `, ${routeText}` : ''}`;
 	return (
-		<HoverPeek
-			side="top"
-			align="center"
-			width={260}
-			openDelay={150}
-			content={
-				<>
+		<Popover.Root
+			open={open}
+			onOpenChange={(next) => {
+				clear();
+				if (!next) openedByHover.current = false;
+				setOpen(next);
+			}}
+			modal={false}
+		>
+			<Popover.Trigger asChild>
+				<button
+					type="button"
+					aria-label={summary}
+					onPointerEnter={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (!open) {
+							timerRef.current = setTimeout(() => {
+								openedByHover.current = true;
+								setOpen(true);
+							}, 150);
+						}
+					}}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						if (openedByHover.current) scheduleClose();
+					}}
+					onClick={(event) => {
+						if (open && openedByHover.current) {
+							event.preventDefault();
+							clear();
+							openedByHover.current = false;
+						}
+					}}
+					className="-my-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover)"
+				>
+					<ModelLogo model={id} size={14} />
+				</button>
+			</Popover.Trigger>
+			<Popover.Portal>
+				<Popover.Content
+					side="top"
+					align="center"
+					sideOffset={6}
+					collisionPadding={12}
+					aria-label={`${name} model details`}
+					onOpenAutoFocus={(event) => {
+						if (openedByHover.current) event.preventDefault();
+					}}
+					onCloseAutoFocus={(event) => {
+						if (openedByHover.current) event.preventDefault();
+					}}
+					onPointerEnter={clear}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						if (openedByHover.current) scheduleClose();
+					}}
+					onClick={(event) => event.stopPropagation()}
+					className="in-pop z-50 flex flex-col gap-2.5 p-3 outline-none"
+					style={{ width: 260, maxWidth: 'calc(100vw - 24px)' }}
+				>
 					<div className="flex min-w-0 items-center gap-2">
 						<ModelLogo model={id} size={20} />
 						<div className="flex min-w-0 flex-1 flex-col">
@@ -315,17 +381,9 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 						) : null}
 					</div>
 					{info?.description ? <p className="m-0 line-clamp-3 text-small leading-[17px] text-(--text-3)">{info.description}</p> : null}
-				</>
-			}
-		>
-			<span
-				tabIndex={0}
-				aria-label={summary}
-				className="-my-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
-			>
-				<ModelLogo model={id} size={14} />
-			</span>
-		</HoverPeek>
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
 	);
 }
 

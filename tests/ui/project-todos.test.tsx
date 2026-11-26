@@ -774,28 +774,41 @@ describe('the To do column on the project board', () => {
 		await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
 
 		// Model icon sits right next to the repo trigger in the same row and opens its detail popover on hover.
-		const modelTrigger = await within(card).findByLabelText(/Main thread model: Claude Sonnet 4, effort High, via anthropic/);
+		const modelTrigger = await within(card).findByRole('button', { name: /Main thread model: Claude Sonnet 4, effort High, via anthropic/ });
 		expect(modelTrigger.parentElement).toBe(repoTrigger.parentElement);
 		await userEvent.hover(modelTrigger);
 		await waitFor(() => {
-			expect(screen.getByText('Claude Sonnet 4')).toBeTruthy();
-			expect(screen.getByText('openrouter/anthropic/claude-sonnet-4')).toBeTruthy();
-			expect(screen.getByText('High')).toBeTruthy();
-			expect(screen.getByText('200K')).toBeTruthy();
-			expect(screen.getByText('$3 in · $15 out per 1M tokens')).toBeTruthy();
-			expect(screen.getByText('via anthropic')).toBeTruthy();
-			expect(screen.getByText('Balanced coding model.')).toBeTruthy();
+			const dialog = screen.getByRole('dialog', { name: 'Claude Sonnet 4 model details' });
+			expect(within(dialog).getByText('Claude Sonnet 4')).toBeTruthy();
+			expect(within(dialog).getByText('openrouter/anthropic/claude-sonnet-4')).toBeTruthy();
+			expect(within(dialog).getByText('High')).toBeTruthy();
+			expect(within(dialog).getByText('200K')).toBeTruthy();
+			expect(within(dialog).getByText('$3 in · $15 out per 1M tokens')).toBeTruthy();
+			expect(within(dialog).getByText('via anthropic')).toBeTruthy();
+			expect(within(dialog).getByText('Balanced coding model.')).toBeTruthy();
 		});
 		await userEvent.unhover(modelTrigger);
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
+
+		// Keyboard activation and tap/click also open the popover and restore focus on Escape.
+		modelTrigger.focus();
+		await userEvent.keyboard('{Enter}');
+		expect(await screen.findByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeTruthy();
+		expect(modelTrigger.getAttribute('aria-expanded')).toBe('true');
+		await userEvent.keyboard('{Escape}');
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
+		expect(modelTrigger.getAttribute('aria-expanded')).toBe('false');
+		expect(document.activeElement).toBe(modelTrigger);
 
 		// A delisted model with no tagged repo still renders its icon and fallback details on hover.
 		const delistedCard = within(column).getByRole('article', { name: 'Legacy model task' });
-		const delistedTrigger = await within(delistedCard).findByLabelText(/Main thread model: retired, effort The model default, sorted by latency/);
+		const delistedTrigger = await within(delistedCard).findByRole('button', { name: /Main thread model: retired, effort The model default, sorted by latency/ });
 		await userEvent.hover(delistedTrigger);
 		await waitFor(() => {
-			expect(screen.getByText('openrouter/test/retired')).toBeTruthy();
-			expect(screen.getByText('The model default')).toBeTruthy();
-			expect(screen.getByText('sorted by latency')).toBeTruthy();
+			const dialog = screen.getByRole('dialog', { name: 'retired model details' });
+			expect(within(dialog).getByText('openrouter/test/retired')).toBeTruthy();
+			expect(within(dialog).getByText('The model default')).toBeTruthy();
+			expect(within(dialog).getByText('sorted by latency')).toBeTruthy();
 		});
 	});
 });
