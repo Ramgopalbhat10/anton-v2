@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Dialog } from 'radix-ui';
+import { Dialog, Popover } from 'radix-ui';
 import { CircleCheck, Cloud, FolderGit2, ListTodo, MessageSquare, MoreHorizontal, Paperclip, Pencil, Play, Plus, RotateCcw, Server, Trash2, Waypoints, X } from '@/lib/icons';
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { PrStatus } from '@/components/marks/pr-status';
 import { AttachButton, AttachmentTray, FileChip, fileSize, ImageThumb, useAttachments } from '@/components/composer/attachments';
 import { RUN_ON_NOTE, RUN_ON_PROVIDERS } from '@/components/composer/composer-plus';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { Btn, FloatingLayerContainer, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
+import { ModelLogo } from '@/components/marks/model-marks';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useOpenThread } from '@/components/projects/thread-card';
 import { Glyph, type GlyphKind, glyphKind, KIND_LABEL } from '@/components/marks/thread-glyph';
 import { AREA } from '@/components/settings/repo-settings';
@@ -16,6 +18,9 @@ import { repoShort, type RunOn, type Session } from '@/lib/api/sessions';
 import { type Space, type SpaceTodo, spaceFileUrl, type TodoAttachment } from '@/lib/api/spaces';
 import { imageFile } from '@/lib/attachments';
 import { MAX_TODO_ATTACHMENTS } from '../../../core/space-todos';
+import { parseRouted, unrouted } from '../../../core/model-route';
+import { dollars, effectiveReasoning, REASONING_LABEL, shortName, tokens } from '@/lib/model-catalog';
+import { useModels } from '@/lib/models';
 import { threadActiveAt, threadLine } from '@/lib/spaces';
 import { cacheStartedTodo, canStartTodo, todoIsUnsaved, todoThreadStartKey, type TodoDraft, type TodoSaves } from './todo-saves';
 
@@ -244,6 +249,190 @@ function TodoDialog({ spaceId, repos, todo, onSave, onClose }: { spaceId: string
 	);
 }
 
+/** Repositories and files are focusable text, not buttons: inspecting them does not edit the to-do. */
+function MetaTip({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span tabIndex={0} aria-label={label} className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-mark outline-none focus-visible:shadow-(--focus)">
+					{children}
+				</span>
+			</TooltipTrigger>
+			<TooltipContent side="top" align="center" collisionPadding={8} className="max-w-[min(22rem,calc(100vw-24px))] whitespace-pre-line [overflow-wrap:anywhere]">
+				{label}
+			</TooltipContent>
+		</Tooltip>
+	);
+}
+
+function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel']> }) {
+	const models = useModels();
+	const [open, setOpen] = useState(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const openedByHover = useRef(false);
+	const restoreFocus = useRef(false);
+	const clear = () => clearTimeout(timerRef.current);
+	const scheduleClose = () => {
+		clear();
+		if (!panelRef.current?.contains(document.activeElement)) {
+			timerRef.current = setTimeout(() => {
+				openedByHover.current = false;
+				restoreFocus.current = false;
+				setOpen(false);
+			}, 90);
+		}
+	};
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	const id = unrouted(choice.model);
+	const info = models.data?.models.find((model) => model.id === id);
+	const name = info ? shortName(info) : (id.split('/').pop() ?? id).replace(/^~/, '');
+	const showEffort = !info || info.reasoning.length > 0;
+	const supportedEffort = Boolean(info && choice.reasoning && info.reasoning.includes(choice.reasoning));
+	const effort = info
+		? supportedEffort
+			? REASONING_LABEL[effectiveReasoning(info, choice.reasoning)]
+			: `${REASONING_LABEL[effectiveReasoning(info, choice.reasoning)]} by default`
+		: choice.reasoning
+			? REASONING_LABEL[choice.reasoning]
+			: 'The model default';
+	const route = parseRouted(choice.model).route;
+	const routeText = route?.provider ? `via ${route.provider}` : route?.sort ? `sorted by ${route.sort}` : null;
+	const billing = info ? (info.subscription ? `On your ${info.subscription} plan` : info.price.input === 0 && info.price.output === 0 ? 'Free' : `${dollars(info.price.input)} in · ${dollars(info.price.output)} out per 1M tokens`) : null;
+	const summary = `Main thread model: ${name}${showEffort ? `, effort ${effort}` : ''}${routeText ? `, ${routeText}` : ''}`;
+	return (
+		<Popover.Root
+			open={open}
+			onOpenChange={(next) => {
+				clear();
+				if (!next) openedByHover.current = false;
+				setOpen(next);
+			}}
+			modal={false}
+		>
+			<Popover.Trigger asChild>
+				<button
+					ref={triggerRef}
+					type="button"
+					aria-label={summary}
+					onPointerEnter={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (!open) {
+							timerRef.current = setTimeout(() => {
+								openedByHover.current = true;
+								restoreFocus.current = false;
+								setOpen(true);
+							}, 150);
+						}
+					}}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (openedByHover.current) scheduleClose();
+					}}
+					onClick={(event) => {
+						clear();
+						if (open && openedByHover.current) {
+							event.preventDefault();
+							openedByHover.current = false;
+							panelRef.current?.focus();
+						} else if (open) {
+							restoreFocus.current = true;
+						} else {
+							openedByHover.current = false;
+							restoreFocus.current = false;
+						}
+					}}
+					className="-my-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover)"
+				>
+					<ModelLogo model={id} size={14} />
+				</button>
+			</Popover.Trigger>
+			<Popover.Portal>
+				<Popover.Content
+					ref={panelRef}
+					side="top"
+					align="center"
+					sideOffset={6}
+					collisionPadding={12}
+					aria-label={`${name} model details`}
+					onOpenAutoFocus={(event) => {
+						if (openedByHover.current) event.preventDefault();
+					}}
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						if (!restoreFocus.current) return;
+						restoreFocus.current = false;
+						triggerRef.current?.focus();
+					}}
+					onEscapeKeyDown={() => {
+						clear();
+						restoreFocus.current = Boolean(panelRef.current?.contains(document.activeElement));
+					}}
+					onInteractOutside={(event) => {
+						if (triggerRef.current?.contains(event.target as Node)) return;
+						clear();
+						openedByHover.current = false;
+						restoreFocus.current = false;
+					}}
+					onPointerEnter={clear}
+					onPointerLeave={(event) => {
+						if (event.pointerType === 'touch') return;
+						clear();
+						if (openedByHover.current) scheduleClose();
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+						// The popover is portalled to document.body; move focus back to the trigger before Tab runs so focus continues in card order.
+						clear();
+						openedByHover.current = false;
+						restoreFocus.current = false;
+						triggerRef.current?.focus();
+						setOpen(false);
+					}}
+					onClick={(event) => event.stopPropagation()}
+					className="in-pop z-50 flex flex-col gap-2.5 p-3 outline-none"
+					style={{ width: 260, maxWidth: 'calc(100vw - 24px)' }}
+				>
+					<div className="flex min-w-0 items-center gap-2">
+						<ModelLogo model={id} size={20} />
+						<div className="flex min-w-0 flex-1 flex-col">
+							<span className="truncate text-body font-medium text-(--text)">{name}</span>
+							<span className="in-num truncate text-micro text-(--text-4)">{id}</span>
+						</div>
+					</div>
+					<div className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-2 gap-y-1 text-small">
+						{showEffort ? (
+							<>
+								<span className="text-(--text-3)">Effort</span>
+								<span className="min-w-0 text-(--text-2)">{effort}</span>
+							</>
+						) : null}
+						{info ? (
+							<>
+								<span className="text-(--text-3)">Context</span>
+								<span className="in-num min-w-0 text-(--text-2)">{tokens(info.contextLength)}</span>
+								<span className="text-(--text-3)">Billing</span>
+								<span className="min-w-0 text-(--text-2)">{billing}</span>
+							</>
+						) : null}
+						{routeText ? (
+							<>
+								<span className="text-(--text-3)">Route</span>
+								<span className="min-w-0 text-(--text-2)">{routeText}</span>
+							</>
+						) : null}
+					</div>
+					{info?.description ? <p className="m-0 line-clamp-3 text-small leading-[17px] text-(--text-3)">{info.description}</p> : null}
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
+	);
+}
+
 type TodoActions = {
 	onOpenCoordinator: () => void;
 	onHandTodo: (todoId: string) => void;
@@ -274,14 +463,21 @@ function TodoCard({ spaceId, repos, todo, saves, onEdit, onOpenCoordinator, onHa
 	return (
 		<article aria-label={todo.title} aria-busy={save?.saving || undefined} className={`flex min-w-0 flex-col gap-1.5 p-2.5 ${CARD}`}>
 			<div className="flex min-w-0 items-start gap-1">
-				<button type="button" onClick={onEdit} disabled={unsaved} className="flex min-w-0 flex-1 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
-					<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
-					{todo.description ? <span className="line-clamp-2 text-small leading-[16px] text-(--text-3)">{todo.description}</span> : null}
-					{tagged.length ? (
-						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={tagged.map((repo) => repo.repoFullName).join('\n')}>
-							<Icon icon={FolderGit2} size={11} className="shrink-0" />
-							<span className="min-w-0 truncate">{tagged.map(repoName).join(', ')}</span>
-						</span>
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<button type="button" onClick={onEdit} disabled={unsaved} className="flex min-w-0 flex-col gap-1 text-left outline-none focus-visible:shadow-(--focus)">
+						<span className="line-clamp-2 text-body leading-[18px] font-medium text-(--text)">{todo.title}</span>
+						{todo.description ? <span className="line-clamp-2 text-small leading-[16px] text-(--text-3)">{todo.description}</span> : null}
+					</button>
+					{tagged.length || todo.threadModel?.model ? (
+						<div className="flex min-w-0 items-center gap-1.5 text-small text-(--text-3)">
+							{tagged.length ? (
+								<MetaTip label={tagged.map((repo) => repo.repoFullName).join('\n')}>
+									<Icon icon={FolderGit2} size={11} className="shrink-0" />
+									<span className="min-w-0 truncate">{tagged.map(repoName).join(', ')}</span>
+								</MetaTip>
+							) : null}
+							{todo.threadModel?.model ? <TodoModelPeek choice={todo.threadModel} /> : null}
+						</div>
 					) : null}
 					{todo.runOn === 'host' ? (
 						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)">
@@ -290,12 +486,14 @@ function TodoCard({ spaceId, repos, todo, saves, onEdit, onOpenCoordinator, onHa
 						</span>
 					) : null}
 					{todo.attachments.length ? (
-						<span className="flex min-w-0 items-center gap-1 text-small text-(--text-3)" title={todo.attachments.map((file) => file.name).join('\n')}>
-							<Icon icon={Paperclip} size={11} className="shrink-0" />
-							<span className="min-w-0 truncate">{todo.attachments.length === 1 ? todo.attachments[0]!.name : `${todo.attachments.length} files`}</span>
-						</span>
+						<div className="flex min-w-0 items-center text-small text-(--text-3)">
+							<MetaTip label={todo.attachments.map((file) => file.name).join('\n')}>
+								<Icon icon={Paperclip} size={11} className="shrink-0" />
+								<span className="min-w-0 truncate">{todo.attachments.length === 1 ? todo.attachments[0]!.name : `${todo.attachments.length} files`}</span>
+							</MetaTip>
+						</div>
 					) : null}
-				</button>
+				</div>
 				<Menu>
 					<MenuTrigger asChild>
 						<IconBtn icon={MoreHorizontal} size="xs" label={`Actions for ${todo.title}`} disabled={handingOff || startingThread || save?.pending} />
