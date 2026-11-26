@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -44,6 +44,7 @@ const { IconPicker, ProjectIcon, parseIcon, suggestIcon } = await import('@/comp
 const { NewThreadForm, ProjectFeed } = await import('@/components/projects/project-feed');
 const { OutputViewerHost } = await import('@/components/content/output-viewer');
 const { ProjectReposChip } = await import('@/components/projects/project-page');
+const { ProjectsPage } = await import('@/components/projects/projects-page');
 
 const thread = (patch: Partial<Session>): Session => session({ spaceId: 'space_1', threadState: 'idle', ...patch });
 
@@ -104,6 +105,22 @@ function withRouter(ui: () => ReactNode, path = '/projects/space_1') {
 	return router;
 }
 
+function withProjectsPage() {
+	const root = createRootRoute({ component: () => <Outlet /> });
+	const tree = root.addChildren([
+		createRoute({ getParentRoute: () => root, path: '/projects', component: ProjectsPage }),
+		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId', component: () => null }),
+		createRoute({ getParentRoute: () => root, path: '/projects/$spaceId/threads/$threadId', component: () => null }),
+	]);
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/projects'] }) });
+	render(
+		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+			<TooltipProvider><RouterProvider router={router} /></TooltipProvider>
+		</QueryClientProvider>,
+	);
+	return router;
+}
+
 describe('threads', () => {
 	it('renders Markdown links and merged PR metadata in a thread peek', async () => {
 		const url = 'https://github.com/acme/demo/pull/12';
@@ -145,6 +162,12 @@ describe('threads', () => {
 		localStorage.clear();
 		api.sessions.mockResolvedValue({ sessions: threads });
 		api.spaces.mockResolvedValue({ spaces: [space] });
+	});
+
+	it('opens a thread straight from its project card row', async () => {
+		const router = withProjectsPage();
+		await userEvent.click(await screen.findByRole('link', { name: 'Open thread Pick a name' }));
+		expect(router.state.location.pathname).toBe('/projects/space_1/threads/asks');
 	});
 
 	it('offers the next step each state calls for', () => {
