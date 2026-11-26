@@ -215,6 +215,23 @@ textarea::placeholder {
 .home-composer:focus-within {
 	box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 0 4px var(--accent-soft), var(--sh-composer);
 }
+
+@media (max-width: 639px) {
+	.home-composer-controls {
+		gap: 6px;
+		padding: 6px 8px 8px;
+	}
+	.home-composer-controls > button {
+		height: 32px;
+		min-height: 32px;
+		border-radius: var(--r-6);
+	}
+	.home-composer-controls > .sg-icon-btn {
+		width: 32px;
+		padding: 0;
+	}
+}
+
 .home-panel {
 	border-radius: var(--r-8);
 	background: var(--bg-surface);

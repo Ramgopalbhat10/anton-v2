@@ -297,7 +297,7 @@ export function Launcher() {
 									{blind ? `${chosenModel?.name ?? 'This model'} cannot see images. Pick a model marked Vision to send them.` : attachments.notice}
 								</div>
 							) : null}
-							<div className="flex flex-wrap items-center gap-1 px-2 pt-1.5 pb-2">
+							<div className="home-composer-controls flex flex-wrap items-center gap-1 px-2 pt-1.5 pb-2">
 								<ComposerPlus attachments={attachments} side="bottom" run={{ value: runOn, onChange: setRunOn }} />
 								<RepoPicker projects={projects.data?.projects ?? []} value={project} onChange={pick} onAdd={() => setAdding(true)} />
 								{chat ? null : <BranchPicker project={project} value={chosenBranch} onChange={setBranch} />}
