@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/kit/instrument';
 import { Icon } from '@/components/kit/signal';
 import { checksTone, PrStatus, prTone } from '@/components/marks/pr-status';
+import { ModelLogo } from '@/components/marks/model-marks';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { branchLabel, isChat, type Session } from '@/lib/api/sessions';
 import { dollars, tokens, whenAgo } from '@/lib/format';
@@ -81,7 +82,7 @@ function Peek({ session }: { session: Session }) {
 					{branchLabel(session)}
 				</Fact>
 				<Fact label="Model">
-					<span title={session.model}>{modelName(session.model)}</span>
+					<span className="inline-flex min-w-0 items-center gap-1.5"><ModelLogo model={session.model} size={14} /><span className="truncate" title={session.model}>{modelName(session.model)}</span></span>
 				</Fact>
 				<Fact label="Started" mono>
 					{ago(session.createdAt)}

@@ -222,12 +222,12 @@ textarea::placeholder {
 		padding: 6px 8px 8px;
 	}
 	.home-composer-controls > button {
-		height: 32px;
-		min-height: 32px;
+		height: 36px;
+		min-height: 36px;
 		border-radius: var(--r-6);
 	}
 	.home-composer-controls > .sg-icon-btn {
-		width: 32px;
+		width: 36px;
 		padding: 0;
 	}
 }

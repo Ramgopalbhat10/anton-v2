@@ -545,6 +545,7 @@ export function ChatSidebar({
 				<div className="min-w-1 flex-1" />
 				<div className="sg-nav-more flex shrink-0 items-center gap-0.5">
 					<IconBtn icon={Search} size="sm" label="Search or jump to (⌘K)" onClick={onOpenPalette} />
+					<span className="sg-nav-label max-md:hidden"><Kbd keys="mod+k" size="sm" /></span>
 					<IconBtn icon={PanelLeft} size="sm" label="Hide sidebar" onClick={onCollapse} className="hidden md:inline-flex" />
 					<IconBtn icon={X} size="sm" label="Close sidebar" onClick={onNavigate} className="md:hidden" />
 				</div>

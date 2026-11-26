@@ -184,6 +184,8 @@ function Starters({ chat, onPick }: { chat: boolean; onPick: (prompt: string) =>
 				<button
 					key={starter.label}
 					type="button"
+					title={`Fill the prompt: ${starter.label}`}
+					aria-label={`Fill the prompt: ${starter.label}`}
 					onClick={() => onPick(starter.prompt)}
 					className="inline-flex h-6 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus)"
 				>
