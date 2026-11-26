@@ -293,6 +293,13 @@ export async function readOutput(id: string, path: string): Promise<Uint8Array |
 	return getProviders().store.get(keys.output(id, path));
 }
 
+/** A file of `../outputs` as a fresh machine would get it from `copyLibrary`, read without one. */
+export async function readLibraryFile(id: string, path: string): Promise<Uint8Array | null> {
+	const [saved, checkpoint] = await Promise.all([savedOutputs(id), readCheckpoint(id)]);
+	const found = saved.find((output) => output.path === path) ?? checkpoint?.outputs.find((output) => output.path === path);
+	return found?.key ? readBlob(found.key) : null;
+}
+
 export async function readBlob(key: string): Promise<Uint8Array | null> {
 	return getProviders().store.get(key);
 }

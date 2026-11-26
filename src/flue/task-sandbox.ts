@@ -15,7 +15,7 @@ const DISCOVERED = /(?:^|\/)(?:AGENTS\.md|CLAUDE\.md|\.agents\/skills)$/;
  */
 export function taskSandbox(cwd: string, machine: (work: boolean) => Promise<Sandbox>): Sandbox {
 	const driver: SandboxDriver = {
-		exec: async (command, options) => (await machine(true)).exec(command, options),
+		exec: async (command, options) => (await untilStopped(machine(true), options?.signal)).exec(command, options),
 		readFile: async (path) => (await machine(false)).readFile(path),
 		readFileBuffer: async (path) => (await machine(false)).readFileBuffer(path),
 		writeFile: async (path, content) => (await machine(true)).writeFile(path, content),
@@ -93,6 +93,20 @@ const READ_DESCRIPTION: Record<ToolProfile, string> = {
 		READ_MORE,
 };
 
+/**
+ * Ends a tool's wait when its reply is stopped. A read that waits for the machine waits for its whole setup, and on This
+ * server that is a clone and an install: not ending it at Stop left the step "could not be confirmed cancelled".
+ */
+export function untilStopped<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return work;
+	if (signal.aborted) return Promise.reject(signal.reason ?? new Error('The operation was aborted.'));
+	return new Promise<T>((resolve, reject) => {
+		const stop = () => reject(signal.reason ?? new Error('The operation was aborted.'));
+		signal.addEventListener('abort', stop, { once: true });
+		work.then(resolve, reject).finally(() => signal.removeEventListener('abort', stop));
+	});
+}
+
 const whole = (value: unknown, min: number, max: number) => (typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.floor(value))) : undefined);
 
 /** The same schema whether the snapshot or the machine answers, so they never change. */
@@ -118,14 +132,17 @@ export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProf
 				};
 				const more = (Array.isArray(input.more) ? input.more : []).filter((entry) => typeof entry?.path === 'string' && entry.path);
 				// One file reads exactly as it did before `more`, so its result and the conversation's bytes stay the same.
-				if (!more.length) return one(input);
+				if (!more.length) return untilStopped(one(input), signal);
 				const entries = [input, ...more];
 				const taken = entries.slice(0, MAX_READ_FILES);
 				// Each file is read on its own, as a lone read would be, and a failure stays with its file.
-				const results = await Promise.all(
-					taken.map((entry) =>
-						one(entry).catch((error: unknown) => ({ content: [text(`Could not read it: ${error instanceof Error ? error.message : String(error)}`)], details: { path: entry.path } })),
+				const results = await untilStopped(
+					Promise.all(
+						taken.map((entry) =>
+							one(entry).catch((error: unknown) => ({ content: [text(`Could not read it: ${error instanceof Error ? error.message : String(error)}`)], details: { path: entry.path } })),
+						),
 					),
+					signal,
 				);
 				const parts = results.flatMap((result, index) => [text(`${index ? '\n' : ''}==> ${taken[index].path} <==`), ...result.content]);
 				const left = entries.length - taken.length;
@@ -148,7 +165,7 @@ export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProf
 			async execute(_toolCallId, params, signal) {
 				signal?.throwIfAborted();
 				const input = params as GrepInput;
-				const output = await files.grep({ ...input, path: at(input.path, input.repo), context: whole(input.context, 0, 10) });
+				const output = await untilStopped(files.grep({ ...input, path: at(input.path, input.repo), context: whole(input.context, 0, 10) }), signal);
 				return { content: [text(output)], details: { pattern: input.pattern } };
 			},
 		};
@@ -160,7 +177,7 @@ export function taskTools(files: TaskFiles, sight: ImageSight, profile: ToolProf
 			async execute(_toolCallId, params, signal) {
 				signal?.throwIfAborted();
 				const input = params as GlobInput;
-				return { content: [text(await files.glob({ ...input, path: at(input.path, input.repo) }))], details: { pattern: input.pattern } };
+				return { content: [text(await untilStopped(files.glob({ ...input, path: at(input.path, input.repo) }), signal))], details: { pattern: input.pattern } };
 			},
 		};
 		return [read, ...changeTools(sandbox, profile), createShellTool(sandbox), grep, glob];

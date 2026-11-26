@@ -25,18 +25,36 @@ import {
 import { runnerOf } from '../tasks/runners.ts';
 import { secretsToHide } from '../secrets/secrets.ts';
 import { machineFor } from './workspace.ts';
+import { readLibraryFile } from '../git/checkpoints.ts';
+import { PROJECT_FILES, readSpaceFile } from '../projects/space-files.ts';
+import { getSessionRecord } from '../../db/sessions.ts';
 
 /*
  * A repository task's read, grep and glob read the snapshot at its base commit until it has a workspace, then the machine
- * (even when stopped). A path outside the repository is only in the machine; `repo` always reads its own snapshot.
+ * (even when stopped). `repo` always reads its own snapshot. Without a workspace a read never starts one: a path outside the
+ * repository is read from the Library (../outputs) or the project files (../project-files), or says the workspace has it.
+ * A read once started the machine instead, and on This server that is a clone and a full install: a thread's read of
+ * ../outputs/uploads/ hung for 5 minutes, then held every read after it once the thread was stopped.
  */
+
+/** The two folders beside the repository that Anton keeps without a machine. */
+export type LibraryPlace = { folder: 'outputs' | typeof PROJECT_FILES; path: string };
 
 export type Deps = {
 	workspace: (id: string) => boolean;
 	machine: (id: string) => Promise<Machine>;
 	secrets: (id: string) => Promise<Record<string, string>>;
 	root: (id: string) => Promise<string>;
+	/** A Library or project file's bytes, null when there is none. */
+	library: (id: string, place: LibraryPlace) => Promise<Uint8Array | null>;
 };
+
+async function libraryFile(id: string, place: LibraryPlace): Promise<Uint8Array | null> {
+	if (!place.path) return null;
+	if (place.folder === 'outputs') return readLibraryFile(id, place.path);
+	const spaceId = (await getSessionRecord(id))?.spaceId;
+	return spaceId ? readSpaceFile(spaceId, place.path).catch(() => null) : null;
+}
 
 export async function taskRoot(id: string): Promise<string> {
 	const runner = await runnerOf(id);
@@ -50,6 +68,7 @@ const defaults: Deps = {
 	machine: (id) => machineFor(id),
 	secrets: (id) => secretsToHide(id),
 	root: (id) => taskRoot(id),
+	library: (id, place) => libraryFile(id, place),
 };
 
 /** From now on its reads come from the machine. */
@@ -59,14 +78,40 @@ export async function workMachine(id: string, deps: Partial<Deps> = {}): Promise
 	return machine;
 }
 
-type Place = { snapshot: string } | { machine: string };
+type Place = { snapshot: string } | { machine: string } | { library: LibraryPlace; shown: string } | { nowhere: string };
 
 async function placeOf(id: string, file: string, d: Deps): Promise<Place> {
 	const root = await d.root(id);
 	const absolute = path.posix.resolve(root, file);
 	const inside = absolute === root || absolute.startsWith(`${root}/`);
-	if (inside && !d.workspace(id)) return { snapshot: path.posix.relative(root, absolute) || '.' };
-	return { machine: absolute };
+	if (d.workspace(id)) return { machine: absolute };
+	if (inside) return { snapshot: path.posix.relative(root, absolute) || '.' };
+	const beside = path.posix.relative(path.posix.dirname(root), absolute);
+	for (const folder of ['outputs', PROJECT_FILES] as const) {
+		if (beside === folder || beside.startsWith(`${folder}/`)) return { library: { folder, path: beside.slice(folder.length + 1) }, shown: `../${beside}` };
+	}
+	return { nowhere: absolute };
+}
+
+/** For a path outside the repository that only a workspace could have. */
+const noWorkspace = (where: string) =>
+	`${where} is outside the repository, so only the task's workspace could have it, and the task has none yet. Call start_workspace first; it clones the repository and installs its dependencies, which can take minutes.`;
+
+/** Without a workspace, grep and glob outside the repository have nothing to search. */
+function outsideAnswer(place: Place): string | null {
+	if ('nowhere' in place) return noWorkspace(place.nowhere);
+	if ('library' in place)
+		return `${place.shown} is not searched before the task has a workspace. Read a file there with read${place.library.folder === PROJECT_FILES ? ', or list the project files with read_project_file' : ''}.`;
+	return null;
+}
+
+async function libraryBytes(id: string, place: { library: LibraryPlace; shown: string }, d: Deps): Promise<Uint8Array | string> {
+	const bytes = await d.library(id, place.library);
+	if (bytes) return bytes;
+	if (!place.library.path) return `${place.shown} is a folder. Read a file in it by its path.`;
+	return place.library.folder === PROJECT_FILES
+		? `${place.shown} is not a project file. List them with read_project_file.`
+		: `${place.shown} is not in the task's Library.`;
 }
 
 function shown(root: string, absolute: string): string {
@@ -81,6 +126,13 @@ export async function readTaskFile(id: string, input: ReadInput, deps: Partial<D
 	if (input.repo) return readRepoFile(id, input.path, offset, limit, input.repo);
 	const place = await placeOf(id, input.path, d);
 	if ('snapshot' in place) return readRepoFile(id, place.snapshot, offset, limit);
+	if ('nowhere' in place) return noWorkspace(place.nowhere);
+	if ('library' in place) {
+		const bytes = await libraryBytes(id, place, d);
+		if (typeof bytes === 'string') return bytes;
+		const content = text(bytes);
+		return content.includes('\0') ? `${place.shown} is a binary file.` : numberedLines(content, offset, limit);
+	}
 	const machine = await d.machine(id);
 	const where = shown(await d.root(id), place.machine);
 	let bytes: Uint8Array;
@@ -99,7 +151,14 @@ export async function taskFileBytes(id: string, file: string, repo?: string, dep
 	const d = { ...defaults, ...deps };
 	if (repo) return repoBytes(id, file, repo);
 	const place = await placeOf(id, file, d);
-	return 'snapshot' in place ? repoBytes(id, place.snapshot) : readMachineFile(await d.machine(id), place.machine);
+	if ('snapshot' in place) return repoBytes(id, place.snapshot);
+	if ('nowhere' in place) throw new Error(noWorkspace(place.nowhere));
+	if ('library' in place) {
+		const bytes = await libraryBytes(id, place, d);
+		if (typeof bytes === 'string') throw new Error(bytes);
+		return bytes;
+	}
+	return readMachineFile(await d.machine(id), place.machine);
 }
 
 export type GrepInput = SearchInput;
@@ -199,6 +258,7 @@ export async function grepTask(id: string, input: GrepInput, deps: Partial<Deps>
 	if (input.repo) return searchRepo(id, input);
 	const place = await placeOf(id, input.path ?? '.', d);
 	if ('snapshot' in place) return searchRepo(id, { ...input, path: place.snapshot === '.' ? undefined : place.snapshot });
+	if (!('machine' in place)) return outsideAnswer(place) as string;
 	return searchMachine(await d.machine(id), await d.root(id), place.machine, input, await d.secrets(id));
 }
 
@@ -260,6 +320,7 @@ export async function globTask(id: string, input: GlobInput, deps: Partial<Deps>
 	if (input.repo) return listRepoFiles(id, { glob: input.pattern, path: input.path, repo: input.repo });
 	const place = await placeOf(id, input.path ?? '.', d);
 	if ('snapshot' in place) return listRepoFiles(id, { glob: input.pattern, path: place.snapshot === '.' ? undefined : place.snapshot });
+	if (!('machine' in place)) return outsideAnswer(place) as string;
 	return globMachine(await d.machine(id), await d.root(id), place.machine, input.pattern);
 }
 
@@ -268,6 +329,7 @@ export async function taskPaths(id: string, input: GlobInput, deps: Partial<Deps
 	if (input.repo) return repoPaths(id, { glob: input.pattern, path: input.path, repo: input.repo });
 	const place = await placeOf(id, input.path ?? '.', d);
 	if ('snapshot' in place) return repoPaths(id, { glob: input.pattern, path: place.snapshot === '.' ? undefined : place.snapshot });
+	if (!('machine' in place)) throw new Error(outsideAnswer(place) as string);
 	const listing = await machineGlob(await d.machine(id), await d.root(id), place.machine, input.pattern);
 	if ('problem' in listing) throw new Error(listing.problem);
 	return listing.paths;
@@ -278,7 +340,10 @@ export async function taskText(id: string, file: string, repo?: string, deps: Pa
 	if (repo) return repoText(id, file, repo);
 	const place = await placeOf(id, file, d);
 	if ('snapshot' in place) return repoText(id, place.snapshot);
-	const content = text(await readMachineFile(await d.machine(id), place.machine));
+	if ('nowhere' in place) throw new Error(noWorkspace(place.nowhere));
+	const bytes = 'library' in place ? await libraryBytes(id, place, d) : await readMachineFile(await d.machine(id), place.machine);
+	if (typeof bytes === 'string') throw new Error(bytes);
+	const content = text(bytes);
 	if (content.includes('\0')) throw new Error(`${file} is a binary file.`);
 	return content;
 }

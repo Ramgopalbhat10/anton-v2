@@ -9,7 +9,7 @@ import { getProviders } from '../../providers/index.ts';
 import { isWorking, stopAgent } from './activity.ts';
 import { copyCheckpoint, deleteCheckpoints, saveCheckpoint } from '../git/checkpoints.ts';
 import { saveSpaceFiles } from '../projects/space-files.ts';
-import { forgetMachine, isStarting, liveMachine, machineFor } from '../sandbox/workspace.ts';
+import { forgetMachine, isStarting, liveMachine, machineFor, stopSetup } from '../sandbox/workspace.ts';
 import { hostRunnerAvailable, runnerFor, runningOnAll } from './runners.ts';
 import { ConflictError, InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { type ModelRoute, parseRouted, routable, routedId } from '../../core/model-route.ts';
@@ -331,7 +331,8 @@ export async function stopSession(id: string): Promise<Session> {
 
 async function stopMachine(id: string, machineState: string | null, runOn: RunOn): Promise<void> {
 	await stopAgent(id);
-	const machine = await liveMachine(id);
+	// A machine stopped part way through its start holds nothing of the task's to save, and its start stops it.
+	const machine = (await stopSetup(id)) ? null : await liveMachine(id);
 	if (machine && machineState) {
 		await saveCheckpoint(id, machine).catch((error: unknown) => logProblem('warn', 'Checkpoint before stop failed', error, id));
 		await saveSpaceFiles(machine, id).catch((error: unknown) => logProblem('warn', 'Could not save the project files before stop', error, id));
