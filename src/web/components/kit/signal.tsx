@@ -155,7 +155,7 @@ export function InfoTip({ children, label = 'More about this' }: { children: Rea
 					{...hover}
 					onOpenAutoFocus={(event) => event.preventDefault()}
 					onClick={(event) => event.stopPropagation()}
-					className="in-pop z-50 w-[min(300px,calc(100vw-24px))] px-3 py-2.5 text-small leading-[18px] font-normal tracking-normal text-pretty normal-case text-(--text-2) outline-none"
+					className="in-pop z-[var(--z-popover)] w-[min(300px,calc(100vw-24px))] px-3 py-2.5 text-small leading-[18px] font-normal tracking-normal text-pretty normal-case text-(--text-2) outline-none"
 				>
 					{children}
 				</Popover.Content>
@@ -243,7 +243,7 @@ export function MenuContent({
 			<MenuPrimitive.Content
 				sideOffset={sideOffset}
 				className={cn(
-					'in-pop z-50 flex min-w-[200px] flex-col p-1 text-(--text) outline-none',
+					'in-pop z-[var(--z-popover)] flex min-w-[200px] flex-col p-1 text-(--text) outline-none',
 					className,
 				)}
 				{...props}
@@ -313,7 +313,7 @@ export function MenuSubContent({ className, ...props }: ComponentProps<typeof Me
 				sideOffset={4}
 				collisionPadding={8}
 				className={cn(
-					'in-pop z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[200px] flex-col overflow-y-auto p-1 text-(--text) outline-none',
+					'in-pop z-[var(--z-popover)] flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[200px] flex-col overflow-y-auto p-1 text-(--text) outline-none',
 					className,
 				)}
 				{...props}

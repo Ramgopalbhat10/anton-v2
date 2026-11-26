@@ -42,7 +42,7 @@ function Peek({ session }: { session: Session }) {
 	const stats = [
 		{ label: 'Spend', value: used > 0 ? dollars(cost) : '—' },
 		{ label: 'Tokens', value: used > 0 ? tokens(used) : '—', title: used > 0 ? `${inputTokens.toLocaleString()} in, ${outputTokens.toLocaleString()} out` : undefined },
-		{ label: 'Active', value: ago(activeAt(session)) },
+		{ label: 'Last active', value: ago(activeAt(session)) },
 	];
 	return (
 		<div className="flex flex-col gap-2.5">
@@ -111,7 +111,7 @@ export function TaskPeek({ session, disabled, children }: { session: Session; di
 					align="start"
 					sideOffset={12}
 					collisionPadding={12}
-					className="in-pop z-50 w-[300px] p-3 outline-none"
+					className="in-pop z-[var(--z-popover)] w-[300px] p-3 outline-none"
 				>
 					<Peek session={session} />
 				</HoverCard.Content>

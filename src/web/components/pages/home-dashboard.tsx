@@ -79,7 +79,7 @@ function CardRow({ session, note, children }: { session: Session; note?: string 
 	return (
 		<TaskLink
 			session={session}
-			className="group/row flex h-11 min-w-0 items-center gap-2.5 px-3 outline-none not-first:border-t not-first:border-(--line) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+			className="group/row flex h-11 min-w-0 items-center gap-2.5 px-3 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
 		>
 			<TaskStatusIcon session={session} size={14} />
 			<span className="flex min-w-0 flex-1 flex-col">
@@ -160,7 +160,7 @@ function Recent({ sessions }: { sessions: Session[] }) {
 					<TaskLink
 						key={session.id}
 						session={session}
-						className="group/row flex h-9 min-w-0 items-center gap-2.5 rounded-control px-2 outline-none hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
+						className="group/row flex h-9 min-w-0 items-center gap-2.5 rounded-control px-2 outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 					>
 						<TaskStatusIcon session={session} size={14} />
 						<span className="min-w-0 flex-1 truncate text-body text-(--text)">{session.title}</span>
