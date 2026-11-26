@@ -181,8 +181,10 @@ export function notifySandboxFailed(task: SessionRecord, error: unknown): void {
 	void notifyTask(task, 'sandbox', 'sandbox-failed', `Sandbox could not start: ${errorText(error) ?? 'setup failed.'}`);
 }
 
-export function notifySandboxStopped(id: string, idleMinutes: number): void {
-	void notifyId(id, 'sandbox', 'sandbox-stopped', `Sandbox stopped after ${idleMinutes} idle ${idleMinutes === 1 ? 'minute' : 'minutes'}. Files are saved; it starts again when needed.`);
+/** Without idle minutes, it stopped because its pull request merged or closed. */
+export function notifySandboxStopped(id: string, idleMinutes: number | null): void {
+	const why = idleMinutes === null ? 'Sandbox stopped: the task is done.' : `Sandbox stopped after ${idleMinutes} idle ${idleMinutes === 1 ? 'minute' : 'minutes'}.`;
+	void notifyId(id, 'sandbox', 'sandbox-stopped', `${why} Files are saved; it starts again when needed.`);
 }
 
 const prName = (url: string) => {

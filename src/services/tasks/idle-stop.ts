@@ -1,3 +1,4 @@
+import type { SessionRecord } from '../../core/types.ts';
 import { getSessionRecord } from '../../db/sessions.ts';
 import { isWorking } from './activity.ts';
 import { hasRunningJob } from '../sandbox/background-jobs.ts';
@@ -6,7 +7,7 @@ import { logProblem } from '../../core/log.ts';
 import { notifySandboxStopped } from '../notify/notifications.ts';
 import { sandboxSettings } from '../sandbox/sandbox-settings.ts';
 import { runningKeys, stopSession } from './sessions.ts';
-import { isStarting } from '../sandbox/workspace.ts';
+import { askedHere, isStarting } from '../sandbox/workspace.ts';
 
 /*
  * The provider's idle timeout counts every command as use, and an open Files or Changes panel reads the machine every few
@@ -39,6 +40,20 @@ export function holdTerminal(id: string): () => void {
 /** A background job counts until it ends or its time is up, so a job never holds the sandbox for good. */
 const inUse = (id: string) => isWorking(id) || isStarting(id) || terminals.has(id) || userHasControl(id) || hasRunningJob(id);
 
+/** Its pull request merged or closed and nobody has written since (a new message clears `resolvedAt`). */
+const done = (record: SessionRecord) => record.resolvedAt !== null && (record.pullRequest?.state === 'merged' || record.pullRequest?.state === 'closed');
+
+/**
+ * The clock is in memory, so a restart (each deploy) would start every wait over. A machine already up when this server
+ * started counts as quiet since its task last did anything: its last checkpoint is written as each reply ends.
+ */
+function quietFrom(record: SessionRecord, now: number): number {
+	if (askedHere(record.id)) return now;
+	const seen = [record.checkpointAt, record.lastInputAt].filter((at): at is string => at !== null);
+	const last = Math.max(...(seen.length ? seen : [record.createdAt]).map(Date.parse));
+	return Number.isFinite(last) ? Math.min(last, now) : now;
+}
+
 /** Only this Anton's tasks, never another install's sandboxes. */
 export async function stopIdleSandboxes(now = Date.now()): Promise<string[]> {
 	const [running, settings] = await Promise.all([runningKeys(), sandboxSettings()]);
@@ -50,19 +65,20 @@ export async function stopIdleSandboxes(now = Date.now()): Promise<string[]> {
 			quietSince.delete(id);
 			continue;
 		}
-		const since = quietSince.get(id);
-		if (since === undefined) {
-			quietSince.set(id, now);
-			continue;
-		}
-		if (now - since < idleMs) continue;
+		const record = await getSessionRecord(id);
+		// A sandbox of another install sharing the provider is not this Anton's to stop.
+		if (!record) continue;
+		const since = quietSince.get(id) ?? quietFrom(record, now);
+		quietSince.set(id, since);
+		const finished = done(record);
+		if (!finished && now - since < idleMs) continue;
+		// A reply may have started meanwhile.
+		if (inUse(id)) continue;
 		quietSince.delete(id);
-		// A sandbox of another install sharing the provider is not this Anton's to stop; a reply may have started meanwhile.
-		if (!(await getSessionRecord(id)) || inUse(id)) continue;
 		await stopSession(id).then(
 			() => {
 				stopped.push(id);
-				notifySandboxStopped(id, settings.idleMinutes);
+				notifySandboxStopped(id, finished ? null : settings.idleMinutes);
 			},
 			(error: unknown) => logProblem('warn', 'Could not stop an idle sandbox', error, id),
 		);
