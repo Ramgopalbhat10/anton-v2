@@ -616,6 +616,9 @@ export const ModelPicker = memo(function ModelPicker({
 
 	let offset = 0;
 	const routed = selected && !selected.subscription && routable(selected.id) ? selected : undefined;
+	const triggerLabel = shown
+		? `${label}: ${shown.name}${effort && selected?.reasoning.length ? `, reasoning ${REASONING_LABEL[reasoning]}` : ''}`
+		: label;
 
 	function routingFor(model: ModelInfo) {
 		if (model.id === shown?.id && routed) return <RouteControls model={routed} route={route} onChange={(next) => setRoute(next)} />;
@@ -643,7 +646,7 @@ export const ModelPicker = memo(function ModelPicker({
 			<PopoverPrimitive.Trigger asChild>
 				<button
 					type="button"
-					aria-label={label}
+					aria-label={triggerLabel}
 					title={selected?.subscription ? `${selected.name}, on your ${selected.subscription} plan` : undefined}
 					className={cn(
 						'flex max-w-[260px] min-w-0 shrink items-center gap-1.5 rounded-control pr-1.5 pl-1.5 font-medium whitespace-nowrap text-(--text-2) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',

@@ -74,7 +74,7 @@ describe('Composer', () => {
 			],
 		});
 		const { client } = setup();
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		expect(screen.getByRole('button', { name: 'Provider: any' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
@@ -83,7 +83,7 @@ describe('Composer', () => {
 		// With a sort, only its icon stays: the provider menu goes, and the picker's button shows the sort.
 		await waitFor(() => expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy());
 		expect(screen.queryByRole('button', { name: /^Provider:/ })).toBeNull();
-		expect(within(screen.getByRole('button', { name: 'Model and reasoning' })).getByTitle('Sorted by price')).toBeTruthy();
+		expect(within(screen.getByRole('button', { name: /^Model and reasoning/ })).getByTitle('Sorted by price')).toBeTruthy();
 
 		// With a provider, only the provider's mark stays, and its menu says where calls fall back to.
 		client.setQueryData(['session', 's1'], session({ route: { provider: 'groq' } }));
@@ -103,7 +103,7 @@ describe('Composer', () => {
 			[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
 			[['connectors'], CONNECTORS],
 		]);
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		const row = screen.getByRole('option', { name: /Other model/ });
 		// A row's routing menus show once the pointer is on it.
 		await userEvent.hover(row);
@@ -121,7 +121,7 @@ describe('Composer', () => {
 			[['budget', 's1'], { limits: { dailyUsd: null, taskUsd: null }, today: 0, task: 0, blocked: null }],
 			[['connectors'], CONNECTORS],
 		]);
-		await userEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		await userEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 		expect(screen.queryByRole('button', { name: /^Provider:|^Sort providers:/ })).toBeNull();
 	});
 

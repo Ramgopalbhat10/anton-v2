@@ -360,7 +360,7 @@ describe('Model picker', () => {
 	function openPicker(start: ModelChoice, subscriptions: Subscription[] = [connected], models = [routed, gpt], pinned: string[] = []) {
 		api.subscriptions.mockResolvedValue({ subscriptions });
 		renderWithQueries(<Picker start={start} />, [[['models'], { models, default: routed.id, pinned }]]);
-		fireEvent.click(screen.getByRole('button', { name: 'Model and reasoning' }));
+		fireEvent.click(screen.getByRole('button', { name: /^Model and reasoning/ }));
 	}
 
 	/** Radix opens menus on pointer down, which fireEvent.click does not send. */
@@ -414,7 +414,7 @@ describe('Model picker', () => {
 		await userEvent.click(screen.getByRole('option', { name: /Fast/ }));
 		expect(screen.getByRole('button', { name: 'Sort providers: Price' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('option', { name: /GPT-6.1-Sol/ }));
-		expect(within(screen.getByRole('button', { name: 'Model and reasoning' })).queryByTitle('Sorted by price')).toBeNull();
+		expect(within(screen.getByRole('button', { name: /^Model and reasoning/ })).queryByTitle('Sorted by price')).toBeNull();
 		expect(within(screen.getByRole('option', { name: /GPT-6.1-Sol/ })).queryByRole('button', { name: /^Provider:|^Sort providers:/ })).toBeNull();
 	});
 	it('shows each source as a section, the plan first, and marks the chosen plan model', async () => {
@@ -423,7 +423,7 @@ describe('Model picker', () => {
 		expect(within(list).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['ChatGPT plan', 'OpenRouter']);
 		// The dot on a plan model's mark says it is on a plan, so neither its row nor the trigger spells it out.
 		expect(within(within(list).getByRole('group', { name: 'ChatGPT plan' })).getByRole('option').textContent).not.toContain('PLAN');
-		expect(screen.getByRole('button', { name: 'Model and reasoning' }).textContent).not.toContain('PLAN');
+		expect(screen.getByRole('button', { name: /^Model and reasoning/ }).textContent).not.toContain('PLAN');
 	});
 
 	it('narrows to one source, and filters, from one menu that stays open for filters', async () => {
@@ -486,7 +486,7 @@ describe('Model picker', () => {
 		expect(within(pinned).getByRole('option').textContent).toContain('Fast');
 		expect(within(pinned).getByRole('button', { name: 'Unpin Fast' }).getAttribute('aria-pressed')).toBe('true');
 		// Pinning is not picking: the task keeps its model, and the panel stays open.
-		expect(screen.getByRole('button', { name: 'Model and reasoning' }).textContent).toContain('GPT-6.1-Sol');
+		expect(screen.getByRole('button', { name: /^Model and reasoning/ }).textContent).toContain('GPT-6.1-Sol');
 
 		fireEvent.click(within(pinned).getByRole('button', { name: 'Unpin Fast' }));
 		await waitFor(() => expect(api.setPinnedModels).toHaveBeenLastCalledWith([]));
@@ -564,7 +564,7 @@ describe('Model picker', () => {
 		const context = screen.getByRole('radiogroup', { name: 'Context window' });
 		expect(within(context).getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['272K', '1M']);
 		fireEvent.click(within(context).getByRole('radio', { name: /1M/ }));
-		const trigger = screen.getByRole('button', { name: 'Model and reasoning' });
+		const trigger = screen.getByRole('button', { name: /^Model and reasoning/ });
 		expect(trigger.textContent).toContain('1M');
 		// What the variant costs is not spelled out under the controls.
 		expect(screen.queryByText('Up to 1M of context.')).toBeNull();

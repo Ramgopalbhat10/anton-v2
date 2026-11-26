@@ -106,8 +106,7 @@ function NeedsYou({ sessions }: { sessions: Session[] }) {
 				<div className="in-card flex flex-col overflow-hidden">
 				{shown.map((session) => (
 					<CardRow key={session.id} session={session} note={session.asking ?? session.errorMessage}>
-						{/* The row is the link; this only says where it leads. */}
-						<span aria-hidden className="sg-btn sg-btn--secondary sg-btn--sm pointer-events-none hidden shrink-0 sm:inline-flex">
+						<span aria-hidden className="shrink-0 rounded-inner bg-(--warn-soft) px-1.5 py-0.5 text-nano font-medium text-(--warn)">
 							{nextStep(session)}
 						</span>
 						<span className={AGE}>{when(activeAt(session))}</span>

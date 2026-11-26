@@ -115,7 +115,7 @@ describe('Project settings', () => {
 		const agentModels = Object.fromEntries(['explorer', 'tester', 'browser', 'computer', 'reviewer'].map((agent) => [agent, { model: id, reasoning: 'low' }])) as Space['agentModels'];
 		page(space({ coordinatorModel: id, coordinatorReasoning: 'low', threadModel: id, threadReasoning: 'high', agentModels }));
 		const callers = ['coordinator', 'thread', 'explorer', 'tester', 'browser', 'computer', 'reviewer'];
-		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[callers.indexOf(caller)]);
+		await userEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ }))[callers.indexOf(caller)]);
 		await userEvent.click(screen.getAllByRole('button', { name: 'Sort providers: default' })[0]);
 		await userEvent.click(screen.getByRole('menuitem', { name: /Price/ }));
 		await userEvent.keyboard('{Escape}');
@@ -130,7 +130,7 @@ describe('Project settings', () => {
 	it('keeps the model picker inside the dialog, where the scroll lock lets its list wheel', async () => {
 		page(space());
 		const dialog = await screen.findByRole('dialog', { name: 'Project settings' });
-		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[0]);
+		await userEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ }))[0]);
 		const models = await screen.findByRole('listbox', { name: 'Models' });
 		expect(dialog.contains(models)).toBe(true);
 	});
