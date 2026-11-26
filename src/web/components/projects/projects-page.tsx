@@ -88,14 +88,20 @@ function ProjectCard({ space }: { space: Space }) {
 					) : null}
 				</div>
 				<div className="mt-3 border-t border-(--line)" />
-								<div className="flex flex-col px-2 pt-1.5 pb-2" style={{ minHeight: CARD_ROWS * 26 }}>
+				<div className="flex flex-col px-2 pt-1.5 pb-2" style={{ minHeight: CARD_ROWS * 26 }}>
 					{open.length ? (
 						open.slice(0, CARD_ROWS).map((thread) => (
-							<div key={thread.id} className="flex h-[26px] items-center gap-2 px-1.5">
+							<Link
+								key={thread.id}
+								to="/projects/$spaceId/threads/$threadId"
+								params={{ spaceId: space.id, threadId: thread.id }}
+								aria-label={`Open thread ${thread.title}`}
+								className="pointer-events-auto relative flex h-[26px] items-center gap-2 rounded-control px-1.5 outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
+							>
 								<ThreadStateIcon thread={thread} size={12} />
 								<span className="min-w-0 flex-1 truncate text-small text-(--text-2)">{thread.title}</span>
 								<span className="in-num shrink-0 text-micro text-(--text-4)">{when(threadActiveAt(thread))}</span>
-							</div>
+							</Link>
 						))
 					) : (
 						<div className="flex h-[26px] items-center px-1.5 text-small text-(--text-3)">All quiet{space.activeAt ? ` · active ${whenAgo(space.activeAt)}` : ''}</div>
