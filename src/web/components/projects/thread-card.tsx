@@ -26,10 +26,6 @@ import { openViewer, type ViewerItem } from '@/lib/viewer';
 import { isImagePath } from '../../../core/outputs';
 import { taskQueries } from '@/lib/task-queries';
 
-export function ThreadStateIcon({ thread, size = 13 }: { thread: Session; size?: number }) {
-	return <ThreadGlyph thread={thread} size={size} />;
-}
-
 type Step = { label: string; icon: IconComponent; primary?: boolean } & ({ send: string } | { open: true; panel?: 'Changes' | 'PR' } | { stop: true } | { href: string });
 
 /** Each step sends its instruction to the thread, as if you typed it. */

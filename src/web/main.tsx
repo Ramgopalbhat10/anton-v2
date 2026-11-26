@@ -7,30 +7,32 @@ import {
 	lazyRouteComponent,
 	redirect,
 } from '@tanstack/react-router';
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ArtifactsSearch } from '@/components/pages/artifacts-page';
 import { connectorViewSearch, sectionSearch, skillViewSearch } from '@/components/settings/routes';
 import { openProjectSettings } from '@/lib/project-settings-modal';
 import { openSettings } from '@/lib/settings-modal';
 import { bootTheme } from '@/lib/theme';
-import { OutputViewerHost } from '@/components/content/output-viewer';
 import { RouteError } from '@/components/kit/error-boundary';
-import { AppShell, HomePage, SessionPage } from '@/components/shell/shell';
+import { AppShell, HomePage } from '@/components/shell/shell';
 import { TitleTips } from '@/components/shell/title-tips';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { type PanelName, panels } from '@/components/workspace/vm-panel';
+import { type PanelName, panels } from '@/components/workspace/panels';
 import { CATEGORIES } from '@/lib/artifacts';
 import { installReturnRefetch } from '@/lib/live-updates';
 import { persistQueries } from '@/lib/persist';
 import { appQueryClient } from '@/lib/task-sync';
 import './styles.css';
 
+const OutputViewerHost = lazy(() => import('@/components/content/output-viewer').then((module) => ({ default: module.OutputViewerHost })));
+
 const queryClient = appQueryClient();
 installReturnRefetch();
 bootTheme();
 
-/* Home and a task are in the first download; every other page loads its code on first visit. */
+/* Home is in the first download; a task and every other page load their code on first visit. */
+const SessionPage = lazyRouteComponent(() => import('@/components/shell/task-workspace'), 'SessionPage');
 const IncognitoPage = lazyRouteComponent(() => import('@/components/pages/incognito'), 'IncognitoPage');
 const ProjectsPage = lazyRouteComponent(() => import('@/components/projects/projects-page'), 'ProjectsPage');
 const ProjectPage = lazyRouteComponent(() => import('@/components/projects/project-page'), 'ProjectPage');
@@ -52,7 +54,7 @@ const rootRoute = createRootRoute({
 		<QueryClientProvider client={queryClient}>
 			<TooltipProvider>
 				<AppShell />
-				<OutputViewerHost />
+				<Suspense fallback={null}><OutputViewerHost /></Suspense>
 				<TitleTips />
 			</TooltipProvider>
 		</QueryClientProvider>

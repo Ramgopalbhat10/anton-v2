@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BurnCard, ProjectPulse, ScheduleTimeline, WaitTracks } from '@/components/projects/project-viz';
-import { NextSteps, ThreadStateIcon, useOpenThread } from '@/components/projects/thread-card';
+import { NextSteps, useOpenThread } from '@/components/projects/thread-card';
+import { ThreadStateIcon } from '@/components/projects/thread-state-icon';
 import { Library as LibraryView } from '@/components/workspace/library-tab';
 import { type LibrarySource, type Place, spacePlace, taskPlace } from '@/lib/library';
 import { api } from '@/lib/api';

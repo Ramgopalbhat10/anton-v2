@@ -6,7 +6,7 @@ import { AttachmentTray, useAttachments } from '@/components/composer/attachment
 import { ComposerInput } from '@/components/composer/composer-input';
 import { ContextMeter } from '@/components/composer/context-meter';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import { type PendingChange, placeholders } from '@/components/thread/sent-text';
+import { type PendingChange, placeholders } from '@/components/thread/pending-send';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { Btn, Icon, IconBtn, Kbd } from '@/components/kit/signal';

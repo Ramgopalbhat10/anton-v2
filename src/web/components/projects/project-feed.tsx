@@ -10,7 +10,7 @@ import { besidePictures, SentImages, sentPictures } from '@/components/thread/se
 import { ComposerInput } from '@/components/composer/composer-input';
 import { PlanToggle } from '@/components/composer/composer';
 import { Mascot, useMascotMood } from '@/components/marks/mascot';
-import { type PendingChange, PendingMessage, placeholders, SentText, useSends } from '@/components/thread/sent-text';
+import { PendingMessage, SentText, useSends } from '@/components/thread/sent-text';
 import { Caption } from '@/components/kit/instrument';
 import { InlineLinks, Markdown, OutputLinks } from '@/components/content/markdown';
 import { OutputCards } from '@/components/content/output-viewer';
@@ -44,6 +44,7 @@ import { uniqueUploadNames } from '../../../core/upload-name';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
+import { type PendingChange, placeholders } from '@/components/thread/pending-send';
 
 type ToolPart = Extract<FlueConversationPart, { type: 'dynamic-tool' }>;
 

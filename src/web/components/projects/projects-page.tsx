@@ -13,7 +13,7 @@ import { FIELD } from '@/components/settings/parts';
 import { Btn, EmptyState, Icon, IconBtn, SearchField, Spinner } from '@/components/kit/signal';
 import { MenuButton } from '@/components/kit/nav';
 import { useNow } from '@/components/thread/subagents';
-import { ThreadStateIcon } from '@/components/projects/thread-card';
+import { ThreadStateIcon } from '@/components/projects/thread-state-icon';
 import { api } from '@/lib/api';
 import type { Space } from '@/lib/api/spaces';
 import { when, whenAgo } from '@/lib/format';
