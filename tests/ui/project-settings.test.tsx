@@ -127,6 +127,14 @@ describe('Project settings', () => {
 			agentModels: callers.indexOf(caller) > 1 ? { ...agentModels, [caller]: { model: `${id}#sort=price`, reasoning: 'low' } } : agentModels,
 		})));
 	});
+	it('keeps the model picker inside the dialog, where the scroll lock lets its list wheel', async () => {
+		page(space());
+		const dialog = await screen.findByRole('dialog', { name: 'Project settings' });
+		await userEvent.click((await screen.findAllByRole('button', { name: 'Model and reasoning' }))[0]);
+		const models = await screen.findByRole('listbox', { name: 'Models' });
+		expect(dialog.contains(models)).toBe(true);
+	});
+
 	it('shows what each helper follows, and saves one of its own', async () => {
 		page(space());
 		// Tester has a model in Settings › General; the rest follow the thread's.
