@@ -67,9 +67,9 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 			<MenuTrigger asChild>
 				<PickerChip icon={GitBranch} label={value || 'main'} disabled={!project} aria-label={`Branch: ${value || 'main'}`} />
 			</MenuTrigger>
-			<MenuContent align="start" className="max-h-[320px] min-w-[220px] overflow-y-auto">
+			<MenuContent align="start" className="max-h-[320px] min-w-[240px] overflow-hidden">
 				{(branches.data?.branches.length ?? 0) > 8 ? (
-					<div className="sticky-veil sticky top-0 z-[1] px-1 pt-1 pb-1.5">
+					<div className="sticky-veil -mx-1 -mt-1 shrink-0 border-b border-(--line) px-2 pt-2 pb-2">
 						<input
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
@@ -80,14 +80,16 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 						/>
 					</div>
 				) : null}
+				<div className="min-h-0 flex-1 overflow-y-auto pt-1">
 				{branches.isPending ? <MenuLabel>Loading branches</MenuLabel> : null}
 				{branches.isError ? <MenuLabel>Could not list branches</MenuLabel> : null}
 				{(branches.data?.branches ?? []).filter((branch) => branch.toLowerCase().includes(query.trim().toLowerCase())).map((branch) => (
-					<MenuItem key={branch} checked={branch === value} onSelect={() => onChange(branch)}>
+					<MenuItem key={branch} icon={GitBranch} checked={branch === value} onSelect={() => onChange(branch)} className="h-8">
 						{branch}
 					</MenuItem>
 				))}
 				{branches.isSuccess && query.trim() && !(branches.data?.branches ?? []).some((branch) => branch.toLowerCase().includes(query.trim().toLowerCase())) ? <MenuLabel>No branches match</MenuLabel> : null}
+				</div>
 			</MenuContent>
 		</Menu>
 	);
