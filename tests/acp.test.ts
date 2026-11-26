@@ -80,7 +80,7 @@ function fakeAccount(): AcpAccount {
 	};
 }
 
-function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-high', agent = devinAgent, effort: string | null = null) {
+function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-high', agent = devinAgent, effort: string | null = null, tools: RuntimeTool[] = [BASH]) {
 	const acp = fakeChannel();
 	const mcp = fakeChannel();
 	const process: AcpProcess = {
@@ -91,7 +91,7 @@ function rig(callTool: RuntimeConversationOptions['callTool'], model = 'swe-2-hi
 		stderrTail: () => '',
 	};
 	const runtime = acpRuntime(agent, fakeAccount(), { spawn: async () => process });
-	const conv = runtime.open({ model, instructions: 'Be brief.', tools: [BASH], effort, callTool });
+	const conv = runtime.open({ model, instructions: 'Be brief.', tools, effort, callTool });
 	const seen: RuntimeEvent[] = [];
 	const collecting = (async () => {
 		for await (const event of conv.events) seen.push(event);
@@ -834,7 +834,7 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 	const opening = prompt.prompt[0]?.text ?? '';
 	assert.match(opening, /^<instructions>\nYou are working for Anton\./);
 	assert.match(opening, /cannot see the repository/);
-	assert.match(opening, /Anton's tools \(MCP server "anton"\):\n- mcp__anton__read\(path\?\): Read a file\n\nBe brief\.\n<\/instructions>$/);
+	assert.match(opening, /Anton's tools \(MCP server "anton", called through mcp_call_tool; \? marks an optional argument\):\n- read\(path\?\): Read a file\n\nBe brief\.\n<\/instructions>$/);
 	assert.equal(prompt.prompt[1]?.text, 'hi');
 
 	acp.incoming.push(JSON.stringify({ jsonrpc: '2.0', id: 900, method: 'fs/read_text_file', params: { sessionId: 's', path: '/work/src/a.ts' } }));
@@ -898,9 +898,99 @@ test('the tool list names each tool as the agent calls it, with its arguments an
 	];
 	assert.equal(
 		toolCatalog(tools, devinAgent),
-		'Anton\'s tools (MCP server "anton"):\n- mcp__anton__check_preview(port): Check a port through Preview.\n- mcp__anton__check_job(job, wait?): A job status',
+		'Anton\'s tools (MCP server "anton", called through mcp_call_tool; ? marks an optional argument):\n- check_preview(port): Check a port through Preview.\n- check_job(job, wait?): A job status',
 	);
+	// agy sees each MCP tool by its own name.
+	assert.equal(toolCatalog(tools.slice(1), { mcpServerName: 'anton', mcpToolName: (tool) => `mcp_anton_${tool}` }), 'Anton\'s tools (MCP server "anton"; ? marks an optional argument):\n- mcp_anton_check_job(job, wait?): A job status');
 	assert.equal(cut('First sentence here. Second sentence runs on.', 30), 'First sentence here.');
 	assert.equal(cut('No stop anywhere in this long text', 10), 'No stop a…');
 	assert.equal(cut('short', 20), 'short');
+});
+
+const NEEDS: RuntimeTool = {
+	name: 'bash',
+	description: 'Run a command',
+	inputSchema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
+};
+const READ_PATH: RuntimeTool = {
+	name: 'read',
+	description: 'Read a file',
+	inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+};
+
+/** A Devin conversation through to its first prompt, with tools that need arguments. */
+async function devinRig() {
+	const names: string[] = [];
+	const r = rig(async (_id, name) => {
+		names.push(name);
+		return { content: [{ type: 'text', text: 'ok' }], isError: false };
+	}, 'swe-2-high', devinAgent, null, [NEEDS, READ_PATH]);
+	await started(r.acp, r.conv);
+	/** Each call Anton ran, with the arguments its tool step carried. */
+	const calls = async (count = names.length) => {
+		const deltas = () => r.seen.filter((e): e is Extract<RuntimeEvent, { type: 'block_delta' }> => e.type === 'block_delta' && Boolean(e.json));
+		await until(() => deltas().length >= count, 'the tool steps');
+		return names.map((name, i) => ({ name, json: deltas()[i]?.json ?? '' }));
+	};
+	return { ...r, calls, names };
+}
+
+test('Devin is told to call Anton\'s tools through mcp_call_tool with an arguments object, listing them once, and where the repository is', async () => {
+	const { acp, conv } = await devinRig();
+	const opening = (parse(acp.sent).find((m) => m.method === 'session/prompt')!.params as { prompt: { text?: string }[] }).prompt[0]?.text ?? '';
+	assert.match(opening, /Your working directory, \/work, is the task's repository/);
+	assert.match(opening, /mcp_call_tool\(server_name: "anton", tool_name: "bash", arguments: \{"command":"…"\}\)/);
+	assert.match(opening, /call mcp_list_tools with server_name "anton" once/);
+	assert.doesNotMatch(opening, /need not list them|mcp__anton__/);
+	conv.close();
+});
+
+test('arguments written as a JSON string, or wrapped once more, still reach the tool, and jail paths become the repository\'s', async () => {
+	const { mcp, conv, calls } = await devinRig();
+	await mcpCall(mcp, 'bash', '{"command":"ls"}');
+	await mcpCall(mcp, 'bash', { arguments: { command: 'pwd' } }, 2);
+	await mcpCall(mcp, 'read', { path: '/work/src/a.ts' }, 3);
+	assert.deepEqual(await calls(3), [
+		{ name: 'bash', json: '{"command":"ls"}' },
+		{ name: 'bash', json: '{"command":"pwd"}' },
+		{ name: 'read', json: '{"path":"src/a.ts"}' },
+	]);
+	conv.close();
+});
+
+test('a call without arguments takes them from Devin\'s record of the call when it has them as a string', async () => {
+	const { acp, mcp, conv, calls } = await devinRig();
+	acp.incoming.push(
+		update('s', {
+			sessionUpdate: 'tool_call',
+			toolCallId: 'tc-1',
+			title: 'Calling bash from anton',
+			kind: 'other',
+			rawInput: { server_name: 'anton', tool_name: 'bash', arguments: '{"command":"npm test"}' },
+		}),
+	);
+	const result = await mcpCall(mcp, 'bash', {});
+	assert.equal((result.result as { isError?: boolean }).isError, false);
+	assert.deepEqual(await calls(1), [{ name: 'bash', json: '{"command":"npm test"}' }]);
+	conv.close();
+});
+
+test('a call without arguments, and no record to take them from, tells Devin the shape without a failed step', async () => {
+	const { acp, mcp, conv, names, seen } = await devinRig();
+	// A record whose arguments were an object reached Anton whole, so it is never taken for another call.
+	acp.incoming.push(
+		update('s', {
+			sessionUpdate: 'tool_call',
+			toolCallId: 'tc-0',
+			title: 'Calling bash from anton',
+			rawInput: { server_name: 'anton', tool_name: 'bash', arguments: { command: 'ls' } },
+		}),
+	);
+	const result = (await mcpCall(mcp, 'bash', {})).result as { isError?: boolean; content: { text: string }[] };
+	assert.equal(result.isError, true);
+	assert.match(result.content[0]!.text, /got no arguments, and it needs command\. Put them inside arguments, as an object: mcp_call_tool\(server_name: "anton", tool_name: "bash", arguments: \{"command":"…"\}\)/);
+	assert.deepEqual(names, []);
+	assert.equal(seen.filter((e) => e.type === 'block_start' && e.block.type === 'tool_use').length, 0);
+	assert.ok(!seen.some((e) => e.type === 'block_delta' && /Calling bash from anton/.test(e.thinking ?? '')), 'Anton\'s own tool is not echoed as a native one');
+	conv.close();
 });

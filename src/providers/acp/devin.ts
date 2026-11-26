@@ -112,7 +112,8 @@ export const devinAgent: AcpAgent = {
 	// devin acp --model presets each new session's default, sparing the ~seconds-long set_config_option.
 	modelArgs: (model) => ['--model', model],
 	mcpServerName: 'anton',
-	mcpToolName: (tool) => `mcp__anton__${tool}`,
+	// Devin's model reaches MCP tools only through these (field names from the CLI's McpCallToolInput, 3000.14 and 3000.15).
+	mcpCall: { tool: 'mcp_call_tool', server: 'server_name', name: 'tool_name', args: 'arguments', list: 'mcp_list_tools' },
 	// Devin lists MCP tools only when it looks, and a listing of Anton's whole toolset came back cut, with the rest in a
 	// file in its own container that it could not open; the tool list in its instructions names every tool either way.
 	mcpDescriptionChars: 300,

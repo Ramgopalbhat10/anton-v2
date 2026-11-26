@@ -161,6 +161,13 @@ export class WorkspaceBridge {
 		return path.startsWith(`${this.jail}/`) ? path.slice(this.jail.length + 1) : path;
 	}
 
+	/** An Anton tool's arguments with a `path` or `cwd` in the jail turned into the repository's, as the agent's own requests are. */
+	paths(args: Record<string, unknown>): Record<string, unknown> {
+		const out = { ...args };
+		for (const key of ['path', 'cwd']) if (typeof out[key] === 'string') out[key] = this.path(out[key]);
+		return out;
+	}
+
 	private need(tool: string): void {
 		if (!this.has(tool)) throw new Error(`There is no workspace yet, so ${tool} is unavailable. Call Anton's start_workspace tool first.`);
 	}
