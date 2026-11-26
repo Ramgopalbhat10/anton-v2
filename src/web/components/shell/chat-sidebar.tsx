@@ -28,6 +28,7 @@ import {
 } from '@/lib/icons';
 import { memo, type ReactNode, useMemo, useState } from 'react';
 import { Avatar, Icon, IconBtn, Kbd, Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger, SearchField } from '@/components/kit/signal';
+import { Disclosure } from '@/components/kit/disclosure';
 import { Count, toneFill, usedTone } from '@/components/kit/instrument';
 import { Logo } from '@/components/marks/illustrations';
 import { prTone } from '@/components/marks/pr-status';
@@ -620,35 +621,39 @@ export function ChatSidebar({
 				{pinned.length ? (
 					<section aria-label="Pinned">
 						<SectionHeader {...header('pinned', 'Pinned', pinned.length)} />
-						{folded('pinned') ? null : rows(pinned, 'pinned')}
+						<Disclosure open={!folded('pinned')}>{rows(pinned, 'pinned')}</Disclosure>
 					</section>
 				) : null}
 				<section aria-label="Running">
 					<SectionHeader {...header('running', 'Running', running.length)} />
-					{folded('running') ? null : sessionsQuery.isError ? (
-						<div className="px-2 py-1.5 text-small text-(--bad)">Could not load tasks.</div>
-					) : sessionsQuery.isPending ? (
-						<div className="h-10 rounded-control bg-(--bg-hover)" />
-					) : running.length ? (
-						rows(running, 'running')
-					) : (
-						<Empty>{narrowed ? 'Nothing running matches.' : 'Nothing is running.'}</Empty>
-					)}
+					<Disclosure open={!folded('running')}>
+						{sessionsQuery.isError ? (
+							<div className="px-2 py-1.5 text-small text-(--bad)">Could not load tasks.</div>
+						) : sessionsQuery.isPending ? (
+							<div className="h-10 rounded-control bg-(--bg-hover)" />
+						) : running.length ? (
+							rows(running, 'running')
+						) : (
+							<Empty>{narrowed ? 'Nothing running matches.' : 'Nothing is running.'}</Empty>
+						)}
+					</Disclosure>
 				</section>
 				<section aria-label="Recent">
 					<SectionHeader {...header('recent', 'Recent', recent.length)} />
-					{folded('recent') ? null : recent.length ? (
-						<>
-							{rows(recent.length > recentShown ? recent.slice(0, recentShown) : recent, 'recent')}
-							{recent.length > recentShown ? (
-								<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mt-0.5 w-full font-normal text-(--text-3)')}>
-									Show {Math.min(RECENT_PAGE, recent.length - recentShown)} more
-								</button>
-							) : null}
-						</>
-					) : (
-						<Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>
-					)}
+					<Disclosure open={!folded('recent')}>
+						{recent.length ? (
+							<>
+								{rows(recent.length > recentShown ? recent.slice(0, recentShown) : recent, 'recent')}
+								{recent.length > recentShown ? (
+									<button type="button" onClick={() => setRecentShown((shown) => shown + RECENT_PAGE)} className={cn(NAV_ROW, 'mt-0.5 w-full font-normal text-(--text-3)')}>
+										Show {Math.min(RECENT_PAGE, recent.length - recentShown)} more
+									</button>
+								) : null}
+							</>
+						) : (
+							<Empty>{narrowed ? 'No stopped task matches.' : 'Stopped tasks show up here.'}</Empty>
+						)}
+					</Disclosure>
 				</section>
 				<div className="h-3 shrink-0" />
 			</div>

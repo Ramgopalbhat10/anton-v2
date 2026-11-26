@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { PrStatus, prTone } from '@/components/marks/pr-status';
 import { ProjectIcon } from '@/components/marks/project-icon';
 import { Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, SearchField, SectionLabel } from '@/components/kit/signal';
+import { Disclosure } from '@/components/kit/disclosure';
 import { CompactViewItem, FacetSubmenus, FilterChips } from '@/components/shell/task-filters';
 import { TaskPeek } from '@/components/shell/task-peek';
 import { ThreadStateIcon } from '@/components/projects/thread-card';
@@ -48,7 +49,7 @@ export function SidebarHeading({ label, count, open, onToggle, children }: { lab
 			>
 				<SectionLabel className="truncate">{label}</SectionLabel>
 				{count ? <span className="in-num text-micro text-(--text-4)">{count}</span> : null}
-				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
+				<Icon icon={ChevronRight} size={12} className="text-(--text-3) transition-transform duration-(--t) ease-(--ease)" style={{ transform: open ? 'rotate(90deg)' : undefined }} />
 			</button>
 			<span className="flex-1" />
 			{children}
@@ -66,7 +67,7 @@ export function GroupHeading({ label, count, open = true, onToggle, children, cl
 				<Icon
 					icon={ChevronRight}
 					size={11}
-					className="text-(--text-4) opacity-0 transition-[opacity,transform] duration-(--t) group-hover/group:opacity-100 group-focus-within/group:opacity-100"
+					className="text-(--text-4) opacity-0 transition-[opacity,transform] duration-(--t) ease-(--ease) group-hover/group:opacity-100 group-focus-within/group:opacity-100"
 					style={{ transform: open ? 'rotate(90deg)' : undefined }}
 				/>
 			) : null}
@@ -104,7 +105,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 					<Icon icon={Plus} size={12} />
 				</Link>
 			</GroupHeading>
-			{open ? (
+			<Disclosure open={open}>
 				<div className="flex flex-col gap-px">
 					{list.map((space) => (
 						<Link key={space.id} to="/projects/$spaceId" params={{ spaceId: space.id }} onClick={onNavigate} className={cn(ROW, LIFTED, 'h-7')}>
@@ -119,7 +120,7 @@ export function ProjectsSection({ onNavigate }: { onNavigate: () => void }) {
 						</Link>
 					) : null}
 				</div>
-			) : null}
+			</Disclosure>
 		</section>
 	);
 }
@@ -264,13 +265,13 @@ function StateGroup({ state, threads, activeId, repos, compact, onNavigate }: { 
 				open={open}
 				onToggle={() => setOpen((current) => !current)}
 			/>
-			{open ? (
+			<Disclosure open={open}>
 				<div className="flex flex-col gap-px">
 					{threads.map((thread) => (
 						<ThreadRow key={thread.id} thread={thread} active={thread.id === activeId} repos={repos} compact={compact} onNavigate={onNavigate} />
 					))}
 				</div>
-			) : null}
+			</Disclosure>
 		</section>
 	);
 }

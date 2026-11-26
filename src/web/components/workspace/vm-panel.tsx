@@ -77,6 +77,7 @@ function ResumeButton({ sessionId }: { sessionId: string }) {
 
 type VmPanelProps = {
 	sessionId: string;
+	closingExpanded?: boolean;
 	tabs: PanelName[];
 	active: PanelName | null;
 	onTabsChange: (tabs: PanelName[]) => void;
@@ -86,13 +87,13 @@ type VmPanelProps = {
 	onClose: () => void;
 };
 
-export const VmPanel = memo(function VmPanel({ contentOpen = true, ...props }: VmPanelProps & { contentOpen?: boolean }) {
+export const VmPanel = memo(function VmPanel({ contentOpen = true, closingExpanded = false, ...props }: VmPanelProps & { contentOpen?: boolean }) {
 	// A viewer-only dock must not initialize a saved Terminal (which starts a sandbox), but an existing panel keeps its state.
 	const [initialized, setInitialized] = useState(contentOpen);
 	if (contentOpen && !initialized) setInitialized(true);
 	const current = props.active && props.tabs.includes(props.active) ? props.active : null;
 	return (
-		<WorkspacePane expanded={props.expanded} narrow={current === null && !props.expanded}>
+		<WorkspacePane expanded={props.expanded} closingExpanded={closingExpanded} narrow={current === null && !props.expanded}>
 			{contentOpen || initialized ? <VmPanelContent {...props} /> : null}
 		</WorkspacePane>
 	);

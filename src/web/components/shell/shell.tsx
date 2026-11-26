@@ -373,6 +373,7 @@ export function TaskWorkspace({
 	leading?: ReactNode;
 }) {
 	const [expanded, setExpanded] = useState(false);
+	const [closingExpanded, setClosingExpanded] = useState(false);
 	const [renaming, setRenaming] = useState(false);
 	const session = useQuery(taskQueries.session(sessionId));
 	const agent = useTaskAgent(sessionId);
@@ -388,11 +389,13 @@ export function TaskWorkspace({
 
 	const setOpen = useCallback(
 		(next: boolean) => {
+			if (!next && expanded) setClosingExpanded(true);
+			if (next) setClosingExpanded(false);
 			if (!next) setExpanded(false);
 			if (onePane) setPaneOpen(next);
 			else change({ open: next });
 		},
-		[change, onePane],
+		[change, expanded, onePane],
 	);
 
 	/** Opens a panel; `quietly` only picks it, without covering the conversation on a phone. */
@@ -420,7 +423,16 @@ export function TaskWorkspace({
 		if (watching) showPanel(watching, true);
 	}, [watching]);
 
-	const centerVisible = !(open && expanded);
+	const [covered, setCovered] = useState(expanded);
+	useEffect(() => {
+		if (!expanded) {
+			setCovered(false);
+			return;
+		}
+		const timer = setTimeout(() => setCovered(true), 300);
+		return () => clearTimeout(timer);
+	}, [expanded]);
+	const centerVisible = !(open && covered);
 	const slide = usePaneSlide(open);
 	const send = useCallback((text: string) => agent.sendMessage(text), [agent.sendMessage]);
 	const sessionData = session.data;
@@ -432,9 +444,9 @@ export function TaskWorkspace({
 		<SendToAgent.Provider value={send}>
 			<ShowPanel.Provider value={showPanel}>
 				<ReadNotificationsOf sessionId={sessionId} />
-				<div className="@container/workspace flex min-h-0 min-w-0 flex-1">
+				<div className="@container/workspace relative flex min-h-0 min-w-0 flex-1">
 					{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
-					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
+					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden @min-[700px]/workspace:invisible @min-[700px]/workspace:flex' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
 						<TaskHeader
 							session={sessionData}
 							status={status}
@@ -458,6 +470,7 @@ export function TaskWorkspace({
 								onTabsChange={changeTabs}
 								onActiveChange={changeActive}
 								expanded={expanded}
+								closingExpanded={closingExpanded}
 								onToggleExpanded={toggleExpanded}
 								onClose={closeWorkspace}
 							/>

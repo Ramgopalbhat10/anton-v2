@@ -340,7 +340,7 @@ export function PickerChip({
 		<button
 			type="button"
 			className={cn(
-				'flex shrink-0 items-center gap-[5px] rounded-control font-medium whitespace-nowrap text-(--text-2) transition-colors duration-(--t-fast) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
+				'sg-press flex shrink-0 items-center gap-[5px] rounded-control font-medium whitespace-nowrap text-(--text-2) outline-none hover:bg-(--bg-hover) hover:text-(--text) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover) data-[state=open]:text-(--text)',
 				height === 28 ? 'h-7 px-2' : 'h-6 px-[7px]',
 			)}
 			{...rest}
@@ -445,7 +445,7 @@ export function FilterMenu({
 				<button
 					type="button"
 					className={cn(
-						'inline-flex h-6 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap outline-none transition-colors duration-(--t-fast) focus-visible:shadow-(--focus)',
+						'sg-press inline-flex h-6 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control px-2 text-small whitespace-nowrap outline-none focus-visible:shadow-(--focus)',
 						value
 							? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]'
 							: 'text-(--text-2) shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-(--bg-hover) hover:text-(--text)',
@@ -494,7 +494,7 @@ export function FilterChip({
 			aria-label={count === undefined ? undefined : `${label}, ${count}`}
 			onClick={onToggle}
 			className={cn(
-				'inline-flex shrink-0 items-center gap-[5px] rounded-control whitespace-nowrap transition-colors duration-(--t-fast) outline-none focus-visible:shadow-(--focus)',
+				'sg-press inline-flex shrink-0 items-center gap-[5px] rounded-control whitespace-nowrap outline-none focus-visible:shadow-(--focus)',
 				size === 'sm' ? 'h-[22px] px-2 text-micro' : 'h-6 px-2 text-small',
 				on
 					? 'bg-(--accent-soft) text-(--accent-text) shadow-[inset_0_0_0_1px_var(--accent-line)]'

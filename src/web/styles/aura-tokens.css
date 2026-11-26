@@ -236,15 +236,18 @@
 	--h-lg: 32px;
 
 	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ease-panel: cubic-bezier(0.77, 0, 0.175, 1);
 	--t-fast: 90ms;
 	--t: 160ms;
 	--t-slow: 240ms;
+	--t-panel: 300ms;
 }
 @media (prefers-reduced-motion: reduce) {
 	:root {
 		--t-fast: 0ms;
 		--t: 0ms;
 		--t-slow: 0ms;
+		--t-panel: 0ms;
 	}
 }
 
