@@ -746,6 +746,12 @@ describe('the To do column on the project board', () => {
 						repos: [],
 						threadModel: { model: 'openrouter/test/retired#sort=latency', reasoning: null },
 					}),
+					makeTodo({
+						id: 'todo_stale_effort',
+						title: 'Stale effort task',
+						repos: [],
+						threadModel: { model: model.id, reasoning: 'xhigh' },
+					}),
 				]}
 				onNewThread={() => undefined}
 				onOpenCoordinator={() => undefined}
@@ -773,9 +779,11 @@ describe('the To do column on the project board', () => {
 		await userEvent.keyboard('{Escape}');
 		await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
 
-		// Model icon sits right next to the repo trigger in the same row and opens its detail popover on hover.
+		// Model icon sits right next to the repo trigger in the same row and opens its detail popover on hover without stealing existing focus.
 		const modelTrigger = await within(card).findByRole('button', { name: /Main thread model: Claude Sonnet 4, effort High, via anthropic/ });
 		expect(modelTrigger.parentElement).toBe(repoTrigger.parentElement);
+		filesTrigger.focus();
+		expect(document.activeElement).toBe(filesTrigger);
 		await userEvent.hover(modelTrigger);
 		await waitFor(() => {
 			const dialog = screen.getByRole('dialog', { name: 'Claude Sonnet 4 model details' });
@@ -787,10 +795,12 @@ describe('the To do column on the project board', () => {
 			expect(within(dialog).getByText('via anthropic')).toBeTruthy();
 			expect(within(dialog).getByText('Balanced coding model.')).toBeTruthy();
 		});
+		expect(document.activeElement).toBe(filesTrigger);
 		await userEvent.unhover(modelTrigger);
 		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
+		expect(document.activeElement).toBe(filesTrigger);
 
-		// Keyboard activation and tap/click also open the popover and restore focus on Escape.
+		// Keyboard activation opens the popover, restores focus on Escape, and resumes Tab / Shift+Tab navigation from the trigger.
 		modelTrigger.focus();
 		await userEvent.keyboard('{Enter}');
 		expect(await screen.findByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeTruthy();
@@ -799,6 +809,30 @@ describe('the To do column on the project board', () => {
 		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
 		expect(modelTrigger.getAttribute('aria-expanded')).toBe('false');
 		expect(document.activeElement).toBe(modelTrigger);
+
+		await userEvent.keyboard('{Enter}');
+		expect(await screen.findByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeTruthy();
+		await userEvent.tab();
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
+		expect(document.activeElement).toBe(filesTrigger);
+
+		modelTrigger.focus();
+		await userEvent.keyboard(' ');
+		expect(await screen.findByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeTruthy();
+		await userEvent.tab({ shift: true });
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
+		expect(document.activeElement).toBe(repoTrigger);
+
+		// A saved effort the catalog no longer supports falls back to the model's current default.
+		const staleCard = within(column).getByRole('article', { name: 'Stale effort task' });
+		const staleTrigger = await within(staleCard).findByRole('button', { name: /Main thread model: Claude Sonnet 4, effort Med by default$/ });
+		await userEvent.hover(staleTrigger);
+		await waitFor(() => {
+			const dialog = screen.getByRole('dialog', { name: 'Claude Sonnet 4 model details' });
+			expect(within(dialog).getByText('Med by default')).toBeTruthy();
+		});
+		await userEvent.unhover(staleTrigger);
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Claude Sonnet 4 model details' })).toBeNull());
 
 		// A delisted model with no tagged repo still renders its icon and fallback details on hover.
 		const delistedCard = within(column).getByRole('article', { name: 'Legacy model task' });

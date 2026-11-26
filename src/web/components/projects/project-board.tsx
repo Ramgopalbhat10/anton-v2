@@ -268,23 +268,36 @@ function MetaTip({ label, children }: { label: string; children: ReactNode }) {
 function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel']> }) {
 	const models = useModels();
 	const [open, setOpen] = useState(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const openedByHover = useRef(false);
+	const restoreFocus = useRef(false);
 	const clear = () => clearTimeout(timerRef.current);
 	const scheduleClose = () => {
 		clear();
-		timerRef.current = setTimeout(() => {
-			openedByHover.current = false;
-			setOpen(false);
-		}, 90);
+		if (!panelRef.current?.contains(document.activeElement)) {
+			timerRef.current = setTimeout(() => {
+				openedByHover.current = false;
+				restoreFocus.current = false;
+				setOpen(false);
+			}, 90);
+		}
 	};
 	useEffect(() => () => clearTimeout(timerRef.current), []);
 
 	const id = unrouted(choice.model);
 	const info = models.data?.models.find((model) => model.id === id);
 	const name = info ? shortName(info) : (id.split('/').pop() ?? id).replace(/^~/, '');
-	const showEffort = Boolean(choice.reasoning || !info || info.reasoning.length > 0);
-	const effort = choice.reasoning ? REASONING_LABEL[choice.reasoning] : info ? `${REASONING_LABEL[effectiveReasoning(info, null)]} by default` : 'The model default';
+	const showEffort = !info || info.reasoning.length > 0;
+	const supportedEffort = Boolean(info && choice.reasoning && info.reasoning.includes(choice.reasoning));
+	const effort = info
+		? supportedEffort
+			? REASONING_LABEL[effectiveReasoning(info, choice.reasoning)]
+			: `${REASONING_LABEL[effectiveReasoning(info, choice.reasoning)]} by default`
+		: choice.reasoning
+			? REASONING_LABEL[choice.reasoning]
+			: 'The model default';
 	const route = parseRouted(choice.model).route;
 	const routeText = route?.provider ? `via ${route.provider}` : route?.sort ? `sorted by ${route.sort}` : null;
 	const billing = info ? (info.subscription ? `On your ${info.subscription} plan` : info.price.input === 0 && info.price.output === 0 ? 'Free' : `${dollars(info.price.input)} in · ${dollars(info.price.output)} out per 1M tokens`) : null;
@@ -301,6 +314,7 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 		>
 			<Popover.Trigger asChild>
 				<button
+					ref={triggerRef}
 					type="button"
 					aria-label={summary}
 					onPointerEnter={(event) => {
@@ -309,19 +323,27 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 						if (!open) {
 							timerRef.current = setTimeout(() => {
 								openedByHover.current = true;
+								restoreFocus.current = false;
 								setOpen(true);
 							}, 150);
 						}
 					}}
 					onPointerLeave={(event) => {
 						if (event.pointerType === 'touch') return;
+						clear();
 						if (openedByHover.current) scheduleClose();
 					}}
 					onClick={(event) => {
+						clear();
 						if (open && openedByHover.current) {
 							event.preventDefault();
-							clear();
 							openedByHover.current = false;
+							panelRef.current?.focus();
+						} else if (open) {
+							restoreFocus.current = true;
+						} else {
+							openedByHover.current = false;
+							restoreFocus.current = false;
 						}
 					}}
 					className="-my-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-control outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus) data-[state=open]:bg-(--bg-hover)"
@@ -331,6 +353,7 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 			</Popover.Trigger>
 			<Popover.Portal>
 				<Popover.Content
+					ref={panelRef}
 					side="top"
 					align="center"
 					sideOffset={6}
@@ -340,12 +363,35 @@ function TodoModelPeek({ choice }: { choice: NonNullable<SpaceTodo['threadModel'
 						if (openedByHover.current) event.preventDefault();
 					}}
 					onCloseAutoFocus={(event) => {
-						if (openedByHover.current) event.preventDefault();
+						event.preventDefault();
+						if (!restoreFocus.current) return;
+						restoreFocus.current = false;
+						triggerRef.current?.focus();
+					}}
+					onEscapeKeyDown={() => {
+						clear();
+						restoreFocus.current = Boolean(panelRef.current?.contains(document.activeElement));
+					}}
+					onInteractOutside={(event) => {
+						if (triggerRef.current?.contains(event.target as Node)) return;
+						clear();
+						openedByHover.current = false;
+						restoreFocus.current = false;
 					}}
 					onPointerEnter={clear}
 					onPointerLeave={(event) => {
 						if (event.pointerType === 'touch') return;
+						clear();
 						if (openedByHover.current) scheduleClose();
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+						// The popover is portalled to document.body; move focus back to the trigger before Tab runs so focus continues in card order.
+						clear();
+						openedByHover.current = false;
+						restoreFocus.current = false;
+						triggerRef.current?.focus();
+						setOpen(false);
 					}}
 					onClick={(event) => event.stopPropagation()}
 					className="in-pop z-50 flex flex-col gap-2.5 p-3 outline-none"
