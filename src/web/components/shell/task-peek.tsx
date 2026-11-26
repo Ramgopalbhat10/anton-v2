@@ -1,4 +1,4 @@
-import { CircleAlert, ClipboardList, Clock, Cloud, Folder, GitBranch, GitPullRequest, MessageSquare, Bot, type IconComponent } from '@/lib/icons';
+import { CircleAlert, ClipboardList, Clock, Cloud, Folder, GitBranch, GitPullRequest, MessageSquare, type IconComponent } from '@/lib/icons';
 import { HoverCard } from 'radix-ui';
 import { type ReactNode, useState } from 'react';
 import { Pips } from '@/components/kit/instrument';
@@ -23,10 +23,10 @@ export const TONE: Record<Tone, string> = {
 
 const CHECKS = { passed: 'checks pass', failed: 'checks failing', pending: 'checks running' } as const;
 
-function Fact({ label, icon, children, mono, wrap }: { label: string; icon: IconComponent; children: ReactNode; mono?: boolean; wrap?: boolean }) {
+function Fact({ label, icon, children, mono, wrap }: { label: string; icon?: IconComponent; children: ReactNode; mono?: boolean; wrap?: boolean }) {
 	return (
 		<div className="flex min-h-7 items-center gap-3 border-t border-(--line) py-1 text-small first:border-t-0">
-			<span className="flex shrink-0 items-center gap-1.5 text-(--text-3)"><Icon icon={icon} size={12} />{label}</span>
+			<span className="flex shrink-0 items-center gap-1.5 text-(--text-3)">{icon ? <Icon icon={icon} size={12} /> : null}{label}</span>
 			<span className={cn('flex min-w-0 flex-1 justify-end text-right text-(--text-2)', wrap ? 'whitespace-normal break-all' : 'truncate', mono && 'in-num text-small')}>{children}</span>
 		</div>
 	);
@@ -81,7 +81,7 @@ function Peek({ session }: { session: Session }) {
 				<Fact label={isChat(session) ? 'Sandbox' : 'Branch'} icon={isChat(session) ? Cloud : GitBranch} mono wrap>
 					<span title={branchLabel(session)}>{branchLabel(session)}</span>
 				</Fact>
-				<Fact label="Model" icon={Bot}>
+				<Fact label="Model">
 					<span className="inline-flex min-w-0 items-center gap-1.5"><ModelLogo model={session.model} size={14} /><span className="truncate" title={session.model}>{modelName(session.model)}</span></span>
 				</Fact>
 				<Fact label="Started" icon={Clock} mono>
