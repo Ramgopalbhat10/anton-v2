@@ -197,7 +197,7 @@ const { cleanUpStorage, storageView } = await import('../src/services/settings/s
 const { restoreCheckpoint } = await import('../src/services/git/restore.ts');
 const { dayKey, toUsage, usageView } = await import('../src/services/models/usage.ts');
 const { connections } = await import('../src/services/settings/connections.ts');
-const { sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox/sandbox-settings.ts');
+const { resourcesFrom, sandboxSettings, setSandboxSettings } = await import('../src/services/sandbox/sandbox-settings.ts');
 const { rebuildPreparedImage } = await import('../src/services/projects/projects.ts');
 const { computeView, stopAllSandboxes } = await import('../src/services/tasks/compute.ts');
 const { addSessionUsage } = await import('../src/db/sessions.ts');
@@ -857,6 +857,38 @@ test('a sandbox stops the idle minutes after its agent finishes, not while its a
 	await stopIdleSandboxes(start + 3 * minutes);
 	assert.ok(!(await stopIdleSandboxes(start + 4 * minutes - 1)).includes(session.id), 'not before its minutes are up');
 	assert.ok((await stopIdleSandboxes(start + 4 * minutes)).includes(session.id));
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
+test('a sandbox stops at the next sweep once its pull request merges, unless something still uses it or a new message came', async () => {
+	const { holdTerminal, stopIdleSandboxes } = await import('../src/services/tasks/idle-stop.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Merged' });
+	await sessions.resumeSession(session.id);
+	const merged = JSON.stringify({ url: 'https://example.test/pull/77', state: 'merged', checks: null, runs: [] });
+	await updateSession(session.id, { prUrl: 'https://example.test/pull/77', pullRequestJson: merged, resolvedAt: null });
+	const start = Date.now();
+	assert.ok(!(await stopIdleSandboxes(start)).includes(session.id), 'written to since the merge: the idle minutes apply');
+	await updateSession(session.id, { resolvedAt: new Date(start).toISOString() });
+	const close = holdTerminal(session.id);
+	assert.ok(!(await stopIdleSandboxes(start + 1)).includes(session.id), 'an open terminal keeps it');
+	close();
+	assert.ok((await stopIdleSandboxes(start + 2)).includes(session.id));
+	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
+});
+
+test('a sandbox already up when the server started counts as quiet since its last checkpoint, so a restart never starts the wait over', async () => {
+	const { stopIdleSandboxes } = await import('../src/services/tasks/idle-stop.ts');
+	const project = await addProject('acme/demo');
+	const session = await sessions.createSession({ projectId: project.id, title: 'Restarted' });
+	const settingsNow = await sandboxSettings();
+	const minutes = settingsNow.idleMinutes * 60_000;
+	// Started by an earlier server: running at the provider, never asked for by this one.
+	const acquired = await local.acquire({ key: session.id, state: null, image: null, baseImage: null, ports: [], resources: resourcesFrom(settingsNow) });
+	const start = Date.now();
+	await updateSession(session.id, { machineState: acquired.state, checkpointAt: new Date(start - minutes).toISOString() });
+	sessions.invalidateRunning();
+	assert.ok((await stopIdleSandboxes(start)).includes(session.id));
 	assert.equal((await sessions.getSession(session.id)).status, 'stopped');
 });
 

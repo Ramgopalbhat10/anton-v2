@@ -158,12 +158,17 @@ async function provisionWith(id: string, signal: AbortSignal): Promise<Machine> 
 
 const machines = new Map<string, Promise<Machine>>();
 const starting = new Set<string>();
+/** Tasks whose machine this server has asked for; any other running machine was already up when it started. */
+const asked = new Set<string>();
+
+export const askedHere = (id: string): boolean => asked.has(id);
 /** Cached so a burst of UI requests resolves one sandbox, and for as long as the agent works and the machine runs. */
 const CACHE_MS = 20_000;
 
 export function machineFor(id: string): Promise<Machine> {
 	const cached = machines.get(id);
 	if (cached) return cached;
+	asked.add(id);
 	const pending = provision(id);
 	machines.set(id, pending);
 	starting.add(id);
