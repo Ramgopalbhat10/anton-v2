@@ -56,6 +56,7 @@ function RepoPicker({ projects, value, onChange, onAdd }: { projects: Project[];
 }
 
 function BranchPicker({ project, value, onChange }: { project?: Project; value: string; onChange: (branch: string) => void }) {
+	const [query, setQuery] = useState('');
 	const branches = useQuery({
 		queryKey: ['branches', project?.id],
 		queryFn: () => api.branches(project!.id),
@@ -66,14 +67,27 @@ function BranchPicker({ project, value, onChange }: { project?: Project; value: 
 			<MenuTrigger asChild>
 				<PickerChip icon={GitBranch} label={value || 'main'} disabled={!project} aria-label={`Branch: ${value || 'main'}`} />
 			</MenuTrigger>
-			<MenuContent align="start" className="max-h-[320px] min-w-[200px] overflow-y-auto">
+			<MenuContent align="start" className="max-h-[320px] min-w-[220px] overflow-y-auto">
+				{(branches.data?.branches.length ?? 0) > 8 ? (
+					<div className="sticky-veil sticky top-0 z-[1] px-1 pt-1 pb-1.5">
+						<input
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							onKeyDown={(event) => event.stopPropagation()}
+							placeholder="Search branches"
+							aria-label="Search branches"
+							className="sg-field h-7 w-full px-2 text-small"
+						/>
+					</div>
+				) : null}
 				{branches.isPending ? <MenuLabel>Loading branches</MenuLabel> : null}
 				{branches.isError ? <MenuLabel>Could not list branches</MenuLabel> : null}
-				{(branches.data?.branches ?? []).map((branch) => (
+				{(branches.data?.branches ?? []).filter((branch) => branch.toLowerCase().includes(query.trim().toLowerCase())).map((branch) => (
 					<MenuItem key={branch} checked={branch === value} onSelect={() => onChange(branch)}>
 						{branch}
 					</MenuItem>
 				))}
+				{branches.isSuccess && query.trim() && !(branches.data?.branches ?? []).some((branch) => branch.toLowerCase().includes(query.trim().toLowerCase())) ? <MenuLabel>No branches match</MenuLabel> : null}
 			</MenuContent>
 		</Menu>
 	);

@@ -135,7 +135,7 @@ function Running({ sessions }: { sessions: Session[] }) {
 			</Heading>
 			<div className="in-card flex flex-col overflow-hidden">
 				{shown.map((session) => (
-					<CardRow key={session.id} session={session}>
+					<CardRow key={session.id} session={session} note={session.lastReply}>
 						<span className="in-num shrink-0 text-small text-(--text-3)">
 							{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
 							{when(session.lastInputAt ?? session.createdAt)}
