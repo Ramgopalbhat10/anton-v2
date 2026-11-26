@@ -70,8 +70,15 @@ export type AcpAgent = {
 	modelArgs?: (model: string) => string[];
 	/** Name the agent sees its Anton tools under (tools appear as mcp__<name>__*). */
 	mcpServerName: string;
-	/** How the agent names an Anton tool it calls, for the tool list in its instructions (Devin: `mcp__anton__<tool>`). */
+	/** How the agent names an Anton tool it calls, for the tool list in its instructions (agy: `mcp_anton_<tool>`). */
 	mcpToolName?: (tool: string) => string;
+	/**
+	 * The agent's own tool that calls an MCP tool, when its model never sees MCP tools by name. Devin's model has only
+	 * `mcp_call_tool {server_name, tool_name, arguments}`, and its system prompt demands `mcp_list_tools` for a server
+	 * before the first call. Told to call `mcp__anton__bash(command)` by name, it left `arguments` out and Anton's tools
+	 * got `{}`; its instructions and the error for a call without arguments now show this shape.
+	 */
+	mcpCall?: { tool: string; server: string; name: string; args: string; list?: string };
 	/**
 	 * Cut each tool's description in `tools/list` to about this many characters. Devin lists MCP tools only on demand and
 	 * cuts a long listing into a file in its own container, which its reads (served from the task's sandbox) cannot open,
@@ -418,6 +425,7 @@ class AcpConversation implements RuntimeConversation {
 				this.pushUsage(update);
 				return;
 			case 'tool_call': {
+				this.noteGatewayCall(update);
 				// The agent's own tools run inside its jail; they never become Anton tool_use
 				// blocks (Flue would try to run them). They ride the thinking stream instead,
 				// so a long silent stretch still shows what the agent is doing.
@@ -429,6 +437,7 @@ class AcpConversation implements RuntimeConversation {
 				return;
 			}
 			case 'tool_call_update': {
+				this.noteGatewayCall(update);
 				const id = typeof update.toolCallId === 'string' ? update.toolCallId : '';
 				const tool = this.nativeTools.get(id);
 				if (tool && update.status === 'failed') this.chunk('thinking', `\n[${tool.kind}] ${tool.title} failed\n`);
@@ -447,7 +456,7 @@ class AcpConversation implements RuntimeConversation {
 	 * tools get shown as Anton's, or Anton's get refused (agy did exactly that).
 	 */
 	private isAntonToolRef(
-		ref: { name?: unknown; title?: unknown; _meta?: Record<string, unknown> } | undefined,
+		ref: { name?: unknown; title?: unknown; rawInput?: unknown; _meta?: Record<string, unknown> } | undefined,
 		meta?: Record<string, unknown>,
 	): boolean {
 		const srv = this.agent.mcpServerName;
@@ -459,7 +468,12 @@ class AcpConversation implements RuntimeConversation {
 		// A bare `anton_<tool>` counts only as a whole word naming one of Anton's tools: a file such as anton_config.ts is not one.
 		const bare = new Set(this.tools.map((tool) => `${srv}_${tool.name}`));
 		const words = title.split(/[^A-Za-z0-9_.-]+/);
+		// Devin's model calls Anton's tools through its gateway tool, titled "Calling grep from anton".
+		const via = this.agent.mcpCall;
+		const input = ref?.rawInput;
+		const gateway = Boolean(via && isRecord(input) && input[via.server] === srv) || (Boolean(via) && title.endsWith(` from ${srv}`) && /^Call(ing|ed) \S+ from /.test(title));
 		return (
+			gateway ||
 			rule.startsWith(mcp) ||
 			name.startsWith(`${mcp}__`) ||
 			name.startsWith(`mcp_${srv}_`) ||
@@ -511,15 +525,79 @@ class AcpConversation implements RuntimeConversation {
 
 	// ---- MCP side -------------------------------------------------------
 
+	/** Some agents namespace MCP tools (mcp__anton__bash, mcp_anton_bash, anton_bash); Anton's name is the suffix. */
+	private antonName(rawName: string): string {
+		if (this.tools.some((tool) => tool.name === rawName)) return rawName;
+		return rawName
+			.replace(/^mcp__[^_]+__/, '')
+			.replace(new RegExp(`^mcp_${this.agent.mcpServerName}_`), '')
+			.replace(new RegExp(`^${this.agent.mcpServerName}_`), '');
+	}
+
+	/**
+	 * A call from the agent's MCP client. Its arguments become an object (a model that wrote them as a JSON string, or
+	 * wrapped them once more, still reaches the tool) and paths in the agent's jail become the repository's. A call that
+	 * brings none to a tool that needs some takes them from the agent's own record of the call when that shows them,
+	 * and otherwise fails back to the agent with the shape it should use, without a failed step in the thread.
+	 */
+	private async fromAgent(rawName: string, raw: unknown): Promise<RuntimeToolOutput> {
+		const tool = this.tools.find((t) => t.name === this.antonName(rawName));
+		if (!tool) return this.handleToolCall(rawName, raw);
+		let args = argsOf(raw, tool, this.agent.mcpCall?.args);
+		const required = requiredOf(tool);
+		if (required.length && !Object.keys(args).length) args = (await this.recoverArgs(tool)) ?? args;
+		if (required.length && !Object.keys(args).length) {
+			const how = this.agent.mcpCall
+				? `Put them inside ${this.agent.mcpCall.args}, as an object: ${callExample(this.agent, this.tools, tool.name)}.`
+				: 'Pass them as the call\'s arguments.';
+			return { content: [{ type: 'text', text: `Anton's ${tool.name} tool got no arguments, and it needs ${required.join(', ')}. ${how}` }], isError: true };
+		}
+		return this.handleToolCall(tool.name, this.workspace.paths(args));
+	}
+
+	/**
+	 * Calls the agent made through its MCP gateway tool whose arguments did not come through as an object (written as a
+	 * string, or beside `arguments` rather than in it), as its own tool_call updates record them, newest last. A call
+	 * whose arguments were an object reached Anton whole, so it is never one of these.
+	 */
+	private looseCalls: { id: string; tool: string; args: Record<string, unknown>; at: number }[] = [];
+
+	private noteGatewayCall(update: SessionUpdate): void {
+		const via = this.agent.mcpCall;
+		const input = update.rawInput;
+		if (!via || !isRecord(input) || input[via.server] !== this.agent.mcpServerName || typeof input[via.name] !== 'string') return;
+		const id = typeof update.toolCallId === 'string' ? update.toolCallId : '';
+		if (id && this.looseCalls.some((call) => call.id === id)) return;
+		const given = input[via.args];
+		if (isRecord(given) && Object.keys(given).length) return;
+		const tool = this.tools.find((t) => t.name === this.antonName(input[via.name] as string));
+		if (!tool) return;
+		let args = argsOf(given, tool, via.args);
+		if (!Object.keys(args).length) args = Object.fromEntries(Object.entries(input).filter(([key]) => ![via.server, via.name, via.args].includes(key)));
+		if (!Object.keys(args).length) return;
+		this.looseCalls.push({ id, tool: tool.name, args, at: Date.now() });
+		if (this.looseCalls.length > 8) this.looseCalls.shift();
+	}
+
+	/** The arguments of the agent's latest loose call of this tool; its tool_call update and the MCP call race, so it waits a moment for one. */
+	private async recoverArgs(tool: RuntimeTool): Promise<Record<string, unknown> | null> {
+		if (!this.agent.mcpCall) return null;
+		const deadline = Date.now() + RECOVER_WAIT_MS;
+		for (;;) {
+			const fresh = this.looseCalls.filter((call) => call.tool === tool.name && Date.now() - call.at < RECOVER_MAX_AGE_MS);
+			const call = fresh.at(-1);
+			if (call) {
+				this.looseCalls.splice(this.looseCalls.indexOf(call), 1);
+				return call.args;
+			}
+			if (Date.now() >= deadline) return null;
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+	}
+
 	/** `steer`: a result the agent reads as a tool result, which can carry the user's words; a file's content cannot. */
 	private async handleToolCall(rawName: string, args: unknown, steer = true): Promise<RuntimeToolOutput> {
-		// Some agents namespace MCP tools (mcp__anton__bash, mcp_anton_bash, anton_bash); Anton's name is the suffix.
-		const name = this.tools.some((tool) => tool.name === rawName)
-			? rawName
-			: rawName
-					.replace(/^mcp__[^_]+__/, '')
-					.replace(new RegExp(`^mcp_${this.agent.mcpServerName}_`), '')
-					.replace(new RegExp(`^${this.agent.mcpServerName}_`), '');
+		const name = this.antonName(rawName);
 		if (!this.tools.some((tool) => tool.name === name)) {
 			return { content: [{ type: 'text', text: `Unknown tool: ${rawName}` }], isError: true };
 		}
@@ -565,7 +643,7 @@ class AcpConversation implements RuntimeConversation {
 			throw new Error('The conversation was closed.');
 		}
 		this.proc = proc;
-		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.handleToolCall(name, args), this.agent.mcpDescriptionChars);
+		this.mcp = mcpServer(proc.mcp, () => this.tools, (name, args) => this.fromAgent(name, args), this.agent.mcpDescriptionChars);
 		this.acp = new AcpClient(proc.acp, {
 			onNotification: (method, params) => {
 				this.agent.notification?.(method, params);
@@ -647,7 +725,7 @@ class AcpConversation implements RuntimeConversation {
 			this.instructionsSent = true;
 			this.catalogKey = key;
 			const catalog = toolCatalog(this.tools, this.agent);
-			const text = [acpNotes(this.agent), catalog, instructions].filter(Boolean).join('\n\n');
+			const text = [acpNotes(this.agent, this.tools), catalog, instructions].filter(Boolean).join('\n\n');
 			parts.push({ type: 'text', text: `<instructions>\n${text}\n</instructions>` });
 		} else if (key !== this.catalogKey && this.tools.length) {
 			this.catalogKey = key;
@@ -775,22 +853,72 @@ function steerPrompt(said: RuntimeContent[], cancelled: boolean): RuntimeContent
 }
 
 /** What differs for an agent Anton drives over ACP from Anton's own instructions, which follow and were written for its own loop. */
-export function acpNotes(agent: Pick<AcpAgent, 'mcpServerName'>): string {
+export function acpNotes(agent: Pick<AcpAgent, 'mcpServerName' | 'mcpCall' | 'workdir'>, tools: RuntimeTool[] = []): string {
 	return [
 		"You are working for Anton. Where Anton's instructions below differ from these notes, follow these:",
+		// Anton's instructions name the repository by its path in the task's sandbox; the agent's session says its jail's.
+		`- Your working directory, ${agent.workdir}, is the task's repository: Anton's instructions below name the same folder by its path in Anton's sandbox, and either path reaches it. Prefer paths relative to the repository root.`,
 		"- Your own file reads, writes and shell commands run in the task's sandbox, in the repository. Your own file search and listing tools cannot see the repository: search with shell commands such as rg, find and ls, or with Anton's grep and glob tools.",
-		`- Anton's other tools come from the MCP server "${agent.mcpServerName}" and are listed below. Call them by name with the arguments shown; you need not list them first.`,
+		callNote(agent, tools),
 		"- Run a test suite, build or other long command with Anton's run_in_background and read its end with check_job (wait waits for it), rather than polling with sleep. Start a server that should keep running with nohup and & and never in the foreground; a command still running after 30 seconds keeps running while you get its output so far.",
 		'- A message the user writes while you work reaches you inside <user_message> with your next tool result or command output, or Anton stops your turn to give it to you. Answer it in a sentence, then carry on.',
 	].join('\n');
 }
 
+/** How the agent calls Anton's tools, in its own terms. */
+function callNote(agent: Pick<AcpAgent, 'mcpServerName' | 'mcpCall'>, tools: RuntimeTool[]): string {
+	const srv = agent.mcpServerName;
+	const via = agent.mcpCall;
+	if (!via) return `- Anton's other tools come from the MCP server "${srv}" and are listed below. Call them by name with the arguments shown; you need not list them first.`;
+	const list = via.list
+		? ` Your system asks you to call ${via.list} for a server before its first ${via.tool}: call ${via.list} with ${via.server} "${srv}" once, then call the tools below without listing them again.`
+		: '';
+	return `- Anton's other tools come from the MCP server "${srv}" and are listed below. Call each one with your ${via.tool} tool: ${via.server} "${srv}", ${via.name} the tool's name as listed, and ${via.args} a JSON object (not a string) holding the tool's own arguments, as in ${callExample(agent, tools)}. An argument put anywhere but inside ${via.args} never reaches the tool.${list}`;
+}
+
+/** One call of the first listed tool that needs arguments, in the agent's call shape. */
+function callExample(agent: Pick<AcpAgent, 'mcpServerName' | 'mcpCall'>, tools: RuntimeTool[], name?: string): string {
+	const via = agent.mcpCall!;
+	const tool = (name ? tools.find((t) => t.name === name) : undefined) ?? tools.find((t) => requiredOf(t).length) ?? { name: 'bash', inputSchema: { required: ['command'] } };
+	const required = requiredOf(tool as RuntimeTool);
+	const args = Object.fromEntries((required.length ? required : ['command']).map((arg) => [arg, '…']));
+	return `${via.tool}(${via.server}: "${agent.mcpServerName}", ${via.name}: "${tool.name}", ${via.args}: ${JSON.stringify(args)})`;
+}
+
+/** How long a call without arguments waits for the agent's record of it, and how old a record it takes. */
+const RECOVER_WAIT_MS = 500;
+const RECOVER_MAX_AGE_MS = 5_000;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * A call's arguments as an object: a JSON string is parsed, and an object holding only the gateway's own `arguments`
+ * key (which the tool itself does not take) is unwrapped once. Anything else is no arguments.
+ */
+export function argsOf(raw: unknown, tool: RuntimeTool, wrapper = 'arguments'): Record<string, unknown> {
+	let value = raw;
+	if (typeof value === 'string') {
+		try {
+			value = JSON.parse(value);
+		} catch {
+			return {};
+		}
+	}
+	if (!isRecord(value)) return {};
+	const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+	const keys = Object.keys(value);
+	if (keys.length === 1 && keys[0] === wrapper && !(wrapper in properties)) return argsOf(value[wrapper], tool, '\0');
+	return value;
+}
+
+const requiredOf = (tool: RuntimeTool): string[] => ((tool.inputSchema as { required?: unknown }).required as string[] | undefined)?.filter((arg) => typeof arg === 'string') ?? [];
+
 const FIRST_SENTENCE = /^(.+?[.!?])(\s|$)/s;
 
 /** Anton's tools by the name the agent calls them, with their arguments (`?` when optional) and the first sentence of each description. */
-export function toolCatalog(tools: RuntimeTool[], agent: Pick<AcpAgent, 'mcpServerName' | 'mcpToolName'>): string {
+export function toolCatalog(tools: RuntimeTool[], agent: Pick<AcpAgent, 'mcpServerName' | 'mcpToolName' | 'mcpCall'>): string {
 	if (!tools.length) return '';
-	const name = agent.mcpToolName ?? ((tool: string) => tool);
+	const name = agent.mcpCall ? (tool: string) => tool : (agent.mcpToolName ?? ((tool: string) => tool));
 	const lines = tools.map((tool) => {
 		const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
 		const required = new Set(schema.required ?? []);
@@ -800,7 +928,8 @@ export function toolCatalog(tools: RuntimeTool[], agent: Pick<AcpAgent, 'mcpServ
 		const brief = first.length > 200 ? `${first.slice(0, 199)}…` : first;
 		return `- ${name(tool.name)}(${args.join(', ')}): ${brief}`;
 	});
-	return `Anton's tools (MCP server "${agent.mcpServerName}"):\n${lines.join('\n')}`;
+	const via = agent.mcpCall ? `, called through ${agent.mcpCall.tool}` : '';
+	return `Anton's tools (MCP server "${agent.mcpServerName}"${via}; ? marks an optional argument):\n${lines.join('\n')}`;
 }
 
 const num = (v: unknown): number => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) || 0 : 0);
