@@ -33,7 +33,7 @@ function walk(dir: string, out: string[], limit: number) {
 function paths(): string[] {
 	const tracked = execSync('git ls-files', { cwd: root, encoding: 'utf8' }).trim().split('\n');
 	const vendored: string[] = [];
-	for (const dir of ['node_modules/@tanstack', 'node_modules/radix-ui', 'node_modules/@radix-ui', 'node_modules/@hugeicons/core-free-icons/dist/esm']) walk(join(root, dir), vendored, 3000 + vendored.length);
+	for (const dir of ['node_modules/@tanstack', 'node_modules/radix-ui', 'node_modules/@radix-ui', 'node_modules/@keyline-icons/react/dist']) walk(join(root, dir), vendored, 3000 + vendored.length);
 	return [...tracked, ...vendored.slice(0, 3000)].sort();
 }
 

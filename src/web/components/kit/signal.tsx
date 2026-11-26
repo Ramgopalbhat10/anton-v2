@@ -11,8 +11,7 @@ type Variant = 'primary' | 'inverse' | 'secondary' | 'ghost' | 'danger' | 'dange
 const ICON_SIZE: Record<Size, number> = { xs: 12, sm: 13, md: 14, lg: 16 };
 
 export function Icon({ icon: Glyph, size = 14, className, style }: { icon: IconComponent; size?: number; className?: string; style?: CSSProperties }) {
-	// Hugeicons line icons at their own 1.5 stroke, whatever their size (src/web/lib/icons.tsx).
-	return <Glyph aria-hidden size={size} strokeWidth={1.5} className={cn('shrink-0', className)} style={style} />;
+	return <Glyph aria-hidden size={size} className={cn('shrink-0', className)} style={style} />;
 }
 
 export function Btn({
