@@ -37,6 +37,7 @@ import { messageText, placeJoined, type ThreadRow } from '@/lib/joined';
 import { outputLinkPath } from '../../../core/outputs';
 import { taskQueries } from '@/lib/task-queries';
 import { useStopCatchUp } from '@/lib/stop-catch-up';
+import { afterStop, useStopped } from '@/lib/stopped';
 import { type Block, changedPaths, openedPullRequest, proposesPlan, replyOutputs, toBlocks } from '@/components/thread/blocks';
 import { SessionId } from '@/components/thread/session-context';
 import { StepsCard } from '@/components/thread/steps';
@@ -243,8 +244,11 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const health = useQuery({ queryKey: ['health'], queryFn: api.health });
 	const session = useQuery(taskQueries.session(sessionId));
 	const scroller = useRef<HTMLDivElement>(null);
-	const busy = agent.status === 'submitted' || agent.status === 'streaming';
-	const { conversation, working, reply: workingReply } = useReplyActivity(agent);
+	// A stop made here shows at once, before the live stream and the task's next read catch up (`useStopped`).
+	const stopped = useStopped(sessionId);
+	const shown = useMemo(() => (stopped ? { ...agent, status: afterStop(agent.status, true) } : agent), [agent, stopped]);
+	const busy = shown.status === 'submitted' || shown.status === 'streaming';
+	const { conversation, working, reply: workingReply } = useReplyActivity(shown);
 	// The runtime lists a message sent while Anton works only once Anton reads it; until then only the page that
 	// sent it shows it, so a thread opened again gets the ones still waiting from the server.
 	const unreadByServer = useQuery(taskQueries.waiting(sessionId)).data?.messages ?? NO_WAITING;
@@ -382,7 +386,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 	const waiting = useRef<{ texts: string[]; until: number } | null>(null);
 	const latest = useRef(messages);
 	latest.current = messages;
-	const catchUp = useStopCatchUp(sessionId, busy, agent.refresh);
+	const catchUp = useStopCatchUp(sessionId, agent.refresh);
 	const onStop = useCallback(async () => {
 		const shown = latest.current;
 		const last = shown.findLastIndex((message) => message.role === 'assistant');

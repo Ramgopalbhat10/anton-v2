@@ -21,6 +21,7 @@ import { incognitoAttachment } from '../services/artifacts/attachments.ts';
 import { assertWithinBudget } from '../services/models/budget.ts';
 import { REASONING, ROUTE, body } from './shared.ts';
 import { conversationWindow } from './conversation-window.ts';
+import { logProblem } from '../core/log.ts';
 
 const app = new Hono();
 
@@ -49,13 +50,24 @@ const STOP_SETTLE_MS = 10_000;
 
 // Stop: its running subagents end as stopped, not failed, and the thread waits on the user. The answer comes once the
 // reply has settled, so a page whose live stream fell behind reads the conversation again and leaves the running state.
+// The pull request review runs as the task's Reviewer, a conversation of its own, so Stop ends it too: the page counts
+// the task working while either runs, and a review left running posts findings that start the agent again.
 app.post('/api/agents/coder/:id/abort', async (c, next) => {
 	const id = c.req.param('id');
 	await noteStopped(id);
-	await next();
+	await Promise.all([next(), stopReviewer(id)]);
 	if (c.res.ok) await untilIdle(id, STOP_SETTLE_MS);
 });
+async function stopReviewer(id: string): Promise<void> {
+	try {
+		await reviewers.request(`/${encodeURIComponent(id)}/abort`, { method: 'POST' });
+	} catch (error) {
+		logProblem('warn', 'Could not stop the review', error, id);
+	}
+}
 const agents = createAgentRouter(Coder);
+// The reviewer is never served over HTTP; its router only stops it.
+const reviewers = createAgentRouter(Reviewer);
 app.route('/api/agents/coder', agents as never);
 // Incognito chats live in memory only: no session record, no files, nothing on disk.
 app.post('/api/incognito/attach', async (c) => {
@@ -113,8 +125,6 @@ app.post('/api/agents/coordinator/:id', async (c, next) => {
 	await next();
 });
 app.route('/api/agents/coordinator', coordinators as never);
-// The reviewer is never served over HTTP; its router only stops it.
-const reviewers = createAgentRouter(Reviewer);
 setAgentAbort(async (id) => {
 	const path = `/${encodeURIComponent(id)}/abort`;
 	const routers = id.startsWith('space_') ? [coordinators] : [agents, reviewers];

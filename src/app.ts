@@ -7,6 +7,8 @@ import { statusOf } from './core/errors.ts';
 import { appDb } from './db/client.ts';
 import { publishUpgradeHandler } from './core/upgrades.ts';
 import { recordAgentEvent } from './services/tasks/activity.ts';
+import { publishPreviewPorts } from './core/preview-proxy.ts';
+import { previewPortsServed } from './services/browser/preview-ports.ts';
 import { noteReplyOutcome } from './services/projects/thread-reports.ts';
 import { generalSettings } from './services/models/general.ts';
 import { recordTurnUsage } from './services/models/usage.ts';
@@ -53,6 +55,7 @@ import { artifactRoutes } from './routes/artifacts.ts';
 const app = new Hono();
 
 publishUpgradeHandler(handleTerminalUpgrade);
+publishPreviewPorts(previewPortsServed);
 installSubagentStop();
 installToolResultCut();
 observeRuntime((event) => {

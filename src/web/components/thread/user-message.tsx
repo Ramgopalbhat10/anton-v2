@@ -6,6 +6,7 @@ import { Icon } from '@/components/kit/signal';
 import { SentAttachments } from '@/components/composer/attachments';
 import { besidePictures, SentImages, sentPictures } from '@/components/thread/sent-images';
 import { splitAttachments } from '../../../core/attachments';
+import { withoutGuidance } from '../../../core/review-follow-up';
 import { tokens } from '@/lib/format';
 import { sameItems } from '@/components/thread/blocks';
 
@@ -17,8 +18,8 @@ export const UserMessage = memo(
 
 /** `composer` is whose composer a drawing on a sent picture goes to. */
 function UserMessageView({ message, meta, note, composer }: { message: FlueConversationMessage; meta: string[]; note?: string; composer?: string }) {
-	// Attached files show as chips; the text they carry is the agent's to read.
-	const { text, files } = splitAttachments(message.parts.map((part) => (part.type === 'text' ? part.text : '')).join(''));
+	// Attached files show as chips; the text they carry is the agent's to read, as is the guidance in Anton's own messages.
+	const { text, files } = splitAttachments(withoutGuidance(message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('')));
 	const pictures = sentPictures(message);
 	return (
 		<div className="group/user flex flex-col items-end gap-1.5">
