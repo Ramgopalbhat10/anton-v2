@@ -267,7 +267,7 @@ export function Launcher() {
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
-			<TopBar crumbs={['Home']}>
+			<TopBar>
 				<Btn size="sm" variant="ghost" icon={EyeOff} title="Start a chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })}>
 					Private chat
 				</Btn>
