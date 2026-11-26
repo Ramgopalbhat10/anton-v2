@@ -1,22 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight } from '@/lib/icons';
-import { type ReactNode, useMemo } from 'react';
-import { PrStatus } from '@/components/marks/pr-status';
+import { type CSSProperties, type ReactNode, useMemo } from 'react';
 import { Badge, Icon } from '@/components/kit/signal';
-import { StatusDot } from '@/components/kit/instrument';
 import { TaskStatusIcon } from '@/components/marks/task-status';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { Session } from '@/lib/api/sessions';
 import { dollars, when } from '@/lib/format';
 import { activeAt, repoName } from '@/lib/task-view';
-import { stateOf, threadLine, useSpaces } from '@/lib/spaces';
+import { stateOf, useSpaces } from '@/lib/spaces';
 import { cn } from '@/lib/utils';
 
 const DAY = 86_400_000;
-/** Days the outcome instrument covers; the newest seven are this week. */
 const DAYS = 14;
-const SHOWN = 5;
+const ATTENTION_SHOWN = 5;
+const LANES_SHOWN = 5;
+const NODES_SHOWN = 10;
 
 function localDay(at: Date): number {
 	return Math.floor((at.getTime() - at.getTimezoneOffset() * 60_000) / DAY);
@@ -47,142 +46,184 @@ const TONE_CLASS = {
 	accent: 'bg-(--accent-soft) text-(--accent-text)',
 } as const;
 
-function TaskLink({ session, children, className }: { session: Session; children: ReactNode; className?: string }) {
+function TaskLink({ session, children, className, style }: { session: Session; children: ReactNode; className?: string; style?: CSSProperties }) {
 	return session.spaceId ? (
-		<Link to="/projects/$spaceId/threads/$threadId" params={{ spaceId: session.spaceId, threadId: session.id }} className={className}>
+		<Link to="/projects/$spaceId/threads/$threadId" params={{ spaceId: session.spaceId, threadId: session.id }} className={className} style={style}>
 			{children}
 		</Link>
 	) : (
-		<Link to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={className}>
+		<Link to="/agents/$sessionId" params={{ sessionId: session.id }} search={{ app: 'code' }} className={className} style={style}>
 			{children}
 		</Link>
 	);
 }
 
-function DeckHeading({ title, children }: { title: string; children?: ReactNode }) {
+function SectionTitle({ title, children }: { title: string; children?: ReactNode }) {
 	return (
-		<div className="flex h-10 shrink-0 items-center gap-2 px-3.5">
-			<h3 className="m-0 text-body font-semibold text-(--text)">{title}</h3>
-			<span className="flex-1" />
+		<div className="mb-3 flex h-6 items-center gap-2">
+			<h2 className="m-0 text-body-lg leading-5 font-semibold text-(--text)">{title}</h2>
 			{children}
 		</div>
 	);
 }
 
-const MORE = 'inline-flex items-center gap-1 rounded-inner text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
+const MORE = 'ml-auto inline-flex items-center gap-1 rounded-inner text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)';
 
-function Where({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
+function placeLabel(session: Session, spaces?: Array<{ id: string; name: string }>): string {
 	const spaceName = session.spaceId ? spaces?.find((space) => space.id === session.spaceId)?.name : undefined;
-	return (
-		<>
-			<span className="shrink-0">{spaceName ?? (session.repo ? repoName(session.repo) : 'Chat')}</span>
-			{session.repo && session.workspace && session.branch ? (
-				<>
-					<span className="text-(--text-4)">·</span>
-					<span className="min-w-0 truncate font-mono text-micro">{session.branch}</span>
-				</>
-			) : null}
-		</>
-	);
+	return spaceName ?? (session.repo ? repoName(session.repo) : 'Chat');
 }
 
-function AttentionRow({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
+function AttentionItem({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
 	const tone = attentionTone(session);
+	const detail = session.asking ?? session.errorMessage ?? session.plan ?? session.brief ?? 'Open the thread to see what changed.';
 	return (
 		<TaskLink
 			session={session}
-			className="group/row flex min-h-12 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
+			className="group/item relative flex min-w-0 gap-3 rounded-control py-2 pr-2 pl-7 outline-none transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus)"
 		>
-			<TaskStatusIcon session={session} size={14} />
-			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="truncate text-body leading-[18px] font-medium text-(--text)">{session.title}</span>
-				<span className="truncate text-small leading-4 text-(--text-3)">{session.asking ?? session.errorMessage ?? <Where session={session} spaces={spaces} />}</span>
+			<span className="absolute top-[15px] left-0 flex size-5 items-center justify-center rounded-full border border-(--line) bg-(--bg-surface)">
+				<TaskStatusIcon session={session} size={12} />
 			</span>
-			<span className={cn('shrink-0 rounded-inner px-1.5 py-0.5 text-nano font-medium', TONE_CLASS[tone])}>{nextStep(session)}</span>
-			<span className="in-num hidden w-9 shrink-0 text-right text-small text-(--text-3) sm:inline">{when(activeAt(session))}</span>
-		</TaskLink>
-	);
-}
-
-function LiveRow({ session, spaces }: { session: Session; spaces?: Array<{ id: string; name: string }> }) {
-	const activity = threadLine(session);
-	return (
-		<TaskLink
-			session={session}
-			className="group/row flex min-h-12 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset)"
-		>
-			<StatusDot tone="accent" pulse className="ml-[3px]" />
-			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="truncate text-body leading-[18px] font-medium text-(--text)">{session.title}</span>
-				<span className="flex min-w-0 items-center gap-1.5 text-small leading-4 text-(--text-3)">
-					{activity ? <span className="truncate">{activity}</span> : <Where session={session} spaces={spaces} />}
+			<span className="flex min-w-0 flex-1 flex-col gap-1">
+				<span className="flex min-w-0 items-baseline gap-2">
+					<span className="min-w-0 flex-1 truncate text-body font-medium text-(--text)">{session.title}</span>
+					<span className="in-num shrink-0 text-small text-(--text-3)">{when(activeAt(session))}</span>
+				</span>
+				<span className="line-clamp-2 max-w-[68ch] text-small leading-5 text-(--text-2)">{detail}</span>
+				<span className="flex min-w-0 items-center gap-2 text-small text-(--text-3)">
+					<span className="truncate">{placeLabel(session, spaces)}</span>
+					{session.branch ? <span className="hidden min-w-0 truncate font-mono text-micro sm:inline">· {session.branch}</span> : null}
 				</span>
 			</span>
-			<PrStatus thread={session} />
-			<span className="in-num shrink-0 text-right text-small text-(--text-3)">
-				{session.usage.cost > 0 ? `${dollars(session.usage.cost)} · ` : ''}
-				{when(session.lastInputAt ?? session.createdAt)}
-			</span>
+			<span className={cn('mt-0.5 h-fit shrink-0 rounded-inner px-1.5 py-0.5 text-nano font-medium', TONE_CLASS[tone])}>{nextStep(session)}</span>
 		</TaskLink>
 	);
 }
 
-function QueueEmpty() {
+function Attention({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
+	const shown = sessions.slice(0, ATTENTION_SHOWN);
 	return (
-		<div className="flex min-h-16 flex-col justify-center px-3.5 py-3 text-small text-(--text-3)">
-			<span className="text-(--text-2)">Nothing needs your judgment.</span>
-			<span>Anton will surface questions, plans, failures, and conflicts here.</span>
-		</div>
-	);
-}
-
-function NeedsYouDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
-	const shown = sessions.slice(0, SHOWN);
-	return (
-		<section aria-label="Needs you" className="border-b border-(--line)">
-			<DeckHeading title="Needs you">
-				<Badge tone={sessions.length ? 'warning' : 'neutral'}>{sessions.length}</Badge>
+		<section aria-label="Needs you">
+			<SectionTitle title="Needs you">
+				<Badge tone="warning">{sessions.length}</Badge>
 				<Link to="/inbox" className={MORE}>
 					Open inbox <Icon icon={ArrowRight} size={12} />
 				</Link>
-			</DeckHeading>
-			<div className="border-t border-(--line)">
-				{shown.length ? shown.map((session) => <AttentionRow key={session.id} session={session} spaces={spaces} />) : <QueueEmpty />}
+			</SectionTitle>
+			<div className="relative flex flex-col gap-1 pl-2 before:absolute before:top-5 before:bottom-5 before:left-[19px] before:w-px before:bg-(--line)">
+				{shown.map((session) => (
+					<AttentionItem key={session.id} session={session} spaces={spaces} />
+				))}
+			</div>
+			{sessions.length > shown.length ? (
+				<Link to="/tasks" className="mt-1 inline-flex items-center gap-1 rounded-inner px-2 py-1 text-small text-(--text-3) outline-none hover:text-(--text) focus-visible:shadow-(--focus)">
+					{sessions.length - shown.length} more waiting <Icon icon={ArrowRight} size={12} />
+				</Link>
+			) : null}
+		</section>
+	);
+}
+
+function laneTone(session: Session): string {
+	const state = stateOf(session);
+	if (state === 'waiting') return 'var(--warn)';
+	if (state === 'working' || state === 'queued') return 'var(--accent)';
+	if (state === 'review' || state === 'landing') return 'var(--ok)';
+	return 'var(--text-4)';
+}
+
+function laneSummary(sessions: Session[]): string {
+	const waiting = sessions.filter(needsYou).length;
+	const active = sessions.filter(isRunning).length;
+	if (waiting && active) return `${waiting} waiting · ${active} active`;
+	if (waiting) return `${waiting} waiting`;
+	if (active) return `${active} active`;
+	return `${sessions.length} quiet`;
+}
+
+function WorkNode({ session, index, total, offset, span }: { session: Session; index: number; total: number; offset: number; span: number }) {
+	const left = total === 1 ? 50 : offset + (index / (total - 1)) * span;
+	const hot = needsYou(session) || isRunning(session);
+	return (
+		<TaskLink
+			session={session}
+			className={cn(
+				'absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full outline-none transition-transform duration-(--t-fast) hover:scale-115 focus-visible:shadow-(--focus)',
+				hot ? 'bg-(--bg-surface)' : 'bg-transparent',
+			)}
+			style={{ left: `${left}%`, boxShadow: hot ? `0 0 0 1px var(--line), 0 0 14px color-mix(in srgb, ${laneTone(session)} 24%, transparent)` : undefined }}
+		>
+			<span className="sr-only">{session.title}</span>
+			<span aria-hidden title={session.title} className="flex size-4 items-center justify-center rounded-full" style={{ color: laneTone(session) }}>
+				<TaskStatusIcon session={session} size={13} />
+			</span>
+		</TaskLink>
+	);
+}
+
+function WorkMap({ sessions }: { sessions: Session[] }) {
+	const spaces = useSpaces();
+	const lanes = useMemo(() => {
+		const groups = new Map<string, { key: string; label: string; sessions: Session[] }>();
+		const today = localDay(new Date());
+		const current = sessions.filter((session) => needsYou(session) || isRunning(session) || today - localDay(new Date(activeAt(session))) < DAYS);
+		for (const session of current) {
+			const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
+			const key = session.spaceId ?? session.repo ?? 'chat';
+			const label = space?.name ?? (session.repo ? repoName(session.repo) : 'Chat');
+			const group = groups.get(key) ?? { key, label, sessions: [] };
+			group.sessions.push(session);
+			groups.set(key, group);
+		}
+		return [...groups.values()]
+			.map((group) => ({
+				...group,
+				sessions: [...group.sessions].sort((a, b) => activeAt(a).localeCompare(activeAt(b))),
+				latest: Math.max(...group.sessions.map((session) => Date.parse(activeAt(session)) || 0)),
+			}))
+			.sort((a, b) => b.latest - a.latest)
+			.slice(0, LANES_SHOWN);
+	}, [sessions, spaces.data]);
+	if (!lanes.length) return null;
+	return (
+		<section aria-label="Work map" className="rounded-card px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+			<div className="mb-2 flex items-center gap-2">
+				<h2 className="m-0 text-body-lg leading-5 font-semibold text-(--text)">Work map</h2>
+				<span className="text-small text-(--text-3)">projects as lanes · latest work at the right</span>
+				<span className="flex-1" />
+				<span className="hidden items-center gap-2 text-nano text-(--text-3) sm:flex">
+					<span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-(--warn)" /> waiting</span>
+					<span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-(--accent)" /> active</span>
+				</span>
+			</div>
+			<div className="flex flex-col gap-1">
+				{lanes.map((lane) => {
+					const nodes = lane.sessions.slice(-NODES_SHOWN);
+					const hidden = lane.sessions.length - nodes.length;
+					return (
+						<div key={lane.key} className="grid min-h-9 grid-cols-[92px_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[132px_minmax(0,1fr)_112px]">
+							<div className="flex min-w-0 flex-col">
+								<span className="truncate text-small font-medium text-(--text-2)">{lane.label}</span>
+								<span className="truncate text-nano text-(--text-4) sm:hidden">{laneSummary(lane.sessions)}</span>
+							</div>
+							<div className="relative h-8 min-w-0" role="group" aria-label={`${lane.sessions.length} tasks in ${lane.label}; ${laneSummary(lane.sessions)}`}>
+								<span aria-hidden className="absolute top-1/2 right-0 left-0 h-px -translate-y-1/2 bg-(--line)" />
+								{nodes.map((session, index) => (
+									<WorkNode key={session.id} session={session} index={index} total={nodes.length} offset={hidden ? 9 : 4} span={hidden ? 83 : 88} />
+								))}
+								{hidden ? <span className="in-num absolute top-1/2 left-0 -translate-y-1/2 rounded-inner bg-(--bg-active) px-1 py-px text-nano text-(--text-3)">+{hidden}</span> : null}
+							</div>
+							<span className="hidden truncate text-right text-small text-(--text-3) sm:block">{laneSummary(lane.sessions)}</span>
+						</div>
+					);
+				})}
 			</div>
 		</section>
 	);
 }
 
-function RunningDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
-	const shown = sessions.slice(0, SHOWN);
-	return (
-		<section aria-label="Running">
-			<DeckHeading title="Running">
-				<StatusDot tone={sessions.length ? 'accent' : 'neutral'} pulse={sessions.length > 0} />
-				<span className="in-num text-small text-(--text-3)">{sessions.length}</span>
-			</DeckHeading>
-			<div className="border-t border-(--line)">
-				{shown.length ? (
-					shown.map((session) => <LiveRow key={session.id} session={session} spaces={spaces} />)
-				) : (
-					<div className="flex min-h-14 items-center px-3.5 text-small text-(--text-3)">Nothing is running right now.</div>
-				)}
-			</div>
-		</section>
-	);
-}
-
-function OutcomeStat({ label, value, detail }: { label: string; value: ReactNode; detail?: string }) {
-	return (
-		<div className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
-			<span className="text-micro leading-4 text-(--text-3)">{label}</span>
-			<span className="in-num truncate text-body-lg leading-5 font-semibold text-(--text)">{value}</span>
-			{detail ? <span className="truncate text-nano leading-3.5 text-(--text-4)">{detail}</span> : null}
-		</div>
-	);
-}
-
-function Outcomes({ sessions }: { sessions: Session[] }) {
+function Momentum({ sessions }: { sessions: Session[] }) {
 	const usage = useQuery({ queryKey: ['usage'], queryFn: api.usage, staleTime: 60_000 });
 	const { perDay, week, merged, openPrs } = useMemo(() => {
 		const today = localDay(new Date());
@@ -204,16 +245,22 @@ function Outcomes({ sessions }: { sessions: Session[] }) {
 	}, [sessions]);
 	const most = Math.max(1, ...perDay);
 	return (
-		<section aria-label="This week" className="border-b border-(--line)">
-			<DeckHeading title="Outcomes">
-				<span className="text-small text-(--text-3)">14 days</span>
-			</DeckHeading>
-			<div className="grid grid-cols-3 divide-x divide-(--line) border-t border-(--line)">
-				<OutcomeStat label="Started" value={week} detail="this week" />
-				<OutcomeStat label="Merged" value={merged} detail={openPrs ? `${openPrs} open` : 'none open'} />
-				<OutcomeStat label="Spent" value={usage.data ? dollars(usage.data.month) : '—'} detail="this month" />
-			</div>
-			<div className="flex h-16 items-end gap-[3px] border-t border-(--line) px-3.5 pt-3 pb-3" role="img" aria-label={`Tasks started on each of the last ${DAYS} days`}>
+		<section aria-label="Momentum" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--line)]">
+			<p className="m-0 text-small leading-5 text-(--text-2)">
+				<strong className="in-num font-semibold text-(--text)">{week}</strong> started this week
+				<span className="text-(--text-4)"> · </span>
+				<strong className="in-num font-semibold text-(--text)">{merged}</strong> merged
+				{openPrs ? (
+					<>
+						<span className="text-(--text-4)"> · </span>
+						<strong className="in-num font-semibold text-(--text)">{openPrs}</strong> open {openPrs === 1 ? 'PR' : 'PRs'}
+					</>
+				) : null}
+				<span className="text-(--text-4)"> · </span>
+				<strong className="in-num font-semibold text-(--text)">{usage.data ? dollars(usage.data.month) : '—'}</strong>{' '}this month
+			</p>
+			<span className="flex-1" />
+			<div role="img" aria-label={`Tasks started on each of the last ${DAYS} days`} className="flex h-6 w-36 items-end gap-[3px]">
 				{perDay.map((count, index) => {
 					const back = DAYS - 1 - index;
 					return (
@@ -221,99 +268,10 @@ function Outcomes({ sessions }: { sessions: Session[] }) {
 							key={index}
 							title={`${count} ${count === 1 ? 'task' : 'tasks'} ${back === 0 ? 'today' : back === 1 ? 'yesterday' : `${back} days ago`}`}
 							className={cn('min-w-0 flex-1 rounded-mark', back < 7 && count > 0 ? 'bg-(--accent)' : 'bg-(--bg-active)')}
-							style={{ height: 5 + Math.round((count / most) * 30) }}
+							style={{ height: 4 + Math.round((count / most) * 20) }}
 						/>
 					);
 				})}
-			</div>
-		</section>
-	);
-}
-
-function stateColor(session: Session): string {
-	const state = stateOf(session);
-	if (state === 'waiting') return 'var(--warn)';
-	if (state === 'working' || state === 'queued') return 'var(--accent)';
-	if (state === 'review' || state === 'landing') return 'var(--ok)';
-	return 'var(--text-4)';
-}
-
-function WorkloadMap({ sessions }: { sessions: Session[] }) {
-	const spaces = useSpaces();
-	const lanes = useMemo(() => {
-		const groups = new Map<string, { key: string; label: string; sessions: Session[] }>();
-		for (const session of sessions) {
-			const space = session.spaceId ? spaces.data?.spaces.find((item) => item.id === session.spaceId) : undefined;
-			const key = session.spaceId ?? session.repo ?? 'chat';
-			const label = space?.name ?? (session.repo ? repoName(session.repo) : 'Chat');
-			const group = groups.get(key) ?? { key, label, sessions: [] };
-			group.sessions.push(session);
-			groups.set(key, group);
-		}
-		return [...groups.values()]
-			.map((group) => ({
-				...group,
-				waiting: group.sessions.filter(needsYou).length,
-				running: group.sessions.filter(isRunning).length,
-				latest: Math.max(...group.sessions.map((session) => Date.parse(activeAt(session)) || 0)),
-			}))
-			.sort((a, b) => b.waiting + b.running - (a.waiting + a.running) || b.latest - a.latest)
-			.slice(0, 5);
-	}, [sessions, spaces.data]);
-	return (
-		<section aria-label="Workload map" className="flex min-h-0 flex-1 flex-col">
-			<DeckHeading title="Workload map">
-				<span className="flex items-center gap-2 text-nano text-(--text-3)">
-					<span className="flex items-center gap-1"><StatusDot color="var(--warn)" /> waiting</span>
-					<span className="flex items-center gap-1"><StatusDot color="var(--accent)" /> active</span>
-				</span>
-			</DeckHeading>
-			<div className="flex min-h-0 flex-1 flex-col border-t border-(--line)">
-				{lanes.map((lane) => (
-					<div key={lane.key} className="flex min-h-11 flex-1 items-center gap-3 px-3.5 py-2 not-first:border-t not-first:border-(--line)">
-						<div className="flex min-w-0 flex-1 flex-col gap-1">
-							<span className="truncate text-small font-medium text-(--text-2)">{lane.label}</span>
-							<span className="flex min-w-0 items-center gap-1" aria-label={`${lane.sessions.length} tasks in ${lane.label}`}>
-								{lane.sessions.slice(0, 12).map((session) => (
-									<span key={session.id} title={session.title} className="h-2.5 w-1.5 rounded-mark" style={{ background: stateColor(session) }} />
-								))}
-								{lane.sessions.length > 12 ? <span className="text-nano text-(--text-4)">+{lane.sessions.length - 12}</span> : null}
-							</span>
-						</div>
-						<span className="in-num shrink-0 text-small text-(--text-3)">{lane.sessions.length}</span>
-					</div>
-				))}
-			</div>
-		</section>
-	);
-}
-
-function RecentDeck({ sessions, spaces }: { sessions: Session[]; spaces?: Array<{ id: string; name: string }> }) {
-	return (
-		<section aria-label="Recent" className="border-t border-(--line) bg-(--bg-panel)">
-			<DeckHeading title="Recent">
-				<Link to="/tasks" className={MORE}>
-					All tasks <Icon icon={ArrowRight} size={12} />
-				</Link>
-			</DeckHeading>
-			<div className="grid border-t border-(--line) lg:grid-cols-5">
-				{sessions.map((session) => (
-					<TaskLink
-						key={session.id}
-						session={session}
-						className="group/row flex min-h-14 min-w-0 items-center gap-2.5 px-3.5 py-2 outline-none not-first:border-t not-first:border-(--line) transition-colors duration-(--t-fast) hover:bg-(--bg-hover) focus-visible:shadow-(--focus-inset) lg:not-first:border-t-0 lg:not-first:border-l"
-					>
-						<TaskStatusIcon session={session} size={14} />
-						<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-							<span className="truncate text-small leading-4 font-medium text-(--text)">{session.title}</span>
-							<span className="flex min-w-0 items-center gap-1 text-micro leading-3.5 text-(--text-3)">
-								<Where session={session} spaces={spaces} />
-								<span className="text-(--text-4)">·</span>
-								<span className="in-num shrink-0">{when(activeAt(session))}</span>
-							</span>
-						</span>
-					</TaskLink>
-				))}
 			</div>
 		</section>
 	);
@@ -359,38 +317,18 @@ export function homeSummary(sessions: Session[]): string {
 export function HomeDashboard() {
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
 	const spaces = useSpaces();
-	const { needs, running, recent, all } = useMemo(() => {
+	const { needs, all } = useMemo(() => {
 		const all = sessions.data?.sessions ?? [];
 		const byActive = [...all].sort((a, b) => activeAt(b).localeCompare(activeAt(a)));
-		const needs = byActive.filter(needsYou);
-		const running = byActive.filter((session) => isRunning(session) && !needsYou(session));
-		const listed = new Set([...needs, ...running].map((session) => session.id));
-		return { needs, running, recent: byActive.filter((session) => !listed.has(session.id)).slice(0, SHOWN), all };
+		return { needs: byActive.filter(needsYou), all };
 	}, [sessions.data]);
 	if (!sessions.data) return null;
 	if (all.length === 0) return <FirstRun />;
 	return (
-		<section aria-label="Control deck" className="overflow-hidden rounded-card bg-(--bg-surface) shadow-[inset_0_0_0_1px_var(--line)]">
-			<div className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-b border-(--line) px-3.5 py-2">
-				<h2 className="m-0 text-body-lg leading-5 font-semibold text-(--text)">Control deck</h2>
-				<span className="text-small text-(--text-3)">Attention, active work, and outcomes in one scan</span>
-				<span className="flex-1" />
-				<span className="flex items-center gap-2 text-small text-(--text-3)">
-					<span className="flex items-center gap-1.5"><StatusDot color="var(--warn)" /> {needs.length} waiting</span>
-					<span className="flex items-center gap-1.5"><StatusDot color="var(--accent)" pulse={running.length > 0} /> {running.length} running</span>
-				</span>
-			</div>
-			<div className="grid lg:grid-cols-[minmax(0,1.42fr)_minmax(300px,0.82fr)]">
-				<div className="min-w-0">
-					<NeedsYouDeck sessions={needs} spaces={spaces.data?.spaces} />
-					<RunningDeck sessions={running} spaces={spaces.data?.spaces} />
-				</div>
-				<div className="flex min-w-0 flex-col border-t border-(--line) lg:border-t-0 lg:border-l">
-					<Outcomes sessions={all} />
-					<WorkloadMap sessions={all} />
-				</div>
-			</div>
-			{recent.length ? <RecentDeck sessions={recent} spaces={spaces.data?.spaces} /> : null}
-		</section>
+		<div className="mx-auto flex w-full max-w-[920px] flex-col gap-6">
+			{needs.length ? <Attention sessions={needs} spaces={spaces.data?.spaces} /> : null}
+			<WorkMap sessions={all} />
+			<Momentum sessions={all} />
+		</div>
 	);
 }
