@@ -4397,8 +4397,27 @@
     }
   }
 
+  async function readPendingEditCount() {
+    const res = await fetch(
+      'http://localhost:' + PORT + '/manual-edit-stash?token=' + encodeURIComponent(TOKEN) + '&pageUrl=' + encodeURIComponent(location.pathname),
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const count = data.count || 0;
+    updatePendingCounter(count);
+    return count;
+  }
+
   async function onPendingPillClick() {
-    const count = parseInt(pendingPillEl?.dataset.count || '0', 10);
+    if (pendingApplyInFlight) return;
+    let count;
+    try {
+      count = await readPendingEditCount();
+    } catch (err) {
+      console.warn('[impeccable] failed to refresh pending count:', err);
+      showToast('Could not confirm pending edits - retry', 4000);
+      return;
+    }
     if (count <= 0 || pendingApplyInFlight) return;
     const ok = confirm('Apply ' + count + ' edit' + (count === 1 ? '' : 's') + ' to source?');
     if (!ok) return;
@@ -4445,7 +4464,15 @@
   }
 
   async function onPendingTrashClick() {
-    const count = parseInt(pendingPillEl?.dataset.count || '0', 10);
+    if (pendingApplyInFlight) return;
+    let count;
+    try {
+      count = await readPendingEditCount();
+    } catch (err) {
+      console.warn('[impeccable] failed to refresh pending count:', err);
+      showToast('Could not confirm pending edits - retry', 4000);
+      return;
+    }
     if (count <= 0 || pendingApplyInFlight) return;
     const ok = confirm('Discard ' + count + ' edit' + (count === 1 ? '' : 's') + ' on this page?');
     if (!ok) return;
