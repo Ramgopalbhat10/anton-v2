@@ -18,6 +18,7 @@ import { useOnePane } from '@/lib/one-pane';
 import { SendToAgent } from '@/lib/review';
 import { ShowPanel } from '@/lib/workspace';
 import { readTaskAgain, showWorking, taskStatus, useFollowOnceStarted } from '@/lib/working';
+import { afterStop, clearStopped, useStopped } from '@/lib/stopped';
 import { useStarting } from '@/lib/starting';
 import { StartingTask } from '@/components/thread/starting-task';
 import { cn } from '@/lib/utils';
@@ -176,10 +177,13 @@ function useTaskAgent(sessionId: string): WindowedAgent {
 	const session = useQuery(taskQueries.session(sessionId));
 	const working = session.data?.working ?? false;
 	useFollowOnceStarted(agent, session.dataUpdatedAt);
-	const status = taskStatus(agent.status, working);
+	// A stop made on this page shows at once in the header and the composer, until a later reply starts.
+	const stopped = useStopped(sessionId);
+	const status = afterStop(taskStatus(agent.status, working), stopped);
 	const flueSend = agent.sendMessage;
 	const sendMessage = useCallback<UseFlueAgentResult['sendMessage']>(
 		async (...args) => {
+			clearStopped(queryClient, sessionId);
 			void showWorking(queryClient, sessionId);
 			try {
 				await flueSend(...args);

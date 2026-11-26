@@ -124,6 +124,8 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	if (!session) throw new NotFoundError('Session not found');
 	if (!session.prUrl) throw new InvalidInputError('This task has no pull request to review.');
 	if (automatic && !(await reviewsOn(session))) return false;
+	// A reply the user stopped is not reviewed on its own; asking by hand still is.
+	if (automatic && session.stoppedAt) return false;
 	if (session.review && (isWorking(id) || preparing.has(id))) {
 		if (automatic) return false;
 		throw new InvalidInputError(preparing.has(id) ? 'A review is already starting.' : 'The agent is still replying; ask for the review once it is done.');
@@ -137,6 +139,8 @@ export async function requestReview(id: string, { automatic }: { automatic: bool
 	if (automatic && activity.comments.filter(isAntonReview).length >= MAX_REVIEWS) return false;
 	if (automatic && (await documentationOnly(id, session.prUrl))) return false;
 	reviewing.set(id, activity.headSha);
+	// Asking for a review by hand after a stop is the user's next move: the task is working again.
+	if (session.stoppedAt) await updateSession(id, { stoppedAt: null });
 	if (!session.review) {
 		await sendToAgent(id, reviewMessage(session.prUrl, session.baseSha, activity.headSha, lastReviewed.get(id), answersMessage(activity.comments)), 'reviewer');
 		return true;
