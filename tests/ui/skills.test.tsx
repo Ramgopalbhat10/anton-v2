@@ -193,7 +193,7 @@ describe('A plugin page', () => {
 		await userEvent.click(screen.getByRole('tab', { name: /Files/ }));
 		expect(await screen.findByRole('heading', { name: 'Anatomy' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('radio', { name: 'Source' }));
-		expect(screen.getByText('<h1 align="center">Anatomy</h1>')).toBeTruthy();
+		expect([...document.querySelectorAll('.whitespace-pre')].some((line) => line.textContent === '<h1 align="center">Anatomy</h1>')).toBe(true);
 		await userEvent.click(screen.getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('heading', { name: 'Anatomy' })).toBeTruthy();
 	});

@@ -15,11 +15,19 @@ const api = vi.hoisted(() => ({
 	revertFile: vi.fn(),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-vi.mock('@/lib/highlight', () => ({
-	highlight: async () => null,
-	highlightDiff: async (lines: Array<{ kind: string; text?: string }>) => lines.map((line) => (line.kind === 'hunk' ? null : [{ content: line.text ?? '', color: 'var(--syntax-function)' }])),
-	hashText: (text: string) => text.length.toString(36),
-}));
+
+function diffShadowTexts(container: HTMLElement): string[] {
+	return [...container.querySelectorAll('diffs-container')].map((node) => node.shadowRoot?.textContent ?? '');
+}
+
+function findDiffSpan(container: HTMLElement, text: string): HTMLSpanElement | undefined {
+	for (const node of container.querySelectorAll('diffs-container')) {
+		for (const span of node.shadowRoot?.querySelectorAll('[data-line] span') ?? []) {
+			if (span.textContent?.trim() === text) return span as HTMLSpanElement;
+		}
+	}
+	return undefined;
+}
 
 const { GitTab } = await import('@/components/workspace/git-tab');
 const { HeaderChanges } = await import('@/components/shell/task-workspace');
@@ -60,13 +68,17 @@ describe('Changes', () => {
 		const list = await screen.findByRole('list', { name: 'Changed files' });
 		expect(within(list).getAllByRole('listitem').map((row) => row.getAttribute('aria-label'))).toEqual(['src/b.ts']);
 		expect(within(list).getByRole('button', { name: /^b\.ts/, expanded: true })).toBeTruthy();
-		expect(screen.getByText('new')).toBeTruthy();
-		await waitFor(() => expect(screen.getByText('new').style.color).toBe('var(--syntax-function)'));
+		await waitFor(() => {
+			expect(diffShadowTexts(list).join('\n')).toContain('new');
+			const span = findDiffSpan(list, 'new');
+			expect(span?.style.getPropertyValue('--diffs-token-dark')).toBe('var(--syntax-keyword)');
+			expect(span?.style.getPropertyValue('--diffs-token-light')).toBe('var(--syntax-keyword)');
+		}, { timeout: 3000 });
 		expect(screen.getByRole('button', { name: /^b\.ts\s*\+1\s*M$/ })).toBeTruthy();
 
 		fireEvent.click(screen.getByRole('button', { name: 'Whole branch' }));
 		expect(await screen.findByRole('button', { name: /^a\.ts\s*\+1\s*M$/ })).toBeTruthy();
-		expect(screen.getByText('pushed')).toBeTruthy();
+		await waitFor(() => expect(diffShadowTexts(screen.getByRole('list', { name: 'Changed files' })).join('\n')).toContain('pushed'));
 
 		fireEvent.click(within(screen.getByRole('list', { name: 'Changed files' })).getByRole('button', { name: /^a\.ts/, expanded: true }));
 		expect(within(screen.getByRole('list', { name: 'Changed files' })).getByRole('button', { name: /^a\.ts/, expanded: false })).toBeTruthy();
@@ -76,10 +88,10 @@ describe('Changes', () => {
 
 	it('says nothing is unpushed once a pull request has it all', async () => {
 		api.changes.mockImplementation(async (_id: string, scope: string) => (scope === 'branch' ? changes(patch('a.ts', 'pushed'), { scope: 'branch', pushedSha: 'p1' }) : changes('', { pushedSha: 'p1' })));
-		renderWithQueries(<GitTab sessionId="s1" />, [[['session', 's1'], session({ workspace: true })]]);
+		const view = renderWithQueries(<GitTab sessionId="s1" />, [[['session', 's1'], session({ workspace: true })]]);
 		expect(await screen.findByText('Nothing unpushed')).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Show the whole branch' }));
-		expect(await screen.findByText('pushed')).toBeTruthy();
+		await waitFor(() => expect(diffShadowTexts(view.container).join('\n')).toContain('pushed'));
 	});
 });
 

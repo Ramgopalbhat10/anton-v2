@@ -8,7 +8,6 @@ export default defineConfig({
 	root: 'src/web',
 	// The API and UI run separate Vite servers; their optimized modules must not overwrite each other.
 	cacheDir: new URL('./node_modules/.vite/ui', import.meta.url).pathname,
-	optimizeDeps: { include: ['shiki'] },
 	plugins: [react(), tailwindcss()],
 	resolve: {
 		alias: {

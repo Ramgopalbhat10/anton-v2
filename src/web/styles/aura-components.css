@@ -647,3 +647,32 @@
 		--fade-r: 0px;
 	}
 }
+
+.anton-diff {
+	--diffs-font-family: var(--mono);
+	--diffs-header-font-family: var(--font);
+	--diffs-font-size: var(--fs-12);
+	--diffs-line-height: 20px;
+	--diffs-tab-size: 4;
+	--diffs-gap-inline: 0px;
+	--diffs-gap-block: 4px;
+	--diffs-gap-style: 1px solid var(--line);
+	--diffs-bg-context-override: var(--bg-surface);
+	--diffs-bg-context-gutter-override: var(--bg-surface);
+	--diffs-bg-separator-override: var(--bg-raised);
+	--diffs-bg-buffer-override: var(--bg-panel);
+	--diffs-bg-hover-override: var(--bg-hover);
+	--diffs-fg-number-override: var(--text-4);
+	--diffs-addition-color-override: var(--ok);
+	--diffs-deletion-color-override: var(--bad);
+	--diffs-modified-color-override: var(--accent);
+	--diffs-bg-addition-override: var(--diff-add);
+	--diffs-bg-addition-number-override: var(--diff-add);
+	--diffs-bg-addition-emphasis-override: var(--diff-add-emphasis);
+	--diffs-bg-deletion-override: var(--diff-del);
+	--diffs-bg-deletion-number-override: var(--diff-del);
+	--diffs-bg-deletion-emphasis-override: var(--diff-del-emphasis);
+	--diffs-selection-color-override: var(--accent);
+	--diffs-bg-selection-override: var(--accent-soft);
+	--diffs-bg-selection-number-override: var(--accent-soft);
+}

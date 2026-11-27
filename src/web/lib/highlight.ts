@@ -1,55 +1,111 @@
-import type { ThemedToken, ThemeRegistration } from 'shiki';
+import type { RegisteredHighlighter, Theme, ThemedToken } from '@pierre/highlights/core';
 import type { DiffLine } from '@/lib/diff';
 
 /** Larger files show as plain text: highlighting them would stall the page. */
 const MAX_CHARS = 300_000;
+const MAX_LINE_CHARS = 4_000;
+const PLAIN_LANGS = new Set(['plain', 'plaintext', 'text', 'txt']);
 
-export function languageFor(path: string, known: Record<string, unknown>): string | null {
+export function languageFor(path: string, known: Record<string, unknown> | ((lang: string) => boolean)): string | null {
+	const has = typeof known === 'function' ? known : (lang: string) => lang in known;
 	const name = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
 	const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name;
-	if (extension in known) return extension;
+	if (has(extension)) return extension;
 	if (name.startsWith('dockerfile')) return 'dockerfile';
 	return null;
 }
 
-const syntax = (name: string) => `var(--syntax-${name})`;
+/**
+ * Every token is painted with a `--syntax-*` variable, so code blocks and diffs
+ * follow Aura's dark/light theme without being tokenized again.
+ */
+export function createAuraZedTheme(appearance: 'dark' | 'light' = 'dark'): Theme {
+	return {
+		name: appearance === 'light' ? 'aura-light' : 'aura-dark',
+		appearance,
+		cssVariables: {
+			prefix: '--syntax-',
+			defaults: { foreground: 'var(--syntax-variable)', background: 'var(--bg-surface)' },
+		},
+		style: {
+			'editor.foreground': 'variable',
+			syntax: {
+				comment: 'comment',
+				punctuation: 'punctuation',
+				'punctuation.special': 'keyword',
+				operator: 'operator',
+				'keyword.operator': 'operator',
+				keyword: 'keyword',
+				preproc: 'keyword',
+				string: 'string',
+				'text.literal': 'string',
+				'diff.plus': 'string',
+				'diff.minus': 'number',
+				number: 'number',
+				boolean: 'number',
+				constant: 'number',
+				variant: 'number',
+				'variable.special': 'number',
+				function: 'function',
+				title: 'function',
+				link_text: 'function',
+				link_uri: 'function',
+				type: 'type',
+				constructor: 'type',
+				namespace: 'type',
+				enum: 'type',
+				tag: 'tag',
+				selector: 'tag',
+				attribute: 'attribute',
+				label: 'attribute',
+				property: 'property',
+				variable: 'variable',
+				embedded: 'variable',
+				'text.jsx': 'variable',
+				primary: 'variable',
+				predictive: 'comment',
+				hint: 'comment',
+				emphasis: { color: 'variable', font_style: 'italic' },
+				'emphasis.strong': { color: 'variable', font_weight: 700 },
+				'emphasis.strong.italic': { color: 'variable', font_style: 'italic', font_weight: 700 },
+				'markup.strikethrough': 'comment',
+			},
+		},
+	};
+}
 
-/** Every token is painted with a `--syntax-*` variable, so a block follows the theme without being highlighted again. */
-const THEME: ThemeRegistration = {
-	name: 'aura',
-	type: 'dark',
-	colors: { 'editor.foreground': syntax('variable'), 'editor.background': 'var(--bg-app)' },
-	tokenColors: [
-		{ scope: ['comment', 'punctuation.definition.comment', 'string.comment'], settings: { foreground: syntax('comment') } },
-		{ scope: ['punctuation', 'meta.brace', 'meta.delimiter'], settings: { foreground: syntax('punctuation') } },
-		{ scope: ['keyword.operator', 'punctuation.accessor'], settings: { foreground: syntax('operator') } },
-		{
-			scope: ['keyword', 'storage', 'storage.type', 'storage.modifier', 'keyword.operator.new', 'keyword.operator.expression', 'keyword.operator.logical.python', 'punctuation.definition.template-expression', 'punctuation.section.embedded'],
-			settings: { foreground: syntax('keyword') },
-		},
-		{ scope: ['string', 'punctuation.definition.string', 'string punctuation.section.embedded source', 'markup.inline.raw', 'markup.inserted'], settings: { foreground: syntax('string') } },
-		{ scope: ['constant', 'constant.numeric', 'constant.language', 'constant.character', 'variable.language', 'support.constant', 'markup.deleted'], settings: { foreground: syntax('number') } },
-		{ scope: ['entity.name.function', 'support.function', 'meta.function-call.generic', 'variable.function', 'markup.heading', 'punctuation.definition.heading', 'entity.name.section', 'markup.underline.link'], settings: { foreground: syntax('function') } },
-		{
-			scope: ['entity.name.type', 'entity.name.class', 'entity.name.namespace', 'entity.other.inherited-class', 'support.type', 'support.class', 'storage.type.primitive', 'support.type.primitive', 'support.type.builtin'],
-			settings: { foreground: syntax('type') },
-		},
-		{ scope: ['entity.name.tag', 'support.class.component'], settings: { foreground: syntax('tag') } },
-		{ scope: ['entity.other.attribute-name'], settings: { foreground: syntax('attribute') } },
-		{ scope: ['variable.other.property', 'variable.other.object.property', 'meta.object-literal.key', 'support.type.property-name', 'support.variable.property'], settings: { foreground: syntax('property') } },
-		{ scope: ['variable', 'variable.parameter', 'meta.template.expression', 'meta.embedded'], settings: { foreground: syntax('variable') } },
-		{ scope: ['markup.bold'], settings: { fontStyle: 'bold' } },
-		{ scope: ['markup.italic'], settings: { fontStyle: 'italic' } },
-	],
+const AURA_ZED_THEME = createAuraZedTheme('dark');
+
+type HighlightState = {
+	highlighter: RegisteredHighlighter;
+	isSupportedLanguage: (lang: string) => boolean;
 };
 
-/** Null when the file is too large or its language unknown. Shiki and each grammar load on first use. */
+let loader: Promise<HighlightState> | undefined;
+
+function loadHighlighter(): Promise<HighlightState> {
+	return (loader ??= Promise.all([import('@pierre/highlights/core'), import('@pierre/highlights/langs')])
+		.then(async ([{ createHighlighter, isSupportedLanguage }, { langs }]) => ({
+			highlighter: await createHighlighter({ langs, themes: [AURA_ZED_THEME] }),
+			isSupportedLanguage,
+		}))
+		.catch((error) => {
+			loader = undefined;
+			throw error;
+		}));
+}
+
+/** Null when the file is too large or its language unknown. Highlights and its lexers load on first use. */
 export async function highlight(code: string, path: string): Promise<ThemedToken[][] | null> {
 	if (code.length > MAX_CHARS) return null;
-	const { bundledLanguages, codeToTokens } = await import('shiki');
-	const lang = languageFor(path, bundledLanguages);
+	const { highlighter, isSupportedLanguage } = await loadHighlighter();
+	const lang = languageFor(path, (candidate) => !PLAIN_LANGS.has(candidate) && isSupportedLanguage(candidate));
 	if (!lang) return null;
-	const { tokens } = await codeToTokens(code, { lang: lang as keyof typeof bundledLanguages, theme: THEME });
+	const { tokens } = highlighter.codeToTokens(code, {
+		lang,
+		theme: AURA_ZED_THEME.name,
+		tokenizeMaxLineLength: MAX_LINE_CHARS,
+	});
 	return tokens;
 }
 
