@@ -40,6 +40,7 @@ Reasons and details: [rules](docs/architecture/rules.md).
 ## Commands
 
 - `npm test` (server) and `npm run test:ui` (React components, in `tests/ui/`)
+- Focused tests while working and before finishing: `node --experimental-strip-types --test tests/<name>.test.ts` (add `--test-name-pattern=<words>` to narrow it) and `npx vitest run tests/ui/<name>.test.tsx`, for the test files of what you changed and its callers. CI runs `npm test` (about 2 minutes) and `npm run test:ui` (about 1) on every pull request: run them yourself only for a change to shared code, config or dependencies, with `run_in_background`. After merging main, if `package-lock.json` changed, start `npm ci` in the background before any check.
 - `npm run check:types`, and `npm run lint:hooks` (the rules of hooks fail it; missing effect dependencies are warnings)
 - `npm run dev` — UI on :43127, API on :43128
 - `npm run ui:fixture` — the real UI with scripted, streaming conversations and a mocked API, for checking a page in a browser (no server, keys or sandbox; `window.__chat` drives it). Use it rather than building a fake backend; see [development](docs/architecture/development.md)
