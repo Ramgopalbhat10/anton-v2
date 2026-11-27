@@ -3,10 +3,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FileView } from '@/components/content/file-view';
 import { FileImages, Markdown } from '@/components/content/markdown';
+import { shadowCodeText } from './render';
 import readme from '../fixtures/skills/anatomy-readme.md?raw';
 import skill from '../fixtures/skills/SKILL.md?raw';
 
-vi.mock('@/lib/highlight', () => ({ highlight: async () => null, hashText: (text: string) => text.length.toString(36) }));
+vi.mock('@/lib/highlight', async (original) => ({ ...(await original<typeof import('@/lib/highlight')>()), highlight: async () => null }));
 
 function file(text: string) {
 	return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -109,7 +110,7 @@ describe('Document previews', () => {
 		expect(await screen.findByRole('heading', { name: 'Anatomy instructions' })).toBeTruthy();
 		fireEvent.click(screen.getByRole('radio', { name: 'Source' }));
 		expect(screen.queryByRole('region', { name: 'Frontmatter' })).toBeNull();
-		expect(screen.getByText('large-id: 9007199254740993')).toBeTruthy();
+		expect(await shadowCodeText()).toContain('large-id: 9007199254740993');
 		fireEvent.click(screen.getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('region', { name: 'Frontmatter' }).textContent).toContain('webgl');
 	});

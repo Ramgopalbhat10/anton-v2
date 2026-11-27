@@ -3,6 +3,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shadowCodeText } from './render';
 import anatomyReadme from '../fixtures/skills/anatomy-readme.md?raw';
 import anatomySkill from '../fixtures/skills/SKILL.md?raw';
 import type { CatalogItem, Plugin, PluginPreview } from '@/lib/api/plugins';
@@ -193,7 +194,7 @@ describe('A plugin page', () => {
 		await userEvent.click(screen.getByRole('tab', { name: /Files/ }));
 		expect(await screen.findByRole('heading', { name: 'Anatomy' })).toBeTruthy();
 		await userEvent.click(screen.getByRole('radio', { name: 'Source' }));
-		expect([...document.querySelectorAll('.whitespace-pre')].some((line) => line.textContent === '<h1 align="center">Anatomy</h1>')).toBe(true);
+		expect(await shadowCodeText()).toContain('<h1 align="center">Anatomy</h1>');
 		await userEvent.click(screen.getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('heading', { name: 'Anatomy' })).toBeTruthy();
 	});
@@ -224,7 +225,7 @@ describe('A plugin page', () => {
 		expect(screen.getAllByRole('radiogroup', { name: 'Show Markdown as' })).toHaveLength(1);
 		await userEvent.click(within(toggle).getByRole('radio', { name: 'Source' }));
 		expect(screen.queryByRole('region', { name: 'Frontmatter' })).toBeNull();
-		expect([...document.querySelectorAll('.whitespace-pre')].some((line) => line.textContent === 'metadata:')).toBe(true);
+		expect(await shadowCodeText()).toContain('metadata:');
 		await userEvent.click(within(toggle).getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('region', { name: 'Frontmatter' }).innerHTML).toBe(metadata);
 	});
