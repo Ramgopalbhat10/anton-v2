@@ -104,8 +104,10 @@
 
 	--diff-add: rgba(61, 214, 140, 0.1);
 	--diff-add-mark: rgba(61, 214, 140, 0.55);
+	--diff-add-emphasis: rgba(61, 214, 140, 0.24);
 	--diff-del: rgba(242, 85, 90, 0.1);
 	--diff-del-mark: rgba(242, 85, 90, 0.55);
+	--diff-del-emphasis: rgba(242, 85, 90, 0.24);
 
 	/* Elevation: hairlines make structure; shadows say which layers float.
 	   sh-1 a control's or the panel's finish, sh-2 menus, popovers and tips,
@@ -183,6 +185,13 @@
 	--merged: #8b5cf6;
 	--conflict: #e8692a;
 	--info: #1d8be0;
+
+	--diff-add: rgba(22, 163, 106, 0.11);
+	--diff-add-mark: rgba(22, 163, 106, 0.6);
+	--diff-add-emphasis: rgba(22, 163, 106, 0.24);
+	--diff-del: rgba(220, 58, 64, 0.1);
+	--diff-del-mark: rgba(220, 58, 64, 0.58);
+	--diff-del-emphasis: rgba(220, 58, 64, 0.22);
 
 	--sh-1: 0 1px 2px rgba(0, 0, 0, 0.05);
 	--sh-2: 0 0 0 1px var(--line-strong), 0 8px 24px -6px rgba(0, 0, 0, 0.14);

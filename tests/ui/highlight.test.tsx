@@ -25,7 +25,7 @@ describe('Syntax colours', () => {
 			],
 			'value.ts',
 		);
-		const token = (row: number, content: string) => rows?.[row]?.find((part) => part.content === content);
+		const token = (row: number, content: string) => rows?.[row]?.find((part) => part.content.trim() === content);
 		expect(token(0, 'function')?.color).toBe('var(--syntax-keyword)');
 		expect(token(1, 'return')?.color).toBe('var(--syntax-keyword)');
 		expect(token(1, '"old"')?.color).toBe('var(--syntax-string)');
@@ -48,17 +48,18 @@ describe('Syntax colours', () => {
 			],
 			'value.ts',
 		);
-		const token = (row: number, content: string) => rows?.[row]?.find((part) => part.content === content);
+		const token = (row: number, content: string) => rows?.[row]?.find((part) => part.content.trim() === content);
 		expect(token(5, 'const')?.color).toBe('var(--syntax-keyword)');
 		expect(token(6, 'const')?.color).toBe('var(--syntax-keyword)');
 	});
 
 	it('paints a deleted file from its old lines', async () => {
 		const rows = await highlightDiff([{ kind: 'remove', number: 1, text: 'const gone = true;' }], 'gone.ts');
-		expect(rows?.[0]?.find((part) => part.content === 'const')?.color).toBe('var(--syntax-keyword)');
+		expect(rows?.[0]?.find((part) => part.content.trim() === 'const')?.color).toBe('var(--syntax-keyword)');
 	});
 
-	it('leaves a file in a language it does not know as plain text', async () => {
+	it('leaves a file in a language it does not know or plain text as plain text', async () => {
 		expect(await highlight('anything', 'notes.unknownext')).toBeNull();
+		expect(await highlight('hello world', 'notes.txt')).toBeNull();
 	});
 });

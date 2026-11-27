@@ -41,3 +41,28 @@ test('parsePatch lists a binary file without lines', () => {
 	assert.equal(image.status, 'A');
 	assert.deepEqual([image.added, image.removed, image.lines.length], [0, 0, 0]);
 });
+
+test('parsePatch preserves raw per-file patch slices and rename prevPath', () => {
+	const renamePatch = [
+		'diff --git a/src/old_name.ts b/src/new_name.ts',
+		'similarity index 85%',
+		'rename from src/old_name.ts',
+		'rename to src/new_name.ts',
+		'--- a/src/old_name.ts',
+		'+++ b/src/new_name.ts',
+		'@@ -1,2 +1,2 @@',
+		'-export const a = 1;',
+		'+export const a = 2;',
+		' export const b = 3;',
+		'',
+	].join('\n');
+	const [retry, docs] = parsePatch(patch);
+	assert.match(retry.patch, /^diff --git a\/src\/retry\.ts b\/src\/retry\.ts\n/);
+	assert.doesNotMatch(retry.patch, /docs\/queue\.md/);
+	assert.match(docs.patch, /^diff --git a\/docs\/queue\.md b\/docs\/queue\.md\n/);
+
+	const [renamed] = parsePatch(renamePatch);
+	assert.equal(renamed.path, 'src/new_name.ts');
+	assert.equal(renamed.prevPath, 'src/old_name.ts');
+	assert.equal(renamed.patch, renamePatch);
+});

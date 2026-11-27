@@ -1,17 +1,39 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, Undo2, X } from '@/lib/icons';
-import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { SelectedLineRange } from '@pierre/diffs';
+import { type DiffLineAnnotation, FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, SlidersHorizontal, Undo2, X } from '@/lib/icons';
+import { Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/kit/disclosure';
+import { Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { FileIcon, FileIcons } from '@/components/marks/file-icons';
 import { StatusChip } from '@/components/content/file-view';
 import { ChangesArt } from '@/components/marks/illustrations';
-import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
+import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
 import { api } from '@/lib/api';
-import type { DiffLine, FileDiff } from '@/lib/diff';
-import { hashText, highlightDiff } from '@/lib/highlight';
+import type { FileDiff } from '@/lib/diff';
+import {
+	ANTON_DIFF_UNSAFE_CSS,
+	AURA_DIFF_THEMES,
+	DiffWorkerProvider,
+	getCachedFileDiffMetadata,
+	getDiffCommentTargets,
+	getLineTextFromDiff,
+	resolveCommentTarget,
+	setDiffViewPrefs,
+	useDiffViewPrefs,
+} from '@/lib/pierre-diffs';
 import { type ReviewComment, useReviewComments } from '@/lib/review';
+import { useTheme } from '@/lib/theme';
+import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { focusFile, ShowPanel } from '@/lib/workspace';
+
+/** Below this diff pane width (px), split diffs fall back to stacked unified layout. */
+const SPLIT_MIN_WIDTH = 720;
+
+export function isDiffPaneNarrow(width: number): boolean {
+	return width > 0 && width < SPLIT_MIN_WIDTH;
+}
 
 /** Draft comments on one file of the diff; absent where the diff is read-only. */
 export type Commenting = {
@@ -20,13 +42,14 @@ export type Commenting = {
 	onRemove: (comment: ReviewComment) => void;
 };
 
-type CodeLine = Exclude<DiffLine, { kind: 'hunk' }>;
-
-const sideOf = (line: CodeLine): ReviewComment['side'] => (line.kind === 'remove' ? 'old' : 'new');
+type DraftAnnotationGroup = {
+	comments: Array<{ comment: ReviewComment; outdated: boolean }>;
+	composer?: { side: ReviewComment['side']; line: number };
+};
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
-		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] items-start gap-2 border-l-2 border-l-(--accent) px-2.5 py-2 font-sans">
+		<div className="in-pop my-1.5 mx-2 flex w-[min(480px,calc(100%-1rem))] items-start gap-2 border-l-2 border-l-(--accent) px-2.5 py-2 font-sans">
 			<Icon icon={MessageSquare} size={12} className="mt-[3px] text-(--text-3)" />
 			<div className="min-w-0 flex-1 text-small leading-[18px] whitespace-pre-wrap text-(--text)">
 				{outdated ? <div className="text-(--text-3)">Line {comment.line} has changed since this comment</div> : null}
@@ -37,19 +60,50 @@ function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; 
 	);
 }
 
-function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onCancel: () => void }) {
-	const [text, setText] = useState('');
-	const save = () => (text.trim() ? onSave(text.trim()) : undefined);
+function CommentForm({
+	value,
+	onChange,
+	onSave,
+	onCancel,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	onSave: (text: string) => void;
+	onCancel: () => void;
+}) {
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	useEffect(() => {
+		const el = textareaRef.current;
+		if (!el) return;
+		// Pierre adds the Shadow DOM annotation slot during layout effects, after React's autoFocus commit step.
+		el.focus();
+		if (document.activeElement === el) return;
+		let frame = 0;
+		let attempts = 0;
+		const retry = () => {
+			const node = textareaRef.current;
+			if (!node || document.activeElement === node || attempts++ >= 5) return;
+			node.focus();
+			if (document.activeElement !== node) frame = requestAnimationFrame(retry);
+		};
+		frame = requestAnimationFrame(retry);
+		return () => cancelAnimationFrame(frame);
+	}, []);
+	const save = () => (value.trim() ? onSave(value.trim()) : undefined);
 	return (
-		<div className="in-pop sticky left-2 my-1.5 ml-14 flex w-[min(480px,calc(100cqw-4.5rem))] flex-col gap-2 border-l-2 border-l-(--accent) p-2 font-sans">
+		<div className="in-pop my-1.5 mx-2 flex w-[min(480px,calc(100%-1rem))] flex-col gap-2 border-l-2 border-l-(--accent) p-2 font-sans">
 			<textarea
+				ref={textareaRef}
 				autoFocus
 				rows={2}
-				value={text}
-				onChange={(event) => setText(event.target.value)}
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save();
-					if (event.key === 'Escape') onCancel();
+					if (event.key === 'Escape') {
+						event.stopPropagation();
+						onCancel();
+					}
 				}}
 				placeholder="What should the agent change here?"
 				aria-label="Comment"
@@ -59,7 +113,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 				<Btn size="xs" variant="ghost" onClick={onCancel}>
 					Cancel
 				</Btn>
-				<Btn size="xs" variant="primary" onClick={save} disabled={!text.trim()}>
+				<Btn size="xs" variant="primary" onClick={save} disabled={!value.trim()}>
 					Add comment
 				</Btn>
 			</div>
@@ -67,110 +121,345 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 	);
 }
 
-type Token = { content: string; color?: string };
-
-function CodeRow({ line, tokens, onComment }: { line: CodeLine; tokens?: Token[] | null; onComment?: () => void }) {
-	return (
-		<div
-			className={cn(
-				'group relative flex',
-				line.kind === 'add' && 'bg-(--diff-add) shadow-[inset_2px_0_0_var(--diff-add-mark)]',
-				line.kind === 'remove' && 'bg-(--diff-del) shadow-[inset_2px_0_0_var(--diff-del-mark)]',
-			)}
-		>
-			{onComment ? (
-				<button
-					type="button"
-					aria-label={`Comment on line ${line.number}`}
-					onClick={onComment}
-					className="absolute top-px left-1.5 inline-flex size-4 items-center justify-center rounded-control bg-(--accent) text-(--accent-fg) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-				>
-					<Icon icon={Plus} size={11} />
-				</button>
-			) : null}
-			<span className="w-12 shrink-0 pr-2 text-right text-(--text-4) tabular-nums select-none">{line.number}</span>
-			<span className={cn('w-4 shrink-0 text-center select-none', line.kind === 'add' ? 'text-(--ok)' : line.kind === 'remove' ? 'text-(--bad)' : 'text-transparent')}>
-				{line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}
-			</span>
-			<span
-				className={cn(
-					'pr-3 whitespace-pre',
-					line.kind === 'context' ? 'text-(--text-2)' : 'text-(--text)',
-				)}
-			>
-				{tokens
-					? tokens.map((token, at) => (
-							<span key={at} style={{ color: token.color }}>
-								{token.content}
-							</span>
-						))
-					: line.text}
-			</span>
-		</div>
-	);
-}
-
 function diffText(file: FileDiff): string {
+	if (file.patch) return file.patch;
 	return file.lines
 		.map((line) => (line.kind === 'hunk' ? `@@ ${line.text} @@` : `${line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' '}${line.text}`))
 		.join('\n');
 }
 
-function DiffLines({ file, commenting }: { file: FileDiff; commenting?: Commenting }) {
-	// The line being commented on, by its number, so a refetch that shifts the diff keeps the form on its line.
+function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: Commenting; narrow: boolean }) {
+	// The line being commented on and its unsaved text live here, so deleting another comment keeps the draft intact.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
-	// A comment stays on its line only while that line still reads the same.
-	const matches = (comment: ReviewComment, line: CodeLine) => comment.side === sideOf(line) && comment.line === line.number && comment.code === line.text;
-	const codeLines = file.lines.filter((line): line is CodeLine => line.kind !== 'hunk');
-	const on = (line: CodeLine) => (commenting?.comments ?? []).filter((comment) => matches(comment, line));
-	const outdated = (commenting?.comments ?? []).filter((comment) => !codeLines.some((line) => matches(comment, line)));
-	const cacheText = useMemo(() => diffText(file), [file]);
-	const cacheHash = useMemo(() => hashText(cacheText), [cacheText]);
-	const colored = useQuery({
-		queryKey: ['highlight-diff', file.path, cacheText.length, cacheHash],
-		queryFn: () => highlightDiff(file.lines, file.path),
-		enabled: file.lines.length > 0,
-		staleTime: Number.POSITIVE_INFINITY,
-		gcTime: 60_000,
-	});
-	const tokens = colored.data ?? null;
-	if (file.lines.length === 0) {
-		return <div className="border-t border-(--line) px-3 py-2 text-small text-(--text-3)">{file.status === 'D' ? 'The file was deleted.' : 'No lines to show: the file is empty or binary.'}</div>;
-	}
-	return (
-		<div className="@container overflow-x-auto border-t border-(--line) py-1 font-mono text-small leading-5">
-			<div className="min-w-max">
-				{outdated.map((comment, at) => (
-					<CommentCard key={`outdated-${at}`} comment={comment} outdated onRemove={() => commenting?.onRemove(comment)} />
+	const [draftText, setDraftText] = useState('');
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const diffContainerRef = useRef<HTMLDivElement>(null);
+	const pointerDownRef = useRef(false);
+	const [focusedTargetIndex, setFocusedTargetIndex] = useState<number | null>(null);
+	const theme = useTheme();
+	const prefs = useDiffViewPrefs();
+	const rawPatch = useMemo(() => diffText(file), [file]);
+	const fileDiff = useMemo(() => getCachedFileDiffMetadata(file, rawPatch), [file, rawPatch]);
+	const effectiveDiffStyle: 'split' | 'unified' = prefs.diffStyle === 'split' && !narrow ? 'split' : 'unified';
+	const hasCommenting = Boolean(commenting);
+	const commentTargets = useMemo(() => (fileDiff && hasCommenting ? getDiffCommentTargets(fileDiff) : []), [fileDiff, hasCommenting]);
+	const activeTarget = focusedTargetIndex !== null && commentTargets.length > 0 ? commentTargets[Math.min(focusedTargetIndex, commentTargets.length - 1)] : null;
+	const activeSelection = useMemo<SelectedLineRange | null>(
+		() => (activeTarget ? { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side } : null),
+		[activeTarget],
+	);
+
+	const openDraft = useCallback((target: { side: ReviewComment['side']; line: number }) => {
+		if (draftRef.current?.side === target.side && draftRef.current.line === target.line) return;
+		setDraft(target);
+		setDraftText('');
+	}, []);
+
+	const closeDraft = useCallback((restoreFocus = false) => {
+		setDraft(null);
+		setDraftText('');
+		if (restoreFocus) diffContainerRef.current?.focus();
+	}, []);
+
+	useEffect(() => {
+		if (!activeTarget) return;
+		const shadow = diffContainerRef.current?.querySelector('diffs-container')?.shadowRoot;
+		if (!shadow) return;
+		const lineEl =
+			effectiveDiffStyle === 'split'
+				? shadow.querySelector(`${activeTarget.side === 'deletions' ? '[data-deletions]' : '[data-additions]'} [data-line="${activeTarget.lineNumber}"]`)
+				: (activeTarget.side === 'deletions'
+						? shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-deletion"]`)
+						: shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-addition"]`) ??
+							shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="context"]`)) ??
+					shadow.querySelector(`[data-line="${activeTarget.lineNumber}"]`);
+		lineEl?.scrollIntoView?.({ block: 'nearest' });
+	}, [activeTarget, effectiveDiffStyle]);
+
+	const options = useMemo(
+		() => ({
+			theme: AURA_DIFF_THEMES,
+			themeType: theme,
+			preferredHighlighter: 'highlights' as const,
+			disableFileHeader: true,
+			diffStyle: effectiveDiffStyle,
+			diffIndicators: prefs.diffIndicators,
+			lineDiffType: prefs.lineDiffType,
+			disableBackground: prefs.disableBackground,
+			disableLineNumbers: prefs.disableLineNumbers,
+			overflow: prefs.overflow,
+			hunkSeparators: 'line-info' as const,
+			enableGutterUtility: hasCommenting,
+			tokenizeMaxLineLength: 4_000,
+			unsafeCSS: ANTON_DIFF_UNSAFE_CSS,
+		}),
+		[
+			theme,
+			effectiveDiffStyle,
+			prefs.diffIndicators,
+			prefs.lineDiffType,
+			prefs.disableBackground,
+			prefs.disableLineNumbers,
+			prefs.overflow,
+			hasCommenting,
+		],
+	);
+
+	const lineAnnotations = useMemo<DiffLineAnnotation<DraftAnnotationGroup>[]>(() => {
+		if (!fileDiff || !commenting) return [];
+		const fileAnnotationSide = fileDiff.type === 'deleted' ? 'deletions' : 'additions';
+		const grouped = new Map<string, DiffLineAnnotation<DraftAnnotationGroup>>();
+		const ensureGroup = (side: 'deletions' | 'additions', lineNumber: number) => {
+			const key = `${side}:${lineNumber}`;
+			let entry = grouped.get(key);
+			if (!entry) {
+				entry = { side, lineNumber, metadata: { comments: [] } };
+				grouped.set(key, entry);
+			}
+			return entry;
+		};
+		for (const comment of commenting.comments) {
+			const side = comment.side === 'old' ? 'deletions' : 'additions';
+			const currentCode = getLineTextFromDiff(fileDiff, side, comment.line);
+			const outdated = currentCode !== comment.code;
+			const targetSide = outdated ? fileAnnotationSide : side;
+			const targetLine = outdated ? 0 : comment.line;
+			ensureGroup(targetSide, targetLine).metadata.comments.push({ comment, outdated });
+		}
+		if (draft) {
+			const targetSide = draft.side === 'old' ? 'deletions' : 'additions';
+			ensureGroup(targetSide, draft.line).metadata.composer = draft;
+		}
+		return [...grouped.values()];
+	}, [fileDiff, commenting, draft]);
+
+	const renderAnnotation = useCallback(
+		(annotation: DiffLineAnnotation<DraftAnnotationGroup>) => {
+			const { comments, composer } = annotation.metadata;
+			return (
+				<Fragment>
+					{comments.map((item, index) => (
+						<CommentCard key={index} comment={item.comment} outdated={item.outdated} onRemove={() => commenting?.onRemove(item.comment)} />
+					))}
+					{composer ? (
+						<CommentForm
+							key={`${composer.side}:${composer.line}`}
+							value={draftText}
+							onChange={setDraftText}
+							onCancel={() => closeDraft(true)}
+							onSave={(body) => {
+								if (!fileDiff) return;
+								const side = composer.side === 'old' ? 'deletions' : 'additions';
+								const code = getLineTextFromDiff(fileDiff, side, composer.line) ?? '';
+								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, code, text: body });
+								closeDraft(false);
+							}}
+						/>
+					) : null}
+				</Fragment>
+			);
+		},
+		[commenting, file.path, fileDiff, draftText, closeDraft],
+	);
+
+	const renderGutterUtility = useCallback(
+		(getHoveredLine: () => { lineNumber: number; side: 'deletions' | 'additions' } | undefined) => (
+			<button
+				type="button"
+				aria-label="Comment on line"
+				onClick={(event) => {
+					event.stopPropagation();
+					const hovered = getHoveredLine();
+					if (!hovered || !fileDiff) return;
+					openDraft(resolveCommentTarget(fileDiff, hovered.side, hovered.lineNumber));
+				}}
+				className="inline-flex size-4 translate-x-1 cursor-pointer items-center justify-center rounded-control bg-(--accent) text-(--accent-fg) shadow-(--sh-1) outline-none focus-visible:shadow-(--focus)"
+			>
+				<Icon icon={Plus} size={11} />
+			</button>
+		),
+		[fileDiff, openDraft],
+	);
+
+	if (!fileDiff || fileDiff.hunks.length === 0) {
+		return (
+			<div className="border-t border-(--line) px-3 py-2 text-small text-(--text-3)">
+				{commenting?.comments.map((comment, at) => (
+					<CommentCard key={at} comment={comment} outdated onRemove={() => commenting.onRemove(comment)} />
 				))}
-				{file.lines.map((line, index) =>
-					line.kind === 'hunk' ? (
-						<div key={`hunk-${index}`} className="my-1 flex bg-(--accent-soft) text-(--accent-text) first:mt-0">
-							<span className="w-12 shrink-0 pr-2 text-right select-none">@@</span>
-							<span className="pl-4 whitespace-pre">{line.text}</span>
-						</div>
-					) : (
-						// Keyed by the line, not its position, so an open comment form keeps its text when the diff refreshes.
-						<Fragment key={`${sideOf(line)}-${line.number}`}>
-							<CodeRow line={line} tokens={tokens?.[index]} onComment={commenting ? () => setDraft({ side: sideOf(line), line: line.number }) : undefined} />
-							{on(line).map((comment, at) => (
-								<CommentCard key={at} comment={comment} onRemove={() => commenting?.onRemove(comment)} />
-							))}
-							{commenting && draft?.side === sideOf(line) && draft.line === line.number ? (
-								<CommentForm
-									onCancel={() => setDraft(null)}
-									onSave={(body) => {
-										commenting.onAdd({ path: file.path, side: sideOf(line), line: line.number, code: line.text, text: body });
-										setDraft(null);
-									}}
-								/>
-							) : null}
-						</Fragment>
-					),
-				)}
+				{file.status === 'D'
+					? 'The file was deleted.'
+					: file.prevPath
+						? `Renamed from ${file.prevPath}.`
+						: 'No lines to show: the file is empty or binary.'}
 			</div>
+		);
+	}
+
+	const keyboardProps =
+		hasCommenting && commentTargets.length > 0
+			? {
+					tabIndex: 0,
+					role: 'region' as const,
+					'aria-label': `Diff for ${file.path}. Use Up or Down arrows to choose a line and Enter to comment.`,
+					onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+						pointerDownRef.current = true;
+						if (!(event.target instanceof Element) || !event.target.closest('[slot]')) setFocusedTargetIndex(null);
+					},
+					onFocus: (event: React.FocusEvent<HTMLDivElement>) => {
+						const fromPointer = pointerDownRef.current;
+						pointerDownRef.current = false;
+						if (event.target === event.currentTarget && !fromPointer) {
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current, commentTargets.length - 1)));
+						}
+					},
+					onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
+						pointerDownRef.current = false;
+						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedTargetIndex(null);
+					},
+					onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+						if (event.target !== event.currentTarget) return;
+						if (event.key === 'ArrowDown' || event.key === 'j') {
+							event.preventDefault();
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current + 1, commentTargets.length - 1)));
+						} else if (event.key === 'ArrowUp' || event.key === 'k') {
+							event.preventDefault();
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.max(current - 1, 0)));
+						} else if (event.key === 'Home') {
+							event.preventDefault();
+							setFocusedTargetIndex(0);
+						} else if (event.key === 'End') {
+							event.preventDefault();
+							setFocusedTargetIndex(commentTargets.length - 1);
+						} else if ((event.key === 'Enter' || event.key === 'c') && !event.metaKey && !event.ctrlKey && !event.altKey) {
+							event.preventDefault();
+							const idx = focusedTargetIndex ?? 0;
+							const target = commentTargets[Math.min(idx, commentTargets.length - 1)];
+							if (target) openDraft({ side: target.side === 'deletions' ? 'old' : 'new', line: target.lineNumber });
+						} else if (event.key === 'Escape' && focusedTargetIndex !== null) {
+							event.preventDefault();
+							setFocusedTargetIndex(null);
+						}
+					},
+				}
+			: {};
+
+	return (
+		<div
+			ref={diffContainerRef}
+			className={cn('anton-diff border-t border-(--line)', hasCommenting && 'outline-none focus-visible:shadow-(--focus-inset)')}
+			{...keyboardProps}
+		>
+			<PierreFileDiff
+				fileDiff={fileDiff}
+				options={options}
+				selectedLines={hasCommenting ? activeSelection : undefined}
+				lineAnnotations={hasCommenting ? lineAnnotations : undefined}
+				renderAnnotation={hasCommenting ? renderAnnotation : undefined}
+				renderGutterUtility={hasCommenting ? renderGutterUtility : undefined}
+			/>
 		</div>
 	);
+}
+
+export function DiffViewControls({ narrow = false }: { narrow?: boolean }) {
+	const prefs = useDiffViewPrefs();
+	return (
+		<div className="flex shrink-0 items-center gap-1">
+			<Segmented label="Diff layout" role="radiogroup">
+				<SegmentedItem
+					role="radio"
+					size="sm"
+					on={prefs.diffStyle === 'split'}
+					title={narrow ? 'Split view (auto-stacked while narrow)' : 'Side-by-side split view'}
+					onClick={() => setDiffViewPrefs({ diffStyle: 'split' })}
+				>
+					Split
+				</SegmentedItem>
+				<SegmentedItem
+					role="radio"
+					size="sm"
+					on={prefs.diffStyle === 'unified'}
+					title="Unified stacked view"
+					onClick={() => setDiffViewPrefs({ diffStyle: 'unified' })}
+				>
+					Stacked
+				</SegmentedItem>
+			</Segmented>
+			<Menu>
+				<MenuTrigger asChild>
+					<IconBtn icon={SlidersHorizontal} size="xs" label="Diff display options" className="shrink-0" />
+				</MenuTrigger>
+				<MenuContent align="end" className="w-[210px]">
+					<MenuLabel>Indicators</MenuLabel>
+					<MenuItem checked={prefs.diffIndicators === 'bars'} onSelect={() => setDiffViewPrefs({ diffIndicators: 'bars' })}>
+						Bars
+					</MenuItem>
+					<MenuItem checked={prefs.diffIndicators === 'classic'} onSelect={() => setDiffViewPrefs({ diffIndicators: 'classic' })}>
+						Classic (+/-)
+					</MenuItem>
+					<MenuItem checked={prefs.diffIndicators === 'none'} onSelect={() => setDiffViewPrefs({ diffIndicators: 'none' })}>
+						None
+					</MenuItem>
+					<MenuSeparator />
+					<MenuLabel>Inline diff</MenuLabel>
+					<MenuItem checked={prefs.lineDiffType === 'word-alt'} onSelect={() => setDiffViewPrefs({ lineDiffType: 'word-alt' })}>
+						Word (smart)
+					</MenuItem>
+					<MenuItem checked={prefs.lineDiffType === 'word'} onSelect={() => setDiffViewPrefs({ lineDiffType: 'word' })}>
+						Word
+					</MenuItem>
+					<MenuItem checked={prefs.lineDiffType === 'char'} onSelect={() => setDiffViewPrefs({ lineDiffType: 'char' })}>
+						Character
+					</MenuItem>
+					<MenuItem checked={prefs.lineDiffType === 'none'} onSelect={() => setDiffViewPrefs({ lineDiffType: 'none' })}>
+						Off
+					</MenuItem>
+					<MenuSeparator />
+					<MenuLabel>Display</MenuLabel>
+					<MenuItem
+						checked={!prefs.disableBackground}
+						onSelect={(event) => {
+							event.preventDefault();
+							setDiffViewPrefs({ disableBackground: !prefs.disableBackground });
+						}}
+					>
+						Line backgrounds
+					</MenuItem>
+					<MenuItem
+						checked={prefs.overflow === 'wrap'}
+						onSelect={(event) => {
+							event.preventDefault();
+							setDiffViewPrefs({ overflow: prefs.overflow === 'wrap' ? 'scroll' : 'wrap' });
+						}}
+					>
+						Wrap lines
+					</MenuItem>
+					<MenuItem
+						checked={!prefs.disableLineNumbers}
+						onSelect={(event) => {
+							event.preventDefault();
+							setDiffViewPrefs({ disableLineNumbers: !prefs.disableLineNumbers });
+						}}
+					>
+						Line numbers
+					</MenuItem>
+				</MenuContent>
+			</Menu>
+		</div>
+	);
+}
+
+/**
+ * Scroll container wired to `@pierre/diffs`'s `<Virtualizer>` when browser observers exist,
+ * falling back to a plain scrolling `<div>` in test DOM environments.
+ */
+export function DiffScrollContainer({ children, className }: { children: ReactNode; className?: string }) {
+	if (typeof window !== 'undefined' && typeof IntersectionObserver !== 'undefined' && typeof ResizeObserver !== 'undefined' && !('happyDOM' in window)) {
+		return <Virtualizer className={className}>{children}</Virtualizer>;
+	}
+	return <div className={className}>{children}</div>;
 }
 
 function useCopied(): [string | null, (what: string, text: string) => void] {
@@ -260,10 +549,11 @@ function FileMenu({ file, sessionId, revertTo }: { file: FileDiff; sessionId?: s
 	);
 }
 
-export function useOpenFiles(files: FileDiff[]) {
+export function useOpenFiles(files: FileDiff[], { virtualized = false }: { virtualized?: boolean } = {}) {
 	const [chosen, setChosen] = useState<Map<string, boolean>>(() => new Map());
 	// A handful of files open by themselves; a longer list opens only its first, so it reads as a list.
-	const opensItself = (file: FileDiff, index: number) => file.lines.length <= 800 && (files.length <= 4 || index === 0);
+	// Virtualized panes keep long diffs open without stalling layout.
+	const opensItself = (file: FileDiff, index: number) => (virtualized || file.lines.length <= 800) && (files.length <= 4 || index === 0);
 	const isOpen = (path: string) => chosen.get(path) ?? opensItself(files.find((file) => file.path === path)!, files.findIndex((file) => file.path === path));
 	const allOpen = files.length > 0 && files.every((file) => isOpen(file.path));
 	return {
@@ -296,6 +586,7 @@ export function ChangeList({
 	sessionId,
 	revertTo = 'base',
 	review,
+	narrow: narrowProp,
 }: {
 	files: FileDiff[];
 	open: OpenFiles;
@@ -303,68 +594,75 @@ export function ChangeList({
 	sessionId?: string;
 	revertTo?: 'base' | 'pushed';
 	review?: ReturnType<typeof useReviewComments>;
+	narrow?: boolean;
 }) {
 	const rows = useRef(new Map<string, HTMLElement>());
+	const [listRef, listSize] = useElementSize<HTMLDivElement>();
+	const narrow = narrowProp ?? isDiffPaneNarrow(listSize.width);
 	useEffect(() => {
 		if (!selected) return;
 		open.set(selected.path, true);
 		rows.current.get(selected.path)?.scrollIntoView?.({ block: 'start' });
 	}, [selected?.at]);
 	return (
-		<div role="list" aria-label="Changed files">
-			{files.map((file) => {
-				const isOpen = open.isOpen(file.path);
-				const slash = file.path.lastIndexOf('/');
-				const comments = review?.comments.filter((comment) => comment.path === file.path) ?? [];
-				return (
-					<section
-						role="listitem"
-						key={file.path}
-						ref={(element) => void (element ? rows.current.set(file.path, element) : rows.current.delete(file.path))}
-						aria-label={file.path}
-						className="border-b border-(--line) last:border-b-0"
-					>
-						<div className="sticky top-0 z-[1] flex h-8 items-center gap-1.5 bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1 pl-1.5">
-							<button
-								type="button"
-								aria-expanded={isOpen}
-								onClick={() => open.set(file.path, !isOpen)}
-								title={file.path}
-								className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-control pr-1 text-left outline-none focus-visible:shadow-(--focus)"
-							>
-								<Icon icon={ChevronRight} size={12} className={cn('text-(--text-3) transition-transform duration-(--t-fast)', isOpen && 'rotate-90')} />
-								<FileIcon path={file.path} />
-								<span className={cn('shrink-0 truncate text-small', selected?.path === file.path ? 'text-(--accent-text)' : 'text-(--text)')}>{file.path.slice(slash + 1)}</span>
-								{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-4)">{file.path.slice(0, slash)}</span> : null}
-							</button>
-							{comments.length ? (
-								<span className="inline-flex shrink-0 items-center gap-1 text-micro text-(--accent-text)" title={`${comments.length} draft ${comments.length === 1 ? 'comment' : 'comments'}`}>
-									<Icon icon={MessageSquare} size={12} />
-									{comments.length}
+		<DiffWorkerProvider>
+			<div ref={narrowProp === undefined ? listRef : undefined} role="list" aria-label="Changed files">
+				{files.map((file) => {
+					const isOpen = open.isOpen(file.path);
+					const slash = file.path.lastIndexOf('/');
+					const comments = review?.comments.filter((comment) => comment.path === file.path) ?? [];
+					return (
+						<section
+							role="listitem"
+							key={file.path}
+							ref={(element) => void (element ? rows.current.set(file.path, element) : rows.current.delete(file.path))}
+							aria-label={file.path}
+							className="border-b border-(--line) last:border-b-0"
+						>
+							<div className="sticky top-0 z-[1] flex h-8 items-center gap-1.5 bg-[linear-gradient(180deg,var(--bg-surface),var(--bg-surface))] pr-1 pl-1.5">
+								<button
+									type="button"
+									aria-expanded={isOpen}
+									onClick={() => open.set(file.path, !isOpen)}
+									title={file.prevPath ? `${file.prevPath} → ${file.path}` : file.path}
+									className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-control pr-1 text-left outline-none focus-visible:shadow-(--focus)"
+								>
+									<Icon icon={ChevronRight} size={12} className={cn('text-(--text-3) transition-transform duration-(--t-fast)', isOpen && 'rotate-90')} />
+									<FileIcon path={file.path} />
+									<span className={cn('shrink-0 truncate text-small', selected?.path === file.path ? 'text-(--accent-text)' : 'text-(--text)')}>{file.path.slice(slash + 1)}</span>
+									{slash > 0 ? <span className="min-w-0 truncate text-micro text-(--text-4)">{file.path.slice(0, slash)}</span> : null}
+									{file.prevPath ? <span className="min-w-0 truncate text-micro text-(--text-4)">← {file.prevPath}</span> : null}
+								</button>
+								{comments.length ? (
+									<span className="inline-flex shrink-0 items-center gap-1 text-micro text-(--accent-text)" title={`${comments.length} draft ${comments.length === 1 ? 'comment' : 'comments'}`}>
+										<Icon icon={MessageSquare} size={12} />
+										{comments.length}
+									</span>
+								) : null}
+								{file.status === 'M' ? null : <StatusChip status={file.status} />}
+								<span className="in-num shrink-0">
+									<DiffStat added={file.added} removed={file.removed} />
 								</span>
-							) : null}
-							{file.status === 'M' ? null : <StatusChip status={file.status} />}
-							<span className="in-num shrink-0">
-								<DiffStat added={file.added} removed={file.removed} />
-							</span>
-							<FileMenu file={file} sessionId={sessionId} revertTo={revertTo} />
-						</div>
-						<Disclosure open={isOpen}>
-							<DiffLines
-								file={file}
-								commenting={
-									review && {
-										comments,
-										onAdd: review.add,
-										onRemove: review.remove,
+								<FileMenu file={file} sessionId={sessionId} revertTo={revertTo} />
+							</div>
+							<Disclosure open={isOpen}>
+								<DiffLines
+									file={file}
+									narrow={narrow}
+									commenting={
+										review && {
+											comments,
+											onAdd: review.add,
+											onRemove: review.remove,
+										}
 									}
-								}
-							/>
-						</Disclosure>
-					</section>
-				);
-			})}
-		</div>
+								/>
+							</Disclosure>
+						</section>
+					);
+				})}
+			</div>
+		</DiffWorkerProvider>
 	);
 }
 
@@ -397,18 +695,21 @@ export function DiffList({
 	base?: string;
 }) {
 	const open = useOpenFiles(files);
+	const [wellRef, wellSize] = useElementSize<HTMLDivElement>();
+	const narrow = isDiffPaneNarrow(wellSize.width);
 	if (files.length === 0) {
 		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
 	return (
 		<FileIcons>
-			<div className="in-well">
+			<div ref={wellRef} className="in-well">
 				<div className="flex h-8 items-center gap-2 border-b border-(--line) pr-1 pl-2.5">
 					<FilesSummary files={files} />
 					<span className="flex-1" />
+					<DiffViewControls narrow={narrow} />
 					<ExpandAll open={open} />
 				</div>
-				<ChangeList files={files} open={open} sessionId={sessionId} />
+				<ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} />
 			</div>
 		</FileIcons>
 	);

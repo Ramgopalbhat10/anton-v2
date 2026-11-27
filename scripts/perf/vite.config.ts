@@ -12,6 +12,7 @@ export default defineConfig({
 	root: new URL('../../src/web', import.meta.url).pathname,
 	cacheDir: new URL('../../node_modules/.vite/perf', import.meta.url).pathname,
 	plugins: [react(), tailwindcss(), mockApi()],
+	worker: { format: 'es' },
 	resolve: {
 		alias: {
 			'@flue/sdk': new URL('./fake-flue-sdk.ts', import.meta.url).pathname,

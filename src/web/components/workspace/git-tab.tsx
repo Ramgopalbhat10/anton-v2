@@ -11,10 +11,11 @@ import { isChat } from '@/lib/api/sessions';
 import type { FileDiff } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { reviewMessage, SendToAgent, useReviewComments } from '@/lib/review';
+import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { setChangesScope, useChangesScope, useFocusedChange } from '@/lib/workspace';
 import { taskQueries } from '@/lib/task-queries';
-import { ChangeList, ExpandAll, FilesSummary, useOpenFiles } from '@/components/workspace/diff-list';
+import { ChangeList, DiffScrollContainer, DiffViewControls, ExpandAll, FilesSummary, isDiffPaneNarrow, useOpenFiles } from '@/components/workspace/diff-list';
 import { useChanges } from '@/lib/changes';
 
 function CommitList({ log, title }: { log: ChangesPayload['log']; title: string }) {
@@ -115,7 +116,9 @@ function LinesFigure({ file }: { file: FileDiff | undefined }) {
 export function GitTab({ sessionId }: { sessionId: string }) {
 	const scope = useChangesScope(sessionId);
 	const { changes, files } = useChanges(sessionId, scope);
-	const open = useOpenFiles(files);
+	const open = useOpenFiles(files, { virtualized: true });
+	const [mainRef, mainSize] = useElementSize<HTMLDivElement>();
+	const narrow = isDiffPaneNarrow(mainSize.width);
 	const review = useReviewComments(sessionId);
 	const session = useQuery(taskQueries.session(sessionId)).data;
 	const [selected, setSelected] = useState<{ path: string; at: number } | null>(null);
@@ -225,7 +228,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						</>
 					}
 					main={(sideToggle) => (
-						<>
+						<div ref={mainRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
 							<EditorBar sideToggle={sideToggle}>
 								<nav aria-label="Showing" className="flex min-w-0 flex-1 items-center gap-1 pl-1 text-small">
 									<span className="shrink-0 text-(--text-3)">{scope === 'branch' ? 'Branch' : 'Changes'}</span>
@@ -235,18 +238,19 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 								{files.length ? (
 									<>
 										<FilesSummary files={files} />
+										<DiffViewControls narrow={narrow} />
 										<ExpandAll open={open} />
 									</>
 								) : null}
 							</EditorBar>
-							<div className="min-h-0 flex-1 overflow-auto">
+							<DiffScrollContainer className="min-h-0 flex-1 overflow-auto">
 								{files.length === 0 ? (
 									empty
 								) : (
-									<ChangeList files={files} open={open} selected={selected} sessionId={sessionId} revertTo={revertTo} review={review} />
+									<ChangeList files={files} open={open} selected={selected} sessionId={sessionId} revertTo={revertTo} review={review} narrow={narrow} />
 								)}
-							</div>
-						</>
+							</DiffScrollContainer>
+						</div>
 					)}
 				/>
 				<ReviewBar review={review} />
