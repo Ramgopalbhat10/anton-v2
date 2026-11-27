@@ -2,6 +2,7 @@ import { type FlueExecutionContext, type FlueExecutionOperation, instrument } fr
 import { cutHeadAndTail, cutResult } from '../services/context/tool-results.ts';
 import { skillFilesReady } from '../services/sandbox/skill-files.ts';
 import { skillInParts } from '../services/context/skill-parts.ts';
+import { skillFolder } from '../services/settings/plugins.ts';
 import { digestResult, WEB_TOOLS } from '../services/context/web-digest.ts';
 import { onMainCoder } from '../services/context/context-usage.ts';
 import { todoNudge } from '../services/replies/todos.ts';
@@ -11,6 +12,9 @@ const isOwnConversation = (ctx: FlueExecutionContext) =>
 	Boolean(ctx.instanceId) && !ctx.taskId && (ctx.session === undefined || ctx.session === 'default') && (ctx.harness === undefined || ctx.harness === 'default');
 
 const SKILL_TOOL = 'activate_skill';
+const READ_SKILL_TOOL = 'read_skill_resource';
+const SKILL_PATH_HINT =
+	'Give the whole path from the skill\'s resource list (/.flue/packaged-skills/<skill>/<file>), or read the file in the sandbox, in the folder the skill\'s activation names.';
 
 /**
  * Every tool call passes through the runtime's execution interceptors, so this sees web fetches, connectors, scripts and
@@ -27,7 +31,14 @@ export function toolResultCutInterceptor<T>(operation: FlueExecutionOperation, c
 	if (toolName === SKILL_TOOL)
 		return next().then(async (result) => {
 			await skillFilesReady(ctx.instanceId!);
-			return skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!);
+			const name = (result as { details?: { skill?: unknown } } | null)?.details?.skill;
+			const folder = typeof name === 'string' && name ? skillFolder(ctx.instanceId!, name) : null;
+			return skillInParts(result, toolCallId, subagent ? null : ctx.instanceId!, folder);
+		});
+	// The runtime finds a skill's file only by the whole path its activation lists; a path relative to the skill is the likely slip.
+	if (toolName === READ_SKILL_TOOL)
+		return next().catch((error: unknown) => {
+			throw error instanceof Error && error.message.includes('Packaged skill file not found') ? new Error(`${error.message}. ${SKILL_PATH_HINT}`) : error;
 		});
 	if (subagent) return next().then((result) => cutHeadAndTail(toolName, result));
 	const cut = next().then((result) => cutResult(ctx.instanceId!, toolCallId, toolName, result));

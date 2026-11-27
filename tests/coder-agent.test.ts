@@ -46,10 +46,22 @@ test('workspace agents batch the edits they know and do not run the same tests t
 	assert.match(source, /const EDIT_HINT =\n\t'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list/);
 	assert.match(source, /const PATCH_HINT =\n\t'Make the changes you already know in one step: one apply_patch call can change several files and several places in each/);
 	// Both workspace prompts take the profile's hint in the place EDIT_HINT had.
-	assert.equal((source.match(/\n\tedit,\n\tPARALLEL_HINT,\n\tFINISH_HINT,/g) ?? []).length, 1);
+	assert.equal((source.match(/\n\tedit,\n\tPARALLEL_HINT,\n\tSIZE_HINT,\n\tFINISH_HINT,/g) ?? []).length, 1);
 	assert.equal((source.match(/\n\tedit,\n\tREAD_HINT,/g) ?? []).length, 1);
 	assert.match(source, /const edit = profile === 'patch' \? PATCH_HINT : EDIT_HINT;/);
 	assert.match(source, /Never run the same tests both ways/);
+});
+
+test('a small, exact change is made and checked without the process a behaviour change gets, and no skill is pulled in for it', () => {
+	const source = coder('prompts.ts');
+	const size = source.slice(source.indexOf('const SIZE_HINT'), source.indexOf('const PARALLEL_HINT'));
+	assert.match(size, /run the type check and the tests of the files you changed, and finish/);
+	assert.match(size, /still fails to run after two fixes to it, drop it and say in your reply what went unchecked/);
+	assert.equal(source.match(/\bSIZE_HINT\b/g)?.length, 3, 'in both workspace prompts');
+	assert.match(source, /Check a UI change that alters behaviour \(what shows, what a click or key does, the requests made\) with a script first/);
+	assert.match(source, /A change to styling alone needs at most one screenshot of the view it touches\./);
+	assert.match(source, /Activate one the user did not name only when its process fits the job: for a small, exact change the request spells out/);
+	assert.match(source, /in the folder its activation names: a repository's own skill in its folder in the repository, an installed one at \.\.\/skills\/<skill name>\//);
 });
 
 test('the sandbox browser needs no desktop, and do keeps the opening notice after autopilot', () => {
@@ -223,7 +235,7 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	assert.match(builder, /run_in_background/);
 	for (const prompt of ['workspacePrompt', 'chatWorkspacePrompt']) {
 		const start = source.indexOf(`const ${prompt}`);
-		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tPARALLEL_HINT,\n\tFINISH_HINT,/, prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tPARALLEL_HINT,\n\tSIZE_HINT,\n\tFINISH_HINT,/, prompt);
 	}
 	assert.equal(source.match(/\bPARALLEL_HINT\b/g)?.length, 3);
 	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.

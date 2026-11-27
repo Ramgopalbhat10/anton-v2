@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { groupResources, skillInParts } from '../src/services/context/skill-parts.ts';
+import { folderNote, groupResources, skillInParts } from '../src/services/context/skill-parts.ts';
+import { toolResultCutInterceptor } from '../src/flue/tool-result-cut.ts';
 import { readFullResult } from '../src/services/context/tool-results.ts';
 
 const BASE = '/.flue/packaged-skills/skill%3Adiagrams%3Aabc';
@@ -40,4 +41,19 @@ test('anything else passes as it is', () => {
 	const other = result('No skill named "x". Available: diagrams.');
 	assert.equal(skillInParts(other, 'k4', 'task'), other);
 	assert.equal(skillInParts('not a result', 'k5', 'task'), 'not a result');
+});
+
+test('a skill whose files are in the sandbox names their folder right under its first line', () => {
+	const given = textOf(skillInParts(result(skill('Draw them.\n')), 'k6', 'task', '.agents/skills/diagrams'));
+	assert.ok(given.startsWith(`Run the skill named "diagrams".\n${folderNote('.agents/skills/diagrams')}\n`));
+	assert.match(given, /read_skill_resource by the whole path/);
+	assert.ok(!textOf(skillInParts(result(skill('Draw them.\n')), 'k7', 'task')).includes('In the sandbox'), 'none without a folder');
+});
+
+test('a skill file asked for by a path the runtime does not know is answered with how to name it', async () => {
+	const tool = { type: 'tool' as const, toolCallId: 'r1', toolName: 'read_skill_resource' };
+	const missing = () => Promise.reject(new Error('[flue] Packaged skill file not found: reference/craft.md'));
+	await assert.rejects(() => toolResultCutInterceptor(tool, { instanceId: 'task' }, missing), /not found: reference\/craft\.md\. Give the whole path from the skill's resource list/);
+	const other = () => Promise.reject(new Error('aborted'));
+	await assert.rejects(() => toolResultCutInterceptor(tool, { instanceId: 'task' }, other), /^Error: aborted$/);
 });

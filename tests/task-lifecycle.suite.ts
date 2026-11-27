@@ -2296,7 +2296,7 @@ test('removing a repo deletes its tasks, machines and automations, and the profi
 });
 
 test("a task's agent gets the repo's skills and installed plugins' skills, the repo's winning a name", async () => {
-	const { installPlugin, pluginsView, primeSkills, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/settings/plugins.ts');
+	const { installPlugin, pluginsView, primeSkills, skillFolder, skillsFor, repoInstructionsFor, setEnabled, removePlugin } = await import('../src/services/settings/plugins.ts');
 	const skillMd = (name: string) => `---\nname: ${name}\ndescription: Use when asked to ${name}.\n---\nDo ${name} carefully.\n`;
 	git(seed, 'checkout', '-q', '-b', 'with-skills');
 	for (const [file, content] of Object.entries({
@@ -2322,6 +2322,10 @@ test("a task's agent gets the repo's skills and installed plugins' skills, the r
 	assert.deepEqual(skillsFor(session.id, false).map((skill) => skill.name), ['release', 'triage', 'lint'], "the plugin's release yields to the repo's");
 	assert.deepEqual(skillsFor(session.id, true).map((skill) => skill.name), ['triage', 'lint'], 'with a sandbox, the runtime reads .agents/skills itself');
 	assert.equal(skillsFor(session.id, false)[2].files['rules.md'], 'No semicolons.');
+	assert.equal(skillFolder(session.id, 'release'), '.agents/skills/release', "the repo's own is in the repository");
+	assert.equal(skillFolder(session.id, 'triage'), '.claude/skills/triage');
+	assert.equal(skillFolder(session.id, 'lint'), '../skills/lint', "an installed one's files are copied beside it");
+	assert.equal(skillFolder(session.id, 'missing'), null);
 	assert.match(repoInstructionsFor(session.id), /Run npm test/);
 
 	await setEnabled(plugin, false);
