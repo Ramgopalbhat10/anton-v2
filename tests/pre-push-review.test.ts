@@ -129,7 +129,7 @@ test('answers round-trip, and the comment ids are read from the follow-up messag
 
 test('follow-up messages separate Markdown lists and indent multiline, 10+ and block-starting comments', async () => {
 	const { nextFollowUp } = await import('../src/services/git/follow-ups.ts');
-	const { answersPrComments, commentIdsIn } = await import('../src/core/review-follow-up.ts');
+	const { answersPrComments, commentIdsIn, withoutGuidance } = await import('../src/core/review-follow-up.ts');
 	const comments = Array.from({ length: 10 }, (_, index) => ({
 		id: `line-${index + 1}`,
 		author: 'reviewer',
@@ -155,13 +155,120 @@ test('follow-up messages separate Markdown lists and indent multiline, 10+ and b
 	const { message } = nextFollowUp('https://github.com/acme/api/pull/7', activity, { sha: null, seen: [], sent: 0 });
 	assert.ok(message);
 	assert.doesNotMatch(message, /\r/);
-	assert.ok(message.includes('Checks failed on your pull request (https://github.com/acme/api/pull/7) at abc1234:\n\n- test: 1 failed (https://ci.test/1)\n\nFind the cause'));
+	assert.ok(message.includes('Checks failed on your pull request (https://github.com/acme/api/pull/7) at abc1234:\n\n- test: 1 failed (https://ci.test/1)\n<anton-guidance>\nFind the cause'));
 	assert.ok(message.includes('New comments on your pull request (https://github.com/acme/api/pull/7):\n\n1. [line-1] @reviewer on src/f1.ts line 1:\n   ```ts\n   const x = 1;\n   ```'));
 	assert.ok(message.includes('2. [line-2] @reviewer on src/f2.ts line 2:\n   - first\n   - second'));
-	assert.ok(message.includes('10. [line-10] @reviewer on src/f10.ts line 10: First line\n\n    Second line\n\nFor each one, first check'));
+	assert.ok(message.includes('10. [line-10] @reviewer on src/f10.ts line 10: First line\n\n    Second line\n<anton-guidance>\nFor each one, first check'));
+	const visible = withoutGuidance(message);
+	assert.ok(visible.includes('- test: 1 failed (https://ci.test/1)\n\nNew comments on your pull request'));
+	assert.ok(visible.endsWith('Second line'));
 	assert.ok(answersPrComments(message));
 	assert.deepEqual(
 		commentIdsIn(message),
 		comments.map((comment) => comment.id),
 	);
+});
+
+test('nextFollowUp contains multiline and truncated check summaries and Setext/table review comments', async () => {
+	const { unified } = await import('unified');
+	const { default: remarkParse } = await import('remark-parse');
+	const { default: remarkGfm } = await import('remark-gfm');
+	const { nextFollowUp } = await import('../src/services/git/follow-ups.ts');
+	const { answersPrComments, commentIdsIn, withoutGuidance } = await import('../src/core/review-follow-up.ts');
+
+	type AstNode = { type: string; ordered?: boolean | null; depth?: number; url?: string; value?: string; children?: AstNode[] };
+	const plainText = (node: AstNode): string => node.value ?? (node.children ? node.children.map(plainText).join('') : '');
+	const collectNodes = (node: AstNode, type: string): AstNode[] => [
+		...(node.type === type ? [node] : []),
+		...(node.children ? node.children.flatMap((child) => collectNodes(child, type)) : []),
+	];
+
+	const fencedSummary = 'Failed:\n```log\nboom\n```';
+	const truncatedSummary = 'Output:\n```log\nAssertionError: expected 1\n  at test.ts:10';
+	const fourTickSummary = 'Trace:\n````txt\na\n\nb\n````';
+
+	const activity = {
+		state: 'open' as const,
+		headSha: 'abc1234',
+		conflicts: false,
+		checks: [
+			{ name: 'test', status: 'failed' as const, summary: fencedSummary, url: 'https://ci.test/1' },
+			{ name: 'unit', status: 'failed' as const, summary: truncatedSummary, url: 'https://ci.test/2' },
+			{ name: 'e2e', status: 'failed' as const, summary: fourTickSummary, url: 'https://ci.test/3' },
+			{ name: 'lint', status: 'failed' as const, summary: '1 error', url: 'https://ci.test/4' },
+		],
+		comments: [
+			{ id: 'line-1', author: 'reviewer', path: 'src/a.ts', line: 1, at: '', body: 'Fix this' },
+			{ id: 'line-2', author: 'reviewer', path: 'src/b.ts', line: 2, at: '', body: 'Title\n---' },
+			{ id: 'line-3', author: 'reviewer', path: 'src/c.ts', line: 3, at: '', body: 'Col A | Col B\n--- | ---\n1 | 2' },
+		],
+	};
+
+	const { message } = nextFollowUp('https://github.com/acme/api/pull/7', activity, { sha: null, seen: [], sent: 0 });
+	assert.ok(message);
+
+	const parser = unified().use(remarkParse).use(remarkGfm);
+	const uiTree = parser.parse(withoutGuidance(message)) as AstNode;
+	const uiNodes = uiTree.children ?? [];
+	assert.deepEqual(
+		uiNodes.map((node) => node.type),
+		['paragraph', 'list', 'paragraph', 'list'],
+	);
+	assert.match(plainText(uiNodes[0]!), /^Checks failed on your pull request/);
+
+	const checksList = uiNodes[1]!;
+	assert.equal(checksList.ordered, false);
+	assert.equal(checksList.children?.length, 4);
+
+	const expectedSummaries = [
+		{ url: 'https://ci.test/1', summary: fencedSummary },
+		{ url: 'https://ci.test/2', summary: truncatedSummary },
+		{ url: 'https://ci.test/3', summary: fourTickSummary },
+	];
+	for (const [index, expected] of expectedSummaries.entries()) {
+		const item = checksList.children![index]!;
+		const links = collectNodes(item, 'link');
+		assert.equal(links.length, 1);
+		assert.equal(links[0]!.url, expected.url);
+		const codes = collectNodes(item, 'code');
+		assert.equal(codes.length, 1);
+		assert.equal(codes[0]!.value, expected.summary);
+	}
+	const lintItem = checksList.children![3]!;
+	assert.equal(collectNodes(lintItem, 'code').length, 0);
+	assert.match(plainText(lintItem), /^lint: 1 error/);
+	assert.equal(collectNodes(lintItem, 'link')[0]?.url, 'https://ci.test/4');
+
+	assert.match(plainText(uiNodes[2]!), /^New comments on your pull request/);
+	const commentsList = uiNodes[3]!;
+	assert.equal(commentsList.ordered, true);
+	assert.equal(commentsList.children?.length, 3);
+
+	const setextItem = commentsList.children![1]!;
+	assert.equal(setextItem.children?.[0]?.type, 'paragraph');
+	assert.match(plainText(setextItem.children![0]!), /^\[line-2\] @reviewer on src\/b\.ts line 2:$/);
+	assert.equal(setextItem.children?.[1]?.type, 'heading');
+	assert.equal(setextItem.children?.[1]?.depth, 2);
+	assert.equal(plainText(setextItem.children![1]!), 'Title');
+
+	const tableItem = commentsList.children![2]!;
+	assert.equal(tableItem.children?.[0]?.type, 'paragraph');
+	assert.match(plainText(tableItem.children![0]!), /^\[line-3\] @reviewer on src\/c\.ts line 3:$/);
+	assert.equal(tableItem.children?.[1]?.type, 'table');
+
+	const rawTree = parser.parse(message) as AstNode;
+	for (const codeNode of collectNodes(rawTree, 'code')) {
+		const value = codeNode.value ?? '';
+		assert.doesNotMatch(value, /lint: 1 error|Find the cause|New comments on your pull request|line-1|line-2|line-3/);
+	}
+	const rawCommentsHeadingIndex = (rawTree.children ?? []).findIndex(
+		(node) => node.type === 'paragraph' && plainText(node).startsWith('New comments on your pull request'),
+	);
+	assert.notEqual(rawCommentsHeadingIndex, -1);
+	const rawCommentsList = rawTree.children![rawCommentsHeadingIndex + 1];
+	assert.equal(rawCommentsList?.type, 'list');
+	assert.equal(rawCommentsList?.ordered, true);
+	assert.equal(rawCommentsList?.children?.length, 3);
+	assert.ok(answersPrComments(message));
+	assert.deepEqual(commentIdsIn(message), ['line-1', 'line-2', 'line-3']);
 });

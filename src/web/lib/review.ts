@@ -40,19 +40,18 @@ function inlineCode(text: string): string {
 	return `${fence}${pad}${text}${pad}${fence}`;
 }
 
+const BODY_BREAK = /^\s*(?:=+|-+|\|?\s*:?-{1,}:?\s*(?:\|\s*:?-{1,}:?\s*)+\|?)\s*$/;
+
 export function reviewMessage(comments: ReviewComment[]): string {
 	const items = comments.map((comment, index) => {
 		const prefix = `${index + 1}. `;
 		const indent = ' '.repeat(prefix.length);
 		const where = `${comment.path}, ${comment.side === 'old' ? 'removed line' : 'line'} ${comment.line}`;
 		const code = comment.code.trim() ? ` (${inlineCode(snippet(comment.code))})` : '';
-		const body = comment.text
-			.trim()
-			.replace(/\r\n?/g, '\n')
-			.split('\n')
-			.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line))
-			.join('\n');
-		return `${prefix}${where}${code}\n${indent}${body}`;
+		const lines = comment.text.trim().replace(/\r\n?/g, '\n').split('\n');
+		const sep = BODY_BREAK.test(lines[0] ?? '') ? `\n\n${indent}` : `\n${indent}`;
+		const body = lines.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line)).join('\n');
+		return `${prefix}${where}${code}${sep}${body}`;
 	});
 	return ['Review comments on your changes. Address each one, then say briefly what you changed.', '', ...items].join('\n');
 }

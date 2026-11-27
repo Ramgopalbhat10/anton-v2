@@ -11,9 +11,19 @@ import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
 import { type PendingChange, type PendingSend } from '@/components/thread/pending-send';
 
+function sentFileRef(raw: string, files: FileLinks | null): { path: string; line?: number } | null {
+	const parsed = fileRef(raw);
+	if (parsed) return parsed;
+	if (!files) return null;
+	if (files.has(raw)) return { path: raw };
+	const match = /^(.*):(\d+)(?:[-–]\d+)?$/.exec(raw);
+	if (match && files.has(match[1]!)) return { path: match[1]!, line: Number(match[2]) };
+	return null;
+}
+
 function SentToken({ kind, text }: { kind: 'command' | 'file'; text: string }) {
 	const files = useContext(FileLinks);
-	const ref = kind === 'file' ? fileRef(text.slice(1)) : null;
+	const ref = kind === 'file' ? sentFileRef(text.slice(1).replace(/^\.\//, ''), files) : null;
 	if (ref && files?.has(ref.path)) {
 		return (
 			<button type="button" data-sent-token={kind} title={`Open ${ref.path}`} onClick={() => files.open(ref.path, ref.line)} className={cn(RICH_CLASS.chip, 'hover:bg-(--accent-soft)')}>

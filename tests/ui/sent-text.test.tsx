@@ -5,6 +5,7 @@ import { SentText } from '@/components/thread/sent-text';
 import { reviewMessage } from '@/lib/review';
 import { richRanges } from '@/lib/rich-text';
 import { renderWithQueries } from './render';
+import { withoutGuidance } from '../../src/core/review-follow-up';
 
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -272,5 +273,104 @@ describe('A sent message', () => {
 		expect(container.textContent).not.toContain('anton-review');
 		expect(screen.getByRole('link', { name: '@src/app.ts' }).getAttribute('href')).toBe('https://example.com');
 		expect([...container.querySelectorAll('code')].map((el) => el.textContent)).toEqual(expect.arrayContaining(['@pkg/name', '/cmd']));
+	});
+
+	it('keeps file mentions with underscores, dotfiles and brackets clickable without emphasis splitting', () => {
+		const open = vi.fn();
+		const existing = new Set(['src/__tests__/helpers.ts', '.github/workflows/ci.yml', 'app/routes/[id]/page.tsx', 'src/_private_/index.ts']);
+		const text = [
+			'Check @src/__tests__/helpers.ts and @src/__tests__/helpers.ts:42, @.github/workflows/ci.yml, @app/routes/[id]/page.tsx.',
+			'**see @src/__tests__/helpers.ts** and *check @src/_private_/index.ts*.',
+			'Link [see @src/__tests__/helpers.ts](https://example.com) and code `@src/__tests__/helpers.ts`.',
+			'',
+			'```ts',
+			'@src/__tests__/helpers.ts',
+			'```',
+		].join('\n');
+
+		const { container } = renderWithQueries(
+			<FileLinks.Provider value={{ has: (path) => existing.has(path), open }}>
+				<SentText text={text} />
+			</FileLinks.Provider>,
+		);
+
+		expect([...container.querySelectorAll('strong')].map((el) => el.textContent)).toEqual(['see @src/__tests__/helpers.ts']);
+		expect([...container.querySelectorAll('em')].map((el) => el.textContent)).toEqual(['check @src/_private_/index.ts']);
+
+		const buttons = screen.getAllByRole('button', { name: '@src/__tests__/helpers.ts' });
+		expect(buttons).toHaveLength(2);
+		fireEvent.click(buttons[0]!);
+		fireEvent.click(screen.getByRole('button', { name: '@src/__tests__/helpers.ts:42' }));
+		fireEvent.click(screen.getByRole('button', { name: '@.github/workflows/ci.yml' }));
+		fireEvent.click(screen.getByRole('button', { name: '@app/routes/[id]/page.tsx' }));
+		fireEvent.click(screen.getByRole('button', { name: '@src/_private_/index.ts' }));
+
+		expect(open).toHaveBeenNthCalledWith(1, 'src/__tests__/helpers.ts', undefined);
+		expect(open).toHaveBeenNthCalledWith(2, 'src/__tests__/helpers.ts', 42);
+		expect(open).toHaveBeenNthCalledWith(3, '.github/workflows/ci.yml', undefined);
+		expect(open).toHaveBeenNthCalledWith(4, 'app/routes/[id]/page.tsx', undefined);
+		expect(open).toHaveBeenNthCalledWith(5, 'src/_private_/index.ts', undefined);
+
+		const link = screen.getByRole('link', { name: 'see @src/__tests__/helpers.ts' });
+		expect(link.getAttribute('href')).toBe('https://example.com');
+		expect(link.querySelector('[data-sent-token]')).toBeNull();
+		expect(container.querySelector('.sg-code')?.textContent).toContain('@src/__tests__/helpers.ts');
+		expect(container.querySelector('.sg-code [data-sent-token]')).toBeNull();
+	});
+
+	it('renders combined multiline-check and review follow-ups without swallowing subsequent items into code blocks', () => {
+		const rawFollowUp = [
+			'Checks failed on your pull request (https://github.com/acme/demo/pull/9) at abc1234:',
+			'',
+			'- test (https://ci.test/1):',
+			'  ````',
+			'  Failed:',
+			'  ```log',
+			'  boom',
+			'  ```',
+			'  ````',
+			'- unit (https://ci.test/2):',
+			'  ```',
+			'  Output:',
+			'  ```log',
+			'  unclosed',
+			'  ```',
+			'- lint: 1 error (https://ci.test/3)',
+			'<anton-guidance>',
+			'Find the cause, fix it.',
+			'</anton-guidance>',
+			'',
+			'New comments on your pull request (https://github.com/acme/demo/pull/9):',
+			'',
+			'1. [line-1] @reviewer on src/a.ts line 1: Fix this',
+			'<anton-guidance>',
+			'For each one, first check it.',
+			'</anton-guidance>',
+		].join('\n');
+
+		const { container } = renderWithQueries(<SentText text={withoutGuidance(rawFollowUp)} />);
+		const ul = container.querySelector('ul')!;
+		expect(within(ul).getAllByRole('listitem')).toHaveLength(3);
+		const ol = container.querySelector('ol')!;
+		expect(within(ol).getAllByRole('listitem')).toHaveLength(1);
+		expect(ol.textContent).toContain('Fix this');
+		for (const url of ['https://ci.test/1', 'https://ci.test/2', 'https://ci.test/3']) {
+			const link = container.querySelector(`a[href="${url}"]`);
+			expect(link).toBeTruthy();
+			expect(link?.closest('.sg-code')).toBeNull();
+		}
+		expect(ol.closest('.sg-code')).toBeNull();
+		expect(container.textContent).not.toContain('Find the cause');
+	});
+
+	it('prevents review comments starting with Setext underlines from turning file headers into headings', () => {
+		const msg = reviewMessage([{ path: 'src/a.ts', side: 'new', line: 4, code: 'const x = 1;', text: '---\nCheck below' }]);
+		const { container } = render(<SentText text={msg} />);
+		expect(container.querySelector('h1, h2, h3')).toBeNull();
+		expect(container.querySelector('hr')).toBeTruthy();
+		const items = container.querySelectorAll('ol > li');
+		expect(items).toHaveLength(1);
+		expect(items[0]!.textContent).toContain('src/a.ts, line 4');
+		expect(items[0]!.textContent).toContain('Check below');
 	});
 });

@@ -38,13 +38,45 @@ async function askingNothing(id: string, comments: PullRequestComment[]): Promis
 	return comments.filter((_, index) => (yesOf(answers[index]?.asks) ?? 1) <= ASKS_NOTHING).map((comment) => comment.id);
 }
 
-const BLOCK_START = /^(?:#{1,6}\s|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|.*\|)/;
+const BLOCK_START =
+	/^(?:#{1,6}(?:\s|$)|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|.*\||(?:[-*_]\s*){3,}$|<(?:!--|!\[CDATA\[|\?|\/?(?:pre|script|style|textarea|details|summary|table|div|p|blockquote|ul|ol|li|h[1-6]|hr)\b))/i;
+const SETEXT_UNDERLINE = /^\s*(?:=+|-+)\s*$/;
+const TABLE_DELIMITER = /^\s*\|?\s*:?-{1,}:?\s*(?:\|\s*:?-{1,}:?\s*)+\|?\s*$/;
+
+function needsBlockBreak(lines: string[]): boolean {
+	const first = lines[0] ?? '';
+	const second = lines[1];
+	if (second === undefined) return false;
+	if (SETEXT_UNDERLINE.test(second)) return true;
+	return first.includes('|') && TABLE_DELIMITER.test(second);
+}
+
+function fenceFor(text: string): string {
+	let longest = 2;
+	for (const match of text.matchAll(/`+/g)) {
+		if (match[0].length > longest) longest = match[0].length;
+	}
+	return '`'.repeat(longest + 1);
+}
+
+function formatCheck(check: CheckResult): string {
+	const name = check.name.replace(/\r?\n/g, ' ').trim() || 'check';
+	const link = check.url ? ` (${check.url})` : '';
+	const summary = (check.summary || 'failed').replace(/\r\n?/g, '\n').trim() || 'failed';
+	if (!summary.includes('\n')) return `- ${name}: ${summary}${link}`;
+	const fence = fenceFor(summary);
+	const body = summary
+		.split('\n')
+		.map((line) => (line ? `  ${line}` : ''))
+		.join('\n');
+	return `- ${name}${link}:\n  ${fence}\n${body}\n  ${fence}`;
+}
 
 function checksMessage(url: string, sha: string, failed: CheckResult[]): string {
 	return [
 		`Checks failed on your pull request (${url}) at ${sha.slice(0, 7)}:`,
 		'',
-		...failed.map((check) => `- ${check.name}: ${check.summary || 'failed'} (${check.url})`),
+		...failed.map(formatCheck),
 		guidance('Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.'),
 	].join('\n');
 }
@@ -69,11 +101,11 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			const indent = ' '.repeat(prefix.length);
 			const where = comment.path ? ` on ${comment.path}${comment.line ? ` line ${comment.line}` : ''}` : '';
 			const body = comment.body.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
-			const indented = body
-				.split('\n')
+			const lines = body.split('\n');
+			const indented = lines
 				.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line))
 				.join('\n');
-			const separator = BLOCK_START.test(body) ? `\n${indent}` : ' ';
+			const separator = needsBlockBreak(lines) ? `\n\n${indent}` : BLOCK_START.test(lines[0] ?? '') ? `\n${indent}` : ' ';
 			return `${prefix}[${comment.id}] @${comment.author}${where}:${separator}${indented}`;
 		}),
 		guidance(
