@@ -14,7 +14,7 @@
 		"start:backup": "scripts/start-with-backup.sh",
 		"check:types": "tsc --noEmit && tsc --noEmit -p src/web/tsconfig.json",
 		"lint:hooks": "oxlint -c .oxlintrc.json src/web",
-		"test": "node --experimental-strip-types --test tests/*.test.ts",
+		"test": "node --experimental-strip-types --test --test-concurrency=8 tests/*.test.ts",
 		"test:ui": "vitest run",
 		"ui:fixture": "vite --config scripts/ui/vite.config.ts",
 		"anton:run": "node --experimental-strip-types scripts/anton-run.ts",
