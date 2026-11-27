@@ -7,7 +7,7 @@ import { IconBtn, Spinner } from '@/components/kit/signal';
 import { UploadingFiles } from '@/components/composer/attachments';
 import { SentImages, type SentPicture } from '@/components/thread/sent-images';
 import { RICH_CLASS } from '@/lib/rich-text';
-import { rehypeNamespaceFootnoteLabel, sentMarkdownPlugins } from '@/lib/sent-markdown';
+import { normalizeLegacyChecksFollowUp, rehypeNamespaceFootnoteLabel, sentMarkdownPlugins } from '@/lib/sent-markdown';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
 import { type PendingChange, type PendingSend } from '@/components/thread/pending-send';
@@ -52,10 +52,11 @@ const SentMarkdown = memo(function SentMarkdown({ text, contentRef }: { text: st
 	const prefix = `sent-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}-`;
 	const remarkRehypeOptions = useMemo(() => ({ clobberPrefix: prefix }), [prefix]);
 	const rehypePlugins = useMemo<PluggableList>(() => [[rehypeNamespaceFootnoteLabel, prefix]], [prefix]);
+	const rendered = useMemo(() => normalizeLegacyChecksFollowUp(text), [text]);
 	return (
 		<div ref={contentRef} className="sg-markdown sg-markdown--sent">
 			<ReactMarkdown remarkPlugins={sentMarkdownPlugins} rehypePlugins={rehypePlugins} remarkRehypeOptions={remarkRehypeOptions} components={sentComponents}>
-				{text}
+				{rendered}
 			</ReactMarkdown>
 		</div>
 	);

@@ -64,6 +64,10 @@ const isStopChar = (code: number | null) =>
 // Characters that can appear inside a path (like `__tests__`, `foo.ts`) without being left dangling as trailing punctuation or emphasis.
 const isTrailable = (code: number | null) => code !== null && code > 0 && /[.,;:!?'"}_]/.test(String.fromCharCode(code));
 const isPunctTrail = (code: number | null) => code !== null && code > 0 && /[.,;:!?'"}]/.test(String.fromCharCode(code));
+const isAsciiPunct = (code: number | null) =>
+	code !== null &&
+	code > 0 &&
+	((code >= 33 && code <= 47) || (code >= 58 && code <= 64) || (code >= 91 && code <= 96) || (code >= 123 && code <= 126));
 
 function sentTokensSyntax(): { text: Record<number, Construct> } {
 	return {
@@ -99,6 +103,24 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 					if (!isSpace(this.previous)) return nok;
 					let hasBody = false;
 
+					// Consume `\` only when it is not a CommonMark escape (`\` + ASCII punctuation) or hard break (`\` + whitespace/EOF).
+					const backslashLiteral: Construct = {
+						partial: true,
+						tokenize(attemptEffects, attemptOk, attemptNok) {
+							const startSlash: State = (code) => {
+								if (code !== 92) return attemptNok(code);
+								attemptEffects.consume(code);
+								return afterSlash;
+							};
+							const afterSlash: State = (code) => {
+								if (isStopChar(code) || isAsciiPunct(code)) return attemptNok(code);
+								hasBody = true;
+								return attemptOk(code);
+							};
+							return startSlash;
+						},
+					};
+
 					// Consume a balanced `[...]` or `(...)` group within the token; abort on whitespace, stop chars, or link syntax `](` / `][`.
 					const balancedGroup = (openCode: number, closeCode: number): Construct => ({
 						partial: true,
@@ -122,6 +144,7 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 							};
 							const step: State = (code) => {
 								if (isStopChar(code)) return attemptNok(code);
+								if (code === 92) return attemptEffects.attempt(backslashLiteral, step, attemptNok)(code);
 								if (code === openCode) {
 									depth += 1;
 									attemptEffects.consume(code);
@@ -148,6 +171,7 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 							const step: State = (code) => {
 								if (!sawPunct && code === 91) return attemptEffects.attempt(balancedGroup(91, 93), attemptOk, attemptNok)(code);
 								if (!sawPunct && code === 40) return attemptEffects.attempt(balancedGroup(40, 41), attemptOk, attemptNok)(code);
+								if (code === 92) return attemptEffects.attempt(backslashLiteral, attemptOk, attemptNok)(code);
 								if (isStopChar(code) || code === 91 || code === 93 || code === 40 || code === 41) return attemptNok(code);
 								if (sawPunct && code === 95) return attemptNok(code);
 								if (isTrailable(code)) {
@@ -178,6 +202,7 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 						if (code === 91) return effects.attempt(balancedGroup(91, 93), body, done)(code);
 						if (code === 40) return effects.attempt(balancedGroup(40, 41), body, done)(code);
 						if (isTrailable(code)) return effects.attempt(trailAttempt, body, done)(code);
+						if (code === 92) return effects.attempt(backslashLiteral, body, done)(code);
 						hasBody = true;
 						effects.consume(code);
 						return body;
@@ -312,6 +337,129 @@ export function rehypeNamespaceFootnoteLabel(prefix: string) {
 		}
 		walk(tree);
 	};
+}
+
+const LEGACY_CHECKS_HEADER = /^Checks failed on your pull request \(https?:\/\/[^)]+\) at [0-9a-f]{7,40}:$/;
+const LEGACY_CHECKS_FOOTER = /^Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request\.$/;
+const LEGACY_COMMENTS_HEADER = /^New comments on your pull request \(https?:\/\/[^)]+\):$/;
+const LEGACY_CHECK_START = /^- (.+?): (.*)$/;
+const LEGACY_CHECK_URL_END = / \((https?:\/\/[^\s)]*|)\)$/;
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
+
+function fenceFor(text: string): string {
+	let longest = 2;
+	for (const match of text.matchAll(/`+/g)) {
+		if (match[0].length > longest) longest = match[0].length;
+	}
+	return '`'.repeat(longest + 1);
+}
+
+/** Re-wraps legacy stored check follow-ups whose check URL was appended to a multiline summary line so fenced logs cannot swallow later checks or review sections. */
+export function normalizeLegacyChecksFollowUp(text: string): string {
+	if (!text.includes('Checks failed on your pull request (')) return text;
+	const lines = text.replace(/\r\n?/g, '\n').split('\n');
+	const out: string[] = [];
+	let changed = false;
+	let fence: string | null = null;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i]!;
+		const marker = FENCE_LINE.exec(line)?.[1];
+		if (fence) {
+			if (marker && marker[0] === fence[0] && marker.length >= fence.length && !line.slice(line.indexOf(marker) + marker.length).trim()) {
+				fence = null;
+			}
+			out.push(line);
+			continue;
+		}
+		if (marker) {
+			fence = marker;
+			out.push(line);
+			continue;
+		}
+		if (LEGACY_CHECKS_HEADER.test(line) && i + 1 < lines.length && LEGACY_CHECK_START.test(lines[i + 1]!)) {
+			let end = -1;
+			let hasFooter = false;
+			for (let j = i + 1; j < lines.length; j++) {
+				if (j > i + 1 && LEGACY_CHECK_URL_END.test(lines[j - 1]!)) {
+					if (LEGACY_CHECKS_FOOTER.test(lines[j]!)) {
+						end = j;
+						hasFooter = true;
+						break;
+					}
+					if (LEGACY_COMMENTS_HEADER.test(lines[j]!)) {
+						end = j;
+						break;
+					}
+					if (lines[j] === '') {
+						let next = j;
+						while (next < lines.length && lines[next] === '') next++;
+						if (next < lines.length && (LEGACY_COMMENTS_HEADER.test(lines[next]!) || LEGACY_CHECKS_FOOTER.test(lines[next]!))) {
+							end = j;
+							break;
+						}
+					}
+				}
+			}
+			if (end === -1 && LEGACY_CHECK_URL_END.test(lines[lines.length - 1]!)) end = lines.length;
+			if (end === -1) {
+				out.push(line);
+				continue;
+			}
+
+			const items: string[][] = [];
+			let current = [lines[i + 1]!];
+			for (let k = i + 2; k < end; k++) {
+				if (LEGACY_CHECK_START.test(lines[k]!) && LEGACY_CHECK_URL_END.test(lines[k - 1]!)) {
+					items.push(current);
+					current = [lines[k]!];
+				} else {
+					current.push(lines[k]!);
+				}
+			}
+			items.push(current);
+
+			out.push(line, '');
+			for (const item of items) {
+				const startMatch = LEGACY_CHECK_START.exec(item[0]!);
+				if (!startMatch) {
+					out.push(...item);
+					continue;
+				}
+				const name = startMatch[1]!.trim() || 'check';
+				const firstSummary = startMatch[2]!;
+				const lastLine = item[item.length - 1]!;
+				const url = LEGACY_CHECK_URL_END.exec(lastLine)?.[1] ?? '';
+				const summaryParts =
+					item.length === 1
+						? [firstSummary.replace(LEGACY_CHECK_URL_END, '')]
+						: [firstSummary, ...item.slice(1, -1), lastLine.replace(LEGACY_CHECK_URL_END, '')];
+				const summary = summaryParts.join('\n').trim() || 'failed';
+				const link = url ? ` (${url})` : '';
+				if (!summary.includes('\n')) {
+					out.push(`- ${name}: ${summary}${link}`);
+				} else {
+					const itemFence = fenceFor(summary);
+					const body = summary
+						.split('\n')
+						.map((summaryLine) => (summaryLine ? `  ${summaryLine}` : ''))
+						.join('\n');
+					out.push(`- ${name}${link}:\n  ${itemFence}\n${body}\n  ${itemFence}`);
+				}
+			}
+			if (hasFooter) {
+				out.push('', lines[end]!);
+				i = end;
+			} else {
+				i = end - 1;
+			}
+			changed = true;
+			continue;
+		}
+		out.push(line);
+	}
+
+	return changed ? out.join('\n') : text;
 }
 
 export const sentMarkdownPlugins: PluggableList = [remarkGfm, remarkStripHtmlComments, remarkSentTokens, remarkSoftBreaks];

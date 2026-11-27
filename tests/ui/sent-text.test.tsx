@@ -458,4 +458,88 @@ describe('A sent message', () => {
 		expect([...container.querySelectorAll('em')].map((el) => el.textContent)).toEqual(['see @foo']);
 		expect(screen.getByRole('link', { name: 'spec' }).getAttribute('href')).toBe('https://example.com/3');
 	});
+
+	it('normalizes legacy stored check follow-ups so multiline summaries cannot swallow subsequent checks or comments', () => {
+		const preGuidanceLegacy = [
+			'Checks failed on your pull request (https://github.com/acme/demo/pull/9) at abc1234:',
+			'- test: Failed:',
+			'```log',
+			'boom',
+			'``` (https://ci.test/1)',
+			'- unit: Output:',
+			'```log',
+			'unclosed (https://ci.test/2)',
+			'- lint: 1 error (https://ci.test/3)',
+			'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+			'',
+			'New comments on your pull request (https://github.com/acme/demo/pull/9):',
+			'1. [line-1] @reviewer on src/a.ts line 1: Fix this',
+		].join('\n');
+
+		const postGuidanceLegacy = [
+			'Checks failed on your pull request (https://github.com/acme/demo/pull/9) at abc1234:',
+			'- test: Failed:',
+			'```log',
+			'boom',
+			'``` (https://ci.test/1)',
+			'- unit: Output:',
+			'```log',
+			'unclosed (https://ci.test/2)',
+			'- lint: 1 error (https://ci.test/3)',
+			'<anton-guidance>',
+			'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+			'</anton-guidance>',
+			'',
+			'New comments on your pull request (https://github.com/acme/demo/pull/9):',
+			'1. [line-1] @reviewer on src/a.ts line 1: Fix this',
+			'<anton-guidance>',
+			'For each one, first check it.',
+			'</anton-guidance>',
+		].join('\n');
+
+		const { container: preContainer } = renderWithQueries(<SentText text={preGuidanceLegacy} />);
+		const preUl = preContainer.querySelector('ul')!;
+		expect(within(preUl).getAllByRole('listitem')).toHaveLength(3);
+		for (const url of ['https://ci.test/1', 'https://ci.test/2', 'https://ci.test/3']) {
+			const link = preContainer.querySelector(`a[href="${url}"]`);
+			expect(link).toBeTruthy();
+			expect(link?.closest('.sg-code')).toBeNull();
+		}
+		expect(preContainer.textContent).toContain('Find the cause, fix it');
+		for (const p of preContainer.querySelectorAll('p')) {
+			if (p.textContent?.includes('Find the cause')) expect(p.closest('.sg-code')).toBeNull();
+		}
+		const preOl = preContainer.querySelector('ol')!;
+		expect(within(preOl).getAllByRole('listitem')).toHaveLength(1);
+		expect(preOl.textContent).toContain('Fix this');
+		expect(preOl.closest('.sg-code')).toBeNull();
+
+		const { container: postContainer } = renderWithQueries(<SentText text={withoutGuidance(postGuidanceLegacy)} />);
+		const postUl = postContainer.querySelector('ul')!;
+		expect(within(postUl).getAllByRole('listitem')).toHaveLength(3);
+		for (const url of ['https://ci.test/1', 'https://ci.test/2', 'https://ci.test/3']) {
+			const link = postContainer.querySelector(`a[href="${url}"]`);
+			expect(link).toBeTruthy();
+			expect(link?.closest('.sg-code')).toBeNull();
+		}
+		const postOl = postContainer.querySelector('ol')!;
+		expect(within(postOl).getAllByRole('listitem')).toHaveLength(1);
+		expect(postOl.textContent).toContain('Fix this');
+		expect(postOl.closest('.sg-code')).toBeNull();
+	});
+
+	it('preserves Markdown escape parity at mention boundaries while keeping literal backslashes in paths', () => {
+		const escapeSample = '@foo\\*bar* and @foo\\_baz_ and @foo\\[link](https://example.com) and @src\\app.ts';
+		const { container: replyContainer } = renderWithQueries(<Markdown text={escapeSample} />);
+		const { container: sentContainer } = renderWithQueries(<SentText text={escapeSample} />);
+
+		expect(replyContainer.querySelectorAll('em')).toHaveLength(0);
+		expect(sentContainer.querySelectorAll('em')).toHaveLength(0);
+		expect([...replyContainer.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['https://example.com']);
+		expect([...sentContainer.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['https://example.com']);
+		expect(sentContainer.textContent).toBe(replyContainer.textContent);
+
+		const tokens = [...sentContainer.querySelectorAll('[data-sent-token="file"]')].map((el) => el.textContent);
+		expect(tokens).toEqual(['@foo', '@foo', '@foo', '@src\\app.ts']);
+	});
 });
