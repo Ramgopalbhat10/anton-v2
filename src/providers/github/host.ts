@@ -53,7 +53,7 @@ type PullRequest = {
 };
 type CommitStatus = { context: string; state: 'error' | 'failure' | 'pending' | 'success'; description: string | null; target_url: string | null };
 type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string; output?: { title?: string | null; summary?: string | null } };
-type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null; in_reply_to_id?: number | null };
+type Comment = { id: number; user: { login: string; type?: string } | null; author_association?: string; body: string | null; state?: string; created_at?: string; submitted_at?: string; path?: string; line?: number | null; original_line?: number | null; side?: string; in_reply_to_id?: number | null };
 
 /** Each reviewer's latest verdict counts: approved when one approves and none still asks for changes. */
 function approvedBy(reviews: Comment[]): boolean {
@@ -113,6 +113,8 @@ function commentOf(kind: string, comment: Comment): PullRequestComment {
 		path: comment.path ?? null,
 		line: comment.line ?? comment.original_line ?? null,
 		at: comment.submitted_at ?? comment.created_at ?? '',
+		...(comment.side ? { side: comment.side === 'LEFT' ? ('old' as const) : ('new' as const) } : {}),
+		...(comment.original_line != null && comment.line == null ? { outdated: true } : {}),
 		...(comment.in_reply_to_id ? { replyTo: `${kind}-${comment.in_reply_to_id}` } : {}),
 	};
 }

@@ -239,7 +239,7 @@ Phase 3 completes the migration of existing patch rendering surfaces. The remain
 | **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done** |
 | **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Done** |
 | **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation (rejected, invariant documented) | `task-workspace.tsx`, `file-view.tsx`, `diff-scroll-container.tsx`, `diff-list.tsx` | **Done** |
-| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Part 1 done** (ranges, hunk/file nav, `<UnresolvedFile>` rejected); PR inline threads planned |
+| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Part 1 done** (ranges, hunk/file nav, `<UnresolvedFile>` rejected); **part 2 mostly done** (GitHub review threads render as read-only inline annotations via REST `side` + the `line`/`original_line` outdated heuristic; Discussion click-to-jump links still open) |
 
 ### Standard Verification Gates (Every Remaining Phase)
 - `npm run check:types` and `npm run lint:hooks`

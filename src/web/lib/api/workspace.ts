@@ -52,6 +52,9 @@ export type DiscussionEntry = {
 	line: number | null;
 	at: string;
 	verdict: string | null;
+	replyTo?: string | null;
+	side?: 'old' | 'new' | null;
+	outdated?: boolean;
 };
 
 /** `mergeable` is null while GitHub works it out. */
