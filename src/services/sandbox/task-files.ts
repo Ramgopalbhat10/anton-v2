@@ -196,7 +196,8 @@ export function searchCommand(input: GrepInput, target: string, tool: 'auto' | '
 	return `if test -d ${quote(target)}; then cd -- ${quote(target)} && echo @dir && set --; else echo @file; set -- ${quote(target)}; fi; { ${either(rg, grep, 'grep', tool)}; } | head -n ${MAX_OUTPUT_LINES + 2}`;
 }
 
-const lineText = (line: string, context: boolean) => (context ? line.trimEnd() : line.trim()).slice(0, 300);
+/** Indentation kept: a hit copied into edit's oldText must match the file. */
+const lineText = (line: string) => line.trimEnd().slice(0, 300);
 
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -238,7 +239,7 @@ export function searchResult(output: string, input: GrepInput, prefix: string): 
 		}
 		if (hit.match) found += 1;
 		if (context && last && (last.file !== hit.file || hit.line > last.line + 1)) out.push('--');
-		out.push(`${hit.file}${hit.match ? ':' : '-'}${hit.line}${hit.match ? ':' : '-'} ${lineText(hit.text, Boolean(context))}`);
+		out.push(`${hit.file}${hit.match ? ':' : '-'}${hit.line}${hit.match ? ':' : '-'} ${lineText(hit.text)}`);
 		last = hit;
 	}
 	// The context before a match past the cap is not shown, as the snapshot shows none.

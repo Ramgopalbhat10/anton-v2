@@ -99,6 +99,8 @@ export const config = {
 	titleModel: read('ANTON_TITLE_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/** Reads long web results for the agent; `off` cuts them instead. Gemini Flash Lite answers in 2-3 s; Haiku took 5-7 s and at times answered nothing. */
 	webDigestModel: read('ANTON_WEB_DIGEST_MODEL', 'openrouter/google/gemini-3.1-flash-lite'),
+	/** Checks a change against its request at a reply's end when Anton cannot call the task's own model (a plan, an ACP agent); `off` sends the agent back to check itself. */
+	replyCheckModel: read('ANTON_REPLY_CHECK_MODEL', 'openrouter/anthropic/claude-haiku-5.5'),
 	/** generate_image's model when Settings › General names none and the task's model cannot draw. */
 	imageModel: read('ANTON_IMAGE_MODEL', 'openrouter/openai/gpt-image-2.5-flare'),
 	/** Flue's default of 1 hour cuts off long features mid-work. */

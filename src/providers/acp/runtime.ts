@@ -867,6 +867,7 @@ export function acpNotes(agent: Pick<AcpAgent, 'mcpServerName' | 'mcpCall' | 'wo
 		"- Your own file reads, writes and shell commands run in the task's sandbox, in the repository. Your own file search and listing tools cannot see the repository: search with shell commands such as rg, find and ls, or with Anton's grep and glob tools.",
 		callNote(agent, tools),
 		"- Run a test suite, build or other long command with Anton's run_in_background and read its end with check_job (wait waits for it), rather than polling with sleep. Start a server that should keep running with nohup and & and never in the foreground; a command still running after 30 seconds keeps running while you get its output so far.",
+		'- A check that passed (tests, the type check, a lint, a build) stands until you change code it covers: do not run it again, or add a new one, only to confirm what it already showed.',
 		'- A message the user writes while you work reaches you inside <user_message> with your next tool result or command output, or Anton stops your turn to give it to you. Answer it in a sentence, then carry on.',
 	].join('\n');
 }

@@ -14,6 +14,9 @@ import { recordUsage } from '../models/usage.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { endsOnUser } from './asks.ts';
 import { coversRequest } from './small-change.ts';
+import { backgroundModel } from '../models/general.ts';
+import { passedJobs } from '../sandbox/background-jobs.ts';
+import { passedChecks, passedNote } from './passed-checks.ts';
 
 /*
  * A fresh read of only the request and the diff before the reply ends, listing what the request asks that the change does
@@ -280,14 +283,14 @@ const SETTLE =
 	'If you are about to report a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of), settle it first from what you have: ' +
 	'the data, documents, examples, existing code and tests, trying each reading against them where that can decide it. Report as open only what nothing there settles.';
 
-export const selfCheck = (request: string) =>
+export const selfCheck = (request: string, passed: readonly string[] = []) =>
 	[
 		'Before you end, check your change against the request with fresh eyes. Here it is again:',
 		'',
 		...requestLines(request),
 		'',
 		'Read your diff (git diff, new files included) against it, item by item: each named function, option, flag, field, message, output format, default, error or fallback path and edge case. ' +
-			`Do whatever is missing or done differently from what the request says, and run the tests that cover it. ${SETTLE} If the change already does everything, end your reply without repeating your answer.`,
+			`Do whatever is missing or done differently from what the request says, and run the tests that cover what you change. ${SETTLE} ${passedNote(passed)} If the change already does everything, end your reply without repeating your answer.`,
 	].join('\n');
 
 export const selfCheckWork = (request: string) =>
@@ -305,6 +308,10 @@ type Deps = {
 	patch: (id: string) => Promise<string | null>;
 	chat?: (id: string) => Promise<boolean>;
 	covers?: (id: string, request: string, patch: string) => Promise<boolean>;
+	/** The model that checks the change when the text port cannot run the task's own (Settings › Background models › Reply check). */
+	checker?: () => string | null;
+	/** The checks that passed since the last file change. */
+	passed?: (id: string) => string[];
 };
 
 const isChat = async (id: string): Promise<boolean> => {
@@ -322,18 +329,26 @@ export async function taskPatch(id: string): Promise<string | null> {
 	return (await changesView(id, 'branch')).patch;
 }
 
+const defaultDeps: Deps = { patch: taskPatch, chat: isChat, covers: coversRequest, checker: () => backgroundModel('replyCheck'), passed: (id) => passedChecks(id, passedJobs(id)) };
+
 /**
  * Reviewed when this request and change were not, up to `MAX_REVIEWS` a reply. Never on `ask` or `propose_plan`, nor on a change
  * the reply left as it found it. The change is read at every end that gets here, so the next reply starts from it.
  */
-export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat, covers: coversRequest }): Promise<string | null> {
+export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, given: Partial<Deps> = {}): Promise<string | null> {
+	const deps = { ...defaultDeps, ...given };
 	if (endsOnUser(id, calls)) return null;
 	await loadGate(id);
 	const { request, review } = gate(id);
 	if (!request) return null;
 	const writer = getProviders().text;
 	const { model } = modelFor(id);
-	const own = writer?.runs(model) ? writer : null;
+	// Anton can call only some models itself; for the rest (a plan, Devin, Antigravity) a background model reads the change, and the
+	// agent checks it alone only without one: that is a whole round of its conversation, which in Nov 2026 changed a file in 7 of 53.
+	const helper = deps.checker?.() ?? null;
+	const checker = writer?.runs(model) ? model : writer && helper && helper !== 'off' && writer.runs(helper) ? helper : null;
+	const passed = () => deps.passed?.(id) ?? [];
+	let byHelper = false;
 	try {
 		const patch = await deps.patch(id);
 		// A machine that is not running says nothing of the change, so what was seen last stands.
@@ -359,7 +374,7 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 		const remember = (state: GateState) => {
 			state.review.reviewed = [...state.review.reviewed.filter((kept) => kept !== digest), digest].slice(-KEEP_REVIEWED);
 		};
-		if (!own) {
+		if (!writer || !checker) {
 			if (review.selfChecked) return null;
 			// The agent's own check is a whole round of its conversation; a small diff the decision model is sure of skips it.
 			const covered = (await deps.covers?.(id, request, patch)) ?? false;
@@ -367,15 +382,16 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 				state.review.selfChecked = true;
 				remember(state);
 			});
-			return covered ? null : selfCheck(request);
+			return covered ? null : selfCheck(request, passed());
 		}
 		if (review.reviews >= MAX_REVIEWS + review.extra) return null;
 		// A file whose diff is not the one the reply found, or that it did not have, is the reply's own; on a task's first reply, every file.
 		const before = review.startFiles;
 		const changed = (path: string) => !before?.[path] || before[path] !== files[path];
-		let answer: Awaited<ReturnType<typeof own.write>>;
+		let answer: Awaited<ReturnType<typeof writer.write>>;
+		byHelper = checker !== model;
 		try {
-			answer = await own.write({ model, prompt: reviewPrompt(request, reviewPatch(patch, changed)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
+			answer = await writer.write({ model: checker, prompt: reviewPrompt(request, reviewPatch(patch, changed)), maxTokens: MAX_TOKENS, reasoning: 'off', timeoutMs: REVIEW_MS }, signal);
 		} finally {
 			// Counted once it has run or failed, not before: a review a restart cut short runs again when the reply's end is checked again.
 			changeGate(id, (state) => {
@@ -383,16 +399,22 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 				remember(state);
 			});
 		}
-		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, model);
+		void recordUsage(id, { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens, cost: answer.cost }, checker);
 		const findings = findingsOf(answer.text);
 		if (!findings) return null;
 		return (
 			'A reviewer who read only the request and your diff thinks the change misses these points:\n\n' +
 			`${findings}\n\n` +
-			'Check each one against the request and the code. Fix those that are real, and run the tests that cover them; skip any that are wrong. Then end your reply.'
+			`Check each one against the request and the code. Fix those that are real, and run the tests that cover them; skip any that are wrong. ${passedNote(passed())} Then end your reply.`
 		);
 	} catch (error) {
-		if (!signal?.aborted) logProblem('warn', 'The change was not reviewed', error, id);
-		return null;
+		if (signal?.aborted) return null;
+		logProblem('warn', 'The change was not reviewed', error, id);
+		// The background model failed where the agent would have checked its own change: it still gets that check, once.
+		if (!byHelper || gate(id).review.selfChecked) return null;
+		changeGate(id, (state) => {
+			state.review.selfChecked = true;
+		});
+		return selfCheck(request, passed());
 	}
 }

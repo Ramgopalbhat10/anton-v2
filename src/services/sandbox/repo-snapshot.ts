@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads';
 import { config } from '../../config.ts';
 import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import { safeRelativePath } from '../../core/shell.ts';
+import { LINE_MARK } from '../../core/tool-profile.ts';
 import type { RepoFiles } from '../../core/plugins.ts';
 import { readTar } from '../../core/tar.ts';
 import { getProject } from '../../db/projects.ts';
@@ -237,7 +238,7 @@ export function numberedLines(text: string, offset = 1, limit = READ_LINES): str
 	if (start > lines.length) return `(the file has ${lines.length} lines; offset ${start} is past its end)`;
 	const shown = lines.slice(start - 1, start - 1 + limit);
 	const cut = (line: string) => (line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS)}… (line cut at ${MAX_LINE_CHARS} characters)` : line);
-	const numbered = shown.map((line, index) => `${start + index}\t${cut(line)}`).join('\n');
+	const numbered = shown.map((line, index) => `${start + index}${LINE_MARK}${cut(line)}`).join('\n');
 	const end = start + shown.length - 1;
 	return end < lines.length ? `${numbered}\n(lines ${start}-${end} of ${lines.length}; read on with offset ${end + 1})` : numbered;
 }
@@ -254,7 +255,7 @@ const { parentPort, workerData } = require('node:worker_threads');
 const { readFileSync } = require('node:fs');
 const { dir, files, pattern, flags, max, context, filesOnly } = workerData;
 const regex = new RegExp(pattern, flags);
-const show = (line) => (context ? line.trimEnd() : line.trim()).slice(0, 300);
+const show = (line) => line.trimEnd().slice(0, 300);
 const out = [];
 let found = 0;
 let more = false;

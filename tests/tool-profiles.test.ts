@@ -78,7 +78,7 @@ test('on the patch profile the prompts name apply_patch and no tool it lacks, an
 	const tools = await readDescription('patch');
 	assert.deepEqual(tools.names, ['read', 'apply_patch', 'bash', 'grep', 'glob']);
 	assert.doesNotMatch(tools.read, /\bedit\b|oldText/);
-	assert.match(tools.read, /leave the numbers out of a patch/);
+	assert.match(tools.read, /leave the number and the → out of a patch/);
 	for (const name of ['task', 'workspace', 'chatWorkspace'] as const) {
 		const text = prompts[name];
 		assert.match(text, /one apply_patch call can change several files and several places in each/, name);

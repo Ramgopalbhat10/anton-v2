@@ -16,7 +16,7 @@ import { Block, HelperModel, HELPERS, PageHeading, SaveState, SettingRow } from 
 const onOpenRouter = (model: ModelInfo) => model.id.startsWith('openrouter/');
 const seesOnOpenRouter = (model: ModelInfo) => onOpenRouter(model) && model.vision;
 
-const NO_BACKGROUND = { webDigest: null, vision: null, compaction: null };
+const NO_BACKGROUND = { webDigest: null, vision: null, compaction: null, replyCheck: null };
 
 const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; info: string; only?: (model: ModelInfo) => boolean }> = [
 	{
@@ -38,6 +38,13 @@ const BACKGROUND: Array<{ task: BackgroundTask; title: string; help: string; inf
 		title: 'Compaction summaries',
 		help: 'Summarizes older turns when a conversation compacts.',
 		info: "Off, each task's own model writes its summary at low effort, so the task waits less for it. A fast model makes compacting quicker; the summary is what the agent remembers of older turns, so keep it a capable one.",
+	},
+	{
+		task: 'replyCheck',
+		title: 'Reply check',
+		help: 'Checks a change against its request when a reply ends.',
+		info: "One call reads the request and the diff and lists what the change misses; the agent is sent back only for those. It is used when Anton cannot call the task's own model, as with Devin, Antigravity and plan models. Without one, the agent is sent back to check its own change, a whole extra round of its conversation. A fast, cheap OpenRouter model fits.",
+		only: onOpenRouter,
 	},
 ];
 

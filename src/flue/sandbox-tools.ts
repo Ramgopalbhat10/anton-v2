@@ -1,7 +1,7 @@
 import { Type } from '@earendil-works/pi-ai';
 import { createGlobTool, createGrepTool, createReadTool, createWriteTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
 import { changeLine, PatchError, parsePatch, type PatchState, planPatch } from '../core/apply-patch.ts';
-import type { ToolProfile } from '../core/tool-profile.ts';
+import { LINE_MARK, type ToolProfile } from '../core/tool-profile.ts';
 import { createShellTool } from './shell-tool.ts';
 
 export type Tool = ReturnType<SandboxToolFactory>[number];
@@ -59,19 +59,85 @@ const EditParams = Type.Object({
 
 const occurrences = (content: string, find: string) => content.split(find).length - 1;
 
-export function applyChanges(path: string, content: string, changes: Change[]): { content: string; replacements: number } {
+/**
+ * Ways an oldText that is not in the file can still name one place in it, each tried only when the exact text is absent,
+ * and taken only when it fits once. Prod, Nov 2026: 22 of Devin's and Antigravity's 34 failed edits had one tab more on
+ * every line than the file (read's number and tab, taken as indentation), and the retry often moved the new code a level
+ * too deep as well. The same shift is made to newText, so the change lands at the file's own indentation.
+ */
+const NUMBERED = new RegExp(`^ *\\d+(?:${LINE_MARK}|\\t)`);
+type Reading = { why: string; line: (line: string) => string | null };
+const READINGS: Reading[] = [
+	{ why: "with read's line numbers taken off", line: (line) => (NUMBERED.test(line) ? line.replace(NUMBERED, '') : null) },
+	...['\t', '  ', '    '].map((unit) => ({
+		why: `with ${unit === '\t' ? 'one tab' : `${unit.length} spaces`} less indentation on each line`,
+		line: (line: string) => (line.startsWith(unit) ? line.slice(unit.length) : null),
+	})),
+];
+
+/**
+ * The reading's oldText and newText, or null when one of oldText's lines does not take it. A blank line takes any, and so
+ * does the first, which may start partway along its line.
+ */
+function reread(change: Change, reading: Reading): { oldText: string; newText: string } | null {
+	const lines = change.oldText.split('\n');
+	const old = lines.map((line, index) => (line.trim() ? (reading.line(line) ?? (index === 0 ? line : null)) : line));
+	if (old.some((line) => line === null) || old.join('\n') === change.oldText) return null;
+	const newText = change.newText
+		.split('\n')
+		.map((line) => reading.line(line) ?? line)
+		.join('\n');
+	return { oldText: old.join('\n'), newText };
+}
+
+/** Where the file holds the line oldText names first, numbered as read shows it, so the next try copies it. */
+function nearest(content: string, oldText: string): string {
+	// Spacing aside, as a miss is most often a matter of whitespace.
+	const squeeze = (line: string) => line.replace(/\s+/g, '');
+	const first = squeeze(oldText.split('\n').find((line) => line.trim()) ?? '');
+	if (!first) return '';
+	const lines = content.split('\n');
+	const at = lines.findIndex((line) => squeeze(line) === first);
+	const loose = at >= 0 ? at : lines.findIndex((line) => squeeze(line).includes(first));
+	if (loose < 0) return '';
+	const shown = lines.slice(loose, loose + Math.min(oldText.split('\n').length + 2, 12));
+	return `\nIts first line is line ${loose + 1} of the file, which reads:\n${shown.map((line, index) => `${loose + 1 + index}${LINE_MARK}${line}`).join('\n')}`;
+}
+
+export function applyChanges(path: string, content: string, changes: Change[]): { content: string; replacements: number; notes: string[] } {
+	// The text after each change, so a miss can tell which earlier change took its text.
+	const after: string[] = [content];
 	let replacements = 0;
-	changes.forEach((change, index) => {
+	const notes: string[] = [];
+	changes.forEach((given, index) => {
 		const which = changes.length > 1 ? `Edit ${index + 1} of ${changes.length}: ` : '';
 		const unchanged = changes.length > 1 ? ' No changes made.' : '';
-		if (!change.oldText) throw new Error(`${which}oldText must be a non-empty string.`);
-		const found = occurrences(content, change.oldText);
-		if (found === 0) throw new Error(`${which}Could not find the exact text in ${path}. Make sure your oldText matches exactly, including whitespace and indentation${changes.length > 1 ? ', and the text the edits before it left' : ''}.${unchanged}`);
+		if (!given.oldText) throw new Error(`${which}oldText must be a non-empty string.`);
+		let change = given;
+		let found = occurrences(content, change.oldText);
+		if (found === 0) {
+			for (const reading of READINGS) {
+				const read = reread(given, reading);
+				const count = read ? occurrences(content, read.oldText) : 0;
+				if (read && (count === 1 || (count > 1 && given.replaceAll))) {
+					change = { ...given, ...read };
+					found = count;
+					notes.push(`${which}its oldText matched only ${reading.why}; newText was shifted the same way. Copy a line's indentation from after the ${LINE_MARK} that follows its number.`);
+					break;
+				}
+			}
+		}
+		if (found === 0) {
+			const before = occurrences(after[0], given.oldText) > 0 ? after.findIndex((text) => occurrences(text, given.oldText) === 0) - 1 : -1;
+			const why = before >= 0 ? ` The file had this text, but edit ${before + 1} of this call changed it${changes[before].replaceAll ? ' (its replaceAll matched here too)' : ''}: aim this edit at the text edit ${before + 1} leaves.` : `${nearest(content, given.oldText)}`;
+			throw new Error(`${which}Could not find the exact text in ${path}. Make sure your oldText matches exactly, including whitespace and indentation${changes.length > 1 ? ', and the text the edits before it left' : ''}.${why}${unchanged}`);
+		}
 		if (found > 1 && !change.replaceAll) throw new Error(`${which}Found ${found} occurrences of the text in ${path}. Provide more surrounding context to make the match unique, or use replaceAll.${unchanged}`);
 		content = change.replaceAll ? content.replaceAll(change.oldText, () => change.newText) : content.replace(change.oldText, () => change.newText);
+		after.push(content);
 		replacements += change.replaceAll ? found : 1;
 	});
-	return { content, replacements };
+	return { content, replacements, notes };
 }
 
 /** One change to a file at a time, per sandbox: a step's tool calls run together, and two that read the same file would each write over the other. */
@@ -120,10 +186,10 @@ export function createMultiEditTool(sandbox: Sandbox): Tool {
 				signal?.throwIfAborted();
 				const before = await sandbox.readFile(input.path);
 				signal?.throwIfAborted();
-				const { content, replacements } = applyChanges(input.path, before, changes);
+				const { content, replacements, notes } = applyChanges(input.path, before, changes);
 				await sandbox.writeFile(input.path, content);
 				const made = changes.length > 1 ? ` (${changes.length} edits)` : replacements > 1 ? ` (${replacements} occurrences)` : '';
-				return { content: [text(`Successfully edited ${input.path}${made}`)], details: { path: input.path, edits: changes.length, replacements } };
+				return { content: [text([`Successfully edited ${input.path}${made}`, ...notes].join('\n'))], details: { path: input.path, edits: changes.length, replacements } };
 			});
 		},
 	};

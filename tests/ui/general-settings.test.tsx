@@ -50,19 +50,19 @@ function page(settings: object = general, models: object[] = []) {
 
 describe('General settings', () => {
 	const gateway = { id: 'openrouter/acme/model', name: 'Gateway', vendor: 'Acme', description: '', createdAt: 0, contextLength: 128000, maxOutput: null, price: { input: 1, output: 2 }, vision: true, reasoning: ['low', 'high'], defaultReasoning: 'high' };
-	const callers = ['default', 'title', 'explorer', 'tester', 'browser', 'computer', 'reviewer', 'webDigest', 'vision', 'compaction'];
+	const callers = ['default', 'title', 'explorer', 'tester', 'browser', 'computer', 'reviewer', 'webDigest', 'vision', 'compaction', 'replyCheck'];
 	it.each(callers)('round-trips routing in the %s picker without changing adjacent settings', async (caller) => {
 		const helpers = Object.fromEntries(callers.slice(2, 7).map((agent) => [agent, { model: gateway.id, reasoning: 'low' }]));
 		const settings = { ...general, model: gateway.id, reasoning: 'low', titleModel: gateway.id, agentModels: helpers,
-			backgroundModels: { webDigest: gateway.id, vision: gateway.id, compaction: gateway.id },
-			backgroundReasoning: { webDigest: 'low', vision: 'low', compaction: 'low' } };
+			backgroundModels: { webDigest: gateway.id, vision: gateway.id, compaction: gateway.id, replyCheck: gateway.id },
+			backgroundReasoning: { webDigest: 'low', vision: 'low', compaction: 'low', replyCheck: 'low' } };
 		page(settings, [gateway, { ...gateway, id: 'openai/plan', name: 'Plan', subscription: 'ChatGPT' }]);
 		await userEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ }))[callers.indexOf(caller)]);
 		if (caller === 'title') {
 			expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
 			expect(screen.queryByRole('radiogroup', { name: 'Reasoning effort' })).toBeNull();
 		}
-		if (caller === 'webDigest' || caller === 'vision') expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
+		if (caller === 'webDigest' || caller === 'vision' || caller === 'replyCheck') expect(screen.queryByRole('option', { name: /Plan/ })).toBeNull();
 		await userEvent.click(screen.getByRole('button', { name: 'Sort providers: default' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: /Latency/ }));
 		await userEvent.keyboard('{Escape}');
@@ -154,19 +154,20 @@ describe('General settings', () => {
 		};
 		const settings = {
 			...general,
-			backgroundModels: { webDigest: null, vision: null, compaction: summarizer.id },
-			backgroundReasoning: { webDigest: null, vision: null, compaction: null },
+			backgroundModels: { webDigest: null, vision: null, compaction: summarizer.id, replyCheck: null },
+			backgroundReasoning: { webDigest: null, vision: null, compaction: null, replyCheck: null },
 		};
 		page(settings, [summarizer]);
-		// The compaction model's picker is the last on the page.
-		fireEvent.click((await screen.findAllByRole('button', { name: /^Model and reasoning/ })).at(-1)!);
+		// The compaction model's picker, in its own row.
+		const row = (await screen.findByText('Compaction summaries')).closest('.border-t') as HTMLElement;
+		fireEvent.click(within(row).getByRole('button', { name: /^Model and reasoning/ }));
 		const effort = await screen.findByRole('radiogroup', { name: 'Reasoning effort' });
 		expect(within(effort).getByRole('radio', { checked: true }).textContent).toBe('High');
 		fireEvent.click(within(effort).getByRole('radio', { name: 'Low' }));
 		expect(within(effort).getByRole('radio', { checked: true }).textContent).toBe('Low');
 		fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() =>
-			expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...settings, backgroundReasoning: { webDigest: null, vision: null, compaction: 'low' } }),
+			expect(api.saveGeneralSettings).toHaveBeenCalledWith({ ...settings, backgroundReasoning: { webDigest: null, vision: null, compaction: 'low', replyCheck: null } }),
 		);
 	});
 

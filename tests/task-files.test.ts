@@ -106,10 +106,10 @@ const inMachine = {
 test('read numbers lines and pages the same from the snapshot and the sandbox', async () => {
 	const fromSnapshot = await files.readTaskFile(id, { path: 'src/long.txt', offset: 10, limit: 3 }, noMachine);
 	const fromSandbox = await files.readTaskFile(id, { path: 'src/long.txt', offset: 10, limit: 3 }, inMachine);
-	assert.equal(fromSnapshot, '10\tline 10\n11\tline 11\n12\tline 12\n(lines 10-12 of 450; read on with offset 13)');
+	assert.equal(fromSnapshot, '10→line 10\n11→line 11\n12→line 12\n(lines 10-12 of 450; read on with offset 13)');
 	assert.equal(fromSandbox, fromSnapshot);
 	// Without a limit, a page of 400 lines.
-	assert.match(await files.readTaskFile(id, { path: 'src/long.txt' }, inMachine), /\n400\tline 400\n\(lines 1-400 of 450; read on with offset 401\)$/);
+	assert.match(await files.readTaskFile(id, { path: 'src/long.txt' }, inMachine), /\n400→line 400\n\(lines 1-400 of 450; read on with offset 401\)$/);
 	// An absolute path in the repository is the same file.
 	assert.equal(await files.readTaskFile(id, { path: `${root}/src/long.txt`, offset: 10, limit: 3 }, noMachine), fromSnapshot);
 	assert.match(await files.readTaskFile(id, { path: 'src' }, noMachine), /src is a folder/);
@@ -120,10 +120,10 @@ test('read numbers lines and pages the same from the snapshot and the sandbox', 
 
 test('a path outside the repository is read from the machine once there is a workspace, and another repository from its snapshot', async () => {
 	const before = machineCalls;
-	assert.equal(await files.readTaskFile(id, { path: '../outputs/report.txt' }, inMachine), '1\ta report\n2\tin outputs\n3\t');
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/report.txt' }, inMachine), '1→a report\n2→in outputs\n3→');
 	assert.equal(machineCalls, before + 1, 'with a workspace, the machine has it');
 	// repo names another GitHub repository, read without cloning whatever the task's state.
-	assert.match(await files.readTaskFile(id, { path: 'src/app.ts', repo: 'acme/other@main' }, inMachine), /^1\timport \{ answer \}/);
+	assert.match(await files.readTaskFile(id, { path: 'src/app.ts', repo: 'acme/other@main' }, inMachine), /^1→import \{ answer \}/);
 	assert.match(await files.grepTask(id, { pattern: 'Button', repo: 'acme/other@main' }, inMachine), /^src\/components\/button\.tsx:1: /);
 	assert.equal(await files.globTask(id, { pattern: '*.tsx', repo: 'acme/other@main' }, inMachine), 'src/components/button.tsx');
 	assert.equal(machineCalls, before + 1, 'another repository never needs the machine');
@@ -137,8 +137,8 @@ test('without a workspace, a path outside the repository never starts a machine:
 	]);
 	const library = async (_id: string, place: { folder: string; path: string }) => kept.get(`${place.folder}:${place.path}`) ?? null;
 	const deps = { ...noMachine, library };
-	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/shot.txt' }, deps), '1\tfrom the Library\n2\t');
-	assert.equal(await files.readTaskFile(id, { path: `${path.dirname(root)}/project-files/brief.md` }, deps), '1\t# Brief\n2\t');
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/shot.txt' }, deps), '1→from the Library\n2→');
+	assert.equal(await files.readTaskFile(id, { path: `${path.dirname(root)}/project-files/brief.md` }, deps), '1→# Brief\n2→');
 	assert.equal(new TextDecoder().decode(await files.taskFileBytes(id, '../outputs/uploads/shot.txt', undefined, deps)), 'from the Library\n');
 	assert.match(await files.readTaskFile(id, { path: '../outputs/uploads/pasted.png' }, deps), /^\.\.\/outputs\/uploads\/pasted\.png is not in the task's Library/);
 	assert.match(await files.readTaskFile(id, { path: '../project-files/missing.md' }, deps), /not a project file\. List them with read_project_file/);
@@ -152,7 +152,7 @@ test('without a workspace, a path outside the repository never starts a machine:
 	// Through the default, a Library file saved for the task is the one read.
 	const { saveOutput } = await import('../src/services/git/checkpoints.ts');
 	await saveOutput(id, 'uploads/saved.txt', new TextEncoder().encode('saved\n'));
-	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/saved.txt' }, noMachine), '1\tsaved\n2\t');
+	assert.equal(await files.readTaskFile(id, { path: '../outputs/uploads/saved.txt' }, noMachine), '1→saved\n2→');
 });
 
 test('Stop ends a read, search or listing that waits for the machine', async () => {
@@ -276,7 +276,7 @@ test('glob lists the same paths from the snapshot and the sandbox, and leaves ou
 test('a read sees the sandbox once the first command has run, and never the snapshot after', async () => {
 	const task = (await sessions.createSession({ projectId: project.id, title: 'Change' })).id;
 	const real = { machine: async () => machine, root: async () => root, secrets: async () => ({}) };
-	assert.match(await files.readTaskFile(task, { path: 'src/app.ts' }, real), /2\tconsole\.log\(answer\);/, 'the snapshot before');
+	assert.match(await files.readTaskFile(task, { path: 'src/app.ts' }, real), /2→console\.log\(answer\);/, 'the snapshot before');
 	assert.ok(!runner.hasWorkspace(task));
 	await files.workMachine(task, real);
 	assert.ok(runner.hasWorkspace(task), 'a command gives the task its workspace');
@@ -395,7 +395,7 @@ test('reading, searching and listing, and the explorer, never start a machine fo
 	const env = await rendered.config.sandbox!.createSandbox({ id: task });
 	const tools = rendered.config.sandbox!.tools!(env, { subagents: {} }) as unknown as Array<{ name: string; execute: (id: string, params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> }>;
 	const call = async (name: string, params: unknown) => (await tools.find((tool) => tool.name === name)!.execute('call', params)).content.map((part) => part.text ?? part.type).join('');
-	assert.equal(await call('read', { path: 'src/app.ts', limit: 1 }), '1\timport { answer } from "./deep";\n(lines 1-1 of 4; read on with offset 2)');
+	assert.equal(await call('read', { path: 'src/app.ts', limit: 1 }), '1→import { answer } from "./deep";\n(lines 1-1 of 4; read on with offset 2)');
 	// An image from the snapshot reaches the model whole: this one cannot see, and no vision model is set up to describe it.
 	assert.match(await call('read', { path: 'logo.png' }), /^logo\.png is an image, and your model cannot see images/);
 	assert.equal(await call('grep', { pattern: 'console' }), 'src/app.ts:2: console.log(answer);');

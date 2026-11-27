@@ -45,18 +45,19 @@ export type VisualReplies = (typeof VISUAL_REPLIES)[number];
 /** Shared with src/db/spaces.ts, which stores a project's own choices for them. */
 export { HELPER_AGENTS, type AgentModel, type HelperAgent } from '../../core/types.ts';
 
-export const BACKGROUND_TASKS = ['webDigest', 'vision', 'compaction'] as const;
+export const BACKGROUND_TASKS = ['webDigest', 'vision', 'compaction', 'replyCheck'] as const;
 export type BackgroundTask = (typeof BACKGROUND_TASKS)[number];
 /** Compaction's null is the task's own model. */
 export const backgroundDefaults = (): Record<BackgroundTask, string | null> => ({
 	webDigest: config.webDigestModel,
 	vision: config.visionModel,
 	compaction: null,
+	replyCheck: config.replyCheckModel,
 });
 /** The TextModel and VisionModel ports reach OpenRouter only. */
-const ON_OPENROUTER: BackgroundTask[] = ['webDigest', 'vision'];
-const NO_BACKGROUND_MODELS: Record<BackgroundTask, string | null> = { webDigest: null, vision: null, compaction: null };
-const NO_BACKGROUND_REASONING: Record<BackgroundTask, Reasoning | null> = { webDigest: null, vision: null, compaction: null };
+const ON_OPENROUTER: BackgroundTask[] = ['webDigest', 'vision', 'replyCheck'];
+const NO_BACKGROUND_MODELS: Record<BackgroundTask, string | null> = { webDigest: null, vision: null, compaction: null, replyCheck: null };
+const NO_BACKGROUND_REASONING: Record<BackgroundTask, Reasoning | null> = { webDigest: null, vision: null, compaction: null, replyCheck: null };
 
 const KEY = 'general';
 

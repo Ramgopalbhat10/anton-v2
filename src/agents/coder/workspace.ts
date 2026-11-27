@@ -1,4 +1,4 @@
-import { defineTool, useSandbox, useSubagent, useTool, type Sandbox } from '@flue/runtime';
+import { defineTool, useSandbox, useSubagent, useTool, type Sandbox, type SandboxToolFactory } from '@flue/runtime';
 import * as v from 'valibot';
 import type { Machine } from '../../core/ports.ts';
 import type { ToolProfile } from '../../core/tool-profile.ts';
@@ -21,6 +21,7 @@ import { checkPreview } from '../../services/browser/preview-check.ts';
 import { describeImage } from '../../services/models/vision.ts';
 import { logProblem } from '../../core/log.ts';
 import { elapsedNote } from '../../services/replies/reply-clock.ts';
+import { noteToolResult } from '../../services/replies/passed-checks.ts';
 import { checkJob, jobNotice, MAX_WAIT_S, startJob } from '../../services/sandbox/background-jobs.ts';
 import { checkNotice } from '../../services/sandbox/repo-check.ts';
 import { explorer, tester, withSettingsModel, useTaskSubagents } from './subagents.ts';
@@ -54,6 +55,19 @@ function sightOf(id: string): ImageSight {
 	};
 }
 
+/** Each result of the agent's file and shell tools, noted for the checks at the reply's end (`passed-checks.ts`). */
+function noting(id: string, factory: SandboxToolFactory): SandboxToolFactory {
+	return (...args) =>
+		factory(...args).map((tool) => ({
+			...tool,
+			async execute(...call: Parameters<typeof tool.execute>) {
+				const result = await tool.execute(...call);
+				noteToolResult(id, tool.name, call[1], result);
+				return result;
+			},
+		}));
+}
+
 async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 	const secrets = await secretsToHide(id);
 	copySkillFilesSoon(id, machine, pluginSkillsFor(id), (error) => logProblem('warn', "Could not copy the skills' files into the sandbox", error, id));
@@ -64,7 +78,7 @@ async function sandboxOf(id: string, machine: Machine): Promise<Sandbox> {
 export function useWorkspace(id: string, chat: boolean, review: ReviewTask | null, profile: ToolProfile) {
 	useSandbox({
 		createSandbox: async () => sandboxOf(id, await machineFor(id)),
-		tools: sandboxTools(sightOf(id), profile),
+		tools: noting(id, sandboxTools(sightOf(id), profile)),
 	});
 	useBackgroundJobs(id);
 	if (!chat) {
@@ -93,15 +107,18 @@ export function useTaskWorkspace(id: string, profile: ToolProfile) {
 			};
 			return taskSandbox(await taskRoot(id), machine);
 		},
-		tools: taskTools(
-			{
-				read: (input) => readTaskFile(id, input),
-				bytes: (path, repo) => taskFileBytes(id, path, repo),
-				grep: (input) => grepTask(id, input),
-				glob: (input) => globTask(id, input),
-			},
-			sightOf(id),
-			profile,
+		tools: noting(
+			id,
+			taskTools(
+				{
+					read: (input) => readTaskFile(id, input),
+					bytes: (path, repo) => taskFileBytes(id, path, repo),
+					grep: (input) => grepTask(id, input),
+					glob: (input) => globTask(id, input),
+				},
+				sightOf(id),
+				profile,
+			),
 		),
 	});
 	useBackgroundJobs(id, (task) => workMachine(task));

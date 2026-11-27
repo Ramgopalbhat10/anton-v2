@@ -6,6 +6,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { RuntimeToolOutput } from '../../core/ports.ts';
+import { LINE_MARK } from '../../core/tool-profile.ts';
 
 type RunTool = (name: string, args: Record<string, unknown>) => Promise<RuntimeToolOutput>;
 /** The user's words waiting for the agent, as a note it reads with a command's output; null when there are none. */
@@ -308,7 +309,7 @@ function unnumber(text: string, start: number, path: string): { body: string[]; 
 	const more = rows.length > 1 ? MORE.exec(rows.at(-1) ?? '') : null;
 	if (more) rows.pop();
 	const body = rows.map((row, index) => {
-		const prefix = `${start + index}\t`;
+		const prefix = `${start + index}${LINE_MARK}`;
 		if (!row.startsWith(prefix)) throw new Error(text.trim() || `${path} could not be read`);
 		const content = row.slice(prefix.length);
 		if (CUT.test(content)) throw new Error(`${path} has a line too long to read whole`);

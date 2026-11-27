@@ -388,3 +388,40 @@ test('the reviewer judges only what a diff can show, and a reasonable reading of
 	assert.match(prompt, /Judge only what a diff can show\. A request to run commands or tests, report results, explain or answer something is not missing from the change\./);
 	assert.match(prompt, /follows a reasonable reading, it is not missing/);
 });
+
+test('when Anton cannot call the task’s model (Devin, Antigravity), the Reply check model reads the change instead of the agent', async () => {
+	asked = [];
+	const helperOnly: TextModel = { ...writer, runs: (model) => model === 'openrouter/helper' };
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: helperOnly });
+	const passed = () => ['npx vitest run tests/ui/settings.test.tsx', 'npm run check:types'];
+	noteRequest('h', 'Add sortBy(keys) with a --reverse flag.');
+	startFinishReview('h');
+	answer = 'NONE';
+	assert.equal(await finishReview('h', edit, undefined, { ...deps(DIFF), checker: () => 'openrouter/helper', passed }), null, 'nothing missing: no extra round');
+	assert.deepEqual(
+		asked.map((input) => input.model),
+		['openrouter/helper'],
+	);
+	answer = 'MISSING: the request asks for a --reverse flag; the change adds none.';
+	const reminder = await finishReview('h', edit, undefined, { ...deps(`${DIFF}+more\n`), checker: () => 'openrouter/helper', passed });
+	assert.match(reminder ?? '', /--reverse flag/);
+	assert.match(reminder ?? '', /These passed since your last file change, and still stand: `npx vitest run tests\/ui\/settings\.test\.tsx`, `npm run check:types`\./);
+	// Off, or a model the text port cannot run: the agent checks its own change, told what already passed.
+	noteRequest('o', 'Fix it.');
+	startFinishReview('o');
+	const own = await finishReview('o', edit, undefined, { ...deps(DIFF), checker: () => 'off', passed });
+	assert.match(own ?? '', /check your change against the request/);
+	assert.match(own ?? '', /still stand: `npx vitest run/);
+	assert.match(own ?? '', /start no build or new check unless you find a gap/);
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: writer });
+});
+
+test('a Reply check model that fails leaves the agent its own check, once', async () => {
+	const failing: TextModel = { runs: (model) => model === 'openrouter/helper', write: async () => Promise.reject(new Error('timeout')) };
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: failing });
+	noteRequest('hf', 'Fix it.');
+	startFinishReview('hf');
+	assert.match((await finishReview('hf', edit, undefined, { ...deps(DIFF), checker: () => 'openrouter/helper' })) ?? '', /check your change against the request/);
+	assert.equal(await finishReview('hf', edit, undefined, { ...deps(`${DIFF}+z\n`), checker: () => 'openrouter/helper' }), null);
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: writer });
+});

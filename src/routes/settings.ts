@@ -95,12 +95,17 @@ app.put('/api/settings/general', async (c) => {
 			claudeCodeCompactAt: v.optional(v.nullable(v.picklist(COMPACT_AT)), DEFAULT_CLAUDE_CODE_COMPACT_AT),
 			agentModels: v.object({ explorer: AGENT_MODEL, tester: AGENT_MODEL, browser: v.optional(AGENT_MODEL, null), computer: v.optional(AGENT_MODEL, null), reviewer: AGENT_MODEL }),
 			backgroundModels: v.optional(
-				v.object({ webDigest: BACKGROUND_MODEL, vision: BACKGROUND_MODEL, compaction: BACKGROUND_MODEL }),
-				{ webDigest: null, vision: null, compaction: null },
+				v.object({ webDigest: BACKGROUND_MODEL, vision: BACKGROUND_MODEL, compaction: BACKGROUND_MODEL, replyCheck: BACKGROUND_MODEL }),
+				{ webDigest: null, vision: null, compaction: null, replyCheck: null },
 			),
 			backgroundReasoning: v.optional(
-				v.object({ webDigest: v.optional(v.nullable(REASONING), null), vision: v.optional(v.nullable(REASONING), null), compaction: v.optional(v.nullable(REASONING), null) }),
-				{ webDigest: null, vision: null, compaction: null },
+				v.object({
+					webDigest: v.optional(v.nullable(REASONING), null),
+					vision: v.optional(v.nullable(REASONING), null),
+					compaction: v.optional(v.nullable(REASONING), null),
+					replyCheck: v.optional(v.nullable(REASONING), null),
+				}),
+				{ webDigest: null, vision: null, compaction: null, replyCheck: null },
 			),
 		}),
 	);

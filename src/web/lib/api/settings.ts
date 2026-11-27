@@ -84,8 +84,8 @@ export type GeneralSettings = {
 	backgroundModels: Record<BackgroundTask, string | null>;
 	backgroundReasoning: Record<BackgroundTask, Reasoning | null>;
 };
-/** Work Anton has a model do behind the agents: reading long web results, seeing the screen, summarizing on compaction. */
-export type BackgroundTask = 'webDigest' | 'vision' | 'compaction';
+/** Work Anton has a model do behind the agents: reading long web results, seeing the screen, summarizing on compaction, checking a change against its request. */
+export type BackgroundTask = 'webDigest' | 'vision' | 'compaction' | 'replyCheck';
 
 export type HelperAgent = 'explorer' | 'tester' | 'browser' | 'computer' | 'reviewer';
 export type Guardrails = { hideSecrets: boolean };
