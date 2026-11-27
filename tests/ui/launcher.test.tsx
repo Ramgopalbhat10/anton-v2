@@ -51,6 +51,14 @@ describe('new task composer', () => {
 		vi.clearAllMocks();
 		localStorage.clear();
 	});
+	it('opens incognito from an icon-only action', async () => {
+		setup();
+		const button = screen.getByRole('button', { name: 'Start a chat that keeps nothing' });
+		expect(button.textContent).toBe('');
+		expect(button.className).toContain('sg-icon-btn');
+		await userEvent.click(button);
+		expect(mocks.navigate).toHaveBeenCalledWith({ to: '/incognito' });
+	});
 	it('uses command and file chips and submits the expanded command with the original file path', async () => {
 		setup();
 		const box = screen.getByRole('textbox');

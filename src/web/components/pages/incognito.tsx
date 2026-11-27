@@ -199,7 +199,7 @@ export function IncognitoPage() {
 							// its empty state during the beat before the message lands.
 							// Thread must be a constrained flex child so its scrollport fills only
 							// the space above the composer, including when the draft grows.
-							<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							<div className="flex min-h-0 min-w-0 flex-1 flex-col pt-8">
 								{agent.messages.length > 0 || busy ? <Thread sessionId={id} agent={agent} composer={null} fresh /> : null}
 							</div>
 						) : null}
@@ -208,8 +208,8 @@ export function IncognitoPage() {
 				</div>
 			</div>
 			<button type="button" onClick={close} aria-label="Close incognito chat" title="Close incognito chat" className="incognito-exit">
-				<Icon icon={EyeOff} size={16} className="incognito-exit-eye" />
-				<Icon icon={X} size={16} className="incognito-exit-x" />
+				<Icon icon={EyeOff} size={13} className="incognito-exit-eye" />
+				<Icon icon={X} size={13} className="incognito-exit-x" />
 			</button>
 		</div>
 	);
