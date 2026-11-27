@@ -191,6 +191,8 @@ function DiffLines({
 	const restoringFocusRef = useRef(false);
 	const [focusedTargetIndex, setFocusedTargetIndex] = useState<number | null>(null);
 	const [expandError, setExpandError] = useState<string | null>(null);
+	const [hydrationRevision, setHydrationRevision] = useState(0);
+	const partialHydrationRef = useRef<boolean | undefined>(undefined);
 	const virtualizer = useVirtualizer();
 	const theme = useTheme();
 	const prefs = useDiffViewPrefs();
@@ -213,7 +215,7 @@ function DiffLines({
 	const fileDiff = useMemo(() => getCachedFileDiffMetadata(file, rawPatch), [file, rawPatch]);
 	const effectiveDiffStyle: 'split' | 'unified' = prefs.diffStyle === 'split' && !narrow ? 'split' : 'unified';
 	const hasCommenting = Boolean(commenting);
-	const commentTargets = useMemo(() => (fileDiff && hasCommenting ? getDiffCommentTargets(fileDiff) : []), [fileDiff, hasCommenting]);
+	const commentTargets = useMemo(() => (fileDiff && hasCommenting ? getDiffCommentTargets(fileDiff) : []), [fileDiff, hasCommenting, hydrationRevision]);
 	const activeTarget = focusedTargetIndex !== null && commentTargets.length > 0 ? commentTargets[Math.min(focusedTargetIndex, commentTargets.length - 1)] : null;
 	const activeSelection = useMemo<SelectedLineRange | null>(
 		() => (activeTarget ? { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side } : null),
@@ -227,6 +229,13 @@ function DiffLines({
 	const handlePostRender = useCallback(
 		(_node: HTMLElement, instance: PierreFileDiffClass<DraftAnnotationGroup>, phase: PostRenderPhase) => {
 			diffInstanceRef.current = phase === 'unmount' ? null : instance;
+			if (phase === 'unmount') {
+				partialHydrationRef.current = undefined;
+				return;
+			}
+			const partial = instance.fileDiff?.isPartial;
+			if (partialHydrationRef.current === true && partial === false) setHydrationRevision((revision) => revision + 1);
+			partialHydrationRef.current = partial;
 		},
 		[],
 	);
@@ -345,7 +354,7 @@ function DiffLines({
 			ensureGroup(targetSide, draft.line).metadata.composer = draft;
 		}
 		return [...grouped.values()];
-	}, [fileDiff, commenting, draft]);
+	}, [fileDiff, commenting, draft, hydrationRevision]);
 
 	const renderAnnotation = useCallback(
 		(annotation: DiffLineAnnotation<DraftAnnotationGroup>) => {
@@ -827,6 +836,7 @@ export function DiffList({
 	branch,
 	base,
 	loadDiffFiles,
+	bounded = false,
 }: {
 	files: FileDiff[];
 	empty?: string;
@@ -834,8 +844,9 @@ export function DiffList({
 	branch?: string;
 	base?: string;
 	loadDiffFiles?: FileDiffContentsLoader;
+	bounded?: boolean;
 }) {
-	const open = useOpenFiles(files);
+	const open = useOpenFiles(files, { virtualized: bounded });
 	const [wellRef, wellSize] = useElementSize<HTMLDivElement>();
 	const narrow = isDiffPaneNarrow(wellSize.width);
 	const compact = isDiffToolbarCompact(wellSize.width);
@@ -843,16 +854,17 @@ export function DiffList({
 	if (files.length === 0) {
 		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
+	const changes = <ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} loadDiffFiles={loadDiffFiles} />;
 	return (
 		<FileIcons>
-			<div ref={wellRef} className="in-well">
-				<div className="flex h-8 items-center gap-2 border-b border-(--line) pr-1 pl-2.5">
+			<div ref={wellRef} className={cn('in-well', bounded && 'flex min-h-0 flex-1 flex-col')}>
+				<div className="flex h-8 shrink-0 items-center gap-2 border-b border-(--line) pr-1 pl-2.5">
 					{tight ? null : <FilesSummary files={files} className="min-w-0 shrink truncate" />}
 					<span className="flex-1" />
 					<DiffViewControls narrow={narrow} compact={compact} />
 					<ExpandAll open={open} />
 				</div>
-				<ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} loadDiffFiles={loadDiffFiles} />
+				{bounded ? <DiffScrollContainer className="min-h-0 flex-1 overflow-auto">{changes}</DiffScrollContainer> : changes}
 			</div>
 		</FileIcons>
 	);

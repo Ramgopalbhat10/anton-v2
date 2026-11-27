@@ -202,6 +202,18 @@ describe('PR', () => {
 		expect(await screen.findByText(/^Merged by you/)).toBeTruthy();
 	});
 
+	it('bounds the changes diff in its own virtualized scroll container', async () => {
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(detail(13));
+		api.pullDiff.mockReset().mockResolvedValue({ patch: patch('src/a.ts', 'new') });
+		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);
+		const list = await screen.findByRole('list', { name: 'Changed files' });
+		await waitFor(() => expect(diffShadowTexts(list).join('\n')).toContain('new'));
+		expect(list.parentElement?.className).toContain('flex-1');
+		expect(list.parentElement?.className).toContain('overflow-auto');
+		expect(list.closest('.in-well')?.className).toContain('min-h-0');
+	});
+
 	it('says so when the thread has opened none', async () => {
 		api.pulls.mockResolvedValue({ pulls: [] });
 		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);
