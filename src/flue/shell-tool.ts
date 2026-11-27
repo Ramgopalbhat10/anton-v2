@@ -47,11 +47,13 @@ export function shellScript(command: string, seconds: number, run: Run, dir = OU
 		'set -m',
 		`( set +m; eval "$__anton_cmd" ) > ${out} 2>&1 &`,
 		'__anton_pid=$!',
-		`( sleep ${seconds}; : > ${stop}; kill -TERM -- -$__anton_pid; sleep ${KILL_GRACE_S}; kill -KILL -- -$__anton_pid ) > /dev/null 2>&1 &`,
+		// Past the grace, whatever in the group outlived the TERM (npm and test runners can) gets KILL: it would otherwise run on unseen.
+		`( sleep ${seconds}; : > ${stop}; kill -TERM -- -$__anton_pid; __i=0; while [ $__i -lt ${KILL_GRACE_S} ] && kill -0 -- -$__anton_pid; do sleep 1; __i=$((__i + 1)); done; kill -KILL -- -$__anton_pid ) > /dev/null 2>&1 &`,
 		'__anton_watch=$!',
 		"trap 'kill -TERM -- -$__anton_pid 2>/dev/null' TERM INT HUP",
 		'wait $__anton_pid; __anton_code=$?',
-		'kill -- -$__anton_watch 2>/dev/null',
+		// The subshell dies at the TERM while what it ran may not: once stopped, the watcher is left to finish the group.
+		`if [ -e ${stop} ]; then wait $__anton_watch; else kill -- -$__anton_watch 2>/dev/null; fi`,
 		'set +m',
 		'__anton_stopped=0',
 		`if [ -e ${stop} ]; then __anton_stopped=1; __anton_code=124; rm -f ${stop}; fi`,

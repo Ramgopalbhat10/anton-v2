@@ -30,6 +30,10 @@ export const REVIEW_RUBRIC = [
  * thread can already be started on the server with no approval; the agent built an approval flow, and two more reviews
  * found holes in it. Judging a change by the trust the code already gives the same thing stops that at the first round.
  */
+/** Prod, Nov 2026: reviewers ran `npm test` and the whole UI suite with 45-150 s limits, one to two minutes each on CI, and all five timed out. */
+export const REVIEW_TESTS =
+	'Run only the tests that cover the changed code (the test files the diff adds or touches, or a name filter), never the full suites: the coding agent runs those, and they outlast the time a command of yours gets.';
+
 export const REVIEW_TRUST =
 	'Judge risk by the trust the code base already gives: before reporting that someone or something could reach a setting, action or data, see how the existing code treats the same thing elsewhere. ' +
 	'A change that follows what the code already allows adds no new risk; report that existing pattern at most once, as low. ' +

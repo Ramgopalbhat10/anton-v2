@@ -80,6 +80,17 @@ test('reviews treat a fix that needs new design as a question for the user', asy
 	assert.match(REVIEW_SCOPE, /design question for the user/);
 });
 
+test('both reviewers run only the tests that cover the change, never the full suites', async () => {
+	const { readFileSync } = await import('node:fs');
+	const { REVIEW_TESTS } = await import('../src/services/git/code-review.ts');
+	assert.match(REVIEW_TESTS, /only the tests that cover the changed code/);
+	assert.match(REVIEW_TESTS, /never the full suites/);
+	assert.match(readFileSync(new URL('../src/agents/reviewer.ts', import.meta.url), 'utf8'), /\n\tREVIEW_TESTS,\n\tREVIEW_GUIDE,/);
+	const subagents = readFileSync(new URL('../src/agents/coder/subagents.ts', import.meta.url), 'utf8');
+	assert.match(subagents, /You may run read-only commands and the tests; change no files, and do not commit or push\.',\n\t\tREVIEW_TESTS,/);
+	assert.match(subagents, /ChangeReviewer\(requestFor\(id\), joinedFor\(id\)\)/);
+});
+
 test("the reviewer judges the change against the user's own request, and by the trust the code already gives", async () => {
 	const { reviewerRequest } = await import('../src/agents/coder/subagents.ts');
 	const { REVIEW_GUIDE, REVIEW_TRUST } = await import('../src/services/git/code-review.ts');
@@ -91,6 +102,11 @@ test("the reviewer judges the change against the user's own request, and by the 
 	assert.match(brief, /adds requirements the request does not make/);
 	const long = reviewerRequest('x'.repeat(5_000));
 	assert.ok(long.length < 3_500 && long.includes('…'), 'a long request is clipped');
+	assert.doesNotMatch(brief, /the user added/, 'nothing about later messages when there are none');
+	const narrowed = reviewerRequest('Render Markdown in sent messages.', ['Only run the test files you added.', ' ']);
+	assert.match(narrowed, /<\/request>\nWhile the work went on, the user added:\n<message>\nOnly run the test files you added\.\n<\/message>\n/);
+	assert.match(narrowed, /bind you too, including how they say to run the tests/);
+	assert.equal(narrowed.match(/<message>/g)?.length, 1, 'a blank message is left out');
 	assert.ok(REVIEW_GUIDE.includes(REVIEW_TRUST), 'the pull request reviewer has the same rule');
 	assert.match(REVIEW_TRUST, /already allows adds no new risk/);
 	assert.match(bugReviewMessage('base0123456789abcdef', false), /a reviewer can be wrong/);
