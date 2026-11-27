@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from 'react';
 
-/** A comment on one line of the diff; `side` says whether `line` counts in the old or new file. */
-export type ReviewComment = { path: string; side: 'old' | 'new'; line: number; code: string; text: string };
+/** A comment on one line or a range of the diff; `side` says whether `line` counts in the old or new file. `endLine` is inclusive when the comment spans several lines; `code` then joins the range's lines with newlines. */
+export type ReviewComment = { path: string; side: 'old' | 'new'; line: number; endLine?: number; code: string; text: string };
 
 /** Sends a message to the task's agent; provided by the task page so panels can talk to the agent. */
 export const SendToAgent = createContext<((text: string) => Promise<void>) | null>(null);
@@ -55,7 +55,8 @@ export function reviewMessage(comments: ReviewComment[]): string {
 	const items = comments.map((comment, index) => {
 		const prefix = `${index + 1}. `;
 		const indent = ' '.repeat(prefix.length);
-		const where = `${comment.path}, ${comment.side === 'old' ? 'removed line' : 'line'} ${comment.line}`;
+		const span = comment.endLine !== undefined && comment.endLine !== comment.line ? `lines ${comment.line}–${comment.endLine}` : `line ${comment.line}`;
+		const where = `${comment.path}, ${comment.side === 'old' ? 'removed ' : ''}${span}`;
 		const code = comment.code.trim() ? ` (${inlineCode(snippet(comment.code))})` : '';
 		const lines = comment.text.trim().replace(/\r\n?/g, '\n').split('\n');
 		const sep = needsReviewBreak(lines) ? `\n\n${indent}` : `\n${indent}`;

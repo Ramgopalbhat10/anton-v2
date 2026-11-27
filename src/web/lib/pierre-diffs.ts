@@ -323,6 +323,17 @@ export function createDiffFilesLoader(
 }
 
 /** Maps a hovered diff line to a canonical review comment target (`old` only for removed lines or deleted files). */
+/** The range's lines joined with newlines, or null when any line in it is not present in the diff. */
+export function getRangeTextFromDiff(fileDiff: FileDiffMetadata, side: 'deletions' | 'additions', start: number, end: number): string | null {
+	const lines: string[] = [];
+	for (let line = start; line <= end; line++) {
+		const text = getLineTextFromDiff(fileDiff, side, line);
+		if (text === null) return null;
+		lines.push(text);
+	}
+	return lines.join('\n');
+}
+
 export function resolveCommentTarget(
 	fileDiff: FileDiffMetadata,
 	side: 'deletions' | 'additions',

@@ -26,6 +26,7 @@ import {
 	getCachedFileDiffMetadata,
 	getDiffCommentTargets,
 	getLineTextFromDiff,
+	getRangeTextFromDiff,
 	normalizeDiffLine,
 	resolveCommentTarget,
 	setDiffViewPrefs,
@@ -64,7 +65,7 @@ export type Commenting = {
 
 type DraftAnnotationGroup = {
 	comments: Array<{ comment: ReviewComment; outdated: boolean }>;
-	composer?: { side: ReviewComment['side']; line: number };
+	composer?: { side: ReviewComment['side']; line: number; endLine?: number };
 };
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
@@ -175,14 +176,16 @@ function DiffLines({
 	commenting,
 	narrow,
 	loadDiffFiles,
+	onJumpFile,
 }: {
 	file: FileDiff;
 	commenting?: Commenting;
 	narrow: boolean;
 	loadDiffFiles?: FileDiffContentsLoader;
+	onJumpFile?: (direction: 1 | -1) => void;
 }) {
 	// The line being commented on and its unsaved text live here, so deleting another comment keeps the draft intact.
-	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
+	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number; endLine?: number } | null>(null);
 	const [draftText, setDraftText] = useState('');
 	const draftRef = useRef(draft);
 	draftRef.current = draft;
@@ -191,6 +194,8 @@ function DiffLines({
 	const pointerDownRef = useRef(false);
 	const restoringFocusRef = useRef(false);
 	const [focusedTargetIndex, setFocusedTargetIndex] = useState<number | null>(null);
+	const [selectionAnchorIndex, setSelectionAnchorIndex] = useState<number | null>(null);
+	const [dragSelection, setDragSelection] = useState<{ side: 'deletions' | 'additions'; start: number; end: number } | null>(null);
 	const [expandError, setExpandError] = useState<string | null>(null);
 	const [hydrationRevision, setHydrationRevision] = useState(0);
 	const partialHydrationRef = useRef<boolean | undefined>(undefined);
@@ -218,10 +223,32 @@ function DiffLines({
 	const hasCommenting = Boolean(commenting);
 	const commentTargets = useMemo(() => (fileDiff && hasCommenting ? getDiffCommentTargets(fileDiff) : []), [fileDiff, hasCommenting, hydrationRevision]);
 	const activeTarget = focusedTargetIndex !== null && commentTargets.length > 0 ? commentTargets[Math.min(focusedTargetIndex, commentTargets.length - 1)] : null;
-	const activeSelection = useMemo<SelectedLineRange | null>(
-		() => (activeTarget ? { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side } : null),
-		[activeTarget],
-	);
+	const activeSelection = useMemo<SelectedLineRange | null>(() => {
+		if (dragSelection) return { start: dragSelection.start, end: dragSelection.end, side: dragSelection.side };
+		if (!activeTarget) return null;
+		if (selectionAnchorIndex === null || commentTargets.length === 0) {
+			return { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side };
+		}
+		const anchor = commentTargets[Math.min(selectionAnchorIndex, commentTargets.length - 1)];
+		if (!anchor || anchor.side !== activeTarget.side) {
+			return { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side };
+		}
+		return {
+			start: Math.min(anchor.lineNumber, activeTarget.lineNumber),
+			end: Math.max(anchor.lineNumber, activeTarget.lineNumber),
+			side: activeTarget.side,
+		};
+	}, [activeTarget, selectionAnchorIndex, commentTargets, dragSelection]);
+
+	// The lines the composer will cover: the painted selection, resolved into old/new file coordinates.
+	const selectionRange = useMemo((): { side: ReviewComment['side']; line: number; endLine: number } | null => {
+		if (!activeSelection || !fileDiff) return null;
+		const side = activeSelection.side ?? 'additions';
+		const first = resolveCommentTarget(fileDiff, side, activeSelection.start);
+		const last = resolveCommentTarget(fileDiff, side, activeSelection.end);
+		if (first.side !== last.side) return { side: last.side, line: last.line, endLine: last.line };
+		return { side: first.side, line: Math.min(first.line, last.line), endLine: Math.max(first.line, last.line) };
+	}, [activeSelection, fileDiff]);
 
 	useEffect(() => () => {
 		diffInstanceRef.current = null;
@@ -241,8 +268,8 @@ function DiffLines({
 		[],
 	);
 
-	const openDraft = useCallback((target: { side: ReviewComment['side']; line: number }) => {
-		if (draftRef.current?.side === target.side && draftRef.current.line === target.line) return;
+	const openDraft = useCallback((target: { side: ReviewComment['side']; line: number; endLine?: number }) => {
+		if (draftRef.current?.side === target.side && draftRef.current.line === target.line && (draftRef.current.endLine ?? target.line) === (target.endLine ?? target.line)) return;
 		setDraft(target);
 		setDraftText('');
 	}, []);
@@ -313,6 +340,12 @@ function DiffLines({
 			loadDiffFiles: wrappedLoadDiffFiles,
 			tokenizeMaxLineLength: 4_000,
 			unsafeCSS: ANTON_DIFF_UNSAFE_CSS,
+			enableLineSelection: hasCommenting,
+			onLineSelectionEnd: hasCommenting
+				? (range: SelectedLineRange | null) => {
+						setDragSelection(range ? { side: range.side ?? 'additions', start: range.start, end: range.end } : null);
+					}
+				: undefined,
 			onPostRender: handlePostRender,
 		}),
 		[
@@ -344,7 +377,7 @@ function DiffLines({
 		};
 		for (const comment of commenting.comments) {
 			const side = comment.side === 'old' ? 'deletions' : 'additions';
-			const currentCode = getLineTextFromDiff(fileDiff, side, comment.line);
+			const currentCode = getRangeTextFromDiff(fileDiff, side, comment.line, comment.endLine ?? comment.line);
 			const outdated = currentCode === null || normalizeDiffLine(currentCode) !== normalizeDiffLine(comment.code);
 			const targetSide = outdated ? fileAnnotationSide : side;
 			const targetLine = outdated ? 0 : comment.line;
@@ -352,7 +385,7 @@ function DiffLines({
 		}
 		if (draft) {
 			const targetSide = draft.side === 'old' ? 'deletions' : 'additions';
-			ensureGroup(targetSide, draft.line).metadata.composer = draft;
+			ensureGroup(targetSide, draft.endLine ?? draft.line).metadata.composer = draft;
 		}
 		return [...grouped.values()];
 	}, [fileDiff, commenting, draft, hydrationRevision]);
@@ -374,8 +407,9 @@ function DiffLines({
 							onSave={(body) => {
 								if (!fileDiff) return;
 								const side = composer.side === 'old' ? 'deletions' : 'additions';
-								const code = getLineTextFromDiff(fileDiff, side, composer.line) ?? '';
-								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, code, text: body });
+								const end = composer.endLine ?? composer.line;
+								const code = getRangeTextFromDiff(fileDiff, side, composer.line, end) ?? '';
+								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, endLine: end !== composer.line ? end : undefined, code, text: body });
 								closeDraft(true);
 							}}
 						/>
@@ -425,7 +459,7 @@ function DiffLines({
 			? {
 					tabIndex: 0,
 					role: 'region' as const,
-					'aria-label': `Diff for ${file.path}. Use Up or Down arrows to choose a line and Enter to comment.`,
+					'aria-label': `Diff for ${file.path}. Use Up or Down arrows to choose a line, Shift with them for a range, Enter to comment, square brackets to jump hunks and files.`,
 					onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
 						pointerDownRef.current = true;
 						if (!(event.target instanceof Element) || !event.target.closest('[slot]')) setFocusedTargetIndex(null);
@@ -440,30 +474,71 @@ function DiffLines({
 					},
 					onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
 						pointerDownRef.current = false;
-						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedTargetIndex(null);
+						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+							setFocusedTargetIndex(null);
+							setSelectionAnchorIndex(null);
+							setDragSelection(null);
+						}
 					},
 					onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
 						if (event.target !== event.currentTarget) return;
+						// Extending stops at a side boundary: a range cannot span old and new lines, so the cursor stays put.
+						const move = (current: number | null, delta: number, extend: boolean): number => {
+							const base = current === null ? (delta > 0 ? -1 : commentTargets.length) : current;
+							let next = Math.min(Math.max(base + delta, 0), commentTargets.length - 1);
+							if (extend && current !== null) {
+								const anchor = commentTargets[Math.min(selectionAnchorIndex ?? current, commentTargets.length - 1)];
+								const target = commentTargets[next];
+								if (anchor && target && anchor.side !== target.side) next = current;
+							}
+							return next;
+						};
 						if (event.key === 'ArrowDown' || event.key === 'j') {
 							event.preventDefault();
-							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current + 1, commentTargets.length - 1)));
+							const extend = event.shiftKey && event.key.startsWith('Arrow');
+							if (extend && selectionAnchorIndex === null && focusedTargetIndex !== null) setSelectionAnchorIndex(focusedTargetIndex);
+							if (!extend) setSelectionAnchorIndex(null);
+							setFocusedTargetIndex((current) => move(current, 1, extend));
 						} else if (event.key === 'ArrowUp' || event.key === 'k') {
 							event.preventDefault();
-							setFocusedTargetIndex((current) => (current === null ? 0 : Math.max(current - 1, 0)));
+							const extend = event.shiftKey && event.key.startsWith('Arrow');
+							if (extend && selectionAnchorIndex === null && focusedTargetIndex !== null) setSelectionAnchorIndex(focusedTargetIndex);
+							if (!extend) setSelectionAnchorIndex(null);
+							setFocusedTargetIndex((current) => move(current, -1, extend));
+						} else if (event.key === ']' || event.key === '[') {
+							if (!fileDiff) return;
+							event.preventDefault();
+							// Jump the cursor to the first line of the next or previous hunk; the selection effect scrolls it into view.
+							const current = activeTarget?.lineNumber ?? 0;
+							const starts = fileDiff.hunks.map((hunk) => hunk.additionStart).sort((a, b) => a - b);
+							const hunkLine = event.key === ']' ? starts.find((line) => line > current) : [...starts].reverse().find((line) => line < current);
+							if (hunkLine === undefined) return;
+							const index = commentTargets.findIndex((target) => target.side === 'additions' && target.lineNumber >= hunkLine);
+							if (index >= 0) {
+								setSelectionAnchorIndex(null);
+								setDragSelection(null);
+								setFocusedTargetIndex(index);
+							}
+						} else if (event.key === '}' || event.key === '{') {
+							if (!onJumpFile) return;
+							event.preventDefault();
+							onJumpFile(event.key === '}' ? 1 : -1);
 						} else if (event.key === 'Home') {
 							event.preventDefault();
+							setSelectionAnchorIndex(null);
 							setFocusedTargetIndex(0);
 						} else if (event.key === 'End') {
 							event.preventDefault();
+							setSelectionAnchorIndex(null);
 							setFocusedTargetIndex(commentTargets.length - 1);
 						} else if ((event.key === 'Enter' || event.key === 'c') && !event.metaKey && !event.ctrlKey && !event.altKey) {
 							event.preventDefault();
-							const idx = focusedTargetIndex ?? 0;
-							const target = commentTargets[Math.min(idx, commentTargets.length - 1)];
-							if (target) openDraft({ side: target.side === 'deletions' ? 'old' : 'new', line: target.lineNumber });
-						} else if (event.key === 'Escape' && focusedTargetIndex !== null) {
+							if (selectionRange) openDraft({ side: selectionRange.side, line: selectionRange.line, endLine: selectionRange.endLine });
+						} else if (event.key === 'Escape' && (focusedTargetIndex !== null || dragSelection !== null)) {
 							event.preventDefault();
 							setFocusedTargetIndex(null);
+							setSelectionAnchorIndex(null);
+							setDragSelection(null);
 						}
 					},
 				}
@@ -787,6 +862,17 @@ export function ChangeList({
 									file={file}
 									narrow={narrow}
 									loadDiffFiles={loadDiffFiles}
+									onJumpFile={(direction) => {
+										const at = files.findIndex((entry) => entry.path === file.path);
+										const next = files[at + direction];
+										if (!next) return;
+										open.set(next.path, true);
+										const section = rows.current.get(next.path);
+										section?.scrollIntoView?.({ block: 'start' });
+										requestAnimationFrame(() => {
+											rows.current.get(next.path)?.querySelector<HTMLElement>('[role="region"]')?.focus({ preventScroll: true });
+										});
+									}}
 									commenting={
 										review && {
 											comments,

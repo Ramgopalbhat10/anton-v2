@@ -161,6 +161,27 @@ Phase 3 finished moving Anton's patch rendering surfaces to `@pierre/diffs` and 
 
 ---
 
+## 4b. Phase 5, Part 1 — Multi-Line Range Commenting & Hunk/File Navigation (Completed)
+
+### Multi-Line Range Commenting (`src/web/lib/review.ts`, `src/web/lib/pierre-diffs.ts`, `src/web/components/workspace/diff-list.tsx`)
+- `ReviewComment` gained an optional inclusive `endLine`; single-line comments (including existing `sessionStorage` drafts) are unchanged, keeping the format backwards-compatible. `code` for a range joins its lines with newlines.
+- `reviewMessage()` formats ranges as `src/app.ts, lines 12–18` (and `removed lines` for old-side ranges).
+- Selection model: `enableLineSelection` is on, so pointer drags paint ranges directly — wired through `onLineSelectionEnd`, which fires only for genuine pointer interaction. (`onLineSelected` also echoes *controlled* writes back — using it makes the echoed keyboard selection stick forever; this trap is why the end hook matters.)
+- Keyboard: `Shift+ArrowDown`/`Shift+ArrowUp` extends a range from the cursor; extending stops at a side boundary because a range cannot span old and new lines. Plain arrows, `Home`/`End`, `Escape`, or blur collapse the range. Enter opens one composer covering the whole selection.
+- Composers and comment cards anchor at the range end; outdated checks compare the joined range text via the new `getRangeTextFromDiff` helper.
+
+### Hunk & File Jump Navigation (`src/web/components/workspace/diff-list.tsx`)
+- `]` / `[` move the keyboard cursor to the first line of the next/previous hunk inside a file diff (reusing the existing selection scroll-into-view machinery).
+- `}` / `{` jump focus to the next/previous file's diff region, opening it first if collapsed.
+
+### `<UnresolvedFile>` Evaluation — Decision: Not Adopted
+`<UnresolvedFile>` renders git conflict markers with accept/reject actions. Anton never surfaces conflict-marker content in diff patches — conflicts exist only transiently in working-tree files while the agent resolves them inside the sandbox, and users do not hand-resolve merges in the UI (the PR tab instructs them to ask the agent). Rendering an interactive resolution editor would invite conflicts with the agent's own resolution work, so the evaluation ends with a documented negative.
+
+### Phase 5, Part 1 Tests
+- `tests/ui/pierre-diffs.test.tsx`: shift-extension range commenting (joined range code + `endLine`), range collapse on plain movement, `reviewMessage` range formatting, `]`/`[` hunk jumping, `}` file jumping with focus following.
+
+---
+
 ## 5. Remaining Phases — Implementation Plan (Phases 4–5)
 
 Phase 3 completes the migration of existing patch rendering surfaces. The remaining work splits cleanly into two incremental phases:
@@ -218,7 +239,7 @@ Phase 3 completes the migration of existing patch rendering surfaces. The remain
 | **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done** |
 | **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Done** |
 | **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation (rejected, invariant documented) | `task-workspace.tsx`, `file-view.tsx`, `diff-scroll-container.tsx`, `diff-list.tsx` | **Done** |
-| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Planned** |
+| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Part 1 done** (ranges, hunk/file nav, `<UnresolvedFile>` rejected); PR inline threads planned |
 
 ### Standard Verification Gates (Every Remaining Phase)
 - `npm run check:types` and `npm run lint:hooks`
