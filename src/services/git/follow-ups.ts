@@ -41,10 +41,11 @@ async function askingNothing(id: string, comments: PullRequestComment[]): Promis
 const BLOCK_START =
 	/^(?:#{1,6}(?:\s|$)|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|.*\||(?:[-*_]\s*){3,}$|<(?:!--|!\[CDATA\[|\?|\/?(?:pre|script|style|textarea|details|summary|table|div|p|blockquote|ul|ol|li|h[1-6]|hr)\b))/i;
 const SETEXT_UNDERLINE = /^\s*(?:=+|-+)\s*$/;
-const TABLE_DELIMITER = /^\s*\|?\s*:?-{1,}:?\s*(?:\|\s*:?-{1,}:?\s*)+\|?\s*$/;
+const TABLE_DELIMITER = /^\s*(?:\|\s*:?-{1,}:?(?:\s*\|\s*:?-{1,}:?)*\s*\|?|:?-{1,}:?\s*\|(?:\s*:?-{1,}:?\s*\|?)*)\s*$/;
 
 function needsBlockBreak(lines: string[]): boolean {
 	const first = lines[0] ?? '';
+	if (SETEXT_UNDERLINE.test(first)) return true;
 	const second = lines[1];
 	if (second === undefined) return false;
 	if (SETEXT_UNDERLINE.test(second)) return true;
@@ -105,7 +106,7 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			const indented = lines
 				.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line))
 				.join('\n');
-			const separator = needsBlockBreak(lines) ? `\n\n${indent}` : BLOCK_START.test(lines[0] ?? '') ? `\n${indent}` : ' ';
+			const separator = BLOCK_START.test(lines[0] ?? '') || needsBlockBreak(lines) ? `\n\n${indent}` : ' ';
 			return `${prefix}[${comment.id}] @${comment.author}${where}:${separator}${indented}`;
 		}),
 		guidance(

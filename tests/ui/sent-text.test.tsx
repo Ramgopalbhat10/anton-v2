@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FileLinks } from '@/components/content/markdown';
+import { FileLinks, Markdown } from '@/components/content/markdown';
 import { SentText } from '@/components/thread/sent-text';
 import { reviewMessage } from '@/lib/review';
 import { richRanges } from '@/lib/rich-text';
@@ -275,12 +275,14 @@ describe('A sent message', () => {
 		expect([...container.querySelectorAll('code')].map((el) => el.textContent)).toEqual(expect.arrayContaining(['@pkg/name', '/cmd']));
 	});
 
-	it('keeps file mentions with underscores, dotfiles and brackets clickable without emphasis splitting', () => {
+	it('keeps file mentions with underscores, dotfiles and brackets clickable without eating adjacent links or emphasis', () => {
 		const open = vi.fn();
-		const existing = new Set(['src/__tests__/helpers.ts', '.github/workflows/ci.yml', 'app/routes/[id]/page.tsx', 'src/_private_/index.ts']);
+		const existing = new Set(['src/__tests__/helpers.ts', '.github/workflows/ci.yml', 'app/routes/[id]/page.tsx', 'app/routes/[...slug]/page.tsx', 'src/_private_/index.ts']);
 		const text = [
-			'Check @src/__tests__/helpers.ts and @src/__tests__/helpers.ts:42, @.github/workflows/ci.yml, @app/routes/[id]/page.tsx.',
+			'Check @src/__tests__/helpers.ts and @src/__tests__/helpers.ts:42, @.github/workflows/ci.yml, @app/routes/[id]/page.tsx, @app/routes/[...slug]/page.tsx.',
 			'**see @src/__tests__/helpers.ts** and *check @src/_private_/index.ts*.',
+			'See @alice,[the spec](https://example.com/1) and @alice[spec](https://example.com/2).',
+			'Adjacent @alice*bold* and @alice**strong** and @alice~~strike~~ and @alice,_italic_.',
 			'Link [see @src/__tests__/helpers.ts](https://example.com) and code `@src/__tests__/helpers.ts`.',
 			'',
 			'```ts',
@@ -294,8 +296,9 @@ describe('A sent message', () => {
 			</FileLinks.Provider>,
 		);
 
-		expect([...container.querySelectorAll('strong')].map((el) => el.textContent)).toEqual(['see @src/__tests__/helpers.ts']);
-		expect([...container.querySelectorAll('em')].map((el) => el.textContent)).toEqual(['check @src/_private_/index.ts']);
+		expect([...container.querySelectorAll('strong')].map((el) => el.textContent)).toEqual(['see @src/__tests__/helpers.ts', 'strong']);
+		expect([...container.querySelectorAll('em')].map((el) => el.textContent)).toEqual(['check @src/_private_/index.ts', 'bold', 'italic']);
+		expect([...container.querySelectorAll('del')].map((el) => el.textContent)).toEqual(['strike']);
 
 		const buttons = screen.getAllByRole('button', { name: '@src/__tests__/helpers.ts' });
 		expect(buttons).toHaveLength(2);
@@ -303,19 +306,56 @@ describe('A sent message', () => {
 		fireEvent.click(screen.getByRole('button', { name: '@src/__tests__/helpers.ts:42' }));
 		fireEvent.click(screen.getByRole('button', { name: '@.github/workflows/ci.yml' }));
 		fireEvent.click(screen.getByRole('button', { name: '@app/routes/[id]/page.tsx' }));
+		fireEvent.click(screen.getByRole('button', { name: '@app/routes/[...slug]/page.tsx' }));
 		fireEvent.click(screen.getByRole('button', { name: '@src/_private_/index.ts' }));
 
 		expect(open).toHaveBeenNthCalledWith(1, 'src/__tests__/helpers.ts', undefined);
 		expect(open).toHaveBeenNthCalledWith(2, 'src/__tests__/helpers.ts', 42);
 		expect(open).toHaveBeenNthCalledWith(3, '.github/workflows/ci.yml', undefined);
 		expect(open).toHaveBeenNthCalledWith(4, 'app/routes/[id]/page.tsx', undefined);
-		expect(open).toHaveBeenNthCalledWith(5, 'src/_private_/index.ts', undefined);
+		expect(open).toHaveBeenNthCalledWith(5, 'app/routes/[...slug]/page.tsx', undefined);
+		expect(open).toHaveBeenNthCalledWith(6, 'src/_private_/index.ts', undefined);
 
+		expect(screen.getByRole('link', { name: 'the spec' }).getAttribute('href')).toBe('https://example.com/1');
+		expect(screen.getByRole('link', { name: 'spec' }).getAttribute('href')).toBe('https://example.com/2');
+		expect([...container.querySelectorAll('[data-sent-token]')].map((el) => el.textContent)).not.toContain('@alice,[the');
 		const link = screen.getByRole('link', { name: 'see @src/__tests__/helpers.ts' });
 		expect(link.getAttribute('href')).toBe('https://example.com');
 		expect(link.querySelector('[data-sent-token]')).toBeNull();
 		expect(container.querySelector('.sg-code')?.textContent).toContain('@src/__tests__/helpers.ts');
 		expect(container.querySelector('.sg-code [data-sent-token]')).toBeNull();
+	});
+
+	it('namespaces footnote IDs, fragment links and aria-describedby labels across an agent reply and sent copies', () => {
+		const footnoted = 'Claim.[^1]\n\n[^1]: Source note.';
+		const { container } = renderWithQueries(
+			<div>
+				<div data-testid="reply">
+					<Markdown text={footnoted} />
+				</div>
+				<div data-testid="copy-1">
+					<SentText text={footnoted} />
+				</div>
+				<div data-testid="copy-2">
+					<SentText text={footnoted} />
+				</div>
+			</div>,
+		);
+
+		const allIds = [...container.querySelectorAll('[id]')].map((el) => el.id);
+		expect(allIds.length).toBeGreaterThanOrEqual(9);
+		expect(new Set(allIds).size).toBe(allIds.length);
+
+		for (const testId of ['reply', 'copy-1', 'copy-2']) {
+			const block = screen.getByTestId(testId);
+			const refLink = block.querySelector<HTMLAnchorElement>('a[data-footnote-ref]')!;
+			const backLink = block.querySelector<HTMLAnchorElement>('a[data-footnote-backref]')!;
+			const footnoteLi = block.querySelector<HTMLLIElement>('.footnotes li')!;
+			const heading = block.querySelector<HTMLHeadingElement>('.footnotes h2')!;
+			expect(refLink.getAttribute('href')).toBe(`#${footnoteLi.id}`);
+			expect(backLink.getAttribute('href')).toBe(`#${refLink.id}`);
+			expect(refLink.getAttribute('aria-describedby')).toBe(heading.id);
+		}
 	});
 
 	it('renders combined multiline-check and review follow-ups without swallowing subsequent items into code blocks', () => {
@@ -330,11 +370,11 @@ describe('A sent message', () => {
 			'  ```',
 			'  ````',
 			'- unit (https://ci.test/2):',
-			'  ```',
+			'  ````',
 			'  Output:',
 			'  ```log',
 			'  unclosed',
-			'  ```',
+			'  ````',
 			'- lint: 1 error (https://ci.test/3)',
 			'<anton-guidance>',
 			'Find the cause, fix it.',
@@ -363,14 +403,59 @@ describe('A sent message', () => {
 		expect(container.textContent).not.toContain('Find the cause');
 	});
 
-	it('prevents review comments starting with Setext underlines from turning file headers into headings', () => {
-		const msg = reviewMessage([{ path: 'src/a.ts', side: 'new', line: 4, code: 'const x = 1;', text: '---\nCheck below' }]);
-		const { container } = render(<SentText text={msg} />);
-		expect(container.querySelector('h1, h2, h3')).toBeNull();
-		expect(container.querySelector('hr')).toBeTruthy();
-		const items = container.querySelectorAll('ol > li');
-		expect(items).toHaveLength(1);
-		expect(items[0]!.textContent).toContain('src/a.ts, line 4');
-		expect(items[0]!.textContent).toContain('Check below');
+	it('prevents review comments starting with Setext underlines or non-1 ordered items from corrupting headers', () => {
+		const hrMsg = reviewMessage([{ path: 'src/a.ts', side: 'new', line: 4, code: 'const x = 1;', text: '---\nCheck below' }]);
+		const { container: hrContainer } = render(<SentText text={hrMsg} />);
+		expect(hrContainer.querySelector('h1, h2, h3')).toBeNull();
+		expect(hrContainer.querySelector('hr')).toBeTruthy();
+		const hrItems = hrContainer.querySelectorAll('ol > li');
+		expect(hrItems).toHaveLength(1);
+		expect(hrItems[0]!.textContent).toContain('src/a.ts, line 4');
+		expect(hrItems[0]!.textContent).toContain('Check below');
+
+		const setextMsg = reviewMessage([{ path: 'src/a.ts', side: 'new', line: 4, code: 'const x = 1;', text: 'Title\n---' }]);
+		const { container: setextContainer } = render(<SentText text={setextMsg} />);
+		const setextItems = setextContainer.querySelectorAll('ol > li');
+		expect(setextItems).toHaveLength(1);
+		expect(setextItems[0]!.querySelector('p')?.textContent).toContain('src/a.ts, line 4');
+		expect(setextItems[0]!.querySelector('h2')?.textContent).toBe('Title');
+
+		const orderedMsg = reviewMessage([{ path: 'src/a.ts', side: 'new', line: 4, code: 'const x = 1;', text: '2. Second step\n3. Third step' }]);
+		const { container: orderedContainer } = render(<SentText text={orderedMsg} />);
+		const nestedList = orderedContainer.querySelector('ol > li > ol');
+		expect(nestedList).toBeTruthy();
+		expect(nestedList!.querySelectorAll('li')).toHaveLength(2);
+		expect(nestedList!.textContent).toContain('Second step');
+		expect(nestedList!.textContent).toContain('Third step');
+	});
+
+	it('preserves GFM footnote references and underscore-bracketed file paths without eating emphasis links', () => {
+		const open = vi.fn();
+		const existing = new Set(['src/app.ts', 'src/foo_(bar).ts', 'src/foo_[id].tsx']);
+		const text = [
+			'See @src/app.ts[^1], @src/foo_(bar).ts, and @src/foo_[id].tsx.',
+			'_see @foo_[spec](https://example.com/3)',
+			'',
+			'[^1]: Note.',
+		].join('\n');
+
+		const { container } = renderWithQueries(
+			<FileLinks.Provider value={{ has: (path) => existing.has(path), open }}>
+				<SentText text={text} />
+			</FileLinks.Provider>,
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: '@src/app.ts' }));
+		fireEvent.click(screen.getByRole('button', { name: '@src/foo_(bar).ts' }));
+		fireEvent.click(screen.getByRole('button', { name: '@src/foo_[id].tsx' }));
+
+		expect(open).toHaveBeenNthCalledWith(1, 'src/app.ts', undefined);
+		expect(open).toHaveBeenNthCalledWith(2, 'src/foo_(bar).ts', undefined);
+		expect(open).toHaveBeenNthCalledWith(3, 'src/foo_[id].tsx', undefined);
+
+		expect(container.querySelector('a[data-footnote-ref]')).toBeTruthy();
+		expect(container.querySelector('.footnotes')?.textContent).toContain('Note.');
+		expect([...container.querySelectorAll('em')].map((el) => el.textContent)).toEqual(['see @foo']);
+		expect(screen.getByRole('link', { name: 'spec' }).getAttribute('href')).toBe('https://example.com/3');
 	});
 });

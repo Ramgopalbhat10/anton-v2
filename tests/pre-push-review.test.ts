@@ -156,8 +156,8 @@ test('follow-up messages separate Markdown lists and indent multiline, 10+ and b
 	assert.ok(message);
 	assert.doesNotMatch(message, /\r/);
 	assert.ok(message.includes('Checks failed on your pull request (https://github.com/acme/api/pull/7) at abc1234:\n\n- test: 1 failed (https://ci.test/1)\n<anton-guidance>\nFind the cause'));
-	assert.ok(message.includes('New comments on your pull request (https://github.com/acme/api/pull/7):\n\n1. [line-1] @reviewer on src/f1.ts line 1:\n   ```ts\n   const x = 1;\n   ```'));
-	assert.ok(message.includes('2. [line-2] @reviewer on src/f2.ts line 2:\n   - first\n   - second'));
+	assert.ok(message.includes('New comments on your pull request (https://github.com/acme/api/pull/7):\n\n1. [line-1] @reviewer on src/f1.ts line 1:\n\n   ```ts\n   const x = 1;\n   ```'));
+	assert.ok(message.includes('2. [line-2] @reviewer on src/f2.ts line 2:\n\n   - first\n   - second'));
 	assert.ok(message.includes('10. [line-10] @reviewer on src/f10.ts line 10: First line\n\n    Second line\n<anton-guidance>\nFor each one, first check'));
 	const visible = withoutGuidance(message);
 	assert.ok(visible.includes('- test: 1 failed (https://ci.test/1)\n\nNew comments on your pull request'));
@@ -201,6 +201,8 @@ test('nextFollowUp contains multiline and truncated check summaries and Setext/t
 			{ id: 'line-1', author: 'reviewer', path: 'src/a.ts', line: 1, at: '', body: 'Fix this' },
 			{ id: 'line-2', author: 'reviewer', path: 'src/b.ts', line: 2, at: '', body: 'Title\n---' },
 			{ id: 'line-3', author: 'reviewer', path: 'src/c.ts', line: 3, at: '', body: 'Col A | Col B\n--- | ---\n1 | 2' },
+			{ id: 'line-4', author: 'reviewer', path: 'src/d.ts', line: 4, at: '', body: '---' },
+			{ id: 'line-5', author: 'reviewer', path: 'src/e.ts', line: 5, at: '', body: 'Col |\n--- |\nval |' },
 		],
 	};
 
@@ -242,7 +244,7 @@ test('nextFollowUp contains multiline and truncated check summaries and Setext/t
 	assert.match(plainText(uiNodes[2]!), /^New comments on your pull request/);
 	const commentsList = uiNodes[3]!;
 	assert.equal(commentsList.ordered, true);
-	assert.equal(commentsList.children?.length, 3);
+	assert.equal(commentsList.children?.length, 5);
 
 	const setextItem = commentsList.children![1]!;
 	assert.equal(setextItem.children?.[0]?.type, 'paragraph');
@@ -256,10 +258,20 @@ test('nextFollowUp contains multiline and truncated check summaries and Setext/t
 	assert.match(plainText(tableItem.children![0]!), /^\[line-3\] @reviewer on src\/c\.ts line 3:$/);
 	assert.equal(tableItem.children?.[1]?.type, 'table');
 
+	const hrItem = commentsList.children![3]!;
+	assert.equal(hrItem.children?.[0]?.type, 'paragraph');
+	assert.match(plainText(hrItem.children![0]!), /^\[line-4\] @reviewer on src\/d\.ts line 4:$/);
+	assert.equal(hrItem.children?.[1]?.type, 'thematicBreak');
+
+	const oneColTableItem = commentsList.children![4]!;
+	assert.equal(oneColTableItem.children?.[0]?.type, 'paragraph');
+	assert.match(plainText(oneColTableItem.children![0]!), /^\[line-5\] @reviewer on src\/e\.ts line 5:$/);
+	assert.equal(oneColTableItem.children?.[1]?.type, 'table');
+
 	const rawTree = parser.parse(message) as AstNode;
 	for (const codeNode of collectNodes(rawTree, 'code')) {
 		const value = codeNode.value ?? '';
-		assert.doesNotMatch(value, /lint: 1 error|Find the cause|New comments on your pull request|line-1|line-2|line-3/);
+		assert.doesNotMatch(value, /lint: 1 error|Find the cause|New comments on your pull request|line-1|line-2|line-3|line-4|line-5/);
 	}
 	const rawCommentsHeadingIndex = (rawTree.children ?? []).findIndex(
 		(node) => node.type === 'paragraph' && plainText(node).startsWith('New comments on your pull request'),
@@ -268,7 +280,7 @@ test('nextFollowUp contains multiline and truncated check summaries and Setext/t
 	const rawCommentsList = rawTree.children![rawCommentsHeadingIndex + 1];
 	assert.equal(rawCommentsList?.type, 'list');
 	assert.equal(rawCommentsList?.ordered, true);
-	assert.equal(rawCommentsList?.children?.length, 3);
+	assert.equal(rawCommentsList?.children?.length, 5);
 	assert.ok(answersPrComments(message));
-	assert.deepEqual(commentIdsIn(message), ['line-1', 'line-2', 'line-3']);
+	assert.deepEqual(commentIdsIn(message), ['line-1', 'line-2', 'line-3', 'line-4', 'line-5']);
 });

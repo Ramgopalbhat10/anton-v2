@@ -12,6 +12,15 @@ type MdNode = {
 	};
 };
 
+type HastNode = {
+	type: string;
+	properties?: {
+		id?: string;
+		ariaDescribedBy?: string[] | string;
+	};
+	children?: HastNode[];
+};
+
 type Token = { type: string };
 type State = (code: number | null) => State | undefined;
 type Effects = {
@@ -40,11 +49,21 @@ const SKIP_CONTAINERS = new Set(['code', 'inlineCode', 'link', 'linkReference', 
 
 const isSpace = (code: number | null) => code === null || code < 0 || /\s/.test(String.fromCharCode(code));
 const isCmdChar = (code: number | null) => code !== null && code > 0 && /[\w-]/.test(String.fromCharCode(code));
-// Stop before whitespace, another `@`, inline code, autolink/HTML delimiters, or table pipes.
+// Stop before whitespace, `@`, inline code, autolink/HTML delimiters, table pipes, or `*`/`~` emphasis/strikethrough delimiters.
 const isStopChar = (code: number | null) =>
-	code === null || code < 0 || code === 64 || code === 96 || code === 60 || code === 62 || code === 124 || /\s/.test(String.fromCharCode(code));
-// Characters that can appear inside a path (like `__tests__`, `foo.ts`, `*`) without being left dangling as trailing punctuation or emphasis.
-const isTrailable = (code: number | null) => code !== null && code > 0 && /[.,;:!?'"\}*~_]/.test(String.fromCharCode(code));
+	code === null ||
+	code < 0 ||
+	code === 64 ||
+	code === 96 ||
+	code === 60 ||
+	code === 62 ||
+	code === 124 ||
+	code === 42 ||
+	code === 126 ||
+	/\s/.test(String.fromCharCode(code));
+// Characters that can appear inside a path (like `__tests__`, `foo.ts`) without being left dangling as trailing punctuation or emphasis.
+const isTrailable = (code: number | null) => code !== null && code > 0 && /[.,;:!?'"}_]/.test(String.fromCharCode(code));
+const isPunctTrail = (code: number | null) => code !== null && code > 0 && /[.,;:!?'"}]/.test(String.fromCharCode(code));
 
 function sentTokensSyntax(): { text: Record<number, Construct> } {
 	return {
@@ -79,29 +98,63 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 				tokenize(effects, ok, nok) {
 					if (!isSpace(this.previous)) return nok;
 					let hasBody = false;
-					let bracketDepth = 0;
-					let parenDepth = 0;
 
-					// Consume a run of trailable characters only when a solid mention character follows, so trailing punctuation or closing emphasis rewinds in O(N).
-					const trailAttempt: Construct = {
+					// Consume a balanced `[...]` or `(...)` group within the token; abort on whitespace, stop chars, or link syntax `](` / `][`.
+					const balancedGroup = (openCode: number, closeCode: number): Construct => ({
 						partial: true,
 						tokenize(attemptEffects, attemptOk, attemptNok) {
-							let bDepth = bracketDepth;
-							let pDepth = parenDepth;
+							let depth = 0;
+							const startGroup: State = (code) => {
+								if (code !== openCode) return attemptNok(code);
+								depth = 1;
+								attemptEffects.consume(code);
+								return openCode === 91 ? afterOpenBracket : step;
+							};
+							const afterOpenBracket: State = (code) => {
+								// Do not swallow GFM footnote references like `@src/app.ts[^1]`.
+								if (code === 94) return attemptNok(code);
+								return step(code);
+							};
+							const afterClose: State = (code) => {
+								if (openCode === 91 && (code === 40 || code === 91)) return attemptNok(code);
+								hasBody = true;
+								return attemptOk(code);
+							};
 							const step: State = (code) => {
 								if (isStopChar(code)) return attemptNok(code);
-								if (code === 93 && bDepth === 0) return attemptNok(code);
-								if (code === 41 && pDepth === 0) return attemptNok(code);
-								if (isTrailable(code)) {
+								if (code === openCode) {
+									depth += 1;
 									attemptEffects.consume(code);
 									return step;
 								}
-								if (code === 91) bDepth += 1;
-								else if (code === 93) bDepth -= 1;
-								else if (code === 40) pDepth += 1;
-								else if (code === 41) pDepth -= 1;
-								bracketDepth = bDepth;
-								parenDepth = pDepth;
+								if (code === closeCode) {
+									depth -= 1;
+									attemptEffects.consume(code);
+									if (depth === 0) return afterClose;
+									return step;
+								}
+								attemptEffects.consume(code);
+								return step;
+							};
+							return startGroup;
+						},
+					});
+
+					// Consume trailable chars only when followed by a solid mention character, and never bridge trailing punctuation into `[`, `(`, or `_`.
+					const trailAttempt: Construct = {
+						partial: true,
+						tokenize(attemptEffects, attemptOk, attemptNok) {
+							let sawPunct = false;
+							const step: State = (code) => {
+								if (!sawPunct && code === 91) return attemptEffects.attempt(balancedGroup(91, 93), attemptOk, attemptNok)(code);
+								if (!sawPunct && code === 40) return attemptEffects.attempt(balancedGroup(40, 41), attemptOk, attemptNok)(code);
+								if (isStopChar(code) || code === 91 || code === 93 || code === 40 || code === 41) return attemptNok(code);
+								if (sawPunct && code === 95) return attemptNok(code);
+								if (isTrailable(code)) {
+									if (isPunctTrail(code)) sawPunct = true;
+									attemptEffects.consume(code);
+									return step;
+								}
 								hasBody = true;
 								attemptEffects.consume(code);
 								return attemptOk;
@@ -121,14 +174,10 @@ function sentTokensSyntax(): { text: Record<number, Construct> } {
 						return ok(code);
 					};
 					const body: State = (code) => {
-						if (isStopChar(code)) return done(code);
-						if (code === 93 && bracketDepth === 0) return done(code);
-						if (code === 41 && parenDepth === 0) return done(code);
+						if (isStopChar(code) || code === 93 || code === 41) return done(code);
+						if (code === 91) return effects.attempt(balancedGroup(91, 93), body, done)(code);
+						if (code === 40) return effects.attempt(balancedGroup(40, 41), body, done)(code);
 						if (isTrailable(code)) return effects.attempt(trailAttempt, body, done)(code);
-						if (code === 91) bracketDepth += 1;
-						else if (code === 93) bracketDepth -= 1;
-						else if (code === 40) parenDepth += 1;
-						else if (code === 41) parenDepth -= 1;
 						hasBody = true;
 						effects.consume(code);
 						return body;
@@ -238,6 +287,28 @@ export function remarkStripHtmlComments() {
 				nextChildren.push(child);
 			}
 			parent.children = nextChildren;
+		}
+		walk(tree);
+	};
+}
+
+/** Namespaces GFM's hardcoded `footnote-label` heading id and `aria-describedby` target per bubble. */
+export function rehypeNamespaceFootnoteLabel(prefix: string) {
+	const labelId = `${prefix}footnote-label`;
+	return (tree: HastNode) => {
+		function walk(node: HastNode) {
+			if (node.properties) {
+				if (node.properties.id === 'footnote-label') node.properties.id = labelId;
+				const described = node.properties.ariaDescribedBy;
+				if (Array.isArray(described)) {
+					node.properties.ariaDescribedBy = described.map((item) => (item === 'footnote-label' ? labelId : item));
+				} else if (described === 'footnote-label') {
+					node.properties.ariaDescribedBy = labelId;
+				}
+			}
+			if (node.children) {
+				for (const child of node.children) walk(child);
+			}
 		}
 		walk(tree);
 	};
