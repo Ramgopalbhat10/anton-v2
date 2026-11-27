@@ -1,61 +1,90 @@
 import { ChevronDown, ChevronUp } from '@/lib/icons';
-import { Fragment, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { FileLinks, fileRef } from '@/components/content/markdown';
+import { memo, type RefObject, useCallback, useContext, useId, useMemo, useRef, useState } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import type { PluggableList } from 'unified';
+import { components as markdownComponents, FileLinks, fileRef } from '@/components/content/markdown';
 import { IconBtn, Spinner } from '@/components/kit/signal';
 import { UploadingFiles } from '@/components/composer/attachments';
 import { SentImages, type SentPicture } from '@/components/thread/sent-images';
-import { RICH_CLASS, richRanges, splitRich } from '@/lib/rich-text';
-import type { FileAttachment, ImageAttachment } from '@/lib/attachments';
+import { RICH_CLASS } from '@/lib/rich-text';
+import { normalizeLegacyChecksFollowUp, rehypeNamespaceFootnoteLabel, sentMarkdownPlugins } from '@/lib/sent-markdown';
 import { useFold } from '@/lib/use-fold';
 import { cn } from '@/lib/utils';
 import { type PendingChange, type PendingSend } from '@/components/thread/pending-send';
 
-export function RichText({ text }: { text: string }) {
-	const files = useContext(FileLinks);
-	const pieces = useMemo(() => splitRich(text, 0, text.length, richRanges(text)), [text]);
-	return pieces.map((piece) => {
-		if (!piece.kind) return <Fragment key={piece.start}>{piece.text}</Fragment>;
-		if (piece.kind === 'link')
-			return (
-				<a key={piece.start} href={piece.text} target="_blank" rel="noreferrer" className={cn(RICH_CLASS.link, 'hover:decoration-current')}>
-					{piece.text}
-				</a>
-			);
-		const ref = piece.kind === 'file' ? fileRef(piece.text.slice(1)) : null;
-		if (ref && files?.has(ref.path))
-			return (
-				<button key={piece.start} type="button" title={`Open ${ref.path}`} onClick={() => files.open(ref.path, ref.line)} className={cn(RICH_CLASS.chip, 'hover:bg-(--accent-soft)')}>
-					{piece.text}
-				</button>
-			);
-		return (
-			<span key={piece.start} className={RICH_CLASS.chip}>
-				{piece.text}
-			</span>
-		);
-	});
+function sentFileRef(raw: string, files: FileLinks | null): { path: string; line?: number } | null {
+	const parsed = fileRef(raw);
+	if (parsed) return parsed;
+	if (!files) return null;
+	if (files.has(raw)) return { path: raw };
+	const match = /^(.*):(\d+)(?:[-–]\d+)?$/.exec(raw);
+	if (match && files.has(match[1]!)) return { path: match[1]!, line: Number(match[2]) };
+	return null;
 }
+
+function SentToken({ kind, text }: { kind: 'command' | 'file'; text: string }) {
+	const files = useContext(FileLinks);
+	const ref = kind === 'file' ? sentFileRef(text.slice(1).replace(/^\.\//, ''), files) : null;
+	if (ref && files?.has(ref.path)) {
+		return (
+			<button type="button" data-sent-token={kind} title={`Open ${ref.path}`} onClick={() => files.open(ref.path, ref.line)} className={cn(RICH_CLASS.chip, 'hover:bg-(--accent-soft)')}>
+				{text}
+			</button>
+		);
+	}
+	return <span data-sent-token={kind} className={RICH_CLASS.chip}>{text}</span>;
+}
+
+const sentComponents: Components = {
+	...markdownComponents,
+	span: ({ node: _node, ...props }) => {
+		const data = props as Record<string, unknown>;
+		const kind = data['data-sent-token'];
+		const value = data['data-sent-value'];
+		if ((kind === 'command' || kind === 'file') && typeof value === 'string') {
+			return <SentToken kind={kind} text={value} />;
+		}
+		return <span {...props} />;
+	},
+};
+
+const SentMarkdown = memo(function SentMarkdown({ text, contentRef }: { text: string; contentRef: RefObject<HTMLDivElement | null> }) {
+	const prefix = `sent-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}-`;
+	const remarkRehypeOptions = useMemo(() => ({ clobberPrefix: prefix }), [prefix]);
+	const rehypePlugins = useMemo<PluggableList>(() => [[rehypeNamespaceFootnoteLabel, prefix]], [prefix]);
+	const rendered = useMemo(() => normalizeLegacyChecksFollowUp(text), [text]);
+	return (
+		<div ref={contentRef} className="sg-markdown sg-markdown--sent">
+			<ReactMarkdown remarkPlugins={sentMarkdownPlugins} rehypePlugins={rehypePlugins} remarkRehypeOptions={remarkRehypeOptions} components={sentComponents}>
+				{rendered}
+			</ReactMarkdown>
+		</div>
+	);
+});
 
 /** Lines a sent message shows until it is opened out. */
 const SENT_FOLD = { lines: 8 };
 
 export function SentText({ text, className }: { text: string; className?: string }) {
 	const body = useRef<HTMLDivElement>(null);
+	const content = useRef<HTMLDivElement>(null);
 	const box = useCallback(() => body.current, []);
-	const fold = useFold(box, text, SENT_FOLD);
+	const inner = useCallback(() => content.current, []);
+	const fold = useFold(box, text, { lines: SENT_FOLD.lines, inner });
 	return (
 		<div
 			className={cn(
-				'relative rounded-dialog rounded-br-inner bg-(--bg-raised) px-3 py-2 text-body-lg leading-[21px] shadow-[inset_0_0_0_1px_var(--line)]',
+				'relative min-w-0 rounded-dialog rounded-br-inner bg-(--bg-raised) px-3 py-2 text-body-lg leading-[21px] shadow-[inset_0_0_0_1px_var(--line)]',
 				className,
 			)}
 		>
 			<div
 				ref={body}
-				className={cn('overflow-hidden whitespace-pre-wrap text-pretty [overflow-wrap:anywhere]', fold.long && 'pr-6', fold.long && !fold.open && 'in-fold-fade')}
+				data-sent-body=""
+				className={cn('overflow-hidden text-pretty [overflow-wrap:anywhere]', fold.long && 'pr-6', fold.long && !fold.open && 'in-fold-fade')}
 				style={fold.style}
 			>
-				<RichText text={text} />
+				<SentMarkdown text={text} contentRef={content} />
 			</div>
 			{fold.long ? (
 				<IconBtn

@@ -33,11 +33,34 @@ export function useReviewComments(sessionId: string) {
 
 const snippet = (code: string) => (code.trim().length > 120 ? `${code.trim().slice(0, 117)}...` : code.trim());
 
+function inlineCode(text: string): string {
+	const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
+	const fence = '`'.repeat(longest + 1);
+	const pad = text.startsWith('`') || text.endsWith('`') || (text.startsWith(' ') && text.endsWith(' ') && text.trim().length > 0) ? ' ' : '';
+	return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+const SETEXT_UNDERLINE = /^\s*(?:=+|-+)\s*$/;
+const TABLE_DELIMITER = /^\s*(?:\|\s*:?-{1,}:?(?:\s*\|\s*:?-{1,}:?)*\s*\|?|:?-{1,}:?\s*\|(?:\s*:?-{1,}:?\s*\|?)*)\s*$/;
+const ORDERED_ITEM = /^\s*\d+[.)]\s/;
+
+function needsReviewBreak(lines: string[]): boolean {
+	const first = lines[0] ?? '';
+	if (SETEXT_UNDERLINE.test(first) || TABLE_DELIMITER.test(first) || ORDERED_ITEM.test(first)) return true;
+	const second = lines[1];
+	return second !== undefined && SETEXT_UNDERLINE.test(second);
+}
+
 export function reviewMessage(comments: ReviewComment[]): string {
 	const items = comments.map((comment, index) => {
+		const prefix = `${index + 1}. `;
+		const indent = ' '.repeat(prefix.length);
 		const where = `${comment.path}, ${comment.side === 'old' ? 'removed line' : 'line'} ${comment.line}`;
-		const code = comment.code.trim() ? ` (\`${snippet(comment.code)}\`)` : '';
-		return `${index + 1}. ${where}${code}\n   ${comment.text.trim().replace(/\n/g, '\n   ')}`;
+		const code = comment.code.trim() ? ` (${inlineCode(snippet(comment.code))})` : '';
+		const lines = comment.text.trim().replace(/\r\n?/g, '\n').split('\n');
+		const sep = needsReviewBreak(lines) ? `\n\n${indent}` : `\n${indent}`;
+		const body = lines.map((line, lineIndex) => (lineIndex > 0 && line ? `${indent}${line}` : line)).join('\n');
+		return `${prefix}${where}${code}${sep}${body}`;
 	});
 	return ['Review comments on your changes. Address each one, then say briefly what you changed.', '', ...items].join('\n');
 }

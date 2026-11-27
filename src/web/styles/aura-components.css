@@ -446,6 +446,15 @@
 .sg-markdown td code,.sg-markdown th code{white-space:nowrap}
 .sg-markdown th{font-weight:500;color:var(--text-2);background:var(--bg-hover)}
 .sg-markdown input[type=checkbox]{margin-right:6px;vertical-align:-1px}
+.sg-markdown--sent{font-size:inherit;line-height:inherit;overflow-wrap:anywhere}
+.sg-markdown--sent p,.sg-markdown--sent ul,.sg-markdown--sent ol,.sg-markdown--sent pre,.sg-markdown--sent table,.sg-markdown--sent blockquote{margin:0 0 8px}
+.sg-markdown--sent h1,.sg-markdown--sent h2,.sg-markdown--sent h3,.sg-markdown--sent h4{margin:12px 0 4px}
+.sg-markdown--sent li>p+p,.sg-markdown--sent li>p+pre,.sg-markdown--sent li>p+.sg-code,.sg-markdown--sent li>p+.sg-mermaid,.sg-markdown--sent li>p+ul,.sg-markdown--sent li>p+ol,.sg-markdown--sent li>p+blockquote{margin-top:6px}
+.sg-markdown--sent li:not(:last-child)>p:last-child{margin-bottom:6px}
+.sg-markdown--sent li>:last-child{margin-bottom:0}
+.sg-markdown--sent>:first-child{margin-top:0}
+.sg-markdown--sent>:last-child{margin-bottom:0}
+.sg-markdown--sent table{max-width:100%}
 
 .sg-disclosure {
  display: grid;
