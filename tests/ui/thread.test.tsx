@@ -77,6 +77,12 @@ function show(flue: UseFlueAgentResult, patch = {}) {
 describe('Thread', () => {
 	beforeEach(() => vi.clearAllMocks());
 
+	it('leaves breathing room between the end of the conversation and the composer', () => {
+		const view = show(agent([user('u1', 'Go'), assistant('a1', [{ type: 'text', text: 'Done' }])]));
+		const rows = view.container.querySelector('.thread-rows');
+		expect(rows?.parentElement?.className).toContain('pb-5');
+	});
+
 	it('animates one header from submission through tools, text and usage, then leaves a static mark', async () => {
 		const view = show(agent([user('u1', 'Go')], { status: 'submitted' }));
 		const update = (flue: UseFlueAgentResult) => view.rerender(<QueryClientProvider client={view.client}><Thread sessionId="s1" agent={flue} /></QueryClientProvider>);

@@ -417,7 +417,7 @@ export function Thread({ sessionId, agent, composer, fresh }: { sessionId: strin
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<div className="relative min-h-0 flex-1">
 				<ChatNavigation rows={rows} onNavigate={navigateToInput} />
-				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-1 pl-4">
+				<div ref={scroller} className="h-full overflow-y-auto pt-2 pr-6 pb-5 pl-4">
 					<div className="thread-rows mx-auto flex max-w-[720px] flex-col gap-5">
 						{health.data && !health.data.openRouter ? (
 							<div className="rounded-card border border-(--warn-line) bg-(--warn-soft) px-3 py-2 text-small leading-[18px] text-(--warn)">
