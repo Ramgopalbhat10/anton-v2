@@ -542,4 +542,71 @@ describe('A sent message', () => {
 		const tokens = [...sentContainer.querySelectorAll('[data-sent-token="file"]')].map((el) => el.textContent);
 		expect(tokens).toEqual(['@foo', '@foo', '@foo', '@src\\app.ts']);
 	});
+
+	it('normalizes legacy stored check follow-ups whose check URLs contain parentheses without swallowing review comments', () => {
+		const checkItems = [
+			'- test: Failed:',
+			'```log',
+			'boom',
+			'``` (https://ci.example/run(1))',
+			'- unit: Output:',
+			'```log',
+			'still failing',
+			'``` (https://ci.example/check(test))',
+		];
+
+		const preGuidance = [
+			'Checks failed on your pull request (https://github.com/acme/demo/pull/9) at abc1234:',
+			...checkItems,
+			'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+			'',
+			'New comments on your pull request (https://github.com/acme/demo/pull/9):',
+			'1. [line-1] @reviewer on src/a.ts line 1: Fix this',
+		].join('\n');
+
+		const postGuidance = [
+			'Checks failed on your pull request (https://github.com/acme/demo/pull/9) at abc1234:',
+			...checkItems,
+			'<anton-guidance>',
+			'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+			'</anton-guidance>',
+			'',
+			'New comments on your pull request (https://github.com/acme/demo/pull/9):',
+			'1. [line-1] @reviewer on src/a.ts line 1: Fix this',
+			'<anton-guidance>',
+			'For each one, first check it.',
+			'</anton-guidance>',
+		].join('\n');
+
+		const checkUrls = ['https://ci.example/run(1)', 'https://ci.example/check(test)'];
+
+		const { container: preContainer } = renderWithQueries(<SentText text={preGuidance} />);
+		const preUl = preContainer.querySelector('ul')!;
+		expect(within(preUl).getAllByRole('listitem')).toHaveLength(2);
+		for (const url of checkUrls) {
+			const link = preContainer.querySelector(`a[href="${url}"]`);
+			expect(link).toBeTruthy();
+			expect(link?.closest('.sg-code')).toBeNull();
+		}
+		const footerParagraph = [...preContainer.querySelectorAll('p')].find((p) => p.textContent?.includes('Find the cause, fix it'));
+		expect(footerParagraph).toBeTruthy();
+		expect(footerParagraph?.closest('.sg-code')).toBeNull();
+		const preOl = preContainer.querySelector('ol')!;
+		expect(within(preOl).getAllByRole('listitem')).toHaveLength(1);
+		expect(preOl.textContent).toContain('Fix this');
+		expect(preOl.closest('.sg-code')).toBeNull();
+
+		const { container: postContainer } = renderWithQueries(<SentText text={withoutGuidance(postGuidance)} />);
+		const postUl = postContainer.querySelector('ul')!;
+		expect(within(postUl).getAllByRole('listitem')).toHaveLength(2);
+		for (const url of checkUrls) {
+			const link = postContainer.querySelector(`a[href="${url}"]`);
+			expect(link).toBeTruthy();
+			expect(link?.closest('.sg-code')).toBeNull();
+		}
+		const postOl = postContainer.querySelector('ol')!;
+		expect(within(postOl).getAllByRole('listitem')).toHaveLength(1);
+		expect(postOl.textContent).toContain('Fix this');
+		expect(postOl.closest('.sg-code')).toBeNull();
+	});
 });

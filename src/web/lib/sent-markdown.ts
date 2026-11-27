@@ -339,11 +339,11 @@ export function rehypeNamespaceFootnoteLabel(prefix: string) {
 	};
 }
 
-const LEGACY_CHECKS_HEADER = /^Checks failed on your pull request \(https?:\/\/[^)]+\) at [0-9a-f]{7,40}:$/;
+const LEGACY_CHECKS_HEADER = /^Checks failed on your pull request \(https?:\/\/\S+\) at [0-9a-f]{7,40}:$/;
 const LEGACY_CHECKS_FOOTER = /^Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request\.$/;
-const LEGACY_COMMENTS_HEADER = /^New comments on your pull request \(https?:\/\/[^)]+\):$/;
+const LEGACY_COMMENTS_HEADER = /^New comments on your pull request \(https?:\/\/\S+\):$/;
 const LEGACY_CHECK_START = /^- (.+?): (.*)$/;
-const LEGACY_CHECK_URL_END = / \((https?:\/\/[^\s)]*|)\)$/;
+const LEGACY_CHECK_URL_END = / \((https?:\/\/\S+|)\)$/;
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
 
 function fenceFor(text: string): string {
