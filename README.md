@@ -58,12 +58,15 @@ A tasks file holds one `{"name", "prompt", "project", "model", "reasoning"}` obj
 | `ANTON_CLAUDE_CODE_MAX_OPEN` | Claude Code conversations kept open at once (default 3) |
 | `ANTON_PUSH_CONTACT` | `mailto:` or `https:` contact for push services (default `mailto:anton@example.com`) |
 | `TZ` | Time zone for the daily spending cap's midnight (default the server's) |
+| `ANTON_PREVIEW_URL` | Where previews of tasks run on this server open, one hostname per port, such as `https://preview-{port}.example.com` (optional; see below) |
 
 Which provider fills each port (`ANTON_SANDBOX`, `ANTON_STORE`, plans and gateways) is in [server-and-providers](docs/architecture/server-and-providers.md) and [models-and-plans](docs/architecture/models-and-plans.md).
 
 ## Deploy and security
 
 Anton has no login of its own: anyone who reaches it can run code in your sandboxes and push with your token. Put it behind an access proxy (for example Cloudflare Access restricted to your email). When the proxy's tunnel runs on the same machine, start Anton with `HOST=127.0.0.1` so the tunnel is the only way in. If you set up the GitHub webhook, let only `/api/github/webhook` bypass the proxy; Anton refuses unsigned deliveries. See [SECURITY_MODEL.md](SECURITY_MODEL.md).
+
+**Previews of tasks run on this server.** Their dev servers listen on this machine's ports, which a browser elsewhere cannot reach as `localhost`. Set `ANTON_PREVIEW_URL` to a hostname template with `{port}` in it, such as `https://preview-{port}.example.com`, and route those hostnames to Anton like its own: a DNS record for each preview port (or a wildcard) on the tunnel, a tunnel rule sending them to Anton's port, and the same access policy as Anton. Anton then serves each port a project previews on, never its own, at its hostname, sockets included, so Vite's live reload works. Keep the hostnames one level below the domain (`preview-43127.example.com`, not `43127.preview.example.com`): Cloudflare's free certificate covers only one level.
 
 State lives in `anton.db` and `flue.db` in the data folder. `npm run build && npm run start:backup` runs Anton under [Litestream](https://litestream.io) (0.5+, needs the Tigris variables), which restores both files on a fresh server and streams writes to the bucket; details in [development](docs/architecture/development.md).
 

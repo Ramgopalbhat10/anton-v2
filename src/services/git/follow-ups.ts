@@ -10,7 +10,7 @@ import { generalSettings } from '../models/general.ts';
 import { decide, yesOf } from '../models/decisions.ts';
 import { logProblem } from '../../core/log.ts';
 import { readPullRequest } from './pr-status.ts';
-import { ANSWER_MARK, PR_COMMENTS_HEAD } from '../../core/review-follow-up.ts';
+import { ANSWER_MARK, guidance, PR_COMMENTS_HEAD } from '../../core/review-follow-up.ts';
 
 /** So a fix that keeps failing cannot loop. */
 export const MAX_FOLLOW_UPS = 5;
@@ -45,15 +45,14 @@ function checksMessage(url: string, sha: string, failed: CheckResult[]): string 
 		`Checks failed on your pull request (${url}) at ${sha.slice(0, 7)}:`,
 		'',
 		...failed.map((check) => `- ${check.name}: ${check.summary || 'failed'} (${check.url})`),
-		'',
-		'Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.',
+		guidance('Find the cause, fix it, run the relevant checks in the sandbox, then call open_pull_request to update the pull request.'),
 	].join('\n');
 }
 
 function conflictsMessage(url: string, base: string): string {
 	return [
 		`Your pull request (${url}) has merge conflicts with ${base}, so it cannot be merged.`,
-		`Call merge_base_branch to merge the latest ${base} into your branch, resolve the conflicts it leaves, run the relevant checks, commit the merge, then call open_pull_request to update the pull request.`,
+		guidance(`Call merge_base_branch to merge the latest ${base} into your branch, resolve the conflicts it leaves, run the relevant checks, commit the merge, then call open_pull_request to update the pull request.`),
 	].join('\n');
 }
 
@@ -77,15 +76,18 @@ function commentsMessage(url: string, comments: PullRequestComment[]): string {
 			const separator = BLOCK_START.test(body) ? `\n${indent}` : ' ';
 			return `${prefix}[${comment.id}] @${comment.author}${where}:${separator}${indented}`;
 		}),
-		'',
-		'For each one, first check it against the code and what the user asked for: a reviewer can be wrong, and one that is wrong, or rests on a risk the code already accepts elsewhere, gets a one-line reason in your reply instead of a fix. ' +
-			'For the rest: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
-			'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
-			'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it. ' +
-			'Do not build a new feature, data model, approval flow, or authorization check or guard to answer a comment, whatever its severity: answer it as a question for the user.',
-		'Then call open_pull_request to update the pull request, and answer each comment with answer_review_comment by its id in brackets: fixed, declined with why it does not hold, or question for the user. ' +
-			'Anton posts your answers on the pull request, resolves the fixed and declined threads, and the next review reads them. read_review_comments shows earlier threads and their answers. ' +
-			'If one is a question for the user, end your reply by asking it with the ask tool, with options to pick from.',
+		guidance(
+			[
+				'For each one, first check it against the code and what the user asked for: a reviewer can be wrong, and one that is wrong, or rests on a risk the code already accepts elsewhere, gets a one-line reason in your reply instead of a fix. ' +
+					'For the rest: find the cause, not only the line named, and fix it wherever the same mistake appears in your change. ' +
+					'Then ask what your fix could break (state it leaves behind, ordering and timing, error paths, what moved on screen) and check that too. ' +
+					'Cover each fix with a test that runs the real code path with data shaped as the system produces it, not a stand-in that skips it. ' +
+					'Do not build a new feature, data model, approval flow, or authorization check or guard to answer a comment, whatever its severity: answer it as a question for the user.',
+				'Then call open_pull_request to update the pull request, and answer each comment with answer_review_comment by its id in brackets: fixed, declined with why it does not hold, or question for the user. ' +
+					'Anton posts your answers on the pull request, resolves the fixed and declined threads, and the next review reads them. read_review_comments shows earlier threads and their answers. ' +
+					'If one is a question for the user, end your reply by asking it with the ask tool, with options to pick from.',
+			].join('\n'),
+		),
 	].join('\n');
 }
 
@@ -135,6 +137,9 @@ export function nextFollowUp(
 export async function followUp(session: SessionRecord, read?: PullRequestActivity): Promise<boolean> {
 	// A task reviewing someone else's pull request has nothing to fix there; its reviews follow pushes instead.
 	if (!session.prUrl || session.review || isWorking(session.id)) return false;
+	// The user stopped the agent: new comments wait on the pull request until their next message starts a reply,
+	// which clears the stop, rather than starting the agent again behind their back.
+	if (session.stoppedAt) return false;
 	const project = await getProject(session.projectId);
 	const state = stateFor(session);
 	if (!project?.followUps || state.done || state.sent >= MAX_FOLLOW_UPS) return false;

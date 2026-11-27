@@ -309,19 +309,47 @@ describe('Thread', () => {
 		expect(screen.getByRole('button', { name: 'Stop the browser agent' })).toBeTruthy();
 	});
 
-	it('says Stopping as Stop is pressed, and reads the conversation again when its stream has not caught up with the stop', async () => {
+	it('leaves the running state the moment Stop is pressed, and reads the conversation again when its stream has not caught up', async () => {
 		api.now.mockResolvedValue({ now: { what: 'running', tool: 'task', detail: 'browser', chars: 0, since: new Date().toISOString() } });
 		const refresh = vi.fn();
 		show(agent([user('u1', 'Find deals'), assistant('a1', [tool('task', { agent: 'browser', prompt: 'Check prices' })])], { status: 'streaming', refresh }));
 		expect(await screen.findByText('Waiting on the browser agent')).toBeTruthy();
 		api.now.mockResolvedValue({ now: null });
-		api.stopAgent.mockResolvedValueOnce(undefined);
+		let answer = () => {};
+		api.stopAgent.mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)));
+		const sessionReads = api.session.mock.calls.length;
 		fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }));
-		expect(await screen.findByText('Stopping')).toBeTruthy();
+		// Before the server answers, though the live stream still says it is running.
+		await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop the agent' })).toBeNull());
 		expect(screen.queryByText('Waiting on the browser agent')).toBeNull();
-		// Stop has answered, so the server has settled; a page still running then has missed it.
+		await waitFor(() => expect(screen.queryByRole('status', { name: 'Anton is working' })).toBeNull());
+		answer();
+		// Stop has answered, so the server has settled: the task is read again, and the conversation in case it fell behind.
+		await waitFor(() => expect(api.session.mock.calls.length).toBeGreaterThan(sessionReads));
 		await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1), { timeout: 2000 });
 		expect(api.subagents.mock.calls.length).toBeGreaterThan(1);
+	});
+
+	it('shows the running state again when a reply starts after the stop', async () => {
+		api.session.mockResolvedValue(session({ id: 's1', working: true, stoppedAt: null }));
+		const view = show(agent([user('u1', 'Go'), assistant('a1', [tool('bash', { command: 'ls' })])], { status: 'streaming' }));
+		api.session.mockResolvedValue(session({ id: 's1', working: false, stoppedAt: new Date().toISOString() }));
+		api.stopAgent.mockResolvedValueOnce(undefined);
+		fireEvent.click(await screen.findByRole('button', { name: 'Stop the agent' }));
+		await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop the agent' })).toBeNull());
+		// A follow-up starts a new reply: the server clears the stop and counts the task working.
+		api.session.mockResolvedValue(session({ id: 's1', working: true, stoppedAt: null }));
+		await act(() => view.client.invalidateQueries({ queryKey: ['session', 's1'] }));
+		expect(await screen.findByRole('button', { name: 'Stop the agent' })).toBeTruthy();
+		api.session.mockReset();
+	});
+
+	it("shows Anton's comments and checks in a follow-up, not the guidance it gives the agent", () => {
+		const text = 'New comments on your pull request (https://example.test/pull/9):\n1. [line-2] @ada on src/a.ts line 4: Rename this\n<anton-guidance>\nFor each one, first check it against the code.\n</anton-guidance>';
+		show(agent([user('u1', text)]));
+		expect(screen.getByText(/Rename this/)).toBeTruthy();
+		expect(screen.queryByText(/For each one/)).toBeNull();
+		expect(screen.queryByText(/anton-guidance/)).toBeNull();
 	});
 
 	it('says in the header of the live steps card what the agent is doing, and for how long, with no line below', async () => {

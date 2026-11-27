@@ -205,6 +205,7 @@ const { openPullRequest, pullRequestView } = await import('../src/services/git/p
 const { setAgentDelivery } = await import('../src/services/tasks/agent-runner.ts');
 const { addAutomation, removeAutomation, runAutomation, runDueAutomations, setAutomationEnabled } = await import('../src/services/automations/automations.ts');
 const { followUp, MAX_FOLLOW_UPS, resetFollowUps } = await import('../src/services/git/follow-ups.ts');
+const { withoutGuidance } = await import('../src/core/review-follow-up.ts');
 const { getSessionRecord, updateSession } = await import('../src/db/sessions.ts');
 const { config: settings } = await import('../src/config.ts');
 const { buildPreparedImage } = await import('../src/services/sandbox/prepared-images.ts');
@@ -1227,7 +1228,15 @@ test('follow-ups tell the agent about failed checks and new comments on its pull
 	activity = { ...activity, headSha: 'sha-2' };
 	assert.equal(await followUp(await record()), false, 'never interrupts a working agent');
 	recordAgentEvent({ type: 'submission_settled', instanceId: session.id, submissionId: 'busy' });
+	await updateSession(session.id, { stoppedAt: new Date().toISOString() });
+	assert.equal(await followUp(await record()), false, 'a task the user stopped is not started again behind their back');
+	await updateSession(session.id, { stoppedAt: null });
 	assert.equal(await followUp(await record()), true, 'a new commit that fails is reported');
+	// The thread shows what failed; how to handle it is for the agent alone.
+	assert.match(delivered[2].text, /<anton-guidance>\nFind the cause[\s\S]*<\/anton-guidance>$/);
+	assert.equal(withoutGuidance(delivered[2].text), delivered[2].text.slice(0, delivered[2].text.indexOf('\n<anton-guidance>')));
+	assert.doesNotMatch(withoutGuidance(delivered[1].text), /For each one|open_pull_request/);
+	assert.match(withoutGuidance(delivered[1].text), /@reviewer on src\/a\.ts line 4: Rename this$/);
 
 	await updateSession(session.id, { followState: JSON.stringify({ sha: null, seen: [], sent: MAX_FOLLOW_UPS }) });
 	assert.equal(await followUp(await record()), false, 'stops after the most it may send');
@@ -1443,13 +1452,18 @@ test('each pull request the agent opens or updates is reviewed, and the review i
 	assert.match(reviewRequests[2].text, /- README\.md:1 "Says reviewed twice\.": declined\. The readme says it once\./, "and the author's answer to each earlier finding");
 	assert.match(reviewRequests[2].text, /Report a finding the author declined again only if/);
 	activity = { ...activity, headSha: 'head-1', comments: [] };
+	// A reply the user stopped is not reviewed on its own; asking by hand reviews it and the task works again.
+	await updateSession(session.id, { stoppedAt: new Date().toISOString() });
+	assert.equal(await requestReview(session.id, { automatic: true }), false);
+	assert.equal(await requestReview(session.id, { automatic: false }), true);
+	assert.equal((await getSessionRecord(session.id))!.stoppedAt, null);
 	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: false });
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await setGeneralSettings({ ...(await generalSettings()), reviewPullRequests: true });
 	activity = { ...activity, state: 'merged' };
 	assert.equal(await requestReview(session.id, { automatic: true }), false);
 	await assert.rejects(() => requestReview(session.id, { automatic: false }), /merged/);
-	assert.equal(reviewRequests.length, 3);
+	assert.equal(reviewRequests.length, 4);
 	activity = { state: 'open', headSha: 'sha-1', checks: [], comments: [] };
 });
 

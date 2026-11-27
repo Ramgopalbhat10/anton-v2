@@ -18,6 +18,22 @@ export async function showWorking(queryClient: QueryClient, id: string): Promise
 	queryClient.setQueryData<Session>(['session', id], (session) => (session ? working(session) : session));
 }
 
+function stopped(session: Session, at: string): Session {
+	// A stopped reply leaves the next move to the user (src/core/thread-state.ts); a resolved thread stays resolved.
+	const threadState = session.threadState && !session.resolvedAt ? 'waiting' : session.threadState;
+	return { ...session, working: false, stoppedAt: at, threadState };
+}
+
+/** Shows the task stopped the moment Stop is pressed, everywhere it is listed; the server's next read agrees once the reply settles. */
+export async function showStopped(queryClient: QueryClient, id: string): Promise<void> {
+	const at = new Date().toISOString();
+	await Promise.all([queryClient.cancelQueries({ queryKey: ['sessions'], exact: true }), queryClient.cancelQueries({ queryKey: ['session', id], exact: true })]);
+	queryClient.setQueryData<{ sessions: Session[] }>(['sessions'], (data) =>
+		data ? { ...data, sessions: data.sessions.map((session) => (session.id === id ? stopped(session, at) : session)) } : data,
+	);
+	queryClient.setQueryData<Session>(['session', id], (session) => (session ? stopped(session, at) : session));
+}
+
 /** Reads the task again everywhere: after a message was turned away, and once the server has it, since `showWorking` dropped any read under way and whatever it carried. */
 export function readTaskAgain(queryClient: QueryClient, id: string): void {
 	void queryClient.invalidateQueries({ queryKey: ['sessions'], exact: true });

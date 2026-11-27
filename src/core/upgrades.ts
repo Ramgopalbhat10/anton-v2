@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
+import { isPreviewUpgrade } from './preview-proxy.ts';
 
 export type UpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
@@ -17,7 +18,7 @@ export function publishUpgradeHandler(handler: UpgradeHandler): void {
 /** Other upgrades, such as Vite's HMR, are left alone. */
 export function routeUpgrades(server: Server, prefix: string): void {
 	server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-		if (!request.url?.startsWith(prefix)) return;
+		if (!request.url?.startsWith(prefix) || isPreviewUpgrade(request)) return;
 		const handler = slot[SLOT];
 		if (handler) handler(request, socket, head);
 		else socket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');

@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { site } from './core/site.ts';
 import { routeUpgrades } from './core/upgrades.ts';
+import { servePreviews } from './core/preview-proxy.ts';
 
 const { loadFlueNodeApplication } = (await import(new URL('../dist/app.mjs', import.meta.url).href)) as {
 	loadFlueNodeApplication: () => Promise<{ fetch: (request: Request) => Response | Promise<Response>; stop: () => Promise<void> }>;
@@ -23,6 +24,8 @@ const server = serve({ fetch: app.fetch, port, hostname, serverOptions: { reques
 	console.log(`[anton] listening on http://${hostname ?? 'localhost'}:${port}`),
 );
 (server as Server).keepAliveTimeout = KEEP_ALIVE_MS;
+// Before the socket routes, so a preview's sockets (Vite's live reload) reach its dev server.
+servePreviews(server as Server, port);
 routeUpgrades(server as Server, '/vm/');
 
 async function shutdown(code: number): Promise<void> {

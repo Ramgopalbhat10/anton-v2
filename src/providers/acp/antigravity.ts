@@ -108,9 +108,11 @@ export function antigravityAgent(opts: { credentialFile: string; client?: OAuthC
 		mcpServerName: 'anton',
 		mcpToolName: (tool) => `mcp_anton_${tool}`,
 		modelConfigId: 'model',
-		// thought_level is agy's effort dial (low/medium/high/xhigh); Anton's 'off'/'minimal'/'max' clamp onto its ends.
+		// thought_level is agy's effort dial (low/medium/high/xhigh); Anton's 'minimal'/'max' clamp onto its ends.
+		// 'off' maps to nothing: no agy level is 'off', so it only arrives for a model with no levels (the
+		// orchestrators), and sending one there fails the session ("Thinking level … is not offered").
 		effortConfigId: 'thought_level',
-		effortMap: { off: 'low', minimal: 'low', max: 'xhigh' },
+		effortMap: { minimal: 'low', max: 'xhigh' },
 		// 'auto' approves edits and safe commands without prompts; the jail is what contains them.
 		sessionConfig: { mode: 'auto' },
 		// models.availableModels lists each model × effort as its own id (`gemini-4-neon-high`);
