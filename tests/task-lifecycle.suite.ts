@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { after, test } from 'node:test';
+import { after, test as nodeTest } from 'node:test';
 import { createClient } from '@libsql/client';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -26,6 +26,14 @@ import type {
 	TreeEntry,
 } from '../src/core/ports.ts';
 import { bareRemote } from './bare-remote.ts';
+
+/**
+ * Run as parts (`task-lifecycle-<n>.test.ts`), each its own process with its own fixture, so the runner takes them side by
+ * side: whole, this file took 45 s and set the floor for `npm test`. Each part runs every n-th test, in file order.
+ */
+const [part, parts] = (process.env.ANTON_TEST_PART ?? '1/1').split('/').map(Number);
+let tests = 0;
+const test = ((...args: Parameters<typeof nodeTest>) => (tests++ % parts === part - 1 ? nodeTest(...args) : undefined)) as typeof nodeTest;
 
 const dir = mkdtempSync(path.join(os.tmpdir(), 'anton-task-'));
 process.env.ANTON_DATA_DIR = path.join(dir, 'data');
@@ -1304,8 +1312,10 @@ test('a pull request whose checks run is read every few seconds until they finis
 	await readWatchedPullRequests(now + 5 * 60_000);
 	assert.equal((await status())?.checks, 'failed', 'the card shows the result on the next quick read');
 	assert.equal(isWatched(session.id), false, 'done once the checks finish');
-	assert.equal(delivered.length, 1, 'the failure reaches the agent at once');
-	assert.match(delivered[0].text, /Checks failed[\s\S]*1 test failed/);
+	// Another test's task with a pull request still watched is read in the same sweep, so only this task's count.
+	const mine = delivered.filter((message) => message.id === session.id);
+	assert.equal(mine.length, 1, 'the failure reaches the agent at once');
+	assert.match(mine[0].text, /Checks failed[\s\S]*1 test failed/);
 
 	watchPullRequest(session.id, now);
 	activity = { ...activity, headSha: 'w-2', checks: [] };
