@@ -5,7 +5,7 @@
  * changes as the server does while a turn runs (subagents every 400 ms, a
  * tool event every 300 ms, the task's state every few seconds).
  */
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -263,6 +263,13 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 	}, 100).unref();
 
 	const attachments = new Map<string, { bytes: Buffer; type: string }>();
+	const readGitRef = (ref: string, filePath: string): string | null => {
+		try {
+			return execFileSync('git', ['show', `${ref}:${filePath}`], { cwd: root, encoding: 'utf8', maxBuffer: 8 << 20 });
+		} catch {
+			return null;
+		}
+	};
 	// The Billing to-do's screenshot, as its Library holds it.
 	attachments.set('plan-change.png', { bytes: readFileSync(join(root, 'src/web/public/icons/icon-192.png')), type: 'image/png' });
 	const json = (res: ServerResponse, body: unknown) => {
@@ -368,6 +375,11 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 			return;
 		}
 		if (path === `${task}/changes`) return json(res, { source: 'live', at: null, branch: 'anton/perf', baseBranch: 'main', patch, log: [{ sha: 'abcdef1234567', subject: 'Work in progress', at: session.createdAt }] });
+		if (path === `${task}/diff-files` || path === `${task}/pulls/12/diff-files`) {
+			const filePath = url.searchParams.get('path') ?? '';
+			const prevPath = url.searchParams.get('prevPath') || filePath;
+			return json(res, { oldText: readGitRef('HEAD~10', prevPath), newText: readGitRef('HEAD', filePath) });
+		}
 		if (path === `${task}/subagents`) return json(res, { runs: runsAt(elapsed(), startedAt) });
 		if (path === `${task}/outputs`) return json(res, { source: 'live', at: null, outputs: [...viewerArtifacts].map(([path, file]) => ({ path, size: file.body.length, mtimeMs: 1 })) });
 		if (path === `${task}/output`) {

@@ -4,7 +4,7 @@ import { ConflictError, InvalidInputError, NotFoundError } from '../core/errors.
 import { isIncognitoId } from '../core/incognito.ts';
 import { pageFetch } from '../services/browser/page-fetch.ts';
 import { PAGE_CSP, pageFrame, pageState, renderPage, savePageState } from '../services/artifacts/renders.ts';
-import { changesView, fileTree, MAX_UPLOAD_BYTES, outputsView, readFile, readOutputFile, removeOutput, storedOutputsOf, uploadOutput } from '../services/artifacts/files.ts';
+import { changesView, checkpointDiffFilesView, diffFilesView, fileTree, MAX_UPLOAD_BYTES, outputsView, readFile, readOutputFile, removeOutput, storedOutputsOf, uploadOutput } from '../services/artifacts/files.ts';
 import { wakeMachine } from '../services/sandbox/workspace.ts';
 import { sessionSkills } from '../services/settings/plugins.ts';
 import { createSession, getSession, listSessions, editSession, fallbackModel, switchToFallbackModel, forkSession, resumeSession, stopSession } from '../services/tasks/sessions.ts';
@@ -26,7 +26,7 @@ import { deleteTask, moveToSpace } from '../services/projects/spaces.ts';
 import { attachToTask } from '../services/artifacts/attachments.ts';
 import { decideSend, mailApprovals } from '../services/connectors/mail.ts';
 import { decideToolApproval, toolApprovals } from '../services/connectors/tool-approvals.ts';
-import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestsOf, pullRequestView } from '../services/git/pull-requests.ts';
+import { mergePullRequest, pullRequestDetail, pullRequestMetadata, pullRequestDiff, pullRequestDiffFiles, pullRequestsOf, pullRequestView } from '../services/git/pull-requests.ts';
 import { requestReview } from '../services/git/code-review.ts';
 import { taskRows } from '../core/task-rows.ts';
 import { REASONING, ROUTE, RUN_ON, body, contentType, bytes } from './shared.ts';
@@ -122,6 +122,16 @@ app.get('/api/sessions/:id/checkpoints/:at', async (c) => {
 	const { id } = await getSession(c.req.param('id'));
 	const patch = await readCheckpointPatchAt(id, c.req.param('at'));
 	return c.json({ at: c.req.param('at'), patch });
+});
+const requiredPath = (c: { req: { query: (name: string) => string | undefined } }) => {
+	const path = c.req.query('path') ?? '';
+	if (!path) throw new InvalidInputError('Specify a file path');
+	return { path, prevPath: c.req.query('prevPath') || undefined };
+};
+app.get('/api/sessions/:id/checkpoints/:at/diff-files', async (c) => {
+	const id = c.req.param('id');
+	await getSession(id);
+	return c.json(await checkpointDiffFilesView(id, c.req.param('at'), requiredPath(c)));
 });
 app.post('/api/sessions/:id/checkpoints/:at/restore', async (c) => c.json(await restoreCheckpoint(c.req.param('id'), c.req.param('at'))));
 app.post('/api/sessions/:id/revert', async (c) => {
@@ -239,12 +249,16 @@ const pullNumber = (c: { req: { param: (name: 'number') => string } }) => {
 app.get('/api/sessions/:id/pulls/:number', async (c) => c.json(await pullRequestDetail(c.req.param('id'), pullNumber(c))));
 app.get('/api/sessions/:id/pulls/:number/metadata', async (c) => c.json(await pullRequestMetadata(c.req.param('id'), pullNumber(c))));
 app.get('/api/sessions/:id/pulls/:number/diff', async (c) => c.json({ patch: await pullRequestDiff(c.req.param('id'), pullNumber(c)) }));
+app.get('/api/sessions/:id/pulls/:number/diff-files', async (c) => c.json(await pullRequestDiffFiles(c.req.param('id'), pullNumber(c), requiredPath(c))));
 app.post('/api/sessions/:id/pulls/:number/merge', async (c) => {
 	const input = await body(c, v.object({ method: v.optional(v.picklist(['squash', 'merge', 'rebase'])), sha: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/))) }));
 	return c.json(await mergePullRequest(c.req.param('id'), pullNumber(c), input));
 });
 
 app.get('/api/sessions/:id/changes', async (c) => c.json(await changesView(c.req.param('id'), c.req.query('scope') === 'branch' ? 'branch' : 'unpushed')));
+app.get('/api/sessions/:id/diff-files', async (c) =>
+	c.json(await diffFilesView(c.req.param('id'), { ...requiredPath(c), scope: c.req.query('scope') === 'branch' ? 'branch' : 'unpushed' })),
+);
 app.get('/api/sessions/:id/files', async (c) => c.json(await fileTree(c.req.param('id'))));
 app.get('/api/sessions/:id/file', async (c) => bytes(c, await readFile(c.req.param('id'), c.req.query('path') ?? '')));
 app.get('/api/sessions/:id/outputs', async (c) => c.json(await outputsView(c.req.param('id'))));

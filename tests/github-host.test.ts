@@ -93,8 +93,8 @@ test("someone else's pull request, open pull requests, merge bases, trees and fi
 	const host = githubHost({ token: 't', apiUrl: API });
 	const info = await host.pullRequest('https://github.com/acme/demo/pull/7');
 	assert.deepEqual(
-		{ repo: info.repo, author: info.author, trusted: info.trusted, body: info.body, baseBranch: info.baseBranch, headSha: info.headSha, commits: info.commits },
-		{ repo: 'acme/demo', author: 'grace', trusted: false, body: 'Does things.', baseBranch: 'main', headSha: 'head1', commits: [{ sha: 'c1', subject: 'First' }, { sha: 'head1', subject: 'Second' }] },
+		{ repo: info.repo, author: info.author, trusted: info.trusted, body: info.body, baseBranch: info.baseBranch, baseSha: info.baseSha, headSha: info.headSha, commits: info.commits },
+		{ repo: 'acme/demo', author: 'grace', trusted: false, body: 'Does things.', baseBranch: 'main', baseSha: 'base1', headSha: 'head1', commits: [{ sha: 'c1', subject: 'First' }, { sha: 'head1', subject: 'Second' }] },
 	);
 	assert.equal((await host.listPullRequests('acme/demo'))[0].trusted, true, 'a member can push to the repo');
 	assert.equal(await host.mergeBase('acme/demo', 'main', 'head1'), 'mb1');
@@ -253,8 +253,8 @@ test("the PR panel reads a pull request whole, anyone's comments included, and m
 	const host = githubHost({ token: 't', apiUrl: API });
 	const detail = await host.pullRequestDetail('https://github.com/acme/demo/pull/9');
 	assert.deepEqual(
-		{ state: detail.state, additions: detail.additions, changedFiles: detail.changedFiles, mergeable: detail.mergeable, approved: detail.approved, checks: detail.checks.map((check) => check.status) },
-		{ state: 'open', additions: 12, changedFiles: 2, mergeable: true, approved: true, checks: ['passed'] },
+		{ baseSha: detail.baseSha, state: detail.state, additions: detail.additions, changedFiles: detail.changedFiles, mergeable: detail.mergeable, approved: detail.approved, checks: detail.checks.map((check) => check.status) },
+		{ baseSha: 'b9', state: 'open', additions: 12, changedFiles: 2, mergeable: true, approved: true, checks: ['passed'] },
 	);
 	assert.deepEqual(
 		detail.discussion.map((entry) => [entry.author, entry.kind, entry.verdict]),

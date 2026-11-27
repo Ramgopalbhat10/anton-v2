@@ -412,6 +412,7 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				body: (pull.body ?? '').trim(),
 				state: stateOf(pull),
 				baseBranch: pull.base.ref,
+				baseSha: pull.base.sha,
 				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
 			};
 		},
@@ -446,6 +447,7 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 				body: (pull.body ?? '').trim(),
 				state: stateOf(pull),
 				baseBranch: pull.base.ref,
+				baseSha: pull.base.sha,
 				commits: commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] })),
 				createdAt: pull.created_at ?? pull.updated_at,
 				mergedAt: pull.merged_at,

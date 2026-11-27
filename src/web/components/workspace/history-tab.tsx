@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, ChevronLeft, History, RotateCcw } from '@/lib/icons';
 import { useMemo, useState } from 'react';
 import { DiffList } from '@/components/workspace/diff-list';
+import { createDiffFilesLoader } from '@/lib/pierre-diffs';
 import { useRefreshTask } from '@/components/workspace/source-bar';
 import { HistoryArt } from '@/components/marks/illustrations';
 import { DiffBars, Status } from '@/components/kit/instrument';
@@ -55,6 +56,10 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 	const [restored, setRestored] = useState<string[] | null>(null);
 	const detail = useQuery({ queryKey: ['checkpoint', sessionId, entry.at], queryFn: () => api.checkpoint(sessionId, entry.at), staleTime: Infinity });
 	const files = useMemo(() => parsePatch(detail.data?.patch ?? ''), [detail.data]);
+	const loadDiffFiles = useMemo(
+		() => createDiffFilesLoader(({ path, prevPath }) => api.checkpointDiffFiles(sessionId, entry.at, path, prevPath)),
+		[sessionId, entry.at],
+	);
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex h-7 items-center gap-2">
@@ -84,7 +89,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 			) : detail.data.patch === null ? (
 				<EmptyState icon={History} title="No diff saved" body="This checkpoint was saved before diffs were kept. It can still be restored." />
 			) : (
-				<DiffList files={files} empty="The files matched the starting commit at this point." />
+				<DiffList files={files} empty="The files matched the starting commit at this point." loadDiffFiles={loadDiffFiles} />
 			)}
 		</div>
 	);

@@ -1,5 +1,11 @@
-import type { SelectedLineRange } from '@pierre/diffs';
-import { type DiffLineAnnotation, FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
+import type {
+	FileDiff as PierreFileDiffClass,
+	FileDiffContentsLoader,
+	PostRenderPhase,
+	SelectedLineRange,
+	VirtualizedFileDiff as PierreVirtualizedFileDiffClass,
+} from '@pierre/diffs';
+import { type DiffLineAnnotation, FileDiff as PierreFileDiff, useVirtualizer, Virtualizer } from '@pierre/diffs/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, SlidersHorizontal, Undo2, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,10 +20,12 @@ import type { FileDiff } from '@/lib/diff';
 import {
 	ANTON_DIFF_UNSAFE_CSS,
 	AURA_DIFF_THEMES,
+	type DiffCommentTarget,
 	DiffWorkerProvider,
 	getCachedFileDiffMetadata,
 	getDiffCommentTargets,
 	getLineTextFromDiff,
+	normalizeDiffLine,
 	resolveCommentTarget,
 	setDiffViewPrefs,
 	useDiffViewPrefs,
@@ -30,9 +38,20 @@ import { focusFile, ShowPanel } from '@/lib/workspace';
 
 /** Below this diff pane width (px), split diffs fall back to stacked unified layout. */
 const SPLIT_MIN_WIDTH = 720;
+const TOOLBAR_COMPACT_WIDTH = 460;
+const TOOLBAR_TIGHT_WIDTH = 380;
+const STICKY_HEADER_HEIGHT = 32;
 
 export function isDiffPaneNarrow(width: number): boolean {
 	return width > 0 && width < SPLIT_MIN_WIDTH;
+}
+
+export function isDiffToolbarCompact(width: number): boolean {
+	return width > 0 && width < TOOLBAR_COMPACT_WIDTH;
+}
+
+export function isDiffToolbarTight(width: number): boolean {
+	return width > 0 && width < TOOLBAR_TIGHT_WIDTH;
 }
 
 /** Draft comments on one file of the diff; absent where the diff is read-only. */
@@ -77,14 +96,21 @@ function CommentForm({
 		if (!el) return;
 		// Pierre adds the Shadow DOM annotation slot during layout effects, after React's autoFocus commit step.
 		el.focus();
-		if (document.activeElement === el) return;
+		if (document.activeElement === el) {
+			el.closest('.in-pop')?.scrollIntoView?.({ block: 'nearest' });
+			return;
+		}
 		let frame = 0;
 		let attempts = 0;
 		const retry = () => {
 			const node = textareaRef.current;
-			if (!node || document.activeElement === node || attempts++ >= 5) return;
-			node.focus();
-			if (document.activeElement !== node) frame = requestAnimationFrame(retry);
+			if (!node || attempts++ >= 20) return;
+			if (document.activeElement !== node) node.focus();
+			if (document.activeElement === node) {
+				node.closest('.in-pop')?.scrollIntoView?.({ block: 'nearest' });
+				return;
+			}
+			frame = requestAnimationFrame(retry);
 		};
 		frame = requestAnimationFrame(retry);
 		return () => cancelAnimationFrame(frame);
@@ -99,7 +125,10 @@ function CommentForm({
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={(event) => {
-					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save();
+					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+						event.preventDefault();
+						save();
+					}
 					if (event.key === 'Escape') {
 						event.stopPropagation();
 						onCancel();
@@ -128,18 +157,59 @@ function diffText(file: FileDiff): string {
 		.join('\n');
 }
 
-function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: Commenting; narrow: boolean }) {
+function findMountedLineElement(shadow: ShadowRoot, target: DiffCommentTarget, diffStyle: 'split' | 'unified'): HTMLElement | null {
+	const el =
+		diffStyle === 'split'
+			? shadow.querySelector(`${target.side === 'deletions' ? '[data-deletions]' : '[data-additions]'} [data-line="${target.lineNumber}"]`)
+			: (target.side === 'deletions'
+					? shadow.querySelector(`[data-line="${target.lineNumber}"][data-line-type="change-deletion"]`)
+					: shadow.querySelector(`[data-line="${target.lineNumber}"][data-line-type="change-addition"]`) ??
+						shadow.querySelector(`[data-line="${target.lineNumber}"][data-line-type="context"]`)) ??
+				shadow.querySelector(`[data-line="${target.lineNumber}"]`);
+	return el instanceof HTMLElement ? el : null;
+}
+
+function DiffLines({
+	file,
+	commenting,
+	narrow,
+	loadDiffFiles,
+}: {
+	file: FileDiff;
+	commenting?: Commenting;
+	narrow: boolean;
+	loadDiffFiles?: FileDiffContentsLoader;
+}) {
 	// The line being commented on and its unsaved text live here, so deleting another comment keeps the draft intact.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
 	const [draftText, setDraftText] = useState('');
 	const draftRef = useRef(draft);
 	draftRef.current = draft;
 	const diffContainerRef = useRef<HTMLDivElement>(null);
+	const diffInstanceRef = useRef<PierreFileDiffClass<DraftAnnotationGroup> | null>(null);
 	const pointerDownRef = useRef(false);
+	const restoringFocusRef = useRef(false);
 	const [focusedTargetIndex, setFocusedTargetIndex] = useState<number | null>(null);
+	const [expandError, setExpandError] = useState<string | null>(null);
+	const virtualizer = useVirtualizer();
 	const theme = useTheme();
 	const prefs = useDiffViewPrefs();
 	const rawPatch = useMemo(() => diffText(file), [file]);
+	useEffect(() => {
+		setExpandError(null);
+	}, [rawPatch]);
+	const wrappedLoadDiffFiles = useMemo<FileDiffContentsLoader | undefined>(() => {
+		if (!loadDiffFiles) return undefined;
+		return async (meta) => {
+			setExpandError(null);
+			try {
+				return await loadDiffFiles(meta);
+			} catch (error) {
+				setExpandError(error instanceof Error && error.message ? error.message : 'Could not expand context.');
+				throw error;
+			}
+		};
+	}, [loadDiffFiles]);
 	const fileDiff = useMemo(() => getCachedFileDiffMetadata(file, rawPatch), [file, rawPatch]);
 	const effectiveDiffStyle: 'split' | 'unified' = prefs.diffStyle === 'split' && !narrow ? 'split' : 'unified';
 	const hasCommenting = Boolean(commenting);
@@ -148,6 +218,17 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 	const activeSelection = useMemo<SelectedLineRange | null>(
 		() => (activeTarget ? { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side } : null),
 		[activeTarget],
+	);
+
+	useEffect(() => () => {
+		diffInstanceRef.current = null;
+	}, []);
+
+	const handlePostRender = useCallback(
+		(_node: HTMLElement, instance: PierreFileDiffClass<DraftAnnotationGroup>, phase: PostRenderPhase) => {
+			diffInstanceRef.current = phase === 'unmount' ? null : instance;
+		},
+		[],
 	);
 
 	const openDraft = useCallback((target: { side: ReviewComment['side']; line: number }) => {
@@ -159,23 +240,51 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 	const closeDraft = useCallback((restoreFocus = false) => {
 		setDraft(null);
 		setDraftText('');
-		if (restoreFocus) diffContainerRef.current?.focus();
+		if (restoreFocus) {
+			restoringFocusRef.current = true;
+			diffContainerRef.current?.focus({ preventScroll: true });
+			restoringFocusRef.current = false;
+		}
 	}, []);
 
 	useEffect(() => {
 		if (!activeTarget) return;
+		if (virtualizer) {
+			const onDone = () => {};
+			virtualizer.scrollSpanIntoView({
+				align: 'nearest',
+				onDone,
+				resolveSpan: () => {
+					const host = diffContainerRef.current?.querySelector('diffs-container');
+					if (!(host instanceof HTMLElement)) return undefined;
+					let rawTop: number | undefined;
+					let rawHeight: number | undefined;
+					const lineEl = host.shadowRoot ? findMountedLineElement(host.shadowRoot, activeTarget, effectiveDiffStyle) : null;
+					const lineRect = lineEl?.getBoundingClientRect();
+					if (lineEl && lineRect && lineRect.height > 0) {
+						rawTop = virtualizer.getOffsetInScrollContainer(lineEl);
+						rawHeight = lineRect.height;
+					} else {
+						const inst = diffInstanceRef.current;
+						if (inst && 'getLinePosition' in inst && typeof inst.getLinePosition === 'function') {
+							const pos = (inst as PierreVirtualizedFileDiffClass<DraftAnnotationGroup>).getLinePosition(activeTarget.lineNumber, activeTarget.side);
+							if (pos) {
+								rawTop = virtualizer.getOffsetInScrollContainer(host) + pos.top;
+								rawHeight = pos.height;
+							}
+						}
+					}
+					if (rawTop === undefined || rawHeight === undefined) return undefined;
+					const top = Math.max(0, rawTop - STICKY_HEADER_HEIGHT);
+					return { top, height: rawHeight + (rawTop - top) };
+				},
+			});
+			return () => virtualizer.cancelScroll(onDone);
+		}
 		const shadow = diffContainerRef.current?.querySelector('diffs-container')?.shadowRoot;
 		if (!shadow) return;
-		const lineEl =
-			effectiveDiffStyle === 'split'
-				? shadow.querySelector(`${activeTarget.side === 'deletions' ? '[data-deletions]' : '[data-additions]'} [data-line="${activeTarget.lineNumber}"]`)
-				: (activeTarget.side === 'deletions'
-						? shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-deletion"]`)
-						: shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-addition"]`) ??
-							shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="context"]`)) ??
-					shadow.querySelector(`[data-line="${activeTarget.lineNumber}"]`);
-		lineEl?.scrollIntoView?.({ block: 'nearest' });
-	}, [activeTarget, effectiveDiffStyle]);
+		findMountedLineElement(shadow, activeTarget, effectiveDiffStyle)?.scrollIntoView?.({ block: 'nearest' });
+	}, [activeTarget, effectiveDiffStyle, virtualizer]);
 
 	const options = useMemo(
 		() => ({
@@ -191,8 +300,10 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 			overflow: prefs.overflow,
 			hunkSeparators: 'line-info' as const,
 			enableGutterUtility: hasCommenting,
+			loadDiffFiles: wrappedLoadDiffFiles,
 			tokenizeMaxLineLength: 4_000,
 			unsafeCSS: ANTON_DIFF_UNSAFE_CSS,
+			onPostRender: handlePostRender,
 		}),
 		[
 			theme,
@@ -203,6 +314,8 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 			prefs.disableLineNumbers,
 			prefs.overflow,
 			hasCommenting,
+			wrappedLoadDiffFiles,
+			handlePostRender,
 		],
 	);
 
@@ -222,7 +335,7 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 		for (const comment of commenting.comments) {
 			const side = comment.side === 'old' ? 'deletions' : 'additions';
 			const currentCode = getLineTextFromDiff(fileDiff, side, comment.line);
-			const outdated = currentCode !== comment.code;
+			const outdated = currentCode === null || normalizeDiffLine(currentCode) !== normalizeDiffLine(comment.code);
 			const targetSide = outdated ? fileAnnotationSide : side;
 			const targetLine = outdated ? 0 : comment.line;
 			ensureGroup(targetSide, targetLine).metadata.comments.push({ comment, outdated });
@@ -253,7 +366,7 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 								const side = composer.side === 'old' ? 'deletions' : 'additions';
 								const code = getLineTextFromDiff(fileDiff, side, composer.line) ?? '';
 								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, code, text: body });
-								closeDraft(false);
+								closeDraft(true);
 							}}
 						/>
 					) : null}
@@ -309,8 +422,9 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 					},
 					onFocus: (event: React.FocusEvent<HTMLDivElement>) => {
 						const fromPointer = pointerDownRef.current;
+						const fromRestore = restoringFocusRef.current;
 						pointerDownRef.current = false;
-						if (event.target === event.currentTarget && !fromPointer) {
+						if (event.target === event.currentTarget && !fromPointer && !fromRestore) {
 							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current, commentTargets.length - 1)));
 						}
 					},
@@ -351,6 +465,14 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 			className={cn('anton-diff border-t border-(--line)', hasCommenting && 'outline-none focus-visible:shadow-(--focus-inset)')}
 			{...keyboardProps}
 		>
+			{expandError ? (
+				<div role="alert" className="flex items-center justify-between gap-2 border-b border-(--line) bg-(--bad-soft) px-2.5 py-1 text-micro text-(--bad)">
+					<span className="min-w-0 truncate" title={expandError}>
+						{expandError}
+					</span>
+					<IconBtn icon={X} size="xs" label="Dismiss expansion error" onClick={() => setExpandError(null)} />
+				</div>
+			) : null}
 			<PierreFileDiff
 				fileDiff={fileDiff}
 				options={options}
@@ -363,35 +485,49 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 	);
 }
 
-export function DiffViewControls({ narrow = false }: { narrow?: boolean }) {
+export function DiffViewControls({ narrow = false, compact = false }: { narrow?: boolean; compact?: boolean }) {
 	const prefs = useDiffViewPrefs();
 	return (
 		<div className="flex shrink-0 items-center gap-1">
-			<Segmented label="Diff layout" role="radiogroup">
-				<SegmentedItem
-					role="radio"
-					size="sm"
-					on={prefs.diffStyle === 'split'}
-					title={narrow ? 'Split view (auto-stacked while narrow)' : 'Side-by-side split view'}
-					onClick={() => setDiffViewPrefs({ diffStyle: 'split' })}
-				>
-					Split
-				</SegmentedItem>
-				<SegmentedItem
-					role="radio"
-					size="sm"
-					on={prefs.diffStyle === 'unified'}
-					title="Unified stacked view"
-					onClick={() => setDiffViewPrefs({ diffStyle: 'unified' })}
-				>
-					Stacked
-				</SegmentedItem>
-			</Segmented>
+			{compact ? null : (
+				<Segmented label="Diff layout" role="radiogroup">
+					<SegmentedItem
+						role="radio"
+						size="sm"
+						on={prefs.diffStyle === 'split'}
+						title={narrow ? 'Split view (auto-stacked while narrow)' : 'Side-by-side split view'}
+						onClick={() => setDiffViewPrefs({ diffStyle: 'split' })}
+					>
+						Split
+					</SegmentedItem>
+					<SegmentedItem
+						role="radio"
+						size="sm"
+						on={prefs.diffStyle === 'unified'}
+						title="Unified stacked view"
+						onClick={() => setDiffViewPrefs({ diffStyle: 'unified' })}
+					>
+						Stacked
+					</SegmentedItem>
+				</Segmented>
+			)}
 			<Menu>
 				<MenuTrigger asChild>
 					<IconBtn icon={SlidersHorizontal} size="xs" label="Diff display options" className="shrink-0" />
 				</MenuTrigger>
 				<MenuContent align="end" className="w-[210px]">
+					{compact ? (
+						<>
+							<MenuLabel>Layout</MenuLabel>
+							<MenuItem checked={prefs.diffStyle === 'split'} onSelect={() => setDiffViewPrefs({ diffStyle: 'split' })}>
+								{narrow ? 'Split (auto-stacked)' : 'Split'}
+							</MenuItem>
+							<MenuItem checked={prefs.diffStyle === 'unified'} onSelect={() => setDiffViewPrefs({ diffStyle: 'unified' })}>
+								Stacked
+							</MenuItem>
+							<MenuSeparator />
+						</>
+					) : null}
 					<MenuLabel>Indicators</MenuLabel>
 					<MenuItem checked={prefs.diffIndicators === 'bars'} onSelect={() => setDiffViewPrefs({ diffIndicators: 'bars' })}>
 						Bars
@@ -587,6 +723,7 @@ export function ChangeList({
 	revertTo = 'base',
 	review,
 	narrow: narrowProp,
+	loadDiffFiles,
 }: {
 	files: FileDiff[];
 	open: OpenFiles;
@@ -595,6 +732,7 @@ export function ChangeList({
 	revertTo?: 'base' | 'pushed';
 	review?: ReturnType<typeof useReviewComments>;
 	narrow?: boolean;
+	loadDiffFiles?: FileDiffContentsLoader;
 }) {
 	const rows = useRef(new Map<string, HTMLElement>());
 	const [listRef, listSize] = useElementSize<HTMLDivElement>();
@@ -649,6 +787,7 @@ export function ChangeList({
 								<DiffLines
 									file={file}
 									narrow={narrow}
+									loadDiffFiles={loadDiffFiles}
 									commenting={
 										review && {
 											comments,
@@ -666,11 +805,11 @@ export function ChangeList({
 	);
 }
 
-export function FilesSummary({ files }: { files: FileDiff[] }) {
+export function FilesSummary({ files, className }: { files: FileDiff[]; className?: string }) {
 	const added = files.reduce((sum, file) => sum + file.added, 0);
 	const removed = files.reduce((sum, file) => sum + file.removed, 0);
 	return (
-		<span className="flex shrink-0 items-center gap-2 text-micro text-(--text-3)">
+		<span className={cn('flex shrink-0 items-center gap-2 text-micro text-(--text-3)', className)}>
 			<span className="in-num">
 				{files.length} {files.length === 1 ? 'file' : 'files'}
 			</span>
@@ -687,16 +826,20 @@ export function DiffList({
 	sessionId,
 	branch,
 	base,
+	loadDiffFiles,
 }: {
 	files: FileDiff[];
 	empty?: string;
 	sessionId?: string;
 	branch?: string;
 	base?: string;
+	loadDiffFiles?: FileDiffContentsLoader;
 }) {
 	const open = useOpenFiles(files);
 	const [wellRef, wellSize] = useElementSize<HTMLDivElement>();
 	const narrow = isDiffPaneNarrow(wellSize.width);
+	const compact = isDiffToolbarCompact(wellSize.width);
+	const tight = isDiffToolbarTight(wellSize.width);
 	if (files.length === 0) {
 		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
@@ -704,12 +847,12 @@ export function DiffList({
 		<FileIcons>
 			<div ref={wellRef} className="in-well">
 				<div className="flex h-8 items-center gap-2 border-b border-(--line) pr-1 pl-2.5">
-					<FilesSummary files={files} />
+					{tight ? null : <FilesSummary files={files} className="min-w-0 shrink truncate" />}
 					<span className="flex-1" />
-					<DiffViewControls narrow={narrow} />
+					<DiffViewControls narrow={narrow} compact={compact} />
 					<ExpandAll open={open} />
 				</div>
-				<ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} />
+				<ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} loadDiffFiles={loadDiffFiles} />
 			</div>
 		</FileIcons>
 	);

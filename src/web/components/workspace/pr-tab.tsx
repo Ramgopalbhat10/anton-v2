@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { DiffList } from '@/components/workspace/diff-list';
+import { createDiffFilesLoader } from '@/lib/pierre-diffs';
 import { Count, Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Markdown } from '@/components/content/markdown';
 import { MergeBox } from '@/components/workspace/pr-merge';
@@ -93,11 +94,19 @@ const CHECK_TONE = { passed: prTone('passed'), failed: prTone('failing'), pendin
 type Section = 'changes' | 'description' | 'discussion' | 'commits' | 'checks';
 
 function PullChanges({ sessionId, number }: { sessionId: string; number: number }) {
+	const queryClient = useQueryClient();
 	const diff = useQuery({ queryKey: ['pull', sessionId, number, 'diff'], queryFn: () => api.pullDiff(sessionId, number), staleTime: 60_000 });
 	const files = useMemo(() => (diff.data ? parsePatch(diff.data.patch) : []), [diff.data]);
+	const loadDiffFiles = useMemo(
+		() =>
+			createDiffFilesLoader(({ path, prevPath }) => api.pullDiffFiles(sessionId, number, path, prevPath), {
+				onStale: () => void queryClient.invalidateQueries({ queryKey: ['pull', sessionId, number, 'diff'] }),
+			}),
+		[queryClient, sessionId, number],
+	);
 	if (diff.isError) return <EmptyState title="Diff unavailable" body={diff.error.message} />;
 	if (!diff.data) return <Loading>Reading the diff from GitHub</Loading>;
-	return <DiffList files={files} empty="This pull request changes no files." />;
+	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} />;
 }
 
 function Discussion({ pull }: { pull: PullRequestDetail }) {

@@ -144,6 +144,8 @@ export type PickedElement = {
 	image: string | null;
 };
 
+export type DiffFileContents = { oldText: string | null; newText: string | null };
+
 export const workspaceApi = {
 	reviews: () => json<{ reviews: ReviewItem[] }>('/api/reviews'),
 	reviewAnyPullRequest: (url: string) => post<Session>('/api/reviews', { url }),
@@ -169,10 +171,25 @@ export const workspaceApi = {
 	pullRequest: (id: string) => json<PullRequest | null>(`/api/sessions/${id}/pull-request`),
 	reviewPullRequest: (id: string) => post<{ started: boolean }>(`/api/sessions/${id}/review`),
 	changes: (id: string, scope: ChangesScope = 'unpushed') => json<ChangesPayload>(`/api/sessions/${id}/changes${scope === 'branch' ? '?scope=branch' : ''}`),
+	diffFiles: (id: string, path: string, scope: ChangesScope = 'unpushed', prevPath?: string) => {
+		const params = new URLSearchParams({ path, scope });
+		if (prevPath) params.set('prevPath', prevPath);
+		return json<DiffFileContents>(`/api/sessions/${id}/diff-files?${params}`);
+	},
 	pulls: (id: string) => json<{ pulls: PullRequestItem[] }>(`/api/sessions/${id}/pulls`),
 	pullMetadata: (id: string, number: number) => json<Pick<PullRequestDetail, 'url' | 'headBranch' | 'baseBranch' | 'additions' | 'deletions'>>(`/api/sessions/${id}/pulls/${number}/metadata`),
 	pull: (id: string, number: number) => json<PullRequestDetail>(`/api/sessions/${id}/pulls/${number}`),
 	pullDiff: (id: string, number: number) => json<{ patch: string }>(`/api/sessions/${id}/pulls/${number}/diff`),
+	pullDiffFiles: (id: string, number: number, path: string, prevPath?: string) => {
+		const params = new URLSearchParams({ path });
+		if (prevPath) params.set('prevPath', prevPath);
+		return json<DiffFileContents>(`/api/sessions/${id}/pulls/${number}/diff-files?${params}`);
+	},
+	checkpointDiffFiles: (id: string, at: string, path: string, prevPath?: string) => {
+		const params = new URLSearchParams({ path });
+		if (prevPath) params.set('prevPath', prevPath);
+		return json<DiffFileContents>(`/api/sessions/${id}/checkpoints/${encodeURIComponent(at)}/diff-files?${params}`);
+	},
 	/** Squashes by default; `sha` refuses the merge when the head moved since you looked. */
 	mergePull: (id: string, number: number, input: { method?: 'squash' | 'merge' | 'rebase'; sha?: string } = {}) =>
 		post<PullRequestDetail>(`/api/sessions/${id}/pulls/${number}/merge`, input),

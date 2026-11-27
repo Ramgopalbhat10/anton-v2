@@ -1,6 +1,6 @@
 import { uploadName } from '../../core/upload-name.ts';
 import { readMachineFile } from '../../core/machine-fs.ts';
-import { safeRelativePath, text } from '../../core/shell.ts';
+import { CommandError, quote, run, safeRelativePath, text } from '../../core/shell.ts';
 import { deletedOutputs, deletePage, noteDeletedOutput } from '../../db/pages.ts';
 import { getProject } from '../../db/projects.ts';
 import { getSessionRecord, updateSession } from '../../db/sessions.ts';
@@ -8,10 +8,9 @@ import type { SessionRecord } from '../../core/types.ts';
 import { hasCommit } from '../git/host-commits.ts';
 import { logProblem } from '../../core/log.ts';
 import { getProviders } from '../../providers/index.ts';
-import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointPatch, readOutput, readUnpushedPatch, saveOutput, savedOutputs } from '../git/checkpoints.ts';
+import { type Checkpoint, type SavedOutput, deleteOutput, readBlob, readCheckpoint, readCheckpointAt, readCheckpointPatch, readOutput, readUnpushedPatch, saveOutput, savedOutputs } from '../git/checkpoints.ts';
 import { announce } from '../../core/changes.ts';
 import { writeMachineFile } from '../../core/machine-fs.ts';
-import { quote, run } from '../../core/shell.ts';
 import { type FileChange, type LogEntry, changes, listFiles, repoDir } from '../git/git.ts';
 import type { Machine } from '../../core/ports.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
@@ -160,6 +159,86 @@ async function savedUnpushed(ctx: Context): Promise<string> {
 	// a push commits everything first; otherwise there is no telling, so the whole branch shows.
 	if (ctx.pushedSha && checkpoint.log[0]?.sha === ctx.pushedSha) return '';
 	return readCheckpointPatch(ctx.id);
+}
+
+export const MAX_DIFF_CONTEXT_BYTES = 2 * 1024 * 1024;
+export type DiffFileContents = { oldText: string | null; newText: string | null };
+
+export function decodeDiffText(bytes: Uint8Array | null): string | null {
+	if (bytes === null) return null;
+	if (bytes.length > MAX_DIFF_CONTEXT_BYTES) throw new InvalidInputError('File too large to expand context.');
+	if (bytes.subarray(0, 8000).includes(0)) throw new InvalidInputError('Binary file cannot expand context.');
+	return text(bytes);
+}
+
+export async function hostFileOrNull(repo: string, sha: string, path: string): Promise<Uint8Array | null> {
+	if (!repo || !sha) return null;
+	try {
+		return await getProviders().git.file(repo, sha, path);
+	} catch (error) {
+		const status = (error as { status?: unknown } | null)?.status;
+		if (error instanceof NotFoundError || status === 404) return null;
+		throw error;
+	}
+}
+
+async function gitBlobAt(machine: Machine, sha: string, path: string): Promise<Uint8Array | null> {
+	if (!sha) return null;
+	const result = await machine.exec(`git cat-file blob ${quote(`${sha}:${path}`)}`, { cwd: repoDir(machine), plain: true });
+	return result.exitCode === 0 ? result.stdout : null;
+}
+
+async function liveFileOrNull(machine: Machine, path: string): Promise<Uint8Array | null> {
+	try {
+		return await readMachineFile(machine, `${repoDir(machine)}/${path}`);
+	} catch (error) {
+		if (error instanceof NotFoundError) return null;
+		if (error instanceof CommandError && /No such file or directory|Not a directory/i.test(error.result.stderr)) return null;
+		throw error;
+	}
+}
+
+async function savedFileBytes(saved: Checkpoint['files'][number]): Promise<Uint8Array | null> {
+	if (saved.status === 'D') return null;
+	if (saved.blob) {
+		const bytes = await readBlob(saved.blob);
+		if (!bytes) throw new NotFoundError('Saved file is missing');
+		return bytes;
+	}
+	throw new InvalidInputError('File too large to expand context.');
+}
+
+export async function diffFilesView(id: string, input: { path: string; prevPath?: string; scope: ChangesScope }): Promise<DiffFileContents> {
+	const path = safeRelativePath(input.path);
+	const oldPath = input.prevPath ? safeRelativePath(input.prevPath) : path;
+	const ctx = await context(id);
+	if (ctx.machine) {
+		const pushedSha = input.scope === 'unpushed' && ctx.pushedSha && (await hasCommit(ctx.machine, ctx.pushedSha)) ? ctx.pushedSha : null;
+		const fromSha = pushedSha ?? ctx.baseSha;
+		const [oldBytes, newBytes] = await Promise.all([gitBlobAt(ctx.machine, fromSha, oldPath), liveFileOrNull(ctx.machine, path)]);
+		return { oldText: decodeDiffText(oldBytes), newText: decodeDiffText(newBytes) };
+	}
+	const oldSha = input.scope === 'unpushed' && ctx.pushedSha && ctx.checkpoint?.unpushed?.pushedSha === ctx.pushedSha ? ctx.pushedSha : ctx.baseSha;
+	const saved = ctx.checkpoint?.files.find((file) => file.path === path);
+	const [oldBytes, newBytes] = await Promise.all([
+		hostFileOrNull(ctx.repo, oldSha, oldPath),
+		saved ? savedFileBytes(saved) : hostFileOrNull(ctx.repo, ctx.baseSha, path),
+	]);
+	return { oldText: decodeDiffText(oldBytes), newText: decodeDiffText(newBytes) };
+}
+
+export async function checkpointDiffFilesView(id: string, at: string, input: { path: string; prevPath?: string }): Promise<DiffFileContents> {
+	const path = safeRelativePath(input.path);
+	const oldPath = input.prevPath ? safeRelativePath(input.prevPath) : path;
+	const [checkpoint, ctx] = await Promise.all([readCheckpointAt(id, at), context(id)]);
+	if (!checkpoint) throw new NotFoundError('Checkpoint not found');
+	const oldBytes =
+		ctx.machine && (await hasCommit(ctx.machine, checkpoint.baseSha))
+			? await gitBlobAt(ctx.machine, checkpoint.baseSha, oldPath)
+			: await hostFileOrNull(ctx.repo, checkpoint.baseSha, oldPath);
+	const saved = checkpoint.files.find((file) => file.path === path);
+	const newBytes = saved ? await savedFileBytes(saved) : oldBytes;
+	return { oldText: decodeDiffText(oldBytes), newText: decodeDiffText(newBytes) };
 }
 
 export async function changesView(id: string, scope: ChangesScope = 'unpushed'): Promise<ChangesView> {

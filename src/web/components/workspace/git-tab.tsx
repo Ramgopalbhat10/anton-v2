@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, CloudCheck, MessageSquare, Send } from '@/lib/icons';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { EditorBar, EditorPane } from '@/components/content/editor-pane';
@@ -15,8 +15,20 @@ import { useElementSize } from '@/lib/use-element-size';
 import { cn } from '@/lib/utils';
 import { setChangesScope, useChangesScope, useFocusedChange } from '@/lib/workspace';
 import { taskQueries } from '@/lib/task-queries';
-import { ChangeList, DiffScrollContainer, DiffViewControls, ExpandAll, FilesSummary, isDiffPaneNarrow, useOpenFiles } from '@/components/workspace/diff-list';
+import {
+	ChangeList,
+	DiffScrollContainer,
+	DiffViewControls,
+	ExpandAll,
+	FilesSummary,
+	isDiffPaneNarrow,
+	isDiffToolbarCompact,
+	isDiffToolbarTight,
+	useOpenFiles,
+} from '@/components/workspace/diff-list';
+import { api } from '@/lib/api';
 import { useChanges } from '@/lib/changes';
+import { createDiffFilesLoader } from '@/lib/pierre-diffs';
 
 function CommitList({ log, title }: { log: ChangesPayload['log']; title: string }) {
 	const [shown, setShown] = useState(true);
@@ -119,6 +131,16 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 	const open = useOpenFiles(files, { virtualized: true });
 	const [mainRef, mainSize] = useElementSize<HTMLDivElement>();
 	const narrow = isDiffPaneNarrow(mainSize.width);
+	const compact = isDiffToolbarCompact(mainSize.width);
+	const tight = isDiffToolbarTight(mainSize.width);
+	const queryClient = useQueryClient();
+	const loadDiffFiles = useMemo(
+		() =>
+			createDiffFilesLoader(({ path, prevPath }) => api.diffFiles(sessionId, path, scope, prevPath), {
+				onStale: () => void queryClient.invalidateQueries({ queryKey: ['changes', sessionId] }),
+			}),
+		[queryClient, sessionId, scope],
+	);
 	const review = useReviewComments(sessionId);
 	const session = useQuery(taskQueries.session(sessionId)).data;
 	const [selected, setSelected] = useState<{ path: string; at: number } | null>(null);
@@ -231,14 +253,14 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 						<div ref={mainRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
 							<EditorBar sideToggle={sideToggle}>
 								<nav aria-label="Showing" className="flex min-w-0 flex-1 items-center gap-1 pl-1 text-small">
-									<span className="shrink-0 text-(--text-3)">{scope === 'branch' ? 'Branch' : 'Changes'}</span>
-									<Icon icon={ChevronRight} size={11} className="text-(--text-3)" />
+									<span className="min-w-0 truncate text-(--text-3)">{scope === 'branch' ? 'Branch' : 'Changes'}</span>
+									<Icon icon={ChevronRight} size={11} className="shrink-0 text-(--text-3)" />
 									<span className="min-w-0 truncate text-(--text)">{scope === 'branch' ? 'All changes' : 'Not pushed'}</span>
 								</nav>
 								{files.length ? (
 									<>
-										<FilesSummary files={files} />
-										<DiffViewControls narrow={narrow} />
+										{tight ? null : <FilesSummary files={files} />}
+										<DiffViewControls narrow={narrow} compact={compact} />
 										<ExpandAll open={open} />
 									</>
 								) : null}
@@ -247,7 +269,7 @@ export function GitTab({ sessionId }: { sessionId: string }) {
 								{files.length === 0 ? (
 									empty
 								) : (
-									<ChangeList files={files} open={open} selected={selected} sessionId={sessionId} revertTo={revertTo} review={review} narrow={narrow} />
+									<ChangeList files={files} open={open} selected={selected} sessionId={sessionId} revertTo={revertTo} review={review} narrow={narrow} loadDiffFiles={loadDiffFiles} />
 								)}
 							</DiffScrollContainer>
 						</div>
