@@ -209,6 +209,42 @@ export function getLineTextFromDiff(fileDiff: FileDiffMetadata, side: 'deletions
 	return null;
 }
 
+/** Maps a hovered diff line to a canonical review comment target (`old` only for removed lines or deleted files). */
+export function resolveCommentTarget(
+	fileDiff: FileDiffMetadata,
+	side: 'deletions' | 'additions',
+	lineNumber: number,
+): { side: 'old' | 'new'; line: number } {
+	if (side === 'additions') return { side: 'new', line: lineNumber };
+	if (fileDiff.type === 'deleted') return { side: 'old', line: lineNumber };
+	let delta = 0;
+	for (const hunk of fileDiff.hunks) {
+		if (!fileDiff.isPartial && lineNumber < hunk.deletionStart) {
+			return { side: 'new', line: lineNumber + (hunk.additionStart - hunk.deletionStart) };
+		}
+		let delLine = hunk.deletionStart;
+		let addLine = hunk.additionStart;
+		for (const content of hunk.hunkContent) {
+			if (content.type === 'context') {
+				if (lineNumber >= delLine && lineNumber < delLine + content.lines) {
+					return { side: 'new', line: addLine + (lineNumber - delLine) };
+				}
+				delLine += content.lines;
+				addLine += content.lines;
+			} else {
+				if (lineNumber >= delLine && lineNumber < delLine + content.deletions) {
+					return { side: 'old', line: lineNumber };
+				}
+				delLine += content.deletions;
+				addLine += content.additions;
+			}
+		}
+		delta = addLine - delLine;
+	}
+	if (!fileDiff.isPartial) return { side: 'new', line: lineNumber + delta };
+	return { side: 'old', line: lineNumber };
+}
+
 function WorkerPoolOptionsSync({ lineDiffType }: { lineDiffType: DiffViewPrefs['lineDiffType'] }) {
 	const workerPool = useWorkerPool();
 	useEffect(() => {

@@ -649,6 +649,9 @@
 }
 
 .anton-diff {
+	position: relative;
+	z-index: 0;
+	isolation: isolate;
 	--diffs-font-family: var(--mono);
 	--diffs-header-font-family: var(--font);
 	--diffs-font-size: var(--fs-12);

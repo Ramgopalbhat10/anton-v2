@@ -1,7 +1,7 @@
 import { type DiffLineAnnotation, FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, SlidersHorizontal, Undo2, X } from '@/lib/icons';
-import { type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/kit/disclosure';
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { FileIcon, FileIcons } from '@/components/marks/file-icons';
@@ -16,6 +16,7 @@ import {
 	DiffWorkerProvider,
 	getCachedFileDiffMetadata,
 	getLineTextFromDiff,
+	resolveCommentTarget,
 	setDiffViewPrefs,
 	useDiffViewPrefs,
 } from '@/lib/pierre-diffs';
@@ -39,9 +40,10 @@ export type Commenting = {
 	onRemove: (comment: ReviewComment) => void;
 };
 
-type DraftAnnotation =
-	| { kind: 'comment'; comment: ReviewComment; outdated: boolean }
-	| { kind: 'composer'; side: ReviewComment['side']; line: number };
+type DraftAnnotationGroup = {
+	comments: Array<{ comment: ReviewComment; outdated: boolean }>;
+	composer?: { side: ReviewComment['side']; line: number };
+};
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
@@ -132,46 +134,56 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 		],
 	);
 
-	const lineAnnotations = useMemo<DiffLineAnnotation<DraftAnnotation>[]>(() => {
+	const lineAnnotations = useMemo<DiffLineAnnotation<DraftAnnotationGroup>[]>(() => {
 		if (!fileDiff || !commenting) return [];
 		const fileAnnotationSide = fileDiff.type === 'deleted' ? 'deletions' : 'additions';
-		const annotations: DiffLineAnnotation<DraftAnnotation>[] = commenting.comments.map((comment) => {
+		const grouped = new Map<string, DiffLineAnnotation<DraftAnnotationGroup>>();
+		const ensureGroup = (side: 'deletions' | 'additions', lineNumber: number) => {
+			const key = `${side}:${lineNumber}`;
+			let entry = grouped.get(key);
+			if (!entry) {
+				entry = { side, lineNumber, metadata: { comments: [] } };
+				grouped.set(key, entry);
+			}
+			return entry;
+		};
+		for (const comment of commenting.comments) {
 			const side = comment.side === 'old' ? 'deletions' : 'additions';
 			const currentCode = getLineTextFromDiff(fileDiff, side, comment.line);
 			const outdated = currentCode !== comment.code;
-			return {
-				side: outdated ? fileAnnotationSide : side,
-				lineNumber: outdated ? 0 : comment.line,
-				metadata: { kind: 'comment', comment, outdated },
-			};
-		});
-		if (draft) {
-			annotations.push({
-				side: draft.side === 'old' ? 'deletions' : 'additions',
-				lineNumber: draft.line,
-				metadata: { kind: 'composer', side: draft.side, line: draft.line },
-			});
+			const targetSide = outdated ? fileAnnotationSide : side;
+			const targetLine = outdated ? 0 : comment.line;
+			ensureGroup(targetSide, targetLine).metadata.comments.push({ comment, outdated });
 		}
-		return annotations;
+		if (draft) {
+			const targetSide = draft.side === 'old' ? 'deletions' : 'additions';
+			ensureGroup(targetSide, draft.line).metadata.composer = draft;
+		}
+		return [...grouped.values()];
 	}, [fileDiff, commenting, draft]);
 
 	const renderAnnotation = useCallback(
-		(annotation: DiffLineAnnotation<DraftAnnotation>) => {
-			const item = annotation.metadata;
-			if (item.kind === 'comment') {
-				return <CommentCard comment={item.comment} outdated={item.outdated} onRemove={() => commenting?.onRemove(item.comment)} />;
-			}
+		(annotation: DiffLineAnnotation<DraftAnnotationGroup>) => {
+			const { comments, composer } = annotation.metadata;
 			return (
-				<CommentForm
-					onCancel={() => setDraft(null)}
-					onSave={(body) => {
-						if (!fileDiff) return;
-						const side = item.side === 'old' ? 'deletions' : 'additions';
-						const code = getLineTextFromDiff(fileDiff, side, item.line) ?? '';
-						commenting?.onAdd({ path: file.path, side: item.side, line: item.line, code, text: body });
-						setDraft(null);
-					}}
-				/>
+				<Fragment>
+					{comments.map((item, index) => (
+						<CommentCard key={index} comment={item.comment} outdated={item.outdated} onRemove={() => commenting?.onRemove(item.comment)} />
+					))}
+					{composer ? (
+						<CommentForm
+							key={`${composer.side}:${composer.line}`}
+							onCancel={() => setDraft(null)}
+							onSave={(body) => {
+								if (!fileDiff) return;
+								const side = composer.side === 'old' ? 'deletions' : 'additions';
+								const code = getLineTextFromDiff(fileDiff, side, composer.line) ?? '';
+								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, code, text: body });
+								setDraft(null);
+							}}
+						/>
+					) : null}
+				</Fragment>
 			);
 		},
 		[commenting, file.path, fileDiff],
@@ -185,18 +197,15 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 				onClick={(event) => {
 					event.stopPropagation();
 					const hovered = getHoveredLine();
-					if (!hovered) return;
-					setDraft({
-						side: hovered.side === 'deletions' ? 'old' : 'new',
-						line: hovered.lineNumber,
-					});
+					if (!hovered || !fileDiff) return;
+					setDraft(resolveCommentTarget(fileDiff, hovered.side, hovered.lineNumber));
 				}}
 				className="inline-flex size-4 translate-x-1 cursor-pointer items-center justify-center rounded-control bg-(--accent) text-(--accent-fg) shadow-(--sh-1) outline-none focus-visible:shadow-(--focus)"
 			>
 				<Icon icon={Plus} size={11} />
 			</button>
 		),
-		[],
+		[fileDiff],
 	);
 
 	if (!fileDiff || fileDiff.hunks.length === 0) {

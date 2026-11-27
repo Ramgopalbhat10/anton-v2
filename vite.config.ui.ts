@@ -9,6 +9,7 @@ export default defineConfig({
 	// The API and UI run separate Vite servers; their optimized modules must not overwrite each other.
 	cacheDir: new URL('./node_modules/.vite/ui', import.meta.url).pathname,
 	plugins: [react(), tailwindcss()],
+	worker: { format: 'es' },
 	resolve: {
 		alias: {
 			'@': new URL('./src/web', import.meta.url).pathname,
