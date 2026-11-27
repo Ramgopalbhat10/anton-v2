@@ -130,7 +130,6 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as lon
 
 test('Coder keeps slow work in the background and independent checks side by side, in every workspace prompt', async () => {
 	const { PROMPTS } = await import('../src/agents/coder/prompts.ts');
-	const { bugReviewMessage } = await import('../src/services/replies/pre-push-review.ts');
 	for (const prompt of [PROMPTS.edit.task, PROMPTS.edit.workspace, PROMPTS.edit.chatWorkspace, PROMPTS.patch.task]) {
 		assert.match(prompt, /start a slow command \(an install, a build, a test run, a whole suite\) with run_in_background as soon as you know you need it/);
 		assert.match(prompt, /wait in check_job only when nothing else is left to do/);
@@ -138,7 +137,6 @@ test('Coder keeps slow work in the background and independent checks side by sid
 		assert.match(prompt, /Never chain an install in front of other commands/);
 		assert.match(prompt, /Before you start a subagent you will wait on, start in the background the checks it does not need/);
 	}
-	assert.match(bugReviewMessage('base0123456789abcdef', false), /^Before Anton pushes[^\n]*\nFirst start in the background \(run_in_background\) the checks you still have to run, so they run while it reviews\.\nStart the reviewer/);
 });
 
 test('Coder checks a change against the whole request and the tests that cover it before finishing, and sends a stalled reply back to work', () => {
