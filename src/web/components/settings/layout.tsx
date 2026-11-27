@@ -137,6 +137,7 @@ export function SettingsLayout() {
 					label={expanded ? 'Shrink settings' : 'Expand settings'}
 					aria-pressed={expanded}
 					onClick={toggleSettingsExpanded}
+					className="hidden md:inline-flex"
 				/>
 				<Kbd keys="esc" size="sm" />
 				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />
