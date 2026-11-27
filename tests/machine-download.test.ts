@@ -66,6 +66,9 @@ function folderMachine(): Machine & { commands: string[] } {
 				child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
 				child.stderr.on('data', (chunk: Buffer) => (err += chunk));
 				child.on('close', (code) => resolve({ stdout: new Uint8Array(Buffer.concat(out)), stderr: err, exitCode: code ?? 1 }));
+				child.on('error', (error) => resolve({ stdout: new Uint8Array(), stderr: String(error), exitCode: 127 }));
+				// A command that exits before reading its stdin (no curl here) closes the pipe first; the write then fails with EPIPE.
+				child.stdin.on('error', () => undefined);
 				child.stdin.end(options.stdin ? Buffer.from(options.stdin) : undefined);
 			}),
 	} as Machine & { commands: string[] };
