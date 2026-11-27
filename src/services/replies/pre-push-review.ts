@@ -54,6 +54,7 @@ export function startPrePushReview(id: string): void {
 export const bugReviewMessage = (from: string, pushed: boolean) =>
 	[
 		'Before Anton pushes your change, have it reviewed with fresh eyes for what it could break.',
+		'First start in the background (run_in_background) the checks you still have to run, so they run while it reviews.',
 		`Start the reviewer subagent with a brief that says in two or three sentences what the change is for, and that it is \`git diff ${from.slice(0, 12)}\` in the repository${pushed ? ' (what changed since your last push)' : ''}.`,
 		'It reports problems with a severity. Check each against the code and what the user asked for before you act: a reviewer can be wrong. ' +
 			'Fix each critical, high or medium one that holds, with a test that covers it, and commit; for one that does not, or that rests on a risk the code already accepts elsewhere, say why in a line and leave it. Leave low ones out of this reply and name them in a line. ' +

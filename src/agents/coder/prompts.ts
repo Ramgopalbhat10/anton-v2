@@ -178,10 +178,20 @@ export const REQUIREMENTS_HINT =
 const FINISH_HINT =
 	'Before you finish a change to code, read the request again and check each thing it names against what you did, including the error, fallback and edge cases it mentions; exercise any it names that no existing test covers with a quick test or script of your own. ' +
 	'Then look past the request at what the change could break: callers and state it touches, ordering and timing, error and failure paths, input limits, keyboard and focus in a UI, and data in the shape the real system produces rather than a stand-in. Test the riskiest of these on the real code path. ' +
-	'Then run the whole test suite of the package or module you changed once, not only the tests of the files you touched, so the change does all it was asked and breaks nothing near it. ' +
-	'Start it with run_in_background (independent suites side by side) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures. ' +
+	'Then run the tests that cover what you changed and what depends on it, not every suite: the test files of the changed modules and of their callers, picked with the runner\'s own filters (file paths, a name pattern, or a related-tests mode such as vitest related or jest --findRelatedTests). ' +
+	'Run a whole suite only when the change reaches widely (a shared module, configuration, dependencies or the build) or no CI runs it on the pull request, and then once, with run_in_background; you are told when it ends, and check_job gives its exit code and failures. ' +
 	'Do not end on part of the request left undone while you can still do it: finish it, and report as open only what needs the user. ' +
 	'A doubt you would report as a caveat or a judgement call (a reading of the request you chose, a convention you assumed, a weakness you know of) is such a part: settle it first from the data, documents, examples, existing code and tests you have, trying each reading against them where that can decide it.';
+
+/**
+ * Prod, 27 Nov 2026: a reply of 1h35m spent 9 minutes blocked in check_job on suites and a reinstall, and its install,
+ * chained in front of the checks in one foreground command, was stopped at 3 minutes and left the dependencies empty.
+ */
+const PARALLEL_HINT =
+	'Keep work moving in parallel: start a slow command (an install, a build, a test run, a whole suite) with run_in_background as soon as you know you need it, and go on reading, editing or writing while it runs; wait in check_job only when nothing else is left to do. ' +
+	'Checks that do not depend on each other (a type check, a lint, separate test files or suites) go as separate commands at once, not chained with &&, so one failure hides none of the others and the slowest sets the time. ' +
+	'Never chain an install in front of other commands: when a merge, pull or checkout changes a lockfile or manifest, start the install in the background at once and let nothing else touch the dependencies until it ends, since a stopped install can leave them broken. ' +
+	'Give a foreground command that may take more than a minute a timeout that fits it. Before you start a subagent you will wait on, start in the background the checks it does not need, so they run while it works.';
 
 /** Without it, models handed long jobs back part-done. From config only, never the clock: it is in the cached system prompt. */
 const BUDGET_HINT = `A reply may run for up to ${hoursText(config.replyTimeoutMs)}, so do a large job in full rather than scope it down or hand it back part-done.`;
@@ -230,13 +240,14 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	ANSWER_HINT,
 	DELEGATE_HINT,
 	BRIEF_HINT,
-	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and the full suites with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
+	'Run the checks yourself: quick, focused ones (the type check, the tests of the files you changed) while you work, and any longer run with run_in_background as below. Give a suite to the tester subagent only when triaging its failures would flood your own context. Never run the same tests both ways, and run them again only after changing code they cover.',
 	read,
 	edit,
+	PARALLEL_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
 	'You do not have git push credentials: open_pull_request commits, and Anton pushes the branch and opens the pull request once, when your reply ends.',
-	'When the request is a change to the repository, call open_pull_request yourself in the same reply once the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then finish the full suites and any fixes, which go with the same push. Call it once: again only to change the title or description. Do not wait to be asked for it, and do not write its link: the thread shows it.',
+	'When the request is a change to the repository, call open_pull_request yourself in the same reply once the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then finish the remaining checks and any fixes, which go with the same push. Call it once: again only to change the title or description. Do not wait to be asked for it, and do not write its link: the thread shows it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
 	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
@@ -258,6 +269,7 @@ const chatWorkspacePrompt = (edit: string) => [
 	'Make files, run commands and install what the job needs there.',
 	edit,
 	READ_HINT,
+	PARALLEL_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,

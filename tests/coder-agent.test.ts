@@ -46,7 +46,7 @@ test('workspace agents batch the edits they know and do not run the same tests t
 	assert.match(source, /const EDIT_HINT =\n\t'Make the changes you already know in one step: all the changes to a file in one edit call, as its edits list/);
 	assert.match(source, /const PATCH_HINT =\n\t'Make the changes you already know in one step: one apply_patch call can change several files and several places in each/);
 	// Both workspace prompts take the profile's hint in the place EDIT_HINT had.
-	assert.equal((source.match(/\n\tedit,\n\tFINISH_HINT,/g) ?? []).length, 1);
+	assert.equal((source.match(/\n\tedit,\n\tPARALLEL_HINT,\n\tFINISH_HINT,/g) ?? []).length, 1);
 	assert.equal((source.match(/\n\tedit,\n\tREAD_HINT,/g) ?? []).length, 1);
 	assert.match(source, /const edit = profile === 'patch' \? PATCH_HINT : EDIT_HINT;/);
 	assert.match(source, /Never run the same tests both ways/);
@@ -128,7 +128,20 @@ test('a coder turn may run up to 4 hours, past Flue\'s 1-hour default, or as lon
 	assert.match(readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8'), /replyTimeoutMs: .*read\('ANTON_REPLY_TIMEOUT_HOURS', '4'\)/);
 });
 
-test('Coder checks a change against the whole request and a whole test suite before finishing, and sends a stalled reply back to work', () => {
+test('Coder keeps slow work in the background and independent checks side by side, in every workspace prompt', async () => {
+	const { PROMPTS } = await import('../src/agents/coder/prompts.ts');
+	const { bugReviewMessage } = await import('../src/services/replies/pre-push-review.ts');
+	for (const prompt of [PROMPTS.edit.task, PROMPTS.edit.workspace, PROMPTS.edit.chatWorkspace, PROMPTS.patch.task]) {
+		assert.match(prompt, /start a slow command \(an install, a build, a test run, a whole suite\) with run_in_background as soon as you know you need it/);
+		assert.match(prompt, /wait in check_job only when nothing else is left to do/);
+		assert.match(prompt, /go as separate commands at once, not chained with &&/);
+		assert.match(prompt, /Never chain an install in front of other commands/);
+		assert.match(prompt, /Before you start a subagent you will wait on, start in the background the checks it does not need/);
+	}
+	assert.match(bugReviewMessage('base0123456789abcdef', false), /^Before Anton pushes[^\n]*\nFirst start in the background \(run_in_background\) the checks you still have to run, so they run while it reviews\.\nStart the reviewer/);
+});
+
+test('Coder checks a change against the whole request and the tests that cover it before finishing, and sends a stalled reply back to work', () => {
 	const source = coder('prompts.ts');
 	for (const prompt of ['const workspacePrompt', 'const chatWorkspacePrompt']) {
 		const start = source.indexOf(prompt);
@@ -136,7 +149,9 @@ test('Coder checks a change against the whole request and a whole test suite bef
 		assert.match(source.slice(start, source.indexOf('.join(', start)), /FINISH_HINT/, prompt);
 	}
 	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/** Links to the outputs folder'));
-	assert.match(finish, /whole test suite of the package or module you changed/);
+	assert.match(finish, /the tests that cover what you changed and what depends on it, not every suite/);
+	assert.match(finish, /vitest related or jest --findRelatedTests/);
+	assert.match(finish, /Run a whole suite only when the change reaches widely .* or no CI runs it on the pull request/);
 	assert.match(finish, /Do not end on part of the request left undone/);
 	assert.match(finish, /A doubt you would report as a caveat or a judgement call/);
 	assert.match(coder('index.ts'), /signal\.aborted \? null : stallReminder\(id, response\.toolCalls\)/);
@@ -202,16 +217,17 @@ test('Coder runs suites as background jobs wherever its prompt names them, and s
 	assert.match(jobs, /name: 'check_job'/);
 	assert.match(jobs, /A server that should keep running is started with nohup instead/);
 	const finish = source.slice(source.indexOf('const FINISH_HINT'), source.indexOf('/**', source.indexOf('const FINISH_HINT')));
-	assert.match(finish, /Start it with run_in_background \(independent suites side by side\) and go on with what is left while it runs; you are told when it ends, and check_job gives its exit code and failures\./);
+	assert.match(finish, /and then once, with run_in_background; you are told when it ends, and check_job gives its exit code and failures\./);
 	assert.doesNotMatch(finish, /log under \/tmp/);
 	const named = [...source.matchAll(/^(?:export )?const ([A-Z_]+) =[\s\S]*?(?=\n(?:export )?(?:const|function|\/\*\*) )/gm)].filter((match) => /run_in_background|check_job/.test(match[0])).map((match) => match[1]);
-	assert.deepEqual(named, ['FINISH_HINT']);
+	assert.deepEqual(named, ['FINISH_HINT', 'PARALLEL_HINT']);
 	const builder = source.slice(source.indexOf('const workspacePrompt'), source.indexOf(".join(' ')", source.indexOf('const workspacePrompt')));
 	assert.match(builder, /run_in_background/);
 	for (const prompt of ['workspacePrompt', 'chatWorkspacePrompt']) {
 		const start = source.indexOf(`const ${prompt}`);
-		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tFINISH_HINT,/, prompt);
+		assert.match(source.slice(start, source.indexOf('.join(', start)), /\tPARALLEL_HINT,\n\tFINISH_HINT,/, prompt);
 	}
+	assert.equal(source.match(/\bPARALLEL_HINT\b/g)?.length, 3);
 	// FINISH_HINT is only in the workspace prompts, which render only with the workspace and so with the tools.
 	assert.equal(source.match(/\bFINISH_HINT\b/g)?.length, 3);
 	assert.match(index, /const prompt = workspace \? prompts\.chatWorkspace : CHAT_PROMPT;/);
