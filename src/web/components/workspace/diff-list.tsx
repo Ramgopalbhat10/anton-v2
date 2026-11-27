@@ -1,3 +1,4 @@
+import type { SelectedLineRange } from '@pierre/diffs';
 import { type DiffLineAnnotation, FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, SlidersHorizontal, Undo2, X } from '@/lib/icons';
@@ -15,6 +16,7 @@ import {
 	AURA_DIFF_THEMES,
 	DiffWorkerProvider,
 	getCachedFileDiffMetadata,
+	getDiffCommentTargets,
 	getLineTextFromDiff,
 	resolveCommentTarget,
 	setDiffViewPrefs,
@@ -58,19 +60,50 @@ function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; 
 	);
 }
 
-function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onCancel: () => void }) {
-	const [text, setText] = useState('');
-	const save = () => (text.trim() ? onSave(text.trim()) : undefined);
+function CommentForm({
+	value,
+	onChange,
+	onSave,
+	onCancel,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	onSave: (text: string) => void;
+	onCancel: () => void;
+}) {
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	useEffect(() => {
+		const el = textareaRef.current;
+		if (!el) return;
+		// Pierre adds the Shadow DOM annotation slot during layout effects, after React's autoFocus commit step.
+		el.focus();
+		if (document.activeElement === el) return;
+		let frame = 0;
+		let attempts = 0;
+		const retry = () => {
+			const node = textareaRef.current;
+			if (!node || document.activeElement === node || attempts++ >= 5) return;
+			node.focus();
+			if (document.activeElement !== node) frame = requestAnimationFrame(retry);
+		};
+		frame = requestAnimationFrame(retry);
+		return () => cancelAnimationFrame(frame);
+	}, []);
+	const save = () => (value.trim() ? onSave(value.trim()) : undefined);
 	return (
 		<div className="in-pop my-1.5 mx-2 flex w-[min(480px,calc(100%-1rem))] flex-col gap-2 border-l-2 border-l-(--accent) p-2 font-sans">
 			<textarea
+				ref={textareaRef}
 				autoFocus
 				rows={2}
-				value={text}
-				onChange={(event) => setText(event.target.value)}
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save();
-					if (event.key === 'Escape') onCancel();
+					if (event.key === 'Escape') {
+						event.stopPropagation();
+						onCancel();
+					}
 				}}
 				placeholder="What should the agent change here?"
 				aria-label="Comment"
@@ -80,7 +113,7 @@ function CommentForm({ onSave, onCancel }: { onSave: (text: string) => void; onC
 				<Btn size="xs" variant="ghost" onClick={onCancel}>
 					Cancel
 				</Btn>
-				<Btn size="xs" variant="primary" onClick={save} disabled={!text.trim()}>
+				<Btn size="xs" variant="primary" onClick={save} disabled={!value.trim()}>
 					Add comment
 				</Btn>
 			</div>
@@ -96,14 +129,53 @@ function diffText(file: FileDiff): string {
 }
 
 function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: Commenting; narrow: boolean }) {
-	// The line being commented on, by its number and side, so a refetch keeps the form anchored.
+	// The line being commented on and its unsaved text live here, so deleting another comment keeps the draft intact.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number } | null>(null);
+	const [draftText, setDraftText] = useState('');
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const diffContainerRef = useRef<HTMLDivElement>(null);
+	const pointerDownRef = useRef(false);
+	const [focusedTargetIndex, setFocusedTargetIndex] = useState<number | null>(null);
 	const theme = useTheme();
 	const prefs = useDiffViewPrefs();
 	const rawPatch = useMemo(() => diffText(file), [file]);
 	const fileDiff = useMemo(() => getCachedFileDiffMetadata(file, rawPatch), [file, rawPatch]);
 	const effectiveDiffStyle: 'split' | 'unified' = prefs.diffStyle === 'split' && !narrow ? 'split' : 'unified';
 	const hasCommenting = Boolean(commenting);
+	const commentTargets = useMemo(() => (fileDiff && hasCommenting ? getDiffCommentTargets(fileDiff) : []), [fileDiff, hasCommenting]);
+	const activeTarget = focusedTargetIndex !== null && commentTargets.length > 0 ? commentTargets[Math.min(focusedTargetIndex, commentTargets.length - 1)] : null;
+	const activeSelection = useMemo<SelectedLineRange | null>(
+		() => (activeTarget ? { start: activeTarget.lineNumber, end: activeTarget.lineNumber, side: activeTarget.side } : null),
+		[activeTarget],
+	);
+
+	const openDraft = useCallback((target: { side: ReviewComment['side']; line: number }) => {
+		if (draftRef.current?.side === target.side && draftRef.current.line === target.line) return;
+		setDraft(target);
+		setDraftText('');
+	}, []);
+
+	const closeDraft = useCallback((restoreFocus = false) => {
+		setDraft(null);
+		setDraftText('');
+		if (restoreFocus) diffContainerRef.current?.focus();
+	}, []);
+
+	useEffect(() => {
+		if (!activeTarget) return;
+		const shadow = diffContainerRef.current?.querySelector('diffs-container')?.shadowRoot;
+		if (!shadow) return;
+		const lineEl =
+			effectiveDiffStyle === 'split'
+				? shadow.querySelector(`${activeTarget.side === 'deletions' ? '[data-deletions]' : '[data-additions]'} [data-line="${activeTarget.lineNumber}"]`)
+				: (activeTarget.side === 'deletions'
+						? shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-deletion"]`)
+						: shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="change-addition"]`) ??
+							shadow.querySelector(`[data-line="${activeTarget.lineNumber}"][data-line-type="context"]`)) ??
+					shadow.querySelector(`[data-line="${activeTarget.lineNumber}"]`);
+		lineEl?.scrollIntoView?.({ block: 'nearest' });
+	}, [activeTarget, effectiveDiffStyle]);
 
 	const options = useMemo(
 		() => ({
@@ -173,20 +245,22 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 					{composer ? (
 						<CommentForm
 							key={`${composer.side}:${composer.line}`}
-							onCancel={() => setDraft(null)}
+							value={draftText}
+							onChange={setDraftText}
+							onCancel={() => closeDraft(true)}
 							onSave={(body) => {
 								if (!fileDiff) return;
 								const side = composer.side === 'old' ? 'deletions' : 'additions';
 								const code = getLineTextFromDiff(fileDiff, side, composer.line) ?? '';
 								commenting?.onAdd({ path: file.path, side: composer.side, line: composer.line, code, text: body });
-								setDraft(null);
+								closeDraft(false);
 							}}
 						/>
 					) : null}
 				</Fragment>
 			);
 		},
-		[commenting, file.path, fileDiff],
+		[commenting, file.path, fileDiff, draftText, closeDraft],
 	);
 
 	const renderGutterUtility = useCallback(
@@ -198,14 +272,14 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 					event.stopPropagation();
 					const hovered = getHoveredLine();
 					if (!hovered || !fileDiff) return;
-					setDraft(resolveCommentTarget(fileDiff, hovered.side, hovered.lineNumber));
+					openDraft(resolveCommentTarget(fileDiff, hovered.side, hovered.lineNumber));
 				}}
 				className="inline-flex size-4 translate-x-1 cursor-pointer items-center justify-center rounded-control bg-(--accent) text-(--accent-fg) shadow-(--sh-1) outline-none focus-visible:shadow-(--focus)"
 			>
 				<Icon icon={Plus} size={11} />
 			</button>
 		),
-		[fileDiff],
+		[fileDiff, openDraft],
 	);
 
 	if (!fileDiff || fileDiff.hunks.length === 0) {
@@ -223,11 +297,64 @@ function DiffLines({ file, commenting, narrow }: { file: FileDiff; commenting?: 
 		);
 	}
 
+	const keyboardProps =
+		hasCommenting && commentTargets.length > 0
+			? {
+					tabIndex: 0,
+					role: 'region' as const,
+					'aria-label': `Diff for ${file.path}. Use Up or Down arrows to choose a line and Enter to comment.`,
+					onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+						pointerDownRef.current = true;
+						if (!(event.target instanceof Element) || !event.target.closest('[slot]')) setFocusedTargetIndex(null);
+					},
+					onFocus: (event: React.FocusEvent<HTMLDivElement>) => {
+						const fromPointer = pointerDownRef.current;
+						pointerDownRef.current = false;
+						if (event.target === event.currentTarget && !fromPointer) {
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current, commentTargets.length - 1)));
+						}
+					},
+					onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
+						pointerDownRef.current = false;
+						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedTargetIndex(null);
+					},
+					onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+						if (event.target !== event.currentTarget) return;
+						if (event.key === 'ArrowDown' || event.key === 'j') {
+							event.preventDefault();
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.min(current + 1, commentTargets.length - 1)));
+						} else if (event.key === 'ArrowUp' || event.key === 'k') {
+							event.preventDefault();
+							setFocusedTargetIndex((current) => (current === null ? 0 : Math.max(current - 1, 0)));
+						} else if (event.key === 'Home') {
+							event.preventDefault();
+							setFocusedTargetIndex(0);
+						} else if (event.key === 'End') {
+							event.preventDefault();
+							setFocusedTargetIndex(commentTargets.length - 1);
+						} else if ((event.key === 'Enter' || event.key === 'c') && !event.metaKey && !event.ctrlKey && !event.altKey) {
+							event.preventDefault();
+							const idx = focusedTargetIndex ?? 0;
+							const target = commentTargets[Math.min(idx, commentTargets.length - 1)];
+							if (target) openDraft({ side: target.side === 'deletions' ? 'old' : 'new', line: target.lineNumber });
+						} else if (event.key === 'Escape' && focusedTargetIndex !== null) {
+							event.preventDefault();
+							setFocusedTargetIndex(null);
+						}
+					},
+				}
+			: {};
+
 	return (
-		<div className="anton-diff border-t border-(--line)">
+		<div
+			ref={diffContainerRef}
+			className={cn('anton-diff border-t border-(--line)', hasCommenting && 'outline-none focus-visible:shadow-(--focus-inset)')}
+			{...keyboardProps}
+		>
 			<PierreFileDiff
 				fileDiff={fileDiff}
 				options={options}
+				selectedLines={hasCommenting ? activeSelection : undefined}
 				lineAnnotations={hasCommenting ? lineAnnotations : undefined}
 				renderAnnotation={hasCommenting ? renderAnnotation : undefined}
 				renderGutterUtility={hasCommenting ? renderGutterUtility : undefined}

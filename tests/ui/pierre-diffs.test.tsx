@@ -1,11 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChangeList, DiffViewControls, useOpenFiles } from '@/components/workspace/diff-list';
 import { parsePatch } from '@/lib/diff';
 import {
 	DEFAULT_DIFF_PREFS,
 	getCachedFileDiffMetadata,
+	getDiffCommentTargets,
 	getDiffViewPrefs,
 	getLineTextFromDiff,
 	resolveCommentTarget,
@@ -137,6 +139,132 @@ describe('pierre-diffs helpers & controls', () => {
 			expect(shadow?.querySelectorAll('slot[name="annotation-additions-3"]')).toHaveLength(1);
 			expect(shadow?.querySelectorAll('slot[name="annotation-additions-0"]')).toHaveLength(1);
 		});
+	});
+
+	it('enumerates ordered visible comment targets across context, deleted, and added lines', () => {
+		const metadata = getCachedFileDiffMetadata({ path: 'src/sample.ts' }, SAMPLE_PATCH)!;
+		expect(getDiffCommentTargets(metadata)).toEqual([
+			{ side: 'additions', lineNumber: 2 },
+			{ side: 'deletions', lineNumber: 3 },
+			{ side: 'additions', lineNumber: 3 },
+			{ side: 'additions', lineNumber: 4 },
+			{ side: 'additions', lineNumber: 20 },
+			{ side: 'additions', lineNumber: 21 },
+			{ side: 'additions', lineNumber: 22 },
+		]);
+
+		const deletedPatch = [
+			'diff --git a/src/gone.ts b/src/gone.ts',
+			'deleted file mode 100644',
+			'index 1111111..0000000',
+			'--- a/src/gone.ts',
+			'+++ /dev/null',
+			'@@ -1,2 +0,0 @@',
+			'-const gone = 1;',
+			'-export default gone;',
+			'',
+		].join('\n');
+		const deleted = getCachedFileDiffMetadata({ path: 'src/gone.ts' }, deletedPatch)!;
+		expect(getDiffCommentTargets(deleted)).toEqual([
+			{ side: 'deletions', lineNumber: 1 },
+			{ side: 'deletions', lineNumber: 2 },
+		]);
+	});
+
+	it('lets keyboard-only users target diff lines and open inline comments', async () => {
+		const user = userEvent.setup();
+		const files = parsePatch(SAMPLE_PATCH);
+		const add = vi.fn();
+		const review = {
+			comments: [] as ReviewComment[],
+			add,
+			remove: vi.fn(),
+			removeAll: vi.fn(),
+			clear: vi.fn(),
+		};
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+
+		renderWithQueries(<Harness />);
+
+		const region = await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		act(() => region.focus());
+
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const textarea = await screen.findByLabelText('Comment');
+		expect(document.activeElement).toBe(textarea);
+		await user.type(textarea, 'Fix removed line');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+
+		expect(add).toHaveBeenCalledWith({
+			path: 'src/sample.ts',
+			side: 'old',
+			line: 3,
+			code: 'const oldVal = "a";',
+			text: 'Fix removed line',
+		});
+
+		act(() => region.focus());
+		fireEvent.keyDown(region, { key: 'Home' });
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const nextTextarea = await screen.findByLabelText('Comment');
+		await user.type(nextTextarea, 'Review added line');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+
+		expect(add).toHaveBeenLastCalledWith({
+			path: 'src/sample.ts',
+			side: 'new',
+			line: 3,
+			code: 'const newVal = "b";',
+			text: 'Review added line',
+		});
+	});
+
+	it('preserves unsaved draft text when deleting an earlier saved comment', async () => {
+		const user = userEvent.setup();
+		const files = parsePatch(SAMPLE_PATCH);
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			const [comments, setComments] = useState<ReviewComment[]>([
+				{ path: 'src/sample.ts', side: 'new', line: 3, code: 'const newVal = "b";', text: 'Saved comment on line 3' },
+			]);
+			const review = {
+				comments,
+				add: (comment: ReviewComment) => setComments((now) => [...now, comment]),
+				remove: (comment: ReviewComment) => setComments((now) => now.filter((item) => item !== comment)),
+				removeAll: (sent: ReviewComment[]) => setComments((now) => now.filter((item) => !sent.includes(item))),
+				clear: () => setComments([]),
+			};
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+
+		renderWithQueries(<Harness />);
+
+		expect(await screen.findByText('Saved comment on line 3')).toBeTruthy();
+
+		const region = screen.getByRole('region', { name: /Diff for src\/sample\.ts/ });
+		act(() => region.focus());
+		fireEvent.keyDown(region, { key: 'End' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const textarea = (await screen.findByLabelText('Comment')) as HTMLTextAreaElement;
+		await user.type(textarea, 'Keep this unsaved draft');
+		expect(textarea.value).toBe('Keep this unsaved draft');
+
+		await user.click(screen.getByRole('button', { name: 'Delete comment' }));
+
+		expect(screen.queryByText('Saved comment on line 3')).toBeNull();
+		const keptTextarea = screen.getByLabelText('Comment') as HTMLTextAreaElement;
+		expect(keptTextarea.value).toBe('Keep this unsaved draft');
 	});
 
 	it('updates persisted diff display preferences from DiffViewControls', async () => {

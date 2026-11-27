@@ -245,6 +245,39 @@ export function resolveCommentTarget(
 	return { side: 'old', line: lineNumber };
 }
 
+export type DiffCommentTarget = {
+	side: 'deletions' | 'additions';
+	lineNumber: number;
+};
+
+/** Ordered list of visible diff lines that can receive inline review comments. */
+export function getDiffCommentTargets(fileDiff: FileDiffMetadata): DiffCommentTarget[] {
+	const targets: DiffCommentTarget[] = [];
+	for (const hunk of fileDiff.hunks) {
+		let delLine = hunk.deletionStart;
+		let addLine = hunk.additionStart;
+		for (const content of hunk.hunkContent) {
+			if (content.type === 'context') {
+				for (let offset = 0; offset < content.lines; offset++) {
+					targets.push({ side: 'additions', lineNumber: addLine + offset });
+				}
+				delLine += content.lines;
+				addLine += content.lines;
+			} else {
+				for (let offset = 0; offset < content.deletions; offset++) {
+					targets.push({ side: 'deletions', lineNumber: delLine + offset });
+				}
+				for (let offset = 0; offset < content.additions; offset++) {
+					targets.push({ side: 'additions', lineNumber: addLine + offset });
+				}
+				delLine += content.deletions;
+				addLine += content.additions;
+			}
+		}
+	}
+	return targets;
+}
+
 function WorkerPoolOptionsSync({ lineDiffType }: { lineDiffType: DiffViewPrefs['lineDiffType'] }) {
 	const workerPool = useWorkerPool();
 	useEffect(() => {
