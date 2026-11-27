@@ -27,6 +27,8 @@ export type ReviewState = {
 
 export type GateState = {
 	request?: string;
+	/** What the user sent while the reply ran, after its request: it can narrow or redirect the work. */
+	joined?: string[];
 	review: ReviewState;
 	round?: { rounds: number; mark: string; seen: number };
 	reminded: boolean;

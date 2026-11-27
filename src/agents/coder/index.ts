@@ -49,7 +49,7 @@ import { recordLatestInput } from '../../services/tasks/latest-input.ts';
 import { noteDelivery } from '../../services/tasks/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../../services/replies/reply-check.ts';
 import { startAwaitingRun } from '../../services/replies/asks.ts';
-import { finishReview, isRequest, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
+import { finishReview, isRequest, noteJoined, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
 import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
 import { prePushReview, startPrePushReview } from '../../services/replies/pre-push-review.ts';
 import { reviewAnswersGate, startReviewAnswers } from '../../services/git/review-answers.ts';
@@ -120,6 +120,7 @@ function useLatestInput(id: string) {
 	});
 	useAgentStart(() => {
 		if (delivery.kind !== 'user') return;
+		noteJoined(id, delivery.body);
 		// The reply starts without waiting on the database, which can be busy for seconds.
 		inBackground(id, Promise.all([noteDelivery(id, delivery.body), recordLatestInput(id, delivery.body)]));
 	});

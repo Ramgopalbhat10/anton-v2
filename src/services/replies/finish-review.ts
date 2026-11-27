@@ -49,10 +49,24 @@ export function noteRequest(id: string, text: string): void {
 	if (request)
 		changeGate(id, (state) => {
 			state.request = request;
+			state.joined = [];
 		});
 }
 
 export const requestFor = (id: string): string | undefined => gate(id).request;
+
+const KEEP_JOINED = 5;
+
+/** A message that joined the reply in hand; the one that started it is its request, not this. */
+export function noteJoined(id: string, text: string): void {
+	const message = requestText(text);
+	if (!message || isRequest(id, text) || gate(id).joined?.includes(message)) return;
+	changeGate(id, (state) => {
+		state.joined = [...(state.joined ?? []), message].slice(-KEEP_JOINED);
+	});
+}
+
+export const joinedFor = (id: string): readonly string[] => gate(id).joined ?? [];
 
 /** The one that started the reply in hand, not one that joined it. */
 export const isRequest = (id: string, text: string): boolean => gate(id).request === requestText(text);

@@ -5,8 +5,8 @@ import { agentKeepsContext, COMPACTION_SUMMARY_EFFORT, compactionFor } from '../
 import { OUTPUTS, repoInstructionsPrompt } from './prompts.ts';
 import { useRepoSnapshot } from './tools/snapshot.ts';
 import { useRunScript } from './tools/run-script.ts';
-import { REVIEW_RUBRIC, REVIEW_SCOPE, REVIEW_TRUST } from '../../services/git/code-review.ts';
-import { requestFor } from '../../services/replies/finish-review.ts';
+import { REVIEW_RUBRIC, REVIEW_SCOPE, REVIEW_TESTS, REVIEW_TRUST } from '../../services/git/code-review.ts';
+import { joinedFor, requestFor } from '../../services/replies/finish-review.ts';
 import { reviewerRan } from '../../services/replies/reviewer-runs.ts';
 
 /**
@@ -56,22 +56,28 @@ const MAX_REVIEW_REQUEST = 3_000;
  * The brief is written by the agent whose change it is: in prod it stated requirements the user never asked for and sent
  * the reviewer hunting for holes in them. So the reviewer reads the user's own words, and weighs the brief's claims against them.
  */
-export function reviewerRequest(request: string | undefined): string {
+export function reviewerRequest(request: string | undefined, joined: readonly string[] = []): string {
 	const text = request?.trim();
 	if (!text) return '';
-	const clipped = text.length > MAX_REVIEW_REQUEST ? `${text.slice(0, MAX_REVIEW_REQUEST)}…` : text;
+	const clip = (value: string) => (value.length > MAX_REVIEW_REQUEST ? `${value.slice(0, MAX_REVIEW_REQUEST)}…` : value);
+	// In prod a user asked twice mid-reply for only the new tests; the reviewer, never told, ran the full suites into five timeouts.
+	const later = joined.map((message) => message.trim()).filter(Boolean);
 	return (
-		`The user asked for this change in these words:\n<request>\n${clipped}\n</request>\n` +
+		`The user asked for this change in these words:\n<request>\n${clip(text)}\n</request>\n` +
+		(later.length
+			? `While the work went on, the user added:\n${later.map((message) => `<message>\n${clip(message)}\n</message>`).join('\n')}\nThese narrow or redirect the request, and bind you too, including how they say to run the tests.\n`
+			: '') +
 		"Judge the change against that request. Your brief is the author's account of the change: where it adds requirements the request does not make, treat them as the author's to check, not as rules the change must meet."
 	);
 }
 
 /** Asked for before a push (`src/services/replies/pre-push-review.ts`): the pull request reviewer's rubric, its findings handed to the Coder. */
-function ChangeReviewer(request?: string) {
+function ChangeReviewer(request?: string, joined: readonly string[] = []) {
 	return [
 		'You are the reviewer specialist. You review a change before it is pushed, with fresh eyes: you have not seen how it was written.',
 		'Read the diff your brief names with git diff, then the surrounding code, callers and tests you need to judge it. You may run read-only commands and the tests; change no files, and do not commit or push.',
-		...(request ? [reviewerRequest(request)] : []),
+		REVIEW_TESTS,
+		...(request ? [reviewerRequest(request, joined)] : []),
 		REVIEW_RUBRIC,
 		REVIEW_TRUST,
 		REVIEW_SCOPE,
@@ -165,7 +171,7 @@ export function useTaskSubagents(id: string) {
 		name: 'reviewer',
 		description:
 			"Reviews a change with fresh eyes before it is pushed, read-only, once a reply, and answers with the problems it confirmed, each with a severity. It starts without this conversation but is given the user's request: brief it with what the change does and the git diff range to read.",
-		agent: () => `${ChangeReviewer(requestFor(id))}${repoInstructionsPrompt(repoInstructionsFor(id))}`,
+		agent: () => `${ChangeReviewer(requestFor(id), joinedFor(id))}${repoInstructionsPrompt(repoInstructionsFor(id))}`,
 	});
 	// Once a reply: past that, what it finds goes to the user rather than into another round.
 	if (!reviewerRan(id)) useSubagent(withSettingsModel(id, reviewer, 'reviewer'));

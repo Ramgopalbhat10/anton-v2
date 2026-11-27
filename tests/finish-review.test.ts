@@ -10,7 +10,7 @@ process.env.ANTON_DATA_DIR = dir;
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const { setProviders } = await import('../src/providers/index.ts');
-const { findingsOf, finishReview, isRequest, MAX_REVIEWS, noteRequest, requestFor, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/replies/finish-review.ts');
+const { findingsOf, finishReview, isRequest, joinedFor, MAX_REVIEWS, noteJoined, noteRequest, requestFor, reopenFinishReview, reviewPatch, reviewPrompt, selfCheck, startFinishReview } = await import('../src/services/replies/finish-review.ts');
 
 type Write = Parameters<TextModel['write']>[0];
 let asked: Write[] = [];
@@ -74,6 +74,22 @@ test('the request is the message that started the reply, not one that joined it'
 	// A message sent while the reply runs is answered within it; the checks at its end still read the request.
 	assert.equal(isRequest('j', 'What are you even testing? Are you stuck?'), false);
 	assert.equal(requestFor('j'), 'Fix incognito chat scrolling.');
+});
+
+test('messages that join a reply are kept after its request, once each, and a new request starts them over', () => {
+	// The starting message may reach useAgentStart before useResponseStart: noting the request drops it again.
+	noteJoined('jn', 'Render Markdown in sent messages.');
+	noteRequest('jn', 'Render Markdown in sent messages.');
+	assert.deepEqual(joinedFor('jn'), []);
+	noteJoined('jn', 'Render Markdown in sent messages.');
+	noteJoined('jn', ' Only run the new test files. ');
+	noteJoined('jn', 'Only run the new test files.');
+	noteJoined('jn', '   ');
+	assert.deepEqual(joinedFor('jn'), ['Only run the new test files.']);
+	for (let n = 1; n <= 7; n += 1) noteJoined('jn', `Note ${n}`);
+	assert.deepEqual(joinedFor('jn'), ['Note 3', 'Note 4', 'Note 5', 'Note 6', 'Note 7'], 'only the latest few');
+	noteRequest('jn', 'Next reply.');
+	assert.deepEqual(joinedFor('jn'), []);
 });
 
 test('a Run’s answer is its words, not the call’s result the agent reads after them', async () => {

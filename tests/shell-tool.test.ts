@@ -100,6 +100,16 @@ test('a command cut by its timeout keeps what it wrote, as start and end with th
 	assert.equal((await run('echo started; sleep 30', 1)).text, 'started\n[anton] Command timed out after 1 seconds.\n\nCommand exited with code 124');
 });
 
+test('a command that ignores the stop is killed after the grace, not left running', async () => {
+	const started = Date.now();
+	const result = await run(`bash -c 'trap "" TERM; echo started; exec sleep 31'`, 1);
+	assert.match(result.text, /^started\n\[anton\] Command timed out after 1 seconds\./);
+	assert.equal(result.details.exitCode, 124);
+	assert.ok(Date.now() - started < 15_000, 'it waits out the grace and no longer');
+	const left = await machine.exec('pgrep -f "^sleep 31$" || true');
+	assert.equal(new TextDecoder().decode(left.stdout).trim(), '', 'what outlived the TERM got KILL');
+});
+
 test('a command that names no timeout gets the default, and the note says what to do when it is stopped', async () => {
 	const seen: Array<{ command: string; timeoutMs?: number }> = [];
 	const fake = { exec: async (command: string, options?: { timeoutMs?: number }) => (seen.push({ command, timeoutMs: options?.timeoutMs }), { stdout: '', stderr: '', exitCode: 0 }) } as unknown as Sandbox;
