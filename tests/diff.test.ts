@@ -66,3 +66,30 @@ test('parsePatch preserves raw per-file patch slices and rename prevPath', () =>
 	assert.equal(renamed.prevPath, 'src/old_name.ts');
 	assert.equal(renamed.patch, renamePatch);
 });
+
+test('parsePatch ignores --- a/ and +++ b/ lines inside hunks and counts them as edits', () => {
+	const sqlPatch = [
+		'diff --git a/schema.sql b/schema.sql',
+		'index 1111111..2222222 100644',
+		'--- a/schema.sql',
+		'+++ b/schema.sql',
+		'@@ -1,3 +1,3 @@',
+		' SELECT 1;',
+		'--- a/previous-query.sql was the source',
+		'+++ b/other.sql',
+		' SELECT 2;',
+		'',
+	].join('\n');
+	const [sql] = parsePatch(sqlPatch);
+	assert.equal(sql.path, 'schema.sql');
+	assert.equal(sql.prevPath, undefined);
+	assert.equal(sql.status, 'M');
+	assert.deepEqual([sql.added, sql.removed], [1, 1]);
+	assert.deepEqual(sql.lines, [
+		{ kind: 'hunk', text: '-1,3 +1,3' },
+		{ kind: 'context', number: 1, text: 'SELECT 1;' },
+		{ kind: 'remove', number: 2, text: '-- a/previous-query.sql was the source' },
+		{ kind: 'add', number: 2, text: '++ b/other.sql' },
+		{ kind: 'context', number: 3, text: 'SELECT 2;' },
+	]);
+});

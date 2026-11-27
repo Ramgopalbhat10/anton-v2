@@ -1,6 +1,7 @@
-import { type DiffsTheme, type FileDiffMetadata, parsePatchFiles, registerCustomTheme } from '@pierre/diffs';
+import { type DiffsTheme, type FileDiffContentsLoader, type FileDiffMetadata, parsePatchFiles, registerCustomTheme } from '@pierre/diffs';
 import { WorkerPoolContextProvider, useWorkerPool } from '@pierre/diffs/react';
 import { createElement, Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from 'react';
+import type { DiffFileContents } from '@/lib/api/workspace';
 import type { FileDiff } from '@/lib/diff';
 import { createAuraZedTheme, hashText } from '@/lib/highlight';
 
@@ -34,7 +35,6 @@ export function ensureAuraDiffThemes(): void {
 
 export const ANTON_DIFF_UNSAFE_CSS = `
 [data-separator='line-info'] {
-	height: 28px;
 	font-size: var(--fs-11);
 	color: var(--text-3);
 	border-block: 1px solid var(--line);
@@ -48,6 +48,17 @@ export const ANTON_DIFF_UNSAFE_CSS = `
 [data-separator='line-info'] [data-separator-content],
 [data-separator='line-info'] [data-separator-wrapper] {
 	border-radius: 0;
+}
+[data-separator='line-info'] [data-expand-button] {
+	border-radius: 0;
+	color: var(--text-3);
+	border-right-color: var(--line);
+}
+[data-separator='line-info'] [data-expand-button]:hover,
+[data-separator='line-info'][data-expand-index] [data-separator-content]:hover {
+	color: var(--text);
+	background-color: var(--bg-hover);
+	text-decoration: none;
 }
 [data-diff-type='split'] [data-additions] {
 	border-left: 1px solid var(--line);
@@ -170,12 +181,14 @@ export function getCachedFileDiffMetadata(file: Pick<FileDiff, 'path'>, rawPatch
 	return metadata;
 }
 
+export const normalizeDiffLine = (text: string): string => text.replace(/\r?\n?$/, '');
+
 /** Reads the single-line text at a 1-based line number on either side of a `FileDiffMetadata`. */
 export function getLineTextFromDiff(fileDiff: FileDiffMetadata, side: 'deletions' | 'additions', lineNumber: number): string | null {
 	if (lineNumber <= 0) return null;
 	if (!fileDiff.isPartial) {
 		const raw = (side === 'deletions' ? fileDiff.deletionLines : fileDiff.additionLines)[lineNumber - 1];
-		return raw === undefined ? null : raw.replace(/\r?\n$/, '');
+		return raw === undefined ? null : normalizeDiffLine(raw);
 	}
 	for (const hunk of fileDiff.hunks) {
 		let delLine = hunk.deletionStart;
@@ -184,22 +197,22 @@ export function getLineTextFromDiff(fileDiff: FileDiffMetadata, side: 'deletions
 			if (content.type === 'context') {
 				if (side === 'deletions' && lineNumber >= delLine && lineNumber < delLine + content.lines) {
 					const raw = fileDiff.deletionLines[content.deletionLineIndex + (lineNumber - delLine)];
-					return raw === undefined ? null : raw.replace(/\r?\n$/, '');
+					return raw === undefined ? null : normalizeDiffLine(raw);
 				}
 				if (side === 'additions' && lineNumber >= addLine && lineNumber < addLine + content.lines) {
 					const raw = fileDiff.additionLines[content.additionLineIndex + (lineNumber - addLine)];
-					return raw === undefined ? null : raw.replace(/\r?\n$/, '');
+					return raw === undefined ? null : normalizeDiffLine(raw);
 				}
 				delLine += content.lines;
 				addLine += content.lines;
 			} else {
 				if (side === 'deletions' && lineNumber >= delLine && lineNumber < delLine + content.deletions) {
 					const raw = fileDiff.deletionLines[content.deletionLineIndex + (lineNumber - delLine)];
-					return raw === undefined ? null : raw.replace(/\r?\n$/, '');
+					return raw === undefined ? null : normalizeDiffLine(raw);
 				}
 				if (side === 'additions' && lineNumber >= addLine && lineNumber < addLine + content.additions) {
 					const raw = fileDiff.additionLines[content.additionLineIndex + (lineNumber - addLine)];
-					return raw === undefined ? null : raw.replace(/\r?\n$/, '');
+					return raw === undefined ? null : normalizeDiffLine(raw);
 				}
 				delLine += content.deletions;
 				addLine += content.additions;
@@ -207,6 +220,106 @@ export function getLineTextFromDiff(fileDiff: FileDiffMetadata, side: 'deletions
 		}
 	}
 	return null;
+}
+
+/** Checks that fetched old/new files still match the displayed patch hunks before hydrating collapsed context. */
+export function filesMatchDiffMetadata(fileDiff: FileDiffMetadata, oldText: string, newText: string): boolean {
+	const oldLines = oldText === '' ? [] : oldText.split(/(?<=\n)/);
+	const newLines = newText === '' ? [] : newText.split(/(?<=\n)/);
+	let delCursor = 0;
+	let addCursor = 0;
+
+	for (const hunk of fileDiff.hunks) {
+		const delStart = hunk.deletionCount === 0 ? hunk.deletionStart : Math.max(hunk.deletionStart - 1, 0);
+		const addStart = hunk.additionCount === 0 ? hunk.additionStart : Math.max(hunk.additionStart - 1, 0);
+		const delGap = delStart - delCursor;
+		const addGap = addStart - addCursor;
+		if (delGap < 0 || delGap !== addGap) return false;
+		if (delCursor + delGap > oldLines.length || addCursor + addGap > newLines.length) return false;
+		for (let i = 0; i < delGap; i++) {
+			if (normalizeDiffLine(oldLines[delCursor + i]!) !== normalizeDiffLine(newLines[addCursor + i]!)) return false;
+		}
+		delCursor = delStart;
+		addCursor = addStart;
+
+		for (const content of hunk.hunkContent) {
+			if (content.type === 'context') {
+				if (delCursor + content.lines > oldLines.length || addCursor + content.lines > newLines.length) return false;
+				for (let i = 0; i < content.lines; i++) {
+					const expectedDel = fileDiff.deletionLines[content.deletionLineIndex + i];
+					const expectedAdd = fileDiff.additionLines[content.additionLineIndex + i];
+					if (expectedDel === undefined || expectedAdd === undefined) return false;
+					if (normalizeDiffLine(oldLines[delCursor + i]!) !== normalizeDiffLine(expectedDel)) return false;
+					if (normalizeDiffLine(newLines[addCursor + i]!) !== normalizeDiffLine(expectedAdd)) return false;
+				}
+				delCursor += content.lines;
+				addCursor += content.lines;
+			} else {
+				if (delCursor + content.deletions > oldLines.length || addCursor + content.additions > newLines.length) return false;
+				for (let i = 0; i < content.deletions; i++) {
+					const expectedDel = fileDiff.deletionLines[content.deletionLineIndex + i];
+					if (expectedDel === undefined) return false;
+					if (normalizeDiffLine(oldLines[delCursor + i]!) !== normalizeDiffLine(expectedDel)) return false;
+				}
+				for (let i = 0; i < content.additions; i++) {
+					const expectedAdd = fileDiff.additionLines[content.additionLineIndex + i];
+					if (expectedAdd === undefined) return false;
+					if (normalizeDiffLine(newLines[addCursor + i]!) !== normalizeDiffLine(expectedAdd)) return false;
+				}
+				delCursor += content.deletions;
+				addCursor += content.additions;
+			}
+		}
+	}
+
+	const delTail = oldLines.length - delCursor;
+	const addTail = newLines.length - addCursor;
+	if (delTail !== addTail) return false;
+	for (let i = 0; i < delTail; i++) {
+		if (normalizeDiffLine(oldLines[delCursor + i]!) !== normalizeDiffLine(newLines[addCursor + i]!)) return false;
+	}
+	return true;
+}
+
+/** Adapts Anton's `{ oldText, newText }` endpoint to `@pierre/diffs`'s `loadDiffFiles` loader. */
+export function createDiffFilesLoader(
+	fetchFiles: (input: { path: string; prevPath?: string }) => Promise<DiffFileContents>,
+	options?: { onStale?: () => void },
+): FileDiffContentsLoader {
+	return async (fileDiff) => {
+		const { oldText, newText } = await fetchFiles({ path: fileDiff.name, prevPath: fileDiff.prevName });
+		if (fileDiff.type === 'rename-pure') {
+			if (newText === null) throw new Error(`Could not load full file contents for ${fileDiff.name}`);
+			return {
+				oldFile: null,
+				newFile: {
+					name: fileDiff.name,
+					contents: newText,
+					cacheKey: `anton-file:${fileDiff.name}:${newText.length}:${hashText(newText)}`,
+				},
+			};
+		}
+		if (oldText === null || newText === null) {
+			throw new Error(`Could not load full file contents for ${fileDiff.name}`);
+		}
+		if (!filesMatchDiffMetadata(fileDiff, oldText, newText)) {
+			options?.onStale?.();
+			throw new Error(options?.onStale ? 'File changed since this diff loaded. Refreshing diff…' : 'File changed since this diff loaded; refresh to expand context.');
+		}
+		const oldName = fileDiff.prevName ?? fileDiff.name;
+		return {
+			oldFile: {
+				name: oldName,
+				contents: oldText,
+				cacheKey: `anton-file:${oldName}:${oldText.length}:${hashText(oldText)}`,
+			},
+			newFile: {
+				name: fileDiff.name,
+				contents: newText,
+				cacheKey: `anton-file:${fileDiff.name}:${newText.length}:${hashText(newText)}`,
+			},
+		};
+	};
 }
 
 /** Maps a hovered diff line to a canonical review comment target (`old` only for removed lines or deleted files). */

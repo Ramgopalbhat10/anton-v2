@@ -22,6 +22,7 @@ export function parsePatch(patch: string): FileDiff[] {
 	let plusPath: string | undefined;
 	let oldLine = 0;
 	let newLine = 0;
+	let inHunk = false;
 
 	const flush = () => {
 		if (!current) return;
@@ -32,6 +33,7 @@ export function parsePatch(patch: string): FileDiff[] {
 		renameFrom = undefined;
 		minusPath = undefined;
 		plusPath = undefined;
+		inHunk = false;
 	};
 
 	const rawLines = patch.split('\n');
@@ -49,19 +51,27 @@ export function parsePatch(patch: string): FileDiff[] {
 		}
 		if (!current) continue;
 		currentRaw.push(raw);
-		if (raw.startsWith('new file mode')) current.status = 'A';
-		else if (raw.startsWith('deleted file mode')) current.status = 'D';
-		else if (raw.startsWith('rename from ')) renameFrom = raw.slice('rename from '.length);
-		else if (raw.startsWith('rename to ')) current.path = raw.slice('rename to '.length);
-		else if (raw.startsWith('--- a/')) minusPath = raw.slice('--- a/'.length);
-		else if (raw.startsWith('+++ b/')) plusPath = raw.slice('+++ b/'.length);
-		else if (raw.startsWith('@@')) {
+		if (!inHunk) {
+			if (raw.startsWith('new file mode')) current.status = 'A';
+			else if (raw.startsWith('deleted file mode')) current.status = 'D';
+			else if (raw.startsWith('rename from ')) renameFrom = raw.slice('rename from '.length);
+			else if (raw.startsWith('rename to ')) current.path = raw.slice('rename to '.length);
+			else if (raw.startsWith('--- a/')) minusPath = raw.slice('--- a/'.length);
+			else if (raw.startsWith('+++ b/')) plusPath = raw.slice('+++ b/'.length);
+			else if (raw.startsWith('@@')) {
+				const match = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+				oldLine = Number(match?.[1] ?? 0);
+				newLine = Number(match?.[2] ?? 0);
+				inHunk = true;
+				current.lines.push({ kind: 'hunk', text: raw.replace(/^@@ /, '').replace(/ @@.*$/, '') });
+			}
+			continue;
+		}
+		if (raw.startsWith('@@')) {
 			const match = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
 			oldLine = Number(match?.[1] ?? 0);
 			newLine = Number(match?.[2] ?? 0);
 			current.lines.push({ kind: 'hunk', text: raw.replace(/^@@ /, '').replace(/ @@.*$/, '') });
-		} else if (raw.startsWith('+++') || raw.startsWith('---') || raw.startsWith('index ')) {
-			continue;
 		} else if (raw.startsWith('+')) {
 			current.added += 1;
 			current.lines.push({ kind: 'add', number: newLine++, text: raw.slice(1) });

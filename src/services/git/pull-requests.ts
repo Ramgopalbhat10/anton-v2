@@ -11,7 +11,9 @@ import { watchPullRequest } from './pr-watch.ts';
 import { machineFor } from '../sandbox/workspace.ts';
 import { InvalidInputError, NotFoundError } from '../../core/errors.ts';
 import type { MergeMethod, PullRequestDetail, PullRequestState } from '../../core/ports.ts';
+import { safeRelativePath } from '../../core/shell.ts';
 import { announce } from '../../core/changes.ts';
+import { decodeDiffText, type DiffFileContents, hostFileOrNull } from '../artifacts/files.ts';
 
 const numberOf = (url: string) => Number(/\/pull\/(\d+)/.exec(url)?.[1] ?? 0);
 
@@ -134,6 +136,20 @@ export async function pullRequestDetail(id: string, number: number): Promise<Pul
 export async function pullRequestDiff(id: string, number: number): Promise<string> {
 	const { url } = await detailRecord(id, number);
 	return getProviders().git.pullRequestDiff(url);
+}
+
+export async function pullRequestDiffFiles(id: string, number: number, input: { path: string; prevPath?: string }): Promise<DiffFileContents> {
+	const path = safeRelativePath(input.path);
+	const oldPath = input.prevPath ? safeRelativePath(input.prevPath) : path;
+	const { url } = await detailRecord(id, number);
+	const { git } = getProviders();
+	const info = await git.pullRequest(url);
+	const oldRef = info.baseSha ? await git.mergeBase(info.repo, info.baseSha, info.headSha).catch(() => info.baseSha!) : info.baseBranch;
+	const [oldBytes, newBytes] = await Promise.all([
+		hostFileOrNull(info.repo, oldRef, oldPath),
+		hostFileOrNull(info.repo, info.headSha, path),
+	]);
+	return { oldText: decodeDiffText(oldBytes), newText: decodeDiffText(newBytes) };
 }
 
 /** Only while its head is still the one you saw (`sha`). */

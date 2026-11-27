@@ -5,11 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChangeList, DiffViewControls, useOpenFiles } from '@/components/workspace/diff-list';
 import { parsePatch } from '@/lib/diff';
 import {
+	createDiffFilesLoader,
 	DEFAULT_DIFF_PREFS,
+	filesMatchDiffMetadata,
 	getCachedFileDiffMetadata,
 	getDiffCommentTargets,
 	getDiffViewPrefs,
 	getLineTextFromDiff,
+	normalizeDiffLine,
 	resolveCommentTarget,
 	setDiffViewPrefs,
 } from '@/lib/pierre-diffs';
@@ -294,5 +297,248 @@ describe('pierre-diffs helpers & controls', () => {
 			overflow: 'wrap',
 			disableLineNumbers: true,
 		});
+	});
+
+	it('moves Split/Stacked into Diff display options when compact', async () => {
+		const user = userEvent.setup();
+		render(<DiffViewControls compact />);
+
+		expect(screen.queryByRole('radio', { name: 'Split' })).toBeNull();
+		expect(screen.queryByRole('radio', { name: 'Stacked' })).toBeNull();
+
+		await user.click(screen.getByRole('button', { name: 'Diff display options' }));
+		await user.click(await screen.findByRole('menuitem', { name: 'Stacked' }));
+		expect(getDiffViewPrefs().diffStyle).toBe('unified');
+
+		await user.click(screen.getByRole('button', { name: 'Diff display options' }));
+		await user.click(await screen.findByRole('menuitem', { name: 'Split' }));
+		expect(getDiffViewPrefs().diffStyle).toBe('split');
+	});
+
+	it('treats pre-upgrade CRLF draft comments as inline after stripping trailing CR', async () => {
+		expect(normalizeDiffLine('const newVal = "b";\r\n')).toBe('const newVal = "b";');
+
+		const files = parsePatch(SAMPLE_PATCH);
+		const review = {
+			comments: [
+				{ path: 'src/sample.ts', side: 'new' as const, line: 3, code: 'const newVal = "b";\r', text: 'Pre-upgrade CRLF comment' },
+			],
+			add: vi.fn(),
+			remove: vi.fn(),
+			removeAll: vi.fn(),
+			clear: vi.fn(),
+		};
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+
+		const { container } = renderWithQueries(<Harness />);
+		expect(await screen.findByText('Pre-upgrade CRLF comment')).toBeTruthy();
+		expect(screen.queryByText(/has changed since this comment/)).toBeNull();
+
+		await waitFor(() => {
+			const shadow = container.querySelector('diffs-container')?.shadowRoot;
+			expect(shadow?.querySelectorAll('slot[name="annotation-additions-3"]')).toHaveLength(1);
+			expect(shadow?.querySelectorAll('slot[name="annotation-additions-0"]')).toHaveLength(0);
+		});
+	});
+
+	it('restores focus to the diff region with preventScroll after Ctrl+Enter comment submission', async () => {
+		const user = userEvent.setup();
+		const files = parsePatch(SAMPLE_PATCH);
+		const add = vi.fn();
+		const review = {
+			comments: [] as ReviewComment[],
+			add,
+			remove: vi.fn(),
+			removeAll: vi.fn(),
+			clear: vi.fn(),
+		};
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+
+		renderWithQueries(<Harness />);
+
+		const region = await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		const focusSpy = vi.spyOn(region, 'focus');
+		act(() => region.focus());
+
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const textarea = await screen.findByLabelText('Comment');
+		await user.type(textarea, 'Submit via shortcut');
+		focusSpy.mockClear();
+		fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+
+		expect(add).toHaveBeenCalledWith({
+			path: 'src/sample.ts',
+			side: 'old',
+			line: 3,
+			code: 'const oldVal = "a";',
+			text: 'Submit via shortcut',
+		});
+		expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+		expect(document.activeElement).toBe(region);
+
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+		const nextTextarea = await screen.findByLabelText('Comment');
+		await user.type(nextTextarea, 'Immediate next target');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+
+		expect(add).toHaveBeenLastCalledWith({
+			path: 'src/sample.ts',
+			side: 'new',
+			line: 3,
+			code: 'const newVal = "b";',
+			text: 'Immediate next target',
+		});
+	});
+
+	it('adapts diff file endpoints with createDiffFilesLoader and expands hidden context lines in ChangeList', async () => {
+		const middle = Array.from({ length: 15 }, (_, index) => `const mid${index + 5} = ${index + 5};`);
+		const oldText = ['// header', 'const keepOne = 1;', 'const oldVal = "a";', 'const keepTwo = 2;', ...middle, 'function tail() {', '}'].join('\n');
+		const newText = ['// header', 'const keepOne = 1;', 'const newVal = "b";', 'const keepTwo = 2;', ...middle, 'function tail() {', '  return newVal;', '}'].join('\n');
+
+		const fetchFiles = vi.fn(async () => ({ oldText, newText }));
+		const loader = createDiffFilesLoader(fetchFiles);
+		const changeMeta = getCachedFileDiffMetadata({ path: 'src/sample.ts' }, SAMPLE_PATCH)!;
+		const loaded = await loader({ ...changeMeta, prevName: 'src/old-sample.ts', type: 'change' });
+		expect(fetchFiles).toHaveBeenCalledWith({ path: 'src/sample.ts', prevPath: 'src/old-sample.ts' });
+		expect(loaded.oldFile).toEqual({
+			name: 'src/old-sample.ts',
+			contents: oldText,
+			cacheKey: expect.stringContaining('anton-file:src/old-sample.ts:'),
+		});
+		expect(loaded.newFile).toEqual({
+			name: 'src/sample.ts',
+			contents: newText,
+			cacheKey: expect.stringContaining('anton-file:src/sample.ts:'),
+		});
+
+		const renamePure = await createDiffFilesLoader(async () => ({ oldText: null, newText }))({
+			...changeMeta,
+			name: 'src/renamed.ts',
+			prevName: 'src/sample.ts',
+			type: 'rename-pure',
+		});
+		expect(renamePure.oldFile).toBeNull();
+		expect(renamePure.newFile?.name).toBe('src/renamed.ts');
+
+		await expect(
+			createDiffFilesLoader(async () => ({ oldText: null, newText }))(changeMeta),
+		).rejects.toThrow(/Could not load full file contents/);
+
+		const files = parsePatch(SAMPLE_PATCH);
+		const expandFetch = vi.fn(async () => ({ oldText, newText }));
+		const review = {
+			comments: [] as ReviewComment[],
+			add: vi.fn(),
+			remove: vi.fn(),
+			removeAll: vi.fn(),
+			clear: vi.fn(),
+		};
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} loadDiffFiles={createDiffFilesLoader(expandFetch)} />;
+		}
+
+		const { container } = renderWithQueries(<Harness />);
+		await waitFor(() => {
+			const shadow = container.querySelector('diffs-container')?.shadowRoot;
+			const middleSeparator = Array.from(shadow?.querySelectorAll('[data-separator]') ?? []).find((el) =>
+				el.textContent?.includes('15 unmodified'),
+			);
+			expect(middleSeparator?.querySelector('[data-expand-button]')).toBeTruthy();
+		});
+
+		const shadow = container.querySelector('diffs-container')!.shadowRoot!;
+		const middleSeparator = Array.from(shadow.querySelectorAll('[data-separator]')).find((el) =>
+			el.textContent?.includes('15 unmodified'),
+		)!;
+		const expandButton = middleSeparator.querySelector('[data-expand-button]') as HTMLElement;
+		fireEvent.click(expandButton);
+
+		await waitFor(() => {
+			expect(expandFetch).toHaveBeenCalledWith({ path: 'src/sample.ts', prevPath: undefined });
+			expect(shadow.textContent).toContain('mid10');
+		});
+	});
+
+	it('rejects stale expanded files when contents diverge from displayed hunks and surfaces expansion errors inline', async () => {
+		const user = userEvent.setup();
+		const stalePatch = SAMPLE_PATCH.replaceAll('src/sample.ts', 'src/stale.ts');
+		const middle = Array.from({ length: 15 }, (_, index) => `const mid${index + 5} = ${index + 5};`);
+		const oldText = ['// header', 'const keepOne = 1;', 'const oldVal = "a";', 'const keepTwo = 2;', ...middle, 'function tail() {', '}'].join('\n');
+		const editedInGap = ['// header', 'const keepOne = 1;', 'const newVal = "b";', 'const keepTwo = 2;', ...middle.slice(0, 7), 'const mid12 = 999;', ...middle.slice(8), 'function tail() {', '  return newVal;', '}'].join('\n');
+		const insertedLine = ['// header', 'const keepOne = 1;', 'const newVal = "b";', 'const keepTwo = 2;', 'const inserted = true;', ...middle, 'function tail() {', '  return newVal;', '}'].join('\n');
+
+		const meta = getCachedFileDiffMetadata({ path: 'src/stale.ts' }, stalePatch)!;
+		expect(filesMatchDiffMetadata(meta, oldText, editedInGap)).toBe(false);
+		expect(filesMatchDiffMetadata(meta, oldText, insertedLine)).toBe(false);
+
+		const onStale = vi.fn();
+		const staleLoader = createDiffFilesLoader(async () => ({ oldText, newText: editedInGap }), { onStale });
+		await expect(staleLoader(meta)).rejects.toThrow(/File changed since this diff loaded/);
+		expect(onStale).toHaveBeenCalledTimes(1);
+
+		const files = parsePatch(stalePatch);
+		function StaleHarness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} loadDiffFiles={staleLoader} />;
+		}
+
+		const staleView = renderWithQueries(<StaleHarness />);
+		await waitFor(() => {
+			const shadow = staleView.container.querySelector('diffs-container')?.shadowRoot;
+			const sep = Array.from(shadow?.querySelectorAll('[data-separator]') ?? []).find((el) => el.textContent?.includes('15 unmodified'));
+			expect(sep?.querySelector('[data-expand-button]')).toBeTruthy();
+		});
+		const staleShadow = staleView.container.querySelector('diffs-container')!.shadowRoot!;
+		const staleSep = Array.from(staleShadow.querySelectorAll('[data-separator]')).find((el) => el.textContent?.includes('15 unmodified'))!;
+		fireEvent.click(staleSep.querySelector('[data-expand-button]') as HTMLElement);
+
+		const staleAlert = await staleView.findByRole('alert');
+		expect(staleAlert.textContent).toContain('File changed since this diff loaded. Refreshing diff…');
+		expect(staleShadow.textContent).not.toContain('999');
+		expect(staleShadow.textContent).toContain('const oldVal = "a";');
+		staleView.unmount();
+
+		function ErrorHarness() {
+			const open = useOpenFiles(files);
+			return (
+				<ChangeList
+					files={files}
+					open={open}
+					loadDiffFiles={createDiffFilesLoader(async () => {
+						throw new Error('File too large to expand context.');
+					})}
+				/>
+			);
+		}
+
+		const errView = renderWithQueries(<ErrorHarness />);
+		await waitFor(() => {
+			const shadow = errView.container.querySelector('diffs-container')?.shadowRoot;
+			const sep = Array.from(shadow?.querySelectorAll('[data-separator]') ?? []).find((el) => el.textContent?.includes('15 unmodified'));
+			expect(sep?.querySelector('[data-expand-button]')).toBeTruthy();
+		});
+		const errShadow = errView.container.querySelector('diffs-container')!.shadowRoot!;
+		const errSep = Array.from(errShadow.querySelectorAll('[data-separator]')).find((el) => el.textContent?.includes('15 unmodified'))!;
+		fireEvent.click(errSep.querySelector('[data-expand-button]') as HTMLElement);
+
+		const errAlert = await errView.findByRole('alert');
+		expect(errAlert.textContent).toContain('File too large to expand context.');
+		expect(errShadow.textContent).toContain('const newVal = "b";');
+
+		await user.click(errView.getByRole('button', { name: 'Dismiss expansion error' }));
+		expect(errView.queryByRole('alert')).toBeNull();
 	});
 });

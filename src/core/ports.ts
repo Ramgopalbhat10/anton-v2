@@ -225,6 +225,7 @@ export type PullRequestInfo = PullRequestSummary & {
 	body: string;
 	state: PullRequestState;
 	baseBranch: string;
+	baseSha?: string;
 	commits: Array<{ sha: string; subject: string }>;
 };
 
