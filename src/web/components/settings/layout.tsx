@@ -1,12 +1,12 @@
 import { Link, Outlet, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ChevronRight, List, type IconComponent, X } from '@/lib/icons';
+import { ChevronRight, List, type IconComponent, Maximize2, Minimize2, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Count } from '@/components/kit/instrument';
 import { EmptyState, Icon, IconBtn, Kbd, SearchField, SectionLabel } from '@/components/kit/signal';
 import { api } from '@/lib/api';
 import { setupLeft } from '@/components/pages/setup-card';
-import { closeSettings } from '@/lib/settings-modal';
+import { closeSettings, toggleSettingsExpanded, useSettingsExpanded } from '@/lib/settings-modal';
 import { useProjects } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { GROUPS, SECTIONS, sectionById } from './sections';
@@ -124,12 +124,21 @@ function CrumbLink({ to, children }: { to: string; children: ReactNode }) {
 export function SettingsLayout() {
 	// Skills and Connectors lay cards out side by side, and a page beside its facts, so they get more room.
 	const path = usePath();
+	const expanded = useSettingsExpanded();
 	const wide = path.startsWith('/settings/skills') || path.startsWith('/settings/connectors');
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<header className="flex h-12 shrink-0 items-center gap-1 border-b border-(--line) pr-2 pl-4 text-body font-medium">
 				<Crumbs />
 				<span className="flex-1" />
+				<IconBtn
+					icon={expanded ? Minimize2 : Maximize2}
+					size="sm"
+					label={expanded ? 'Shrink settings' : 'Expand settings'}
+					aria-pressed={expanded}
+					onClick={toggleSettingsExpanded}
+					className="hidden md:inline-flex"
+				/>
 				<Kbd keys="esc" size="sm" />
 				<IconBtn icon={X} size="sm" label="Close settings" onClick={closeSettings} />
 			</header>

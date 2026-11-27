@@ -2,12 +2,14 @@ import { Dialog } from 'radix-ui';
 import { lazy, useState } from 'react';
 import { LazyPart } from '@/components/kit/error-boundary';
 import { FloatingLayerContainer } from '@/components/kit/signal';
-import { closeSettings, useSettingsHref } from '@/lib/settings-modal';
+import { closeSettings, useSettingsExpanded, useSettingsHref } from '@/lib/settings-modal';
+import { cn } from '@/lib/utils';
 
 const SettingsCard = lazy(() => import('./card').then((module) => ({ default: module.SettingsCard })));
 
 export function SettingsModal() {
 	const href = useSettingsHref();
+	const expanded = useSettingsExpanded();
 	const [dialog, setDialog] = useState<HTMLDivElement | null>(null);
 	return (
 		<Dialog.Root open={href !== null} onOpenChange={(open) => (open ? undefined : closeSettings())}>
@@ -16,7 +18,10 @@ export function SettingsModal() {
 				<Dialog.Content
 					ref={setDialog}
 					aria-describedby={undefined}
-					className="settings-card fixed inset-0 z-50 flex flex-col overflow-hidden outline-none md:m-auto md:h-[min(820px,calc(100dvh-64px))] md:w-[min(1180px,calc(100vw-64px))]"
+					className={cn(
+						'settings-card fixed inset-0 z-50 flex flex-col overflow-hidden outline-none md:m-auto md:h-[min(820px,calc(100dvh-64px))]',
+						expanded ? 'md:w-[calc(100vw-32px)]' : 'md:w-[min(1180px,calc(100vw-64px))]',
+					)}
 				>
 					<FloatingLayerContainer.Provider value={dialog}>
 						<Dialog.Title className="sr-only">Settings</Dialog.Title>
