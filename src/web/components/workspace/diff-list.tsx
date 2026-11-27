@@ -65,8 +65,12 @@ export type Commenting = {
 
 type DraftAnnotationGroup = {
 	comments: Array<{ comment: ReviewComment; outdated: boolean }>;
+	foreign?: ForeignDiffComment[];
 	composer?: { side: ReviewComment['side']; line: number; endLine?: number };
 };
+
+/** A read-only comment made on the git host (e.g. a GitHub review thread), shown inline but not editable or sendable. */
+export type ForeignDiffComment = { path: string; side: 'old' | 'new'; line: number; author: string; body: string; outdated?: boolean };
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
@@ -174,12 +178,14 @@ function findMountedLineElement(shadow: ShadowRoot, target: DiffCommentTarget, d
 function DiffLines({
 	file,
 	commenting,
+	foreign = [],
 	narrow,
 	loadDiffFiles,
 	onJumpFile,
 }: {
 	file: FileDiff;
 	commenting?: Commenting;
+	foreign?: ForeignDiffComment[];
 	narrow: boolean;
 	loadDiffFiles?: FileDiffContentsLoader;
 	onJumpFile?: (direction: 1 | -1) => void;
@@ -363,7 +369,8 @@ function DiffLines({
 	);
 
 	const lineAnnotations = useMemo<DiffLineAnnotation<DraftAnnotationGroup>[]>(() => {
-		if (!fileDiff || !commenting) return [];
+		if (!fileDiff || (!commenting && foreign.length === 0)) return [];
+		if (!fileDiff) return [];
 		const fileAnnotationSide = fileDiff.type === 'deleted' ? 'deletions' : 'additions';
 		const grouped = new Map<string, DiffLineAnnotation<DraftAnnotationGroup>>();
 		const ensureGroup = (side: 'deletions' | 'additions', lineNumber: number) => {
@@ -375,7 +382,15 @@ function DiffLines({
 			}
 			return entry;
 		};
-		for (const comment of commenting.comments) {
+		for (const note of foreign) {
+			const side = note.side === 'old' ? 'deletions' : 'additions';
+			const targetSide = note.outdated ? fileAnnotationSide : side;
+			const targetLine = note.outdated ? 0 : note.line;
+			const key = `${targetSide}:${targetLine}`;
+			const entry = ensureGroup(targetSide, targetLine);
+			entry.metadata.foreign = [...(entry.metadata.foreign ?? []), note];
+		}
+		for (const comment of commenting?.comments ?? []) {
 			const side = comment.side === 'old' ? 'deletions' : 'additions';
 			const currentCode = getRangeTextFromDiff(fileDiff, side, comment.line, comment.endLine ?? comment.line);
 			const outdated = currentCode === null || normalizeDiffLine(currentCode) !== normalizeDiffLine(comment.code);
@@ -388,13 +403,24 @@ function DiffLines({
 			ensureGroup(targetSide, draft.endLine ?? draft.line).metadata.composer = draft;
 		}
 		return [...grouped.values()];
-	}, [fileDiff, commenting, draft, hydrationRevision]);
+	}, [fileDiff, commenting, foreign, draft, hydrationRevision]);
 
 	const renderAnnotation = useCallback(
 		(annotation: DiffLineAnnotation<DraftAnnotationGroup>) => {
-			const { comments, composer } = annotation.metadata;
+			const { comments, composer, foreign: notes } = annotation.metadata;
 			return (
 				<Fragment>
+					{(notes ?? []).map((note, index) => (
+						<div key={`foreign-${index}`} className="in-pop my-1.5 mx-2 flex w-[min(480px,calc(100%-1rem))] flex-col gap-1 px-2.5 py-2 font-sans">
+							<span className="flex items-center gap-1.5 text-micro text-(--text-3)">
+								<Icon icon={MessageSquare} size={11} />
+								<span className="font-medium text-(--text-2)">{note.author}</span>
+								{note.outdated ? <span>· outdated</span> : null}
+								<span>· on GitHub</span>
+							</span>
+							<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{note.body}</span>
+						</div>
+					))}
 					{comments.map((item, index) => (
 						<CommentCard key={index} comment={item.comment} outdated={item.outdated} onRemove={() => commenting?.onRemove(item.comment)} />
 					))}
@@ -562,8 +588,8 @@ function DiffLines({
 				fileDiff={fileDiff}
 				options={options}
 				selectedLines={hasCommenting ? activeSelection : undefined}
-				lineAnnotations={hasCommenting ? lineAnnotations : undefined}
-				renderAnnotation={hasCommenting ? renderAnnotation : undefined}
+				lineAnnotations={hasCommenting || foreign.length > 0 ? lineAnnotations : undefined}
+				renderAnnotation={hasCommenting || foreign.length > 0 ? renderAnnotation : undefined}
 				renderGutterUtility={hasCommenting ? renderGutterUtility : undefined}
 			/>
 		</div>
@@ -796,6 +822,7 @@ export function ChangeList({
 	sessionId,
 	revertTo = 'base',
 	review,
+	foreign,
 	narrow: narrowProp,
 	loadDiffFiles,
 }: {
@@ -805,6 +832,7 @@ export function ChangeList({
 	sessionId?: string;
 	revertTo?: 'base' | 'pushed';
 	review?: ReturnType<typeof useReviewComments>;
+	foreign?: ForeignDiffComment[];
 	narrow?: boolean;
 	loadDiffFiles?: FileDiffContentsLoader;
 }) {
@@ -862,6 +890,7 @@ export function ChangeList({
 									file={file}
 									narrow={narrow}
 									loadDiffFiles={loadDiffFiles}
+									foreign={foreign?.filter((note) => note.path === file.path)}
 									onJumpFile={(direction) => {
 										const at = files.findIndex((entry) => entry.path === file.path);
 										const next = files[at + direction];
@@ -911,6 +940,7 @@ export function DiffList({
 	sessionId,
 	branch,
 	base,
+	foreign,
 	loadDiffFiles,
 	bounded = false,
 }: {
@@ -919,6 +949,7 @@ export function DiffList({
 	sessionId?: string;
 	branch?: string;
 	base?: string;
+	foreign?: ForeignDiffComment[];
 	loadDiffFiles?: FileDiffContentsLoader;
 	bounded?: boolean;
 }) {
@@ -930,7 +961,7 @@ export function DiffList({
 	if (files.length === 0) {
 		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
-	const changes = <ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} loadDiffFiles={loadDiffFiles} />;
+	const changes = <ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} foreign={foreign} loadDiffFiles={loadDiffFiles} />;
 	return (
 		<FileIcons>
 			<div ref={wellRef} className={cn('in-well', bounded && 'flex min-h-0 flex-1 flex-col')}>

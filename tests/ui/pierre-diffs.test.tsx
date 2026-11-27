@@ -711,3 +711,29 @@ describe('hunk and file jump navigation', () => {
 		});
 	});
 });
+
+describe('foreign GitHub review annotations', () => {
+	it('renders read-only host comments inline at their line', async () => {
+		const files = parsePatch(SAMPLE_PATCH);
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} foreign={[{ path: 'src/sample.ts', side: 'new', line: 3, author: 'octocat', body: 'Can this be a constant?' }]} />;
+		}
+		renderWithQueries(<Harness />);
+		expect(await screen.findByText('octocat')).toBeTruthy();
+		expect(screen.getByText('Can this be a constant?')).toBeTruthy();
+		expect(screen.getByText('· on GitHub')).toBeTruthy();
+		expect(screen.queryByLabelText('Comment')).toBeNull();
+	});
+
+	it('groups outdated host comments at the file top marked outdated', async () => {
+		const files = parsePatch(SAMPLE_PATCH);
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} foreign={[{ path: 'src/sample.ts', side: 'new', line: 99, author: 'hubot', body: 'Stale note', outdated: true }]} />;
+		}
+		renderWithQueries(<Harness />);
+		expect(await screen.findByText('hubot')).toBeTruthy();
+		expect(screen.getByText(/outdated/)).toBeTruthy();
+	});
+});

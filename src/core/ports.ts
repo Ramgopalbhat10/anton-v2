@@ -193,8 +193,8 @@ export type Issue = { number: number; title: string; body: string; url: string }
 export type CheckResult = { name: string; status: 'pending' | 'passed' | 'failed' | 'skipped'; summary: string; url: string };
 
 /** Only from people who can push to the repo and from apps installed on it. */
-/** `replyTo`: for a reply in a line comment's thread, the id of the comment that started it. */
-export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string; replyTo?: string | null };
+/** `replyTo`: for a reply in a line comment's thread, the id of the comment that started it. `side`/`outdated` are only set on line comments: the host's REST payload carries `side`, and `line` going null while `original_line` stays means the line has since left the diff. */
+export type PullRequestComment = { id: string; author: string; body: string; path: string | null; line: number | null; at: string; replyTo?: string | null; side?: 'old' | 'new' | null; outdated?: boolean };
 
 /** `id` is its first comment's `PullRequestComment.id`; `outdated` when the lines it was on have since changed. */
 export type ReviewThread = { id: string; path: string; line: number | null; resolved: boolean; outdated: boolean; comments: Array<{ author: string; body: string; at: string }> };

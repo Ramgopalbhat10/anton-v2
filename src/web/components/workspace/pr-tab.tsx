@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from '@/lib/icons';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { DiffList } from '@/components/workspace/diff-list';
+import { DiffList, type ForeignDiffComment } from '@/components/workspace/diff-list';
 import { createDiffFilesLoader } from '@/lib/pierre-diffs';
 import { Count, Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Markdown } from '@/components/content/markdown';
@@ -93,7 +93,7 @@ const CHECK_TONE = { passed: prTone('passed'), failed: prTone('failing'), pendin
 
 type Section = 'changes' | 'description' | 'discussion' | 'commits' | 'checks';
 
-function PullChanges({ sessionId, number, bounded = false }: { sessionId: string; number: number; bounded?: boolean }) {
+function PullChanges({ sessionId, number, bounded = false, foreign = [] }: { sessionId: string; number: number; bounded?: boolean; foreign?: ForeignDiffComment[] }) {
 	const queryClient = useQueryClient();
 	const diff = useQuery({ queryKey: ['pull', sessionId, number, 'diff'], queryFn: () => api.pullDiff(sessionId, number), staleTime: 60_000 });
 	const files = useMemo(() => (diff.data ? parsePatch(diff.data.patch) : []), [diff.data]);
@@ -106,7 +106,7 @@ function PullChanges({ sessionId, number, bounded = false }: { sessionId: string
 	);
 	if (diff.isError) return <EmptyState title="Diff unavailable" body={diff.error.message} />;
 	if (!diff.data) return <Loading>Reading the diff from GitHub</Loading>;
-	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} bounded={bounded} />;
+	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} bounded={bounded} foreign={foreign} />;
 }
 
 function Discussion({ pull }: { pull: PullRequestDetail }) {
@@ -281,7 +281,16 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 					</SegmentedItem>
 				))}
 			</Segmented>
-			{section === 'changes' ? <PullChanges sessionId={sessionId} number={pull.number} bounded={!page} /> : null}
+			{section === 'changes' ? (
+					<PullChanges
+						sessionId={sessionId}
+						number={pull.number}
+						bounded={!page}
+						foreign={pull.discussion
+							.filter((entry) => entry.kind === 'line' && entry.path && entry.line && !entry.replyTo)
+							.map((entry) => ({ path: entry.path!, side: entry.side ?? 'new', line: entry.line!, author: entry.author, body: entry.body, outdated: entry.outdated }))}
+					/>
+				) : null}
 			{section === 'description' ? (
 				<PullSection bounded={!page}>
 					{pull.body ? (
