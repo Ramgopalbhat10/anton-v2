@@ -64,7 +64,7 @@ describe('IncognitoPage', () => {
 			mocks.agent.messages = [{ id: status }];
 			view.rerender(<IncognitoPage />);
 			const slot = screen.getByTestId('thread').parentElement!;
-			for (const token of ['flex', 'flex-col', 'flex-1', 'min-h-0', 'min-w-0']) expect(slot.classList.contains(token)).toBe(true);
+			for (const token of ['flex', 'flex-col', 'flex-1', 'min-h-0', 'min-w-0', 'pt-8']) expect(slot.classList.contains(token)).toBe(true);
 			expect(slot.nextElementSibling?.classList.contains('shrink-0')).toBe(true);
 			expect(slot.nextElementSibling?.contains(composer)).toBe(true);
 			expect(screen.getByRole('textbox', { name: 'Message' })).toBe(input);

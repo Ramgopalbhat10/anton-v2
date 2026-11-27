@@ -743,7 +743,7 @@
 	flex: 1;
 	flex-direction: column;
 	background: #000;
-	--inc-pad: clamp(34px, 3.4vmin, 48px);
+	--inc-pad: clamp(8px, 1.2vmin, 16px);
 }
 .incognito-viewport {
 	position: absolute;
@@ -753,12 +753,12 @@
 	position: absolute;
 	inset: var(--inc-pad);
 	overflow: hidden;
-	border-radius: 18px;
+	border-radius: 14px;
 	background: var(--bg-panel);
 	box-shadow:
 		0 0 0 1px var(--line),
 		0 30px 90px rgb(0 0 0 / 0.55);
-	animation: incognito-frame 420ms var(--ease) both;
+	animation: incognito-frame 260ms var(--ease) both;
 }
 @keyframes incognito-frame {
 	from {
@@ -767,7 +767,7 @@
 	}
 }
 .incognito-stage {
-	animation: incognito-stage 260ms var(--ease) both;
+	animation: incognito-stage 180ms var(--ease) both;
 }
 @keyframes incognito-stage {
 	from {
@@ -777,23 +777,25 @@
 }
 .incognito-exit {
 	position: absolute;
-	top: calc((var(--inc-pad) - 36px) / 2);
-	right: calc((var(--inc-pad) - 36px) / 2);
+	top: calc((2.75rem - 1px - var(--h-sm)) / 2);
+	right: 0.75rem;
 	z-index: 10;
 	display: flex;
-	width: 36px;
-	height: 36px;
+	width: var(--h-sm);
+	height: var(--h-sm);
 	align-items: center;
 	justify-content: center;
 	border-radius: 9999px;
-	background: rgb(255 255 255 / 0.08);
+	background: rgb(16 16 16 / 0.94);
+	box-shadow:
+		0 0 0 1px rgb(255 255 255 / 0.24),
+		0 8px 22px rgb(0 0 0 / 0.28);
 	color: #fff;
 	outline: none;
 	transition: background-color var(--t) var(--ease);
-	animation: incognito-icon 260ms var(--ease) 160ms both;
 }
 .incognito-exit:hover {
-	background: rgb(255 255 255 / 0.18);
+	background: rgb(40 40 40 / 0.94);
 }
 .incognito-exit:focus-visible {
 	box-shadow: var(--focus);
@@ -814,12 +816,6 @@
 .incognito-exit:hover .incognito-exit-x,
 .incognito-exit:focus-visible .incognito-exit-x {
 	opacity: 1;
-}
-@keyframes incognito-icon {
-	from {
-		opacity: 0;
-		transform: translateY(-4px) scale(0.9);
-	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.incognito-card,

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowUp, BookOpen, CalendarClock, ChartNoAxesColumn, EyeOff, FileText, FlaskConical, Folder, GitBranch, GitPullRequest, Globe, type IconComponent, MessageSquare, Plus, Settings, TriangleAlert } from '@/lib/icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PlanToggle } from '@/components/composer/composer';
 import { HomeDashboard, homeSummary } from '@/components/pages/home-dashboard';
 import { SetupCard } from '@/components/pages/setup-card';
@@ -13,7 +13,7 @@ import { Mascot, useMascotMood } from '@/components/marks/mascot';
 import { ModelPicker } from '@/components/composer/model-picker';
 import { useModels } from '@/lib/models';
 import { useGeneralSettings } from '@/components/settings/general-settings';
-import { Btn, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
+import { Btn, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, PickerChip } from '@/components/kit/signal';
 import { api, SAFETY_NET_MS } from '@/lib/api';
 import type { ModelChoice } from '@/lib/api/plans';
 import type { Project } from '@/lib/api/projects';
@@ -200,6 +200,10 @@ function Starters({ chat, onPick }: { chat: boolean; onPick: (prompt: string) =>
 }
 
 export function Launcher() {
+	// Incognito opens only from here: warm its route once the launcher is on screen, not on unrelated routes.
+	useEffect(() => {
+		void import('@/components/pages/incognito').catch(() => undefined);
+	}, []);
 	const navigate = useNavigate();
 	const profile = useQuery({ queryKey: ['profile'], queryFn: api.profile, staleTime: Number.POSITIVE_INFINITY });
 	const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions, refetchInterval: SAFETY_NET_MS });
@@ -272,9 +276,7 @@ export function Launcher() {
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
 			<TopBar>
-				<Btn size="sm" variant="ghost" icon={EyeOff} title="Start a chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })}>
-					Private chat
-				</Btn>
+				<IconBtn size="sm" variant="ghost" icon={EyeOff} label="Start a chat that keeps nothing" onClick={() => void navigate({ to: '/incognito' })} />
 			</TopBar>
 			<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-6">
 				<div className="mx-auto flex max-w-[760px] flex-col gap-11 pt-8 md:pt-[min(11vh,88px)]">
