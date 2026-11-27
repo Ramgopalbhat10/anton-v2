@@ -16,7 +16,7 @@ import {
 	resolveCommentTarget,
 	setDiffViewPrefs,
 } from '@/lib/pierre-diffs';
-import type { ReviewComment } from '@/lib/review';
+import { reviewMessage, type ReviewComment } from '@/lib/review';
 import { renderWithQueries } from './render';
 
 const SAMPLE_PATCH = [
@@ -575,5 +575,139 @@ describe('pierre-diffs helpers & controls', () => {
 
 		await user.click(errView.getByRole('button', { name: 'Dismiss expansion error' }));
 		expect(errView.queryByRole('alert')).toBeNull();
+	});
+});
+
+describe('multi-line range commenting', () => {
+	it('extends the selection with Shift+Arrow and comments on the whole range', async () => {
+		const user = userEvent.setup();
+		const files = parsePatch(SAMPLE_PATCH);
+		const add = vi.fn();
+		const review = { comments: [] as ReviewComment[], add, remove: vi.fn(), removeAll: vi.fn(), clear: vi.fn() };
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+		renderWithQueries(<Harness />);
+		const region = await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		act(() => region.focus());
+
+		// Cursor starts on the first target (additions line 2); extend over the addition and context below it.
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'ArrowDown', shiftKey: true });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const textarea = await screen.findByLabelText('Comment');
+		await user.type(textarea, 'Rework these lines');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+
+		expect(add).toHaveBeenCalledWith({
+			path: 'src/sample.ts',
+			side: 'new',
+			line: 3,
+			endLine: 4,
+			code: 'const newVal = "b";\nconst keepTwo = 2;',
+			text: 'Rework these lines',
+		});
+	});
+
+	it('collapses the range back to one line when moving without Shift', async () => {
+		const user = userEvent.setup();
+		const files = parsePatch(SAMPLE_PATCH);
+		const add = vi.fn();
+		const review = { comments: [] as ReviewComment[], add, remove: vi.fn(), removeAll: vi.fn(), clear: vi.fn() };
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+		renderWithQueries(<Harness />);
+		const region = await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		act(() => region.focus());
+
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'ArrowDown', shiftKey: true });
+		fireEvent.keyDown(region, { key: 'ArrowDown' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+
+		const textarea = await screen.findByLabelText('Comment');
+		await user.type(textarea, 'Single again');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+
+		expect(add).toHaveBeenCalledWith({
+			path: 'src/sample.ts',
+			side: 'new',
+			line: 20,
+			endLine: undefined,
+			code: 'function tail() {',
+			text: 'Single again',
+		});
+	});
+
+	it('formats ranges in reviewMessage and stays single-line compatible', () => {
+		const range = reviewMessage([{ path: 'src/app.ts', side: 'new', line: 12, endLine: 18, code: 'a\nb', text: 'Rewrite this block' }]);
+		expect(range).toContain('src/app.ts, lines 12–18');
+		const single = reviewMessage([{ path: 'src/app.ts', side: 'old', line: 7, code: 'x', text: 'Why' }]);
+		expect(single).toContain('src/app.ts, removed line 7');
+	});
+});
+
+describe('hunk and file jump navigation', () => {
+	const TWO_FILE_PATCH = [
+		SAMPLE_PATCH,
+		[
+			'diff --git a/src/other.ts b/src/other.ts',
+			'index 1111111..2222222 100644',
+			'--- a/src/other.ts',
+			'+++ b/src/other.ts',
+			'@@ -1,2 +1,2 @@',
+			' const alpha = 1;',
+			'-const betaOld = 2;',
+			'+const betaNew = 2;',
+			'',
+		].join('\n'),
+	].join('\n');
+
+	it('] jumps the cursor to the next hunk and [ back', async () => {
+		const files = parsePatch(SAMPLE_PATCH);
+		const review = { comments: [] as ReviewComment[], add: vi.fn(), remove: vi.fn(), removeAll: vi.fn(), clear: vi.fn() };
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+		renderWithQueries(<Harness />);
+		const region = await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		act(() => region.focus());
+
+		fireEvent.keyDown(region, { key: ']' });
+		fireEvent.keyDown(region, { key: 'Enter' });
+		expect((await screen.findByLabelText('Comment')).closest('[slot]')).toBeTruthy();
+		fireEvent.keyDown(region, { key: 'Escape' });
+
+		// After ] the cursor sits at the second hunk's first line (additions line 20).
+		const user = userEvent.setup();
+		const add = review.add;
+		await user.type(screen.getByLabelText('Comment'), 'Hunk note');
+		await user.click(screen.getByRole('button', { name: 'Add comment' }));
+		expect(add).toHaveBeenCalledWith(expect.objectContaining({ line: 20, side: 'new' }));
+	});
+
+	it('} moves focus to the next file diff region', async () => {
+		const files = parsePatch(TWO_FILE_PATCH);
+		const review = { comments: [] as ReviewComment[], add: vi.fn(), remove: vi.fn(), removeAll: vi.fn(), clear: vi.fn() };
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} />;
+		}
+		renderWithQueries(<Harness />);
+		await screen.findByRole('region', { name: /Diff for src\/sample\.ts/ });
+		const regions = [...document.querySelectorAll<HTMLElement>('[role="region"][aria-label^="Diff for"]')];
+		expect(regions.map((r) => r.getAttribute('aria-label'))).toEqual(['Diff for src/sample.ts. Use Up or Down arrows to choose a line, Shift with them for a range, Enter to comment, square brackets to jump hunks and files.', 'Diff for src/other.ts. Use Up or Down arrows to choose a line, Shift with them for a range, Enter to comment, square brackets to jump hunks and files.']);
+		act(() => regions[0]!.focus());
+		fireEvent.keyDown(regions[0]!, { key: '}' });
+		await waitFor(() => {
+			expect(document.activeElement).toBe(regions[1]);
+		});
 	});
 });
