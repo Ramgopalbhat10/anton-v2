@@ -423,7 +423,8 @@ function repacked(plugin: InstalledPlugin): Promise<InstalledPlugin> {
 	return pending;
 }
 
-type RepoContext = { agents: MountedSkill[]; claude: MountedSkill[]; instructions: string };
+/** `folders` holds where each of the repository's own skills is in it, by name. */
+type RepoContext = { agents: MountedSkill[]; claude: MountedSkill[]; instructions: string; folders?: Record<string, string> };
 const NO_CONTEXT: RepoContext = { agents: [], claude: [], instructions: '' };
 const repoContexts = new Map<string, Promise<RepoContext>>();
 const KEEP_CONTEXTS = 50;
@@ -440,7 +441,8 @@ async function readRepoContext(repo: string, sha: string): Promise<RepoContext> 
 		const bytes = await files.read(name);
 		if (bytes) parts.push(new TextDecoder().decode(bytes).trim());
 	}
-	return { agents: agents.map(toMounted), claude: claude.map(toMounted), instructions: parts.join('\n\n').slice(0, MAX_INSTRUCTIONS) };
+	const folders = Object.fromEntries([...agents, ...claude].filter((skill) => skill.folder).map((skill) => [skill.name, skill.folder!]));
+	return { agents: agents.map(toMounted), claude: claude.map(toMounted), instructions: parts.join('\n\n').slice(0, MAX_INSTRUCTIONS), folders };
 }
 
 function repoContext(repo: string, sha: string): Promise<RepoContext> {
@@ -488,6 +490,17 @@ export function pluginSkillsFor(id: string): MountedSkill[] {
 	const { repo, plugins } = primed.get(id) ?? { repo: NO_CONTEXT, plugins: [] };
 	const taken = new Set([...repo.agents, ...repo.claude].map((skill) => skill.name));
 	return plugins.filter((skill) => !taken.has(skill.name));
+}
+
+/**
+ * Where a skill's files are in the sandbox, from the working folder: a repository's own in the repository, an installed
+ * one's copy beside it (copySkillFiles). Null for one with no files, or not known to this task.
+ */
+export function skillFolder(id: string, name: string): string | null {
+	const { repo, plugins } = primed.get(id) ?? { repo: NO_CONTEXT, plugins: [] };
+	if ([...repo.agents, ...repo.claude].some((skill) => skill.name === name)) return repo.folders?.[name] ?? null;
+	const installed = plugins.find((skill) => skill.name === name);
+	return installed && Object.keys(installed.files).length > 0 ? `../skills/${name}` : null;
 }
 
 /** For a task without a sandbox; one with a sandbox reads them from its files. */

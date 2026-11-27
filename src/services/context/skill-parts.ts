@@ -46,8 +46,12 @@ function headAndSections(text: string, from: number, to: number, toolCallId: str
 	);
 }
 
-/** A subagent's is never cut. */
-export function skillInParts<T>(result: T, toolCallId: string, conversation: string | null): T {
+/** Prod, Nov 2026: agents ran a skill's scripts from ../skills, where only installed skills are copied, and lost minutes finding them. */
+export const folderNote = (folder: string) =>
+	`In the sandbox, this skill's files are in ${folder}/ (from your working folder): run its scripts and read its files there, or read them with read_skill_resource by the whole path listed below.`;
+
+/** A subagent's is never cut. `folder` is where the skill's files are in the sandbox, when they are. */
+export function skillInParts<T>(result: T, toolCallId: string, conversation: string | null, folder: string | null = null): T {
 	const text = resultText(result);
 	if (text === null) return result;
 	let split = false;
@@ -57,6 +61,10 @@ export function skillInParts<T>(result: T, toolCallId: string, conversation: str
 	if (listEnd > 0) {
 		const grouped = groupResources(text.slice(listAt + LIST_START.length, listEnd));
 		if (grouped) changed = text.slice(0, listAt) + grouped + text.slice(listEnd);
+	}
+	if (folder) {
+		const line = changed.indexOf('\n');
+		changed = line < 0 ? `${changed}\n${folderNote(folder)}` : `${changed.slice(0, line)}\n${folderNote(folder)}${changed.slice(line)}`;
 	}
 	const open = changed.indexOf('<skill_instructions>\n');
 	const close = changed.indexOf('</skill_instructions>');

@@ -16,9 +16,11 @@ const { recordSubagentEvent } = await import('../src/services/tasks/subagent-run
 const CODE = 'diff --git a/src/sort.ts b/src/sort.ts\n+export function sortBy(keys: string[]) {}\n';
 const DOCS = 'diff --git a/docs/sorting.md b/docs/sorting.md\n+Sorting\ndiff --git a/README.md b/README.md\n+More\n';
 let reviews = true;
+let cosmetic = false;
 const deps = (patch: string | null, from = 'base0123456789abcdef', pushed = false) => ({
 	change: async () => (patch === null ? null : { patch, from, pushed }),
 	reviews: async () => reviews,
+	cosmetic: async () => cosmetic,
 });
 const queue = (id: string) =>
 	changeGate(id, (state) => {
@@ -56,6 +58,16 @@ test('documentation, a stopped machine and reviews turned off are never held for
 	assert.equal(await prePushReview('b', deps(CODE)), null);
 	reviews = true;
 	assert.ok(await prePushReview('b', deps(CODE)));
+});
+
+test('a small change of styling or copy alone is not held for it, and counts as reviewed', async () => {
+	startPrePushReview('s');
+	queue('s');
+	cosmetic = true;
+	assert.equal(await prePushReview('s', deps(CODE)), null);
+	cosmetic = false;
+	assert.equal(await prePushReview('s', deps(CODE)), null, 'the same change is not judged again');
+	assert.ok(await prePushReview('s', deps(`${CODE}+more\n`)), 'a change past it is');
 });
 
 test('the reviewer subagent runs once a reply, and a reply whose agent already ran it is not asked again', async () => {

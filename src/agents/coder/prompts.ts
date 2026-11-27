@@ -2,7 +2,7 @@ import { config } from '../../config.ts';
 import type { ToolProfile } from '../../core/tool-profile.ts';
 import type { ReviewTask, ThreadProject } from '../../services/tasks/agent-runner.ts';
 import { REVIEW_GUIDE } from '../../services/git/code-review.ts';
-import { pluginSkillsFor } from '../../services/settings/plugins.ts';
+import { skillsFor } from '../../services/settings/plugins.ts';
 import { toolsOnHost } from '../../services/tasks/runners.ts';
 import type { SealedSecretBrief } from '../../services/secrets/sealed-secrets.ts';
 import { hoursText } from '../../services/replies/reply-clock.ts';
@@ -82,17 +82,19 @@ export const APP_HINT =
 
 export const REMEMBER_HINT = 'When you learn something about this repository that a later task would otherwise have to rediscover, save it with remember.';
 
+/** Prod, Nov 2026: a design skill whose description matches any UI work was activated for a one-class padding change, and its process cost minutes. */
 const SKILL_HINT =
 	'When the user names a skill, such as /pdf or "use the pdf skill", activate that skill before you start. ' +
+	'Activate one the user did not name only when its process fits the job: for a small, exact change the request spells out (a value, a class, a style, a label), make it without one. ' +
 	"A skill you activated stays loaded: on later messages, work from its instructions above rather than activating it again, unless they are no longer in the conversation.";
 
 const SKILL_FILES_HINT =
-	"An installed skill's supporting files (its references, scripts and kits) are also in the sandbox at ../skills/<skill name>/, beside your working folder: " +
-	'run or import them from there, or copy what you need into your work. read_skill_resource reads the same files.';
+	"A skill's supporting files (its references, scripts and kits) are also in the sandbox, in the folder its activation names: a repository's own skill in its folder in the repository, an installed one at ../skills/<skill name>/, beside your working folder. " +
+	'Run or import them from there, or copy what you need into your work. read_skill_resource reads the same files, by the whole path its list gives.';
 
 export function skillHint(id: string, workspace: boolean): string {
-	const copied = workspace && pluginSkillsFor(id).some((skill) => Object.keys(skill.files).length > 0);
-	return copied ? `${SKILL_HINT} ${SKILL_FILES_HINT}` : SKILL_HINT;
+	const withFiles = workspace && skillsFor(id, false).some((skill) => Object.keys(skill.files).length > 0);
+	return withFiles ? `${SKILL_HINT} ${SKILL_FILES_HINT}` : SKILL_HINT;
 }
 
 export function hostHint(): string {
@@ -187,6 +189,12 @@ const FINISH_HINT =
  * Prod, 27 Nov 2026: a reply of 1h35m spent 9 minutes blocked in check_job on suites and a reinstall, and its install,
  * chained in front of the checks in one foreground command, was stopped at 3 minutes and left the dependencies empty.
  */
+/** Prod, Nov 2026: a one-class padding change was made 3 minutes in, then 8.5 minutes and 3.3M tokens went on building a fixture and Playwright scripts to look at it. */
+const SIZE_HINT =
+	'Size the work to the change. When the request is a small, exact change it spells out (a value, a class, a style, a label or a line of copy), find it, make it, run the type check and the tests of the files you changed, and finish: ' +
+	'the edge-case search below, whole suites, Playwright scripts and fixtures are for changes that alter behaviour, unless the user asks for them or the change turns out wider than it looked. ' +
+	'When a check you built yourself (a script, a fixture, a server) still fails to run after two fixes to it, drop it and say in your reply what went unchecked, rather than spend the reply on the check.';
+
 const PARALLEL_HINT =
 	'Keep work moving in parallel: start a slow command (an install, a build, a test run, a whole suite) with run_in_background as soon as you know you need it, and go on reading, editing or writing while it runs; wait in check_job only when nothing else is left to do. ' +
 	'Checks that do not depend on each other (a type check, a lint, separate test files or suites) go as separate commands at once, not chained with &&, so one failure hides none of the others and the slowest sets the time. ' +
@@ -244,12 +252,13 @@ const workspacePrompt = ({ start = [], read, web, edit }: { start?: string[]; re
 	read,
 	edit,
 	PARALLEL_HINT,
+	SIZE_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
 	'You do not have git push credentials: open_pull_request commits, and Anton pushes the branch and opens the pull request once, when your reply ends.',
 	'When the request is a change to the repository, call open_pull_request yourself in the same reply once the change works (the type check and the focused tests pass), unless the user asked for no pull request, or only for a plan, an answer or a review; then finish the remaining checks and any fixes, which go with the same push. Call it once: again only to change the title or description. Do not wait to be asked for it, and do not write its link: the thread shows it.',
 	'To run a web app, bind its dev server to 0.0.0.0 on one of the ports in $ANTON_PREVIEW_PORTS and start it in the background with its output in a log file (`nohup <command> > /tmp/dev.log 2>&1 &`); the user can open it from the Preview panel.',
-	`Check a UI change with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is.`,
+	`Check a UI change that alters behaviour (what shows, what a click or key does, the requests made) with a script first: one Playwright script that drives the running app and asserts what the change claims (the elements and their counts, the requests made, a download's contents, a narrow viewport such as 320 px), saving its screenshots to ${OUTPUTS}. Playwright and Chromium are installed globally in the sandbox: write it as CommonJS in /tmp (require('playwright')) and run it with NODE_PATH="$(npm root -g)" node /tmp/check.cjs (on an older machine without them, one screenshot call installs them). Run the same script again after each fix. When the repository's instructions name a fixture or mock server for its UI, run the app that way rather than building a fake backend of your own, and check what the request and the change call for, not every viewport and flow there is. A change to styling alone needs at most one screenshot of the view it touches.`,
 	"Use the browser subagent only for a flow a script cannot express, or when the user asks for it to be clicked through: brief it with the app's URL (its Preview URL when the user will try it in Preview, else http://localhost:<port>), what to click and type through, and what to report. When you skip it, you may offer it in your reply. Use the screenshot tool for a quick full-page capture.",
 	PREVIEW_HINT,
 	web,
@@ -270,6 +279,7 @@ const chatWorkspacePrompt = (edit: string) => [
 	edit,
 	READ_HINT,
 	PARALLEL_HINT,
+	SIZE_HINT,
 	FINISH_HINT,
 	BUDGET_HINT,
 	`Save deliverables (files, screenshots, reports, exports) to ${OUTPUTS}; the user sees them in the Library.`,

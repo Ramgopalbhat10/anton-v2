@@ -8,6 +8,7 @@ import { patchFiles } from './finish-review.ts';
 import { changeGate, gate, loadGate } from './gate-state.ts';
 import { reviewerRan, startReviewerRuns } from './reviewer-runs.ts';
 import { answersPrComments } from '../../core/review-follow-up.ts';
+import { cosmeticChange } from './small-change.ts';
 
 /*
  * Anton's pull request reviewer used to be the first to ask what a change breaks, after the push. Each finding then cost a
@@ -26,6 +27,7 @@ type Change = { patch: string; from: string; pushed: boolean };
 type Deps = {
 	change: (id: string) => Promise<Change | null>;
 	reviews: () => Promise<boolean>;
+	cosmetic: (id: string, patch: string) => Promise<boolean>;
 };
 
 /** Null without a running machine, which is never started for this. */
@@ -42,6 +44,7 @@ async function taskChange(id: string): Promise<Change | null> {
 const defaults: Deps = {
 	change: taskChange,
 	reviews: async () => (await generalSettings()).reviewPullRequests,
+	cosmetic: cosmeticChange,
 };
 
 export function startPrePushReview(id: string): void {
@@ -84,6 +87,13 @@ export async function prePushReview(id: string, deps: Deps = defaults): Promise<
 	if (bugsReviewed === digest) return null;
 	const paths = patchFiles(patch).map((file) => file.path);
 	if (paths.length && paths.every((file) => PROSE.test(file))) return null;
+	// A few lines of styling or copy: the pull request's reviewer still reads it, off the reply's path.
+	if (await deps.cosmetic(id, patch)) {
+		changeGate(id, (state) => {
+			state.bugsReviewed = digest;
+		});
+		return null;
+	}
 	changeGate(id, (state) => {
 		state.bugsAsked = true;
 		state.bugsReviewed = digest;

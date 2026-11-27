@@ -13,6 +13,7 @@ import { modelFor } from '../tasks/sessions.ts';
 import { recordUsage } from '../models/usage.ts';
 import { liveMachine } from '../sandbox/workspace.ts';
 import { endsOnUser } from './asks.ts';
+import { coversRequest } from './small-change.ts';
 
 /*
  * A fresh read of only the request and the diff before the reply ends, listing what the request asks that the change does
@@ -300,7 +301,11 @@ export const selfCheckWork = (request: string) =>
 	].join('\n');
 
 type Call = { tool: string };
-type Deps = { patch: (id: string) => Promise<string | null>; chat?: (id: string) => Promise<boolean> };
+type Deps = {
+	patch: (id: string) => Promise<string | null>;
+	chat?: (id: string) => Promise<boolean>;
+	covers?: (id: string, request: string, patch: string) => Promise<boolean>;
+};
 
 const isChat = async (id: string): Promise<boolean> => {
 	const session = await getSessionRecord(id);
@@ -321,7 +326,7 @@ export async function taskPatch(id: string): Promise<string | null> {
  * Reviewed when this request and change were not, up to `MAX_REVIEWS` a reply. Never on `ask` or `propose_plan`, nor on a change
  * the reply left as it found it. The change is read at every end that gets here, so the next reply starts from it.
  */
-export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat }): Promise<string | null> {
+export async function finishReview(id: string, calls: readonly Call[], signal?: AbortSignal, deps: Deps = { patch: taskPatch, chat: isChat, covers: coversRequest }): Promise<string | null> {
 	if (endsOnUser(id, calls)) return null;
 	await loadGate(id);
 	const { request, review } = gate(id);
@@ -356,11 +361,13 @@ export async function finishReview(id: string, calls: readonly Call[], signal?: 
 		};
 		if (!own) {
 			if (review.selfChecked) return null;
+			// The agent's own check is a whole round of its conversation; a small diff the decision model is sure of skips it.
+			const covered = (await deps.covers?.(id, request, patch)) ?? false;
 			changeGate(id, (state) => {
 				state.review.selfChecked = true;
 				remember(state);
 			});
-			return selfCheck(request);
+			return covered ? null : selfCheck(request);
 		}
 		if (review.reviews >= MAX_REVIEWS + review.extra) return null;
 		// A file whose diff is not the one the reply found, or that it did not have, is the reply's own; on a task's first reply, every file.

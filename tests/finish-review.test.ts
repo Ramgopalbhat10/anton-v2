@@ -204,6 +204,28 @@ test('on a model no reviewer runs, such as a plan model, the agent is given the 
 	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: writer });
 });
 
+test('on such a model, a small change the decision model is sure does all the request asks skips the agent’s own check', async () => {
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: null });
+	let judged: string[] = [];
+	const covering = (patch: string, covers: boolean) => ({
+		patch: async () => patch,
+		covers: async (_id: string, request: string) => {
+			judged.push(request);
+			return covers;
+		},
+	});
+	noteRequest('k', 'Make the scroller padding pb-5.');
+	startFinishReview('k');
+	assert.equal(await finishReview('k', edit, undefined, covering(DIFF, true)), null);
+	assert.deepEqual(judged, ['Make the scroller padding pb-5.']);
+	assert.equal(await finishReview('k', edit, undefined, covering(`${DIFF}+z\n`, false)), null, 'once a reply, as the check it stands for');
+	judged = [];
+	noteRequest('u', 'Make the scroller padding pb-5.');
+	startFinishReview('u');
+	assert.match((await finishReview('u', edit, undefined, covering(DIFF, false))) ?? '', /check your change against the request/, 'unsure, the agent checks it');
+	setProviders({ sandbox: {} as never, store: {} as never, git: {} as never, models: { name: 'openrouter', list: async () => [] }, text: writer });
+});
+
 test('a chat whose reply worked in its sandbox and left no diff checks what it made against the request itself', async () => {
 	asked = [];
 	const chat = (patch: string | null, isChat = true) => ({ patch: async () => patch, chat: async () => isChat });
