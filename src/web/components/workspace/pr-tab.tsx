@@ -93,7 +93,7 @@ const CHECK_TONE = { passed: prTone('passed'), failed: prTone('failing'), pendin
 
 type Section = 'changes' | 'description' | 'discussion' | 'commits' | 'checks';
 
-function PullChanges({ sessionId, number }: { sessionId: string; number: number }) {
+function PullChanges({ sessionId, number, bounded = false }: { sessionId: string; number: number; bounded?: boolean }) {
 	const queryClient = useQueryClient();
 	const diff = useQuery({ queryKey: ['pull', sessionId, number, 'diff'], queryFn: () => api.pullDiff(sessionId, number), staleTime: 60_000 });
 	const files = useMemo(() => (diff.data ? parsePatch(diff.data.patch) : []), [diff.data]);
@@ -106,7 +106,7 @@ function PullChanges({ sessionId, number }: { sessionId: string; number: number 
 	);
 	if (diff.isError) return <EmptyState title="Diff unavailable" body={diff.error.message} />;
 	if (!diff.data) return <Loading>Reading the diff from GitHub</Loading>;
-	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} />;
+	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} bounded={bounded} />;
 }
 
 function Discussion({ pull }: { pull: PullRequestDetail }) {
@@ -187,13 +187,17 @@ function Loading({ children }: { children: ReactNode }) {
 	);
 }
 
+function PullSection({ bounded, children }: { bounded: boolean; children: ReactNode }) {
+	return <div className={cn(bounded && 'min-h-0 flex-1 overflow-y-auto')}>{children}</div>;
+}
+
 /** On a page of its own (`page`, as Reviews shows it) the page's bar already names the repository and links out, so the title leads. */
 export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = false }: { sessionId: string; item: PullRequestItem; pulls: PullRequestItem[]; onSelect: (number: number) => void; ownWork: boolean; page?: boolean }) {
 	const [section, setSection] = useState<Section>('changes');
 	const detail = useQuery({ queryKey: ['pull', sessionId, item.number], queryFn: () => api.pull(sessionId, item.number) });
 	const pull = detail.data;
 	const header = page ? (
-		<div className="flex flex-col gap-2">
+		<div className="flex shrink-0 flex-col gap-2">
 			<h2 className="m-0 text-h2 leading-[26px] font-semibold tracking-[-0.015em] text-pretty text-(--text)">{pull?.title ?? item.title}</h2>
 			<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-3)">
 				<StatePill state={pull?.state ?? item.state} size="sm" />
@@ -215,7 +219,7 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 			</div>
 		</div>
 	) : (
-		<div className="flex min-w-0 items-center gap-1.5">
+		<div className="flex min-w-0 shrink-0 items-center gap-1.5">
 			<StatePill state={pull?.state ?? item.state} size="sm" />
 			<PullPicker pulls={pulls} selected={item} onSelect={onSelect} />
 			<span className="min-w-0 truncate text-small text-(--text-4)">{item.repo}</span>
@@ -250,10 +254,10 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 		{ id: 'checks', label: 'Checks', count: pull.checks.length },
 	];
 	return (
-		<div className={cn('flex flex-col', page ? 'gap-4' : 'gap-2.5')}>
+		<div className={cn('flex flex-col', page ? 'gap-4' : 'min-h-0 flex-1 gap-2.5')}>
 			{header}
 			{page ? null : (
-				<div className="flex flex-col gap-1">
+				<div className="flex shrink-0 flex-col gap-1">
 					<h2 className="m-0 text-body-lg leading-[20px] font-medium text-pretty text-(--text)">{pull.title}</h2>
 					<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-(--text-3)">
 						<span className="text-(--text-2)">{pull.author}</span>
@@ -266,8 +270,10 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 					</div>
 				</div>
 			)}
-			<MergeBox sessionId={sessionId} pull={pull} ownWork={ownWork} />
-			<Segmented label="Pull request" className="max-w-full self-start overflow-x-auto">
+			<div className="shrink-0">
+				<MergeBox sessionId={sessionId} pull={pull} ownWork={ownWork} />
+			</div>
+			<Segmented label="Pull request" className="max-w-full shrink-0 self-start overflow-x-auto">
 				{sections.map((item) => (
 					<SegmentedItem key={item.id} size="sm" className="shrink-0" on={section === item.id} onClick={() => setSection(item.id)}>
 						{item.label}
@@ -275,19 +281,33 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 					</SegmentedItem>
 				))}
 			</Segmented>
-			{section === 'changes' ? <PullChanges sessionId={sessionId} number={pull.number} /> : null}
+			{section === 'changes' ? <PullChanges sessionId={sessionId} number={pull.number} bounded={!page} /> : null}
 			{section === 'description' ? (
-				pull.body ? (
-					<div className="in-well px-3.5 py-3 text-body text-(--text-2)">
-						<Markdown text={pull.body} />
-					</div>
-				) : (
-					<EmptyState title="No description" body="The pull request was opened without one." />
-				)
+				<PullSection bounded={!page}>
+					{pull.body ? (
+						<div className="in-well px-3.5 py-3 text-body text-(--text-2)">
+							<Markdown text={pull.body} />
+						</div>
+					) : (
+						<EmptyState title="No description" body="The pull request was opened without one." />
+					)}
+				</PullSection>
 			) : null}
-			{section === 'discussion' ? <Discussion pull={pull} /> : null}
-			{section === 'commits' ? <Commits pull={pull} /> : null}
-			{section === 'checks' ? <Checks pull={pull} /> : null}
+			{section === 'discussion' ? (
+				<PullSection bounded={!page}>
+					<Discussion pull={pull} />
+				</PullSection>
+			) : null}
+			{section === 'commits' ? (
+				<PullSection bounded={!page}>
+					<Commits pull={pull} />
+				</PullSection>
+			) : null}
+			{section === 'checks' ? (
+				<PullSection bounded={!page}>
+					<Checks pull={pull} />
+				</PullSection>
+			) : null}
 		</div>
 	);
 }

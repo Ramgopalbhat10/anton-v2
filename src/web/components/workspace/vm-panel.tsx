@@ -105,6 +105,8 @@ function VmPanelContent({ sessionId, tabs, active, onTabsChange, onActiveChange,
 	}
 
 	const current = active && tabs.includes(active) ? active : null;
+	const fixedPanel = current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' || current === 'Changes';
+	const scrollingFlexPanel = current === 'PR' || current === 'History';
 	const View = current ? VIEWS[current] : null;
 
 	return (
@@ -189,7 +191,7 @@ function VmPanelContent({ sessionId, tabs, active, onTabsChange, onActiveChange,
 			<div
 				className={cn(
 					'min-h-0 flex-1',
-					current === 'Terminal' || current === 'Preview' || current === 'Browser' || current === 'Files' || current === 'Changes' ? 'flex flex-col p-3' : 'overflow-y-auto p-3',
+					fixedPanel ? 'flex flex-col p-3' : scrollingFlexPanel ? 'flex flex-col overflow-y-auto p-3' : 'overflow-y-auto p-3',
 				)}
 			>
 				{current === null ? (

@@ -1,6 +1,6 @@
 # `@pierre/highlights` & `@pierre/diffs` Migration Roadmap
 
-This document describes the overall objective for adopting `@pierre/highlights` and `@pierre/diffs` across Anton v2, what was delivered in Phases 1 and 2, and the implementation plan for the remaining phases (Phases 3–5).
+This document describes the overall objective for adopting `@pierre/highlights` and `@pierre/diffs` across Anton v2, what was delivered in Phases 1–3, and the implementation plan for the remaining phases (Phases 4–5).
 
 ---
 
@@ -103,32 +103,37 @@ Phase 2 wires `@pierre/diffs`'s `loadDiffFiles` context-expansion pipeline end-t
 
 ---
 
-## 4. Remaining Phases — Implementation Plan (Phases 3–5)
+## 4. Phase 3 — Remaining Diff Surfaces, PR/History Virtualization & Legacy Cleanup (Completed)
 
-Phase 2 intentionally stops after workspace diff context expansion and the PR #354 fixes. The remaining work splits cleanly into three incremental phases:
+Phase 3 finished moving Anton's patch rendering surfaces to `@pierre/diffs` and removed the legacy diff highlighter.
 
-### Phase 3: Remaining Diff Surfaces, PR/History Virtualization & Legacy Cleanup
+### Thread `show` Diff Cards
+- **`src/web/components/thread/show-card.tsx`**: Replaced the manual `<pre>` line loop with read-only `@pierre/diffs` rendering inside `.anton-diff` + `DiffWorkerProvider`. Single-file git patches render through `<PatchDiff>`; multi-file or concatenated patches render each parsed `FileDiffMetadata` through `<PierreFileDiff>`.
+- Diff cards use unified layout, `AURA_DIFF_THEMES`, word-alt intra-line diffs, `max-h-80 overflow-auto`, and `disableFileHeader` when `node.path` already labels the card. Headerless or malformed patches for which `parsePatchFiles` returns zero files keep a plain `<pre>` fallback.
+- **`scripts/ui/chat-sdk.ts`**: Added the `?show-diff` fixture conversation so the thread card can be checked in a real browser.
 
-#### Scope & Changes
-1. **Migrate Thread `show` Diff Cards (`src/web/components/thread/show-card.tsx`)**:
-   - Replace the manual `<pre>` line loop inside `Diff` (currently splitting `node.patch` and styling `+`/`-`/`@@` lines by prefix) with a read-only `@pierre/diffs` render (`<PatchDiff>` or `<PierreFileDiff>` via `getCachedFileDiffMetadata`) inside `.anton-diff` + `DiffWorkerProvider`.
-   - Use unified layout (`diffStyle: 'unified'`), Aura themes (`AURA_DIFF_THEMES`), `max-h-80 overflow-auto`, and `disableFileHeader: true` when `node.path` already renders the card header.
-   - Keep a plain `<pre>` fallback for malformed or headerless patches where `parsePatchFiles` returns zero files.
-2. **Virtualize PR & History `DiffList` (`src/web/components/workspace/diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`)**:
-   - Currently `GitTab` wraps `<ChangeList>` in `<DiffScrollContainer>`, whereas `DiffList` (used by `PullChanges` in `pr-tab.tsx` and `CheckpointView` in `history-tab.tsx`) renders `<ChangeList>` directly without `<DiffScrollContainer>` and calls `useOpenFiles(files)` without `{ virtualized: true }`.
-   - Update `DiffList` to wrap `<ChangeList>` in `<DiffScrollContainer className="min-h-0 flex-1 overflow-auto">` inside a bounded flex column (passing bounded height from `PullChanges` / `CheckpointView`) and enable `{ virtualized: true }` on `useOpenFiles`.
-3. **Re-sync Annotations After Context Hydration (`src/web/components/workspace/diff-list.tsx`)**:
-   - Track a per-`DiffLines` hydration revision counter incremented in `handlePostRender` whenever `instance`'s metadata transitions from `isPartial === true` to `false`.
-   - Include that revision in the `commentTargets` and `lineAnnotations` dependency arrays so comments or keyboard navigation reflect newly expanded context lines immediately.
-4. **Remove Legacy `highlightDiff` (`src/web/lib/highlight.ts`, `tests/ui/highlight.test.tsx`)**:
-   - Remove `highlightDiff` and `highlightHunk` (which have zero remaining callers in `src/web`) along with their unit tests in `tests/ui/highlight.test.tsx`, keeping `highlight`, `languageFor`, `createAuraZedTheme`, and `hashText`.
+### PR & History Virtualization
+- **`src/web/components/workspace/diff-list.tsx`**: `DiffList` now accepts a bounded mode. Bounded lists enable `useOpenFiles(files, { virtualized: true })` and wrap `ChangeList` in `<DiffScrollContainer className="min-h-0 flex-1 overflow-auto">` beneath the toolbar.
+- **`src/web/components/workspace/pr-tab.tsx` / `vm-panel.tsx`**: Workspace PR panels are bounded flex columns. The Changes section owns the virtualized diff scroll while Description, Discussion, Commits, and Checks scroll inside the panel; Reviews page mode remains unbounded because that page already owns its outer scroll.
+- **`src/web/components/workspace/history-tab.tsx` / `vm-panel.tsx`**: Checkpoint diffs use the same bounded virtualized path, while the checkpoint list scrolls inside the History panel.
 
-#### Verification for Phase 3
-- `npm run check:types`, `npm run lint:hooks`, `npm run build`
-- `npx vitest run tests/ui/pierre-diffs.test.tsx tests/ui/changes-pr.test.tsx tests/ui/highlight.test.tsx` plus `show-card` UI tests covering both valid git patches and fallback snippets
-- Playwright check verifying large PR diff / checkpoint virtualization and thread `show` diff card rendering in dark & light themes
+### Post-Hydration Annotation Sync
+- **`src/web/components/workspace/diff-list.tsx`**: `DiffLines` watches `onPostRender` for a `FileDiffMetadata.isPartial === true` to `false` transition and increments a hydration revision included in `commentTargets` and `lineAnnotations`. Comments on lines hidden before expansion therefore move from the file-level outdated state back onto their hydrated line immediately.
+
+### Legacy Cleanup
+- **`src/web/lib/highlight.ts` / `tests/ui/highlight.test.tsx`**: Removed `highlightDiff`, `highlightHunk`, their private line types, and their tests. `highlight`, `languageFor`, `createAuraZedTheme`, and `hashText` remain for code blocks and file viewers until Phase 4.
+
+### Phase 3 Tests
+- **`tests/ui/show-card.test.tsx`**: Valid git patches render in the Shadow DOM diff renderer; malformed/headerless snippets keep the `<pre>` fallback.
+- **`tests/ui/pierre-diffs.test.tsx`**: Covers annotation re-sync after context hydration.
+- **`tests/ui/changes-pr.test.tsx` / `tests/ui/history.test.tsx`**: Cover the bounded virtualized PR and checkpoint diff containers.
+- Verification ran: `npm run check:types`, `npm run lint:hooks`, `npm run build`, `npm test`, `npm run test:ui`, the targeted diff suites, the checked-in virtualized keyboard Playwright script, and Chromium checks for 2,000-line PR/checkpoint virtualization plus `show` diff cards in dark and light themes.
 
 ---
+
+## 5. Remaining Phases — Implementation Plan (Phases 4–5)
+
+Phase 3 completes the migration of existing patch rendering surfaces. The remaining work splits cleanly into two incremental phases:
 
 ### Phase 4: Worker-Backed `<File>` Viewer for Files Tab, Source Previews & Shared Worker Pool
 
@@ -175,13 +180,13 @@ Phase 2 intentionally stops after workspace diff context expansion and the PR #3
 
 ---
 
-## 5. Summary Roadmap & Cross-Phase Verification Checklist
+## 6. Summary Roadmap & Cross-Phase Verification Checklist
 
 | Phase | Scope | Key Files | Status |
 | --- | --- | --- | --- |
 | **Phase 1** | `@pierre/highlights` Zed Aura theme, `@pierre/diffs` `DiffLines`, worker pool, preferences, draft & keyboard commenting | `highlight.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `diff.ts`, `aura-tokens.css`, `aura-components.css` | **Done (PR #354)** |
-| **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done (This PR)** |
-| **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Planned** |
+| **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done** |
+| **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Done** |
 | **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation | `task-workspace.tsx`, `file-view.tsx`, `files-tab.tsx`, `code-block.tsx`, `file-previews.tsx` | **Planned** |
 | **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Planned** |
 

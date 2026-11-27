@@ -61,8 +61,8 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 		[sessionId, entry.at],
 	);
 	return (
-		<div className="flex flex-col gap-2">
-			<div className="flex h-7 items-center gap-2">
+		<div className="flex min-h-0 flex-1 flex-col gap-2">
+			<div className="flex h-7 shrink-0 items-center gap-2">
 				<Btn variant="ghost" size="xs" icon={ChevronLeft} onClick={onBack}>
 					History
 				</Btn>
@@ -74,7 +74,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 				)}
 			</div>
 			{restored ? (
-				<div className="flex items-start gap-2.5 rounded-control border border-(--line) bg-(--ok-soft) px-3 py-2.5 text-small leading-[18px] text-(--text-2)">
+				<div className="flex shrink-0 items-start gap-2.5 rounded-control border border-(--line) bg-(--ok-soft) px-3 py-2.5 text-small leading-[18px] text-(--text-2)">
 					<Icon icon={Check} size={13} className="mt-0.5 text-(--ok)" />
 					<span>
 					Files restored. Commits and the conversation are unchanged, so tell the agent if it should know.
@@ -89,7 +89,7 @@ function CheckpointView({ sessionId, entry, latest, onBack }: { sessionId: strin
 			) : detail.data.patch === null ? (
 				<EmptyState icon={History} title="No diff saved" body="This checkpoint was saved before diffs were kept. It can still be restored." />
 			) : (
-				<DiffList files={files} empty="The files matched the starting commit at this point." loadDiffFiles={loadDiffFiles} />
+				<DiffList files={files} empty="The files matched the starting commit at this point." loadDiffFiles={loadDiffFiles} bounded />
 			)}
 		</div>
 	);
@@ -110,15 +110,15 @@ export function HistoryTab({ sessionId }: { sessionId: string }) {
 		return <EmptyState art={<HistoryArt className="w-full max-w-[340px]" />} title="No checkpoints yet" body="Each time the agent finishes a reply that changed files, the state is saved here." />;
 	}
 	return (
-		<div className="flex flex-col gap-2.5">
-			<div className="in-caption flex h-7 items-center gap-2">
+		<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
+			<div className="in-caption flex h-7 shrink-0 items-center gap-2">
 				<span>
 					{entries.length} {entries.length === 1 ? 'checkpoint' : 'checkpoints'}
 				</span>
 				<span className="flex-1" />
 				<span className="normal-case tracking-normal">One per reply that changed files</span>
 			</div>
-			<ol className="in-card m-0 list-none p-1.5" aria-label="Checkpoints">
+			<ol className="in-card m-0 shrink-0 list-none p-1.5" aria-label="Checkpoints">
 				{entries.map((entry, index) => (
 					<li key={entry.at} className="relative">
 						<span aria-hidden className={cn('absolute left-[17px] w-px bg-(--line-strong)', index === 0 ? 'top-1/2' : 'top-0', index === entries.length - 1 ? 'bottom-1/2' : 'bottom-0')} />

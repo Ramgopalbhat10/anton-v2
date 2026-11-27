@@ -1,3 +1,5 @@
+import { parsePatchFiles } from "@pierre/diffs";
+import { FileDiff as PierreFileDiff, PatchDiff } from "@pierre/diffs/react";
 import {
   ArrowDown,
   ArrowUp,
@@ -39,6 +41,12 @@ import { UiChart } from "@/components/thread/ui-chart";
 import { DeletedArtifact } from "@/components/content/output-viewer";
 import { outputUrl } from "@/lib/api/outputs";
 import { useDeletedOutput } from "@/lib/deleted-outputs";
+import {
+  ANTON_DIFF_UNSAFE_CSS,
+  AURA_DIFF_THEMES,
+  DiffWorkerProvider,
+} from "@/lib/pierre-diffs";
+import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /* A card from the agent's `show` tool (catalog in src/core/ui-spec.ts); a button or a form's submit sends your next message. */
@@ -337,7 +345,24 @@ function Timeline({ node }: { node: Extract<UiNode, { type: "timeline" }> }) {
 }
 
 function Diff({ node }: { node: Extract<UiNode, { type: "diff" }> }) {
-  const lines = node.patch.replace(/\n$/, "").split("\n");
+  const theme = useTheme();
+  const parsed = useMemo(() => parsePatchFiles(node.patch), [node.patch]);
+  const files = useMemo(() => parsed.flatMap((patch) => patch.files), [parsed]);
+  const options = useMemo(
+    () => ({
+      theme: AURA_DIFF_THEMES,
+      themeType: theme,
+      preferredHighlighter: "highlights" as const,
+      diffStyle: "unified" as const,
+      diffIndicators: "bars" as const,
+      lineDiffType: "word-alt" as const,
+      disableFileHeader: Boolean(node.path) && files.length === 1,
+      overflow: "scroll" as const,
+      tokenizeMaxLineLength: 4_000,
+      unsafeCSS: ANTON_DIFF_UNSAFE_CSS,
+    }),
+    [theme, node.path, files.length],
+  );
   return (
     <div className="overflow-hidden rounded-control border border-(--line) bg-(--bg-app)">
       {node.path ? (
@@ -345,25 +370,27 @@ function Diff({ node }: { node: Extract<UiNode, { type: "diff" }> }) {
           {node.path}
         </div>
       ) : null}
-      <pre className="m-0 max-h-80 overflow-auto py-1.5 font-mono text-small leading-[18px]">
-        {lines.map((line, index) => (
-          <div
-            key={index}
-            className={cn(
-              "px-3 whitespace-pre",
-              line.startsWith("+") && !line.startsWith("+++")
-                ? "bg-(--ok-soft) text-(--ok)"
-                : line.startsWith("-") && !line.startsWith("---")
-                  ? "bg-(--bad-soft) text-(--bad)"
-                  : line.startsWith("@@")
-                    ? "text-(--accent-text)"
-                    : "text-(--text-2)",
+      {files.length === 0 ? (
+        <pre className="m-0 max-h-80 overflow-auto px-3 py-1.5 font-mono text-small leading-[18px] whitespace-pre text-(--text-2)">
+          {node.patch}
+        </pre>
+      ) : (
+        <DiffWorkerProvider>
+          <div className="anton-diff max-h-80 overflow-auto">
+            {parsed.length === 1 && files.length === 1 ? (
+              <PatchDiff patch={node.patch} options={options} />
+            ) : (
+              files.map((file, index) => (
+                <PierreFileDiff
+                  key={`${file.prevName ?? ""}:${file.name}:${index}`}
+                  fileDiff={file}
+                  options={options}
+                />
+              ))
             )}
-          >
-            {line || " "}
           </div>
-        ))}
-      </pre>
+        </DiffWorkerProvider>
+      )}
     </div>
   );
 }

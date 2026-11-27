@@ -472,6 +472,41 @@ describe('pierre-diffs helpers & controls', () => {
 		});
 	});
 
+	it('re-syncs line annotations after expanded context hydrates the diff', async () => {
+		const middle = Array.from({ length: 15 }, (_, index) => `const mid${index + 5} = ${index + 5};`);
+		const oldText = ['// header', 'const keepOne = 1;', 'const oldVal = "a";', 'const keepTwo = 2;', ...middle, 'function tail() {', '}'].join('\n');
+		const newText = ['// header', 'const keepOne = 1;', 'const newVal = "b";', 'const keepTwo = 2;', ...middle, 'function tail() {', '  return newVal;', '}'].join('\n');
+		const files = parsePatch(SAMPLE_PATCH.replaceAll('src/sample.ts', 'src/resync-sample.ts'));
+		const review = {
+			comments: [{ path: 'src/resync-sample.ts', side: 'new' as const, line: 10, code: 'const mid10 = 10;', text: 'Hidden line note' }],
+			add: vi.fn(),
+			remove: vi.fn(),
+			removeAll: vi.fn(),
+			clear: vi.fn(),
+		};
+
+		function Harness() {
+			const open = useOpenFiles(files);
+			return <ChangeList files={files} open={open} review={review} loadDiffFiles={createDiffFilesLoader(async () => ({ oldText, newText }))} />;
+		}
+
+		const { container } = renderWithQueries(<Harness />);
+		expect(await screen.findByText('Hidden line note')).toBeTruthy();
+		expect(screen.getByText('Line 10 has changed since this comment')).toBeTruthy();
+
+		const shadow = container.querySelector('diffs-container')!.shadowRoot!;
+		await waitFor(() => {
+			const middleSeparator = Array.from(shadow.querySelectorAll('[data-separator]')).find((el) => el.textContent?.includes('15 unmodified'));
+			expect(middleSeparator?.querySelector('[data-expand-button]')).toBeTruthy();
+		});
+		const middleSeparator = Array.from(shadow.querySelectorAll('[data-separator]')).find((el) => el.textContent?.includes('15 unmodified'))!;
+		fireEvent.click(middleSeparator.querySelector('[data-expand-button]') as HTMLElement);
+
+		await waitFor(() => expect(shadow.textContent).toContain('mid10'));
+		await waitFor(() => expect(screen.queryByText('Line 10 has changed since this comment')).toBeNull());
+		expect(screen.getByText('Hidden line note')).toBeTruthy();
+	});
+
 	it('rejects stale expanded files when contents diverge from displayed hunks and surfaces expansion errors inline', async () => {
 		const user = userEvent.setup();
 		const stalePatch = SAMPLE_PATCH.replaceAll('src/sample.ts', 'src/stale.ts');

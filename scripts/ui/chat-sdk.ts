@@ -142,6 +142,45 @@ function approvalTurn(): Message[] {
 	];
 }
 
+/** With `?show-diff`, one finished `show` card whose diff exercises the thread's diff renderer. */
+function showDiffTurn(): Pick<Conversation, 'messages' | 'settlements'> {
+	const patch = [
+		'diff --git a/src/sample.ts b/src/sample.ts',
+		'index 1111111..2222222 100644',
+		'--- a/src/sample.ts',
+		'+++ b/src/sample.ts',
+		'@@ -2,3 +2,3 @@',
+		' const keepOne = 1;',
+		'-const oldVal = "a";',
+		'+const newVal = "b";',
+		' const keepTwo = 2;',
+		'',
+	].join('\n');
+	return {
+		messages: [
+			{ id: 'show-diff-u', role: 'user', purpose: 'user', display: 'visible', submissionId: 'show-diff', parts: [text('Show the patch.')] },
+			{
+				id: 'show-diff-a',
+				role: 'assistant',
+				purpose: 'assistant',
+				display: 'visible',
+				submissionId: 'show-diff',
+				parts: [
+					{
+						type: 'dynamic-tool',
+						toolName: 'show',
+						toolCallId: 'fixture-show-diff',
+						state: 'output-available',
+						input: { title: 'A patch', children: [{ type: 'diff', path: 'src/sample.ts', patch }] },
+						output: 'Shown',
+					},
+				],
+			},
+		],
+		settlements: [{ submissionId: 'show-diff', outcome: 'completed' }],
+	};
+}
+
 function turnsFromUrl(): number {
 	const turns = Number(new URLSearchParams(location.search).get('turns') ?? 8);
 	return Number.isFinite(turns) && turns >= 0 ? Math.min(Math.floor(turns), 200) : 8;
@@ -152,10 +191,11 @@ export function createFlueClient({ url }: { url: string }) {
 	const params = new URLSearchParams(location.search);
 	const coordinator = url.includes('/coordinator/');
 	const todos = coordinator && params.has('joined-todos') ? joinedTodos(params.get('joined-todos') === 'inferred') : { messages: [], settlements: [] };
+	const showDiff = params.has('show-diff') ? showDiffTurn() : { messages: [], settlements: [] };
 	let conversation: Conversation = {
 		conversationId: url,
-		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns(params.get('reports') === 'deleted') : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : [])],
-		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }, ...todos.settlements],
+		messages: [...startingTurns(turns), ...(coordinator ? [...coordinatorTurn(), ...(params.has('reports') ? reportTurns(params.get('reports') === 'deleted') : [])] : []), ...todos.messages, ...(params.has('approvals') ? approvalTurn() : []), ...showDiff.messages],
+		settlements: [...Array.from({ length: turns }, (_, index) => ({ submissionId: `s${index}`, outcome: 'completed' })), { submissionId: 'st', outcome: 'completed' }, ...todos.settlements, ...showDiff.settlements],
 	};
 	let snapshot: Snapshot = { conversation, offset: '0', phase: 'live', error: undefined };
 	const listeners = new Set<() => void>();
