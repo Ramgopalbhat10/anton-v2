@@ -22,7 +22,9 @@ const { api, iPhone } = vi.hoisted(() => {
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
 
 const { SectionPage, SettingsLayout } = await import('@/components/settings/layout');
+const { SettingsModal } = await import('@/components/settings/modal');
 const { SettingsOverview } = await import('@/components/settings/overview');
+const { closeSettings, openSettings } = await import('@/lib/settings-modal');
 
 /** The settings routes as main.tsx mounts them, without the app shell around them. */
 function open(path: string) {
@@ -43,7 +45,37 @@ function open(path: string) {
 	);
 }
 
+function openModal() {
+	closeSettings();
+	openSettings();
+	const root = createRootRoute({ component: () => <SettingsModal /> });
+	const tree = root.addChildren([createRoute({ getParentRoute: () => root, path: '/', component: () => null })]);
+	const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+	render(
+		<QueryClientProvider client={client}>
+			<RouterProvider router={router} />
+		</QueryClientProvider>,
+	);
+}
+
 describe('Settings', () => {
+	it('expands the settings card width from its header, then shrinks it back', async () => {
+		openModal();
+		const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+		expect(dialog.className).toContain('md:w-[min(1180px,calc(100vw-64px))]');
+		const expand = await screen.findByRole('button', { name: 'Expand settings' });
+		expect(expand.compareDocumentPosition(screen.getByText('Esc')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		fireEvent.click(expand);
+		expect(await screen.findByRole('button', { name: 'Shrink settings' })).toBeTruthy();
+		expect(dialog.className).toContain('md:w-[calc(100vw-32px)]');
+		expect(dialog.className).not.toContain('md:w-[min(1180px,calc(100vw-64px))]');
+		fireEvent.click(screen.getByRole('button', { name: 'Shrink settings' }));
+		expect(await screen.findByRole('button', { name: 'Expand settings' })).toBeTruthy();
+		expect(dialog.className).toContain('md:w-[min(1180px,calc(100vw-64px))]');
+		closeSettings();
+	});
+
 	it('lists every section by group on the overview, with what was spent today', async () => {
 		open('/settings');
 		expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
