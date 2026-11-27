@@ -5,13 +5,14 @@ import type {
 	SelectedLineRange,
 	VirtualizedFileDiff as PierreVirtualizedFileDiffClass,
 } from '@pierre/diffs';
-import { type DiffLineAnnotation, FileDiff as PierreFileDiff, useVirtualizer, Virtualizer } from '@pierre/diffs/react';
+import { type DiffLineAnnotation, FileDiff as PierreFileDiff, useVirtualizer } from '@pierre/diffs/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, ExternalLink, MessageSquare, MoreHorizontal, Plus, SlidersHorizontal, Undo2, X } from '@/lib/icons';
 import { Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Disclosure } from '@/components/kit/disclosure';
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { FileIcon, FileIcons } from '@/components/marks/file-icons';
+import { DiffScrollContainer } from '@/components/content/diff-scroll-container';
 import { StatusChip } from '@/components/content/file-view';
 import { ChangesArt } from '@/components/marks/illustrations';
 import { Btn, DiffStat, EmptyState, Icon, IconBtn, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/kit/signal';
@@ -594,17 +595,6 @@ export function DiffViewControls({ narrow = false, compact = false }: { narrow?:
 			</Menu>
 		</div>
 	);
-}
-
-/**
- * Scroll container wired to `@pierre/diffs`'s `<Virtualizer>` when browser observers exist,
- * falling back to a plain scrolling `<div>` in test DOM environments.
- */
-export function DiffScrollContainer({ children, className }: { children: ReactNode; className?: string }) {
-	if (typeof window !== 'undefined' && typeof IntersectionObserver !== 'undefined' && typeof ResizeObserver !== 'undefined' && !('happyDOM' in window)) {
-		return <Virtualizer className={className}>{children}</Virtualizer>;
-	}
-	return <div className={className}>{children}</div>;
 }
 
 function useCopied(): [string | null, (what: string, text: string) => void] {

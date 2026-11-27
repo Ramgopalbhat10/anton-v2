@@ -1,12 +1,17 @@
+import type { File as PierreFileClass, FileContents, PostRenderPhase, SelectedLineRange } from '@pierre/diffs';
+import { File as PierreFile } from '@pierre/diffs/react';
 import { useQuery } from '@tanstack/react-query';
 import { Code, Eye, Folder, FolderOpen } from '@/lib/icons';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DocumentMarkdown } from '@/components/content/document-markdown';
+import { DiffScrollContainer } from '@/components/content/diff-scroll-container';
 import { FileIcon } from '@/components/marks/file-icons';
 import { type FileImages as FileImagesValue } from '@/components/content/markdown';
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Icon, Spinner } from '@/components/kit/signal';
-import { highlight } from '@/lib/highlight';
+import { hashText } from '@/lib/highlight';
+import { AURA_DIFF_THEMES, DiffWorkerProvider } from '@/lib/pierre-diffs';
+import { useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
 type TreeNode = { name: string; path: string; children: Map<string, TreeNode>; file: boolean };
@@ -144,15 +149,6 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 	return true;
 }
 
-/** A number per distinct read: the highlighted copy is kept by it, so a refetch with the same bytes reuses its colours rather than highlighting again. */
-const versions = new WeakMap<Uint8Array, number>();
-let nextVersion = 0;
-function versionOf(bytes: Uint8Array): number {
-	let version = versions.get(bytes);
-	if (version === undefined) versions.set(bytes, (version = nextVersion++));
-	return version;
-}
-
 function asText(bytes: Uint8Array): string | null {
 	if (bytes.subarray(0, 8000).includes(0)) return null;
 	return new TextDecoder().decode(bytes);
@@ -190,6 +186,85 @@ export function MarkdownToggle({ preview, onChange, className }: { preview: bool
 	);
 }
 
+/** `VirtualizedFile` adds these to the base instance; present only inside a `<Virtualizer>`. */
+type ScrollableFileInstance = {
+	scrollToLine?: (lineNumber: number, align: ScrollLogicalPosition, onDone: () => void) => void;
+	getLinePosition?: (lineNumber: number) => { top: number; height: number } | undefined;
+};
+
+/**
+ * Source code through `@pierre/diffs`'s `<File>`: highlighting runs in the shared worker pool and
+ * long files virtualize inside the scroll container instead of mounting every line. The marked
+ * line of a `path:line` deep link is painted as the selected line and centered once the layout
+ * can measure it; renders before that retry through `onPostRender`.
+ */
+function SourceView({ path, contents, markedLine }: { path: string; contents: string; markedLine?: number }) {
+	const theme = useTheme();
+	const hostRef = useRef<HTMLDivElement>(null);
+	const instanceRef = useRef<(PierreFileClass & ScrollableFileInstance) | null>(null);
+	const pendingLineRef = useRef<number | null>(null);
+	const file = useMemo<FileContents>(
+		() => ({ name: path, contents, cacheKey: `anton-file:${path}:${contents.length}:${hashText(contents)}` }),
+		[path, contents],
+	);
+
+	const scrollToLine = useCallback((line: number): boolean => {
+		const instance = instanceRef.current;
+		if (instance?.scrollToLine && instance.getLinePosition) {
+			if (instance.getLinePosition(line) == null) return false;
+			instance.scrollToLine(line, 'center', () => {});
+			return true;
+		}
+		const row = hostRef.current?.querySelector('diffs-container')?.shadowRoot?.querySelector(`[data-line="${line}"]`);
+		if (row instanceof HTMLElement) {
+			row.scrollIntoView({ block: 'center' });
+			return true;
+		}
+		return false;
+	}, []);
+
+	const handlePostRender = useCallback(
+		(_node: HTMLElement, instance: PierreFileClass, phase: PostRenderPhase) => {
+			instanceRef.current = phase === 'unmount' ? null : (instance as PierreFileClass & ScrollableFileInstance);
+			if (phase === 'unmount') return;
+			const line = pendingLineRef.current;
+			if (line != null && scrollToLine(line)) pendingLineRef.current = null;
+		},
+		[scrollToLine],
+	);
+
+	useEffect(() => {
+		if (!markedLine) return;
+		pendingLineRef.current = markedLine;
+		if (scrollToLine(markedLine)) pendingLineRef.current = null;
+	}, [markedLine, scrollToLine]);
+
+	const options = useMemo(
+		() => ({
+			theme: AURA_DIFF_THEMES,
+			themeType: theme,
+			preferredHighlighter: 'highlights' as const,
+			disableFileHeader: true,
+			overflow: 'scroll' as const,
+			tokenizeMaxLineLength: 4_000,
+			onPostRender: handlePostRender,
+		}),
+		[theme, handlePostRender],
+	);
+
+	const selectedLines = useMemo<SelectedLineRange | null>(() => (markedLine ? { start: markedLine, end: markedLine } : null), [markedLine]);
+
+	return (
+		<div ref={hostRef} className="anton-diff flex min-h-0 flex-1 flex-col">
+			<DiffWorkerProvider>
+				<DiffScrollContainer className="min-h-0 flex-1 overflow-auto">
+					<PierreFile file={file} options={options} selectedLines={selectedLines} />
+				</DiffScrollContainer>
+			</DiffWorkerProvider>
+		</div>
+	);
+}
+
 /** Pass `preview` to choose how Markdown shows from outside, as a tab bar does; without it the file has its own toggle. */
 export function FileView({
 	path,
@@ -217,66 +292,38 @@ export function FileView({
 	// Tool calls refetch open files; the same bytes keep the same array, so nothing below re-renders or re-highlights.
 	const file = useQuery({ queryKey, queryFn: read, structuralSharing: (old, next) => (old instanceof Uint8Array && next instanceof Uint8Array && sameBytes(old, next) ? old : next) });
 	const contents = useMemo(() => (file.data && !imageType ? asText(file.data) : ''), [file.data, imageType]);
-	const lines = useMemo(() => (contents ? contents.split('\n') : []), [contents]);
 	useEffect(() => {
 		if (!file.data || !imageType) return;
 		const url = URL.createObjectURL(new Blob([new Uint8Array(file.data)], { type: imageType }));
 		setImageUrl(url);
 		return () => URL.revokeObjectURL(url);
 	}, [file.data, imageType]);
-	const colored = useQuery({
-		queryKey: ['highlight', ...queryKey, file.data ? versionOf(file.data) : -1],
-		queryFn: () => highlight(contents ?? '', path),
-		enabled: Boolean(contents) && !imageType && (!markdown || !preview),
-		staleTime: Number.POSITIVE_INFINITY,
-		// An earlier version's colours are only wanted again while the file shows it.
-		gcTime: 10_000,
-	});
-	const tokens = colored.data ?? null;
-	const marked = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		if (markedLine && lines.length) marked.current?.scrollIntoView({ block: 'center' });
-	}, [markedLine, lines.length]);
+	const source = !file.isError && !file.isPending && !imageType && !(markdown && preview && contents !== null) && contents !== null;
 	return (
 		<div className={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--bg-app)', className)}>
 			{markdown && chosen === undefined ? <MarkdownToggle preview={preview} onChange={setOwn} className="my-2 me-3 self-end shrink-0" /> : null}
-			<div className="min-h-0 flex-1 overflow-auto">
-				{file.isError ? (
-					<div className="px-3 py-2.5 text-small text-(--bad)">{file.error.message || 'Could not read this file.'}</div>
-				) : file.isPending ? (
-					<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-3)">
-						<Spinner size={12} />
-						Reading
-					</div>
-				) : imageType ? (
-					<div className="flex min-h-40 items-center justify-center p-4">
-						<img src={imageUrl} alt={path.split('/').pop()} className="max-h-full max-w-full object-contain" />
-					</div>
-				) : markdown && preview && contents !== null ? (
-					<DocumentMarkdown text={contents} images={images} className="p-4" />
-				) : contents === null ? (
-					<div className="px-3 py-2.5 text-small text-(--text-3)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
-				) : (
-					<div className="overflow-x-auto py-1.5 font-mono text-small leading-[19px]">
-						<div className="min-w-max">
-							{lines.map((line, index) => (
-								<div key={index} ref={index + 1 === markedLine ? marked : undefined} className={cn('flex', index + 1 === markedLine && 'bg-(--accent-soft)')}>
-									<span className="w-12 shrink-0 border-r border-(--line) pr-2.5 text-right text-(--text-4) select-none">{index + 1}</span>
-									<span className="pr-3 pl-3 whitespace-pre text-(--text-2)">
-										{tokens?.[index]
-											? tokens[index].map((token, at) => (
-													<span key={at} style={{ color: token.color }}>
-														{token.content}
-													</span>
-												))
-											: line}
-									</span>
-								</div>
-							))}
+			{source ? (
+				<SourceView path={path} contents={contents} markedLine={markedLine} />
+			) : (
+				<div className="min-h-0 flex-1 overflow-auto">
+					{file.isError ? (
+						<div className="px-3 py-2.5 text-small text-(--bad)">{file.error.message || 'Could not read this file.'}</div>
+					) : file.isPending ? (
+						<div className="flex items-center gap-2 px-3 py-2.5 text-small text-(--text-3)">
+							<Spinner size={12} />
+							Reading
 						</div>
-					</div>
-				)}
-			</div>
+					) : imageType ? (
+						<div className="flex min-h-40 items-center justify-center p-4">
+							<img src={imageUrl} alt={path.split('/').pop()} className="max-h-full max-w-full object-contain" />
+						</div>
+					) : markdown && preview && contents !== null ? (
+						<DocumentMarkdown text={contents} images={images} className="p-4" />
+					) : contents === null ? (
+						<div className="px-3 py-2.5 text-small text-(--text-3)">Binary file, {file.data.length.toLocaleString()} bytes.</div>
+					) : null}
+				</div>
+			)}
 		</div>
 	);
 }

@@ -17,7 +17,6 @@ import { setChangesScope, useChangesScope, useFocusedChange } from '@/lib/worksp
 import { taskQueries } from '@/lib/task-queries';
 import {
 	ChangeList,
-	DiffScrollContainer,
 	DiffViewControls,
 	ExpandAll,
 	FilesSummary,
@@ -26,6 +25,7 @@ import {
 	isDiffToolbarTight,
 	useOpenFiles,
 } from '@/components/workspace/diff-list';
+import { DiffScrollContainer } from '@/components/content/diff-scroll-container';
 import { api } from '@/lib/api';
 import { useChanges } from '@/lib/changes';
 import { createDiffFilesLoader } from '@/lib/pierre-diffs';

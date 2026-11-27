@@ -1,7 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { expect } from 'vitest';
 import type { Session } from '@/lib/api/sessions';
+
+/** Source rendered through `@pierre/diffs` lives in a Shadow DOM beyond `screen`'s reach; its `pre` carries the code text. */
+export async function shadowCodeText(host: ParentNode = document): Promise<string> {
+	let text = '';
+	await waitFor(() => {
+		const pre = host.querySelector('diffs-container')?.shadowRoot?.querySelector('pre');
+		expect(pre?.textContent?.trim().length).toBeGreaterThan(0);
+		text = pre?.textContent ?? '';
+	});
+	return text;
+}
 
 /** Renders with a fresh query cache, seeded with whatever the test passes. */
 export function renderWithQueries(ui: ReactNode, seed: Array<[unknown[], unknown]> = []) {

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { renderWithQueries, session } from './render';
+import { renderWithQueries, session, shadowCodeText } from './render';
 
 const api = vi.hoisted(() => ({
 	session: vi.fn(),
@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
 	file: vi.fn(async (_id: string, _path: string) => new TextEncoder().encode('export const answer = 42;\n')),
 }));
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api }));
-vi.mock('@/lib/highlight', () => ({ highlight: async () => null, hashText: (text: string) => text.length.toString(36) }));
+vi.mock('@/lib/highlight', async (original) => ({ ...(await original<typeof import('@/lib/highlight')>()), highlight: async () => null }));
 
 const { FilesTab } = await import('@/components/workspace/files-tab');
 
@@ -39,7 +39,7 @@ describe('FilesTab', () => {
 		expect(matches).toEqual(['app.tssrcM', 'app.test.tstests']);
 
 		fireEvent.click(within(screen.getByLabelText('File tree')).getByRole('button', { name: /^app\.ts\s*src\s*M/ }));
-		expect(await screen.findByText('export const answer = 42;')).toBeTruthy();
+		expect(await shadowCodeText()).toContain('export const answer = 42;');
 		expect(api.file).toHaveBeenCalledWith('s1', 'src/app.ts');
 		expect(screen.getByRole('button', { name: /^app\.ts\s*src\s*M/ }).getAttribute('aria-current')).toBe('true');
 	});
@@ -115,7 +115,7 @@ describe('file viewer tabs', () => {
 		expect(showAs.closest('[role=tablist]')).toBeNull();
 		expect(showAs.parentElement?.querySelector('[role=tablist][aria-label="Open files"]')).toBeTruthy();
 		fireEvent.click(within(showAs).getByRole('radio', { name: 'Source' }));
-		expect(screen.getByText('# Hello file')).toBeTruthy();
+		expect(await shadowCodeText()).toContain('# Hello file');
 		fireEvent.click(within(showAs).getByRole('radio', { name: 'Preview' }));
 		expect(screen.getByRole('heading', { name: 'Hello file' })).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'photo.png' }));

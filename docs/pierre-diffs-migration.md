@@ -131,11 +131,41 @@ Phase 3 finished moving Anton's patch rendering surfaces to `@pierre/diffs` and 
 
 ---
 
+## 4a. Phase 4 — Shared Worker Pool & Worker-Backed `<File>` Viewer (Completed)
+
+### Shared Worker Pool Hoist
+- **`src/web/components/shell/task-workspace.tsx`**: Mounted one shared `DiffWorkerProvider` around the workspace content (thread + panels). Because `@pierre/diffs`'s `WorkerPoolContextProvider` reference-counts a module-level singleton, this hoisted provider keeps the worker pool, tokenizer, and AST caches alive when switching between Changes, PR, History, and Files panels; the pool now survives any combination of tab switches and only the original mount/unmount of the workspace itself registers instances.
+- **`src/web/components/content/diff-scroll-container.tsx`**: Extracted `DiffScrollContainer` out of `diff-list.tsx` into its own module so both the diff lists and the Files viewer share the `<Virtualizer>` wrapper without a circular import.
+- Nested `DiffWorkerProvider` fallbacks remain inside `ChangeList`, `ShowPanel` diff cards, and the Files `SourceView` so those surfaces still work when rendered outside the workspace shell (worker instances reference-count, so nesting costs nothing).
+
+### Files Tab `<File>` Migration (`src/web/components/content/file-view.tsx`)
+- Replaced main-thread `highlight()` + per-line `<div>` rendering in `FileView`'s source mode with `@pierre/diffs/react`'s `<File>` inside `DiffScrollContainer`'s `<Virtualizer>`, using `AURA_DIFF_THEMES`, the current `themeType`, `preferredHighlighter: 'highlights'`, `disableFileHeader: true` (the surrounding panels draw their own path headers), and `tokenizeMaxLineLength: 4000` matching the legacy guard.
+- Preserved behaviors:
+  - `structuralSharing` byte-equality on file queries is unchanged, so live polling does not re-render unchanged files.
+  - `path:line` deep links pass `selectedLines: { start: line, end: line }` and scroll the virtualized viewer to the line via `VirtualizedFile.scrollToLine(line, 'center')` (retried across post-render phases until measured, with a `scrollIntoView` fallback).
+  - Markdown `Source`/`Preview` toggle, image object-URL previews, and binary-file messages are untouched.
+  - Syntax tokens paint through `--diffs-token-*` CSS variables bound to Aura `--syntax-*` tokens, so dark/light theme switches stay pure-CSS with zero re-tokenization.
+- Browser-measured virtualization: a 10,000+ line `package-lock.json` mounts ~100 rows initially, deep scrolling mounts later slices on demand, and the line-number gutter stays sticky during horizontal scrolling.
+
+### Artifact Source Preview Evaluation — Decision: Not Migrated
+`CodeBlock`'s `source={true}` mode (used by `Source`/`SourceAt` in `file-previews.tsx`) was evaluated against `<File>` and **kept on the main-thread `@pierre/highlights` path**, because the migration cannot preserve the invariant documented in `docs/architecture/replies-and-artifacts.md` ("the gutter stays pinned while scrolling horizontally and the horizontal scrollbar sits below the visible code, not below the file's last line"):
+- `<File>` renders `[data-code]` as a full-content-height element with internal `overflow-x: scroll`; measured in-browser at 2,008 px tall inside a 640 px viewport, its horizontal scrollbar lands at the bottom of the entire file rather than the viewport.
+- Vertical scrolling in `<Virtualizer>` belongs to an outer container, so the two axes cannot share one viewport scroller.
+- Pierre does pin the gutter (sticky) — but both scrollbar-placement aspects of the invariant regress. Inline fenced blocks (`source={false}`) were never in scope, per plan.
+
+### Phase 4 Tests
+- **`tests/ui/file-view.test.tsx`**: New — shadow-DOM source rendering, deep-linked `path:line` selection painting (`data-selected-line` on the correct row), and binary-file messaging.
+- **`tests/ui/render.tsx`**: Added `shadowCodeText()` helper awaiting text inside `<diffs-container>` shadow roots.
+- **`tests/ui/files-tab.test.tsx`, `tests/ui/document-preview.test.tsx`, `tests/ui/skills.test.tsx`**: Updated shadow-DOM assertions and spread the real `@/lib/highlight` module in mocks so `createAuraZedTheme` registration survives.
+- Chromium checks against `npm run ui:fixture`: file opening, syntax tokens, virtualization subset + deep scrolling, Markdown Source/Preview toggle, 320 px layout, dark and light themes, zero console/page errors.
+
+---
+
 ## 5. Remaining Phases — Implementation Plan (Phases 4–5)
 
 Phase 3 completes the migration of existing patch rendering surfaces. The remaining work splits cleanly into two incremental phases:
 
-### Phase 4: Worker-Backed `<File>` Viewer for Files Tab, Source Previews & Shared Worker Pool
+### Phase 4: Worker-Backed `<File>` Viewer for Files Tab, Source Previews & Shared Worker Pool (completed — see §4a)
 
 #### Scope & Changes
 1. **Hoist `DiffWorkerProvider` to the Task Workspace Shell (`src/web/lib/pierre-diffs.ts`, `src/web/components/shell/task-workspace.tsx`, `src/web/components/workspace/diff-list.tsx`)**:
@@ -187,7 +217,7 @@ Phase 3 completes the migration of existing patch rendering surfaces. The remain
 | **Phase 1** | `@pierre/highlights` Zed Aura theme, `@pierre/diffs` `DiffLines`, worker pool, preferences, draft & keyboard commenting | `highlight.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `diff.ts`, `aura-tokens.css`, `aura-components.css` | **Done (PR #354)** |
 | **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done** |
 | **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Done** |
-| **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation | `task-workspace.tsx`, `file-view.tsx`, `files-tab.tsx`, `code-block.tsx`, `file-previews.tsx` | **Planned** |
+| **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation (rejected, invariant documented) | `task-workspace.tsx`, `file-view.tsx`, `diff-scroll-container.tsx`, `diff-list.tsx` | **Done** |
 | **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Planned** |
 
 ### Standard Verification Gates (Every Remaining Phase)

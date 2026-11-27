@@ -13,6 +13,7 @@ import { VmPanel } from '@/components/workspace/vm-panel';
 import { type PanelName, panels } from '@/components/workspace/panels';
 import { PaneSlideContext, usePaneSlide } from '@/components/workspace/workspace-pane';
 import { isChat, type Session } from '@/lib/api/sessions';
+import { DiffWorkerProvider } from '@/lib/pierre-diffs';
 import { readPinnedPanels } from '@/lib/pinned-panels';
 import { useOnePane } from '@/lib/one-pane';
 import { SendToAgent } from '@/lib/review';
@@ -285,39 +286,42 @@ export function TaskWorkspace({
 		<SendToAgent.Provider value={send}>
 			<ShowPanel.Provider value={showPanel}>
 				<ReadNotificationsOf sessionId={sessionId} />
-				<div className="@container/workspace relative flex min-h-0 min-w-0 flex-1">
-					{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
-					<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden @min-[700px]/workspace:invisible @min-[700px]/workspace:flex' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
-						<TaskHeader
-							session={sessionData}
-							status={status}
-							leading={leading}
-							workspaceOpen={open}
-							renaming={renaming}
-							onRenamingChange={setRenaming}
-							onShowPanel={showPanel}
-							onOpenWorkspace={openWorkspace}
-							onAskForPullRequest={askForPullRequest}
-						/>
-						<Thread sessionId={sessionId} agent={agent} />
-					</div>
-					{slide ? (
-						<PaneSlideContext.Provider value={slide}>
-							<VmPanel
-								sessionId={sessionId}
-								contentOpen={workspaceOpen}
-								tabs={tabs}
-								active={active}
-								onTabsChange={changeTabs}
-								onActiveChange={changeActive}
-								expanded={expanded}
-								closingExpanded={closingExpanded}
-								onToggleExpanded={toggleExpanded}
-								onClose={closeWorkspace}
+				{/* One worker pool for the thread's diff cards and every workspace tab, so switching panels keeps warm highlight caches instead of booting a pool per tab. Nested providers share this singleton. */}
+				<DiffWorkerProvider>
+					<div className="@container/workspace relative flex min-h-0 min-w-0 flex-1">
+						{/* Hidden rather than unmounted while the workspace is expanded, so the conversation keeps its draft, scroll and stream. */}
+						<div className={cn('min-h-0 min-w-0 flex-1 flex-col', !centerVisible ? 'hidden @min-[700px]/workspace:invisible @min-[700px]/workspace:flex' : open ? 'hidden @min-[700px]/workspace:flex' : 'flex')}>
+							<TaskHeader
+								session={sessionData}
+								status={status}
+								leading={leading}
+								workspaceOpen={open}
+								renaming={renaming}
+								onRenamingChange={setRenaming}
+								onShowPanel={showPanel}
+								onOpenWorkspace={openWorkspace}
+								onAskForPullRequest={askForPullRequest}
 							/>
-						</PaneSlideContext.Provider>
-					) : null}
-				</div>
+							<Thread sessionId={sessionId} agent={agent} />
+						</div>
+						{slide ? (
+							<PaneSlideContext.Provider value={slide}>
+								<VmPanel
+									sessionId={sessionId}
+									contentOpen={workspaceOpen}
+									tabs={tabs}
+									active={active}
+									onTabsChange={changeTabs}
+									onActiveChange={changeActive}
+									expanded={expanded}
+									closingExpanded={closingExpanded}
+									onToggleExpanded={toggleExpanded}
+									onClose={closeWorkspace}
+								/>
+							</PaneSlideContext.Provider>
+						) : null}
+					</div>
+				</DiffWorkerProvider>
 			</ShowPanel.Provider>
 		</SendToAgent.Provider>
 	);
