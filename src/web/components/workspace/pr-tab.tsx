@@ -184,8 +184,13 @@ function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry
 			)}
 		</div>
 	);
-	const row = (entry: DiscussionEntry, compact: boolean) => (
-		<div className="relative flex gap-2.5">
+	// Reddit-style threading: replies indent one step and connect to the starter's spine with a curved elbow;
+	// the spine runs in segments — the starter drops it below its avatar, each non-last reply continues it.
+	const row = (entry: DiscussionEntry, compact: boolean, link?: { spineStart?: boolean; elbow?: boolean; continues?: boolean }) => (
+		<div className={cn('relative flex gap-2.5', link?.elbow ? 'ml-6' : '')}>
+			{link?.spineStart ? <span aria-hidden className="absolute top-[18px] -bottom-2.5 left-[7px] w-px bg-(--line-strong)" /> : null}
+			{link?.elbow ? <span aria-hidden className="absolute top-0 -left-4 h-[9px] w-4 rounded-bl-control border-b border-l border-(--line-strong)" /> : null}
+			{link?.continues ? <span aria-hidden className="absolute top-[9px] -bottom-2.5 -left-4 w-px bg-(--line-strong)" /> : null}
 			<Avatar name={entry.author} size="xs" />
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				{header(entry, compact)}
@@ -201,10 +206,9 @@ function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry
 		const replies = (repliesOf.get(entry.id) ?? []).slice().sort((a, b) => a.at.localeCompare(b.at));
 		return (
 			<li key={entry.id} className="relative flex flex-col gap-2.5 border-b border-(--line) px-3 py-2.5 last:border-b-0">
-				{replies.length > 0 ? <span aria-hidden className="absolute top-7 bottom-3 left-[19px] w-px bg-(--line)" /> : null}
-				{row(entry, false)}
-				{replies.map((reply) => (
-					<Fragment key={reply.id}>{row(reply, true)}</Fragment>
+				{row(entry, false, { spineStart: replies.length > 0 })}
+				{replies.map((reply, at) => (
+					<Fragment key={reply.id}>{row(reply, true, { elbow: true, continues: at < replies.length - 1 })}</Fragment>
 				))}
 			</li>
 		);
