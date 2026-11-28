@@ -188,9 +188,9 @@ function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry
 	// the spine runs in segments — the starter drops it below its avatar, each non-last reply continues it.
 	const row = (entry: DiscussionEntry, compact: boolean, link?: { spineStart?: boolean; elbow?: boolean; continues?: boolean }) => (
 		<div className={cn('relative flex gap-2.5', link?.elbow ? 'ml-6' : '')}>
-			{link?.spineStart ? <span aria-hidden className="absolute top-[18px] -bottom-2.5 left-[7px] w-px bg-(--line-strong)" /> : null}
-			{link?.elbow ? <span aria-hidden className="absolute top-0 -left-4 h-[9px] w-4 rounded-bl-control border-b border-l border-(--line-strong)" /> : null}
-			{link?.continues ? <span aria-hidden className="absolute top-[9px] -bottom-2.5 -left-4 w-px bg-(--line-strong)" /> : null}
+			{link?.spineStart ? <span aria-hidden className="absolute top-[18px] -bottom-2.5 left-[7.5px] w-px bg-(--line-strong)" /> : null}
+			{link?.elbow ? <span aria-hidden className="absolute top-0 -left-[16.5px] h-[9px] w-[16.5px] rounded-bl-control border-b border-l border-(--line-strong)" /> : null}
+			{link?.continues ? <span aria-hidden className="absolute top-[9px] -bottom-2.5 -left-[16.5px] w-px bg-(--line-strong)" /> : null}
 			<Avatar name={entry.author} size="xs" />
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				{header(entry, compact)}
