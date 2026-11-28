@@ -542,7 +542,7 @@ describe('pierre-diffs helpers & controls', () => {
 
 		const staleAlert = await staleView.findByRole('alert');
 		expect(staleAlert.textContent).toContain('File changed since this diff loaded. Refreshing diff…');
-		expect(staleShadow.textContent).not.toContain('999');
+		expect(staleShadow.textContent).not.toContain('mid12');
 		expect(staleShadow.textContent).toContain('const oldVal = "a";');
 		staleView.unmount();
 
