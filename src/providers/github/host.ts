@@ -425,20 +425,34 @@ export function githubHost({ token, apiUrl }: GitHubOptions): GitHost {
 		},
 		async pullRequestDetail(url): Promise<PullRequestDetail> {
 			const { repo, number } = pullOf(url);
-			const [pull, commits, notes, lineNotes, reviews] = await Promise.all([
+			const [pull, commits, notes, lineNotes, reviews, threads] = await Promise.all([
 				json<PullRequest>(`/repos/${repo}/pulls/${number}`),
 				all<{ sha: string; commit: { message: string } }>(`/repos/${repo}/pulls/${number}/commits?per_page=100`),
 				all<Comment>(`/repos/${repo}/issues/${number}/comments?per_page=100`),
 				all<Comment>(`/repos/${repo}/pulls/${number}/comments?per_page=100`),
 				all<Comment>(`/repos/${repo}/pulls/${number}/reviews?per_page=100`),
+				// Resolved and outdated states only exist in GraphQL; when it fails the REST heuristic still applies.
+				threadsOf(repo, number).catch(() => [] as Awaited<ReturnType<typeof threadsOf>>),
 			]);
 			const [runs, statuses] = await Promise.all([
 				json<{ check_runs: CheckRun[] }>(`/repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`),
 				json<{ statuses: CommitStatus[] }>(`/repos/${repo}/commits/${pull.head.sha}/status?per_page=100`),
 			]);
+			// A thread's key is its first comment's database id, matching what REST replies carry in `in_reply_to_id`.
+			const threadByComment = new Map<number, { resolved: boolean; outdated: boolean }>();
+			for (const thread of threads) {
+				for (const node of thread.comments.nodes) {
+					threadByComment.set(node.databaseId, { resolved: thread.isResolved, outdated: thread.isOutdated });
+				}
+			}
 			const discussion = [
 				...notes.map((comment) => discussionOf('comment', comment)),
-				...lineNotes.map((comment) => discussionOf('line', comment)),
+				...lineNotes.map((comment) => {
+					const entry = discussionOf('line', comment);
+					const thread = threadByComment.get(comment.id) ?? (comment.in_reply_to_id ? threadByComment.get(comment.in_reply_to_id) : undefined);
+					if (!thread) return entry;
+					return { ...entry, outdated: thread.outdated, ...(thread.resolved ? { resolved: true } : {}) };
+				}),
 				...reviews.map((review) => discussionOf('review', review)),
 			]
 				.filter((entry) => entry.body || entry.verdict)

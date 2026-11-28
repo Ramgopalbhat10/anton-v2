@@ -244,6 +244,19 @@ export function mockApi({ working = true }: { working?: boolean } = {}): Plugin 
 	const spaceTodos = new Map<string, SpaceTodo[]>([['space-billing', billingTodos.map((item) => ({ ...item }))]]);
 	const tree = paths();
 	const patch = execSync('git diff HEAD~10 HEAD -- src/web/components/thread/thread.tsx src/web/components/thread/subagents.tsx src/web/components/workspace/files-tab.tsx src/web/lib', { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
+	// Anchor scripted review threads to lines the generated patch really shows, so they render inline in the PR tab.
+	const anchorFile = /diff --git a\/(\S+) b\//.exec(patch)?.[1];
+	const anchorHunk = /@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(patch);
+	if (anchorFile && anchorHunk && pull.discussion.length === 1) {
+		const line = Number(anchorHunk[1]) + 2;
+		pull.discussion = [
+			...pull.discussion,
+			{ id: 'line-50', kind: 'line', author: 'anaisgit', body: 'This guard drops the empty-filter case — was that deliberate? It changes what the sidebar shows after archiving.', path: anchorFile, line, at: ago(42), verdict: null, side: 'new' },
+			{ id: 'line-51', kind: 'line', author: 'perf', body: 'Fixed: the filter now keeps empty results and the sidebar test covers it.', path: anchorFile, line, at: ago(30), verdict: null, side: 'new', replyTo: 'line-50' },
+			{ id: 'line-52', kind: 'line', author: 'reviewbot', body: 'Nit: this rename makes the call sites harder to grep.', path: anchorFile, line: line + 4, at: ago(25), verdict: null, side: 'new', resolved: true },
+			{ id: 'line-53', kind: 'line', author: 'anaisgit', body: 'This hunk was rewritten in the meantime — the original note no longer applies cleanly.', path: anchorFile, line: 99999, at: ago(20), verdict: null, side: 'new', outdated: true },
+		];
+	}
 	const changed = [...patch.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => ({ path: match[1], status: 'M' }));
 	let startedAt = 0;
 	const elapsed = () => (startedAt ? Date.now() - startedAt : -1);

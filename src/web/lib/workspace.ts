@@ -6,7 +6,7 @@ import type { ChangesScope } from '@/lib/api/workspace';
 export const ShowPanel = createContext<(name: PanelName) => void>(() => undefined);
 
 /** A place in the task's files a reply points at: a repository file in Files, or a changed file in Changes. */
-export type FileFocus = { path: string; line?: number; at: number };
+export type FileFocus = { path: string; line?: number; side?: 'old' | 'new' | null; at: number };
 
 const fileFocus = new Map<string, FileFocus>();
 const changeFocus = new Map<string, FileFocus>();
@@ -23,8 +23,8 @@ export function focusFile(sessionId: string, path: string, line?: number): void 
 	for (const listener of focusListeners) listener();
 }
 
-export function focusChange(sessionId: string, path: string): void {
-	changeFocus.set(sessionId, { path, at: Date.now() });
+export function focusChange(sessionId: string, path: string, line?: number, side?: 'old' | 'new' | null): void {
+	changeFocus.set(sessionId, { path, line, side, at: Date.now() });
 	for (const listener of focusListeners) listener();
 }
 

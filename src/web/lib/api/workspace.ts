@@ -55,6 +55,7 @@ export type DiscussionEntry = {
 	replyTo?: string | null;
 	side?: 'old' | 'new' | null;
 	outdated?: boolean;
+	resolved?: boolean;
 };
 
 /** `mergeable` is null while GitHub works it out. */
