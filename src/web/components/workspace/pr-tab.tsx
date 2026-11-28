@@ -147,12 +147,15 @@ function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry
 	const roots = pull.discussion.filter((entry) => !entry.replyTo || !pull.discussion.some((other) => other.id === entry.replyTo));
 	const orphanReplies = pull.discussion.filter((entry) => entry.replyTo && !roots.includes(entry) && !pull.discussion.some((other) => other.id === entry.replyTo));
 	const timeline = [...roots, ...orphanReplies].sort((a, b) => a.at.localeCompare(b.at));
-	const renderEntry = (entry: DiscussionEntry, nested = false) => (
-		<li key={entry.id} className={cn('flex gap-2.5 px-3 py-2.5', nested ? 'border-t border-(--line) pl-9' : 'border-b border-(--line) last:border-b-0')}>
-			<Avatar name={entry.author} size="xs" />
-			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small">
-					<span className="font-medium text-(--text)">{entry.author}</span>
+	// A thread reads as one connected conversation: replies share the starter's avatar column on a spine,
+	// with compact headers — repeating "commented on path:line" per reply dissolved the grouping.
+	const header = (entry: DiscussionEntry, compact: boolean) => (
+		<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small">
+			<span className="font-medium text-(--text)">{entry.author}</span>
+			{compact ? (
+				<span className="in-num text-micro text-(--text-4)">· {entry.at ? age(entry.at) : ''}</span>
+			) : (
+				<Fragment>
 					<span className="text-(--text-3)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
 					{entry.path ? (
 						onJump && entry.line ? (
@@ -177,24 +180,37 @@ function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry
 						<span className={cn('rounded-control px-1.5 py-px text-micro', entry.verdict === 'approved' ? 'bg-(--ok-soft) text-(--ok)' : 'bg-(--warn-soft) text-(--warn)')}>{entry.verdict}</span>
 					) : null}
 					<span className="in-num ml-auto text-micro text-(--text-4)">{entry.at ? age(entry.at) : ''}</span>
-				</div>
+				</Fragment>
+			)}
+		</div>
+	);
+	const row = (entry: DiscussionEntry, compact: boolean) => (
+		<div className="relative flex gap-2.5">
+			<Avatar name={entry.author} size="xs" />
+			<div className="flex min-w-0 flex-1 flex-col gap-1">
+				{header(entry, compact)}
 				{entry.body ? (
-					<div className="text-body text-(--text-2)">
+					<div className="text-body break-words text-(--text-2)">
 						<Markdown text={entry.body} />
 					</div>
 				) : null}
 			</div>
-		</li>
+		</div>
 	);
+	const renderThread = (entry: DiscussionEntry) => {
+		const replies = (repliesOf.get(entry.id) ?? []).slice().sort((a, b) => a.at.localeCompare(b.at));
+		return (
+			<li key={entry.id} className="relative flex flex-col gap-2.5 border-b border-(--line) px-3 py-2.5 last:border-b-0">
+				{replies.length > 0 ? <span aria-hidden className="absolute top-7 bottom-3 left-[19px] w-px bg-(--line)" /> : null}
+				{row(entry, false)}
+				{replies.map((reply) => (
+					<Fragment key={reply.id}>{row(reply, true)}</Fragment>
+				))}
+			</li>
+		);
+	};
 	return (
-		<ol className="in-well m-0 flex list-none flex-col p-0">
-			{timeline.map((entry) => (
-				<Fragment key={entry.id}>
-					{renderEntry(entry)}
-					{(repliesOf.get(entry.id) ?? []).map((reply) => renderEntry(reply, true))}
-				</Fragment>
-			))}
-		</ol>
+		<ol className="in-well m-0 flex list-none flex-col p-0">{timeline.map((entry) => renderThread(entry))}</ol>
 	);
 }
 

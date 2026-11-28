@@ -269,9 +269,10 @@ describe('PR', () => {
 		fireEvent.click(await screen.findByRole('tab', { name: /Discussion/ }));
 		const starter = await screen.findByText('Starter body');
 		expect(screen.getByText('Reply body')).toBeTruthy();
-		// The reply is nested under the starter in the same thread block, before the later general note.
+		// The reply is nested in the starter's thread item, not a loose timeline entry of its own.
 		const replyItem = screen.getByText('Reply body').closest('li');
-		expect(replyItem?.className).toContain('pl-9');
+		expect(replyItem?.textContent).toContain('Starter body');
+		expect(replyItem?.textContent).not.toContain('General note');
 		// The path:line reference is a jump link that switches to the Changes tab.
 		const jump = screen.getAllByRole('button', { name: /src\/a\.ts:1/ })[0]!;
 		fireEvent.click(jump);
