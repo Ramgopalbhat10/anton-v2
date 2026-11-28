@@ -721,8 +721,8 @@ describe('foreign GitHub review annotations', () => {
 		}
 		renderWithQueries(<Harness />);
 		expect(await screen.findByText('octocat')).toBeTruthy();
-		expect(screen.getByText('Can this be a constant?')).toBeTruthy();
-		expect(screen.getByText('· on GitHub')).toBeTruthy();
+		expect(screen.getAllByText('Can this be a constant?').length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/on GitHub/).length).toBeGreaterThan(0);
 		expect(screen.queryByLabelText('Comment')).toBeNull();
 	});
 

@@ -69,8 +69,18 @@ type DraftAnnotationGroup = {
 	composer?: { side: ReviewComment['side']; line: number; endLine?: number };
 };
 
-/** A read-only comment made on the git host (e.g. a GitHub review thread), shown inline but not editable or sendable. */
-export type ForeignDiffComment = { path: string; side: 'old' | 'new'; line: number; author: string; body: string; outdated?: boolean };
+/** A read-only comment thread started on the git host (e.g. a GitHub review thread), shown inline but not editable or sendable. */
+export type ForeignDiffComment = {
+	path: string;
+	side: 'old' | 'new';
+	line: number;
+	author: string;
+	body: string;
+	at?: string;
+	outdated?: boolean;
+	resolved?: boolean;
+	replies?: Array<{ author: string; body: string; at: string }>;
+};
 
 function CommentCard({ comment, onRemove, outdated }: { comment: ReviewComment; onRemove: () => void; outdated?: boolean }) {
 	return (
@@ -182,6 +192,7 @@ function DiffLines({
 	narrow,
 	loadDiffFiles,
 	onJumpFile,
+	scrollRequest,
 }: {
 	file: FileDiff;
 	commenting?: Commenting;
@@ -189,6 +200,7 @@ function DiffLines({
 	narrow: boolean;
 	loadDiffFiles?: FileDiffContentsLoader;
 	onJumpFile?: (direction: 1 | -1) => void;
+	scrollRequest?: { side: 'old' | 'new'; line: number; at: number } | null;
 }) {
 	// The line being commented on and its unsaved text live here, so deleting another comment keeps the draft intact.
 	const [draft, setDraft] = useState<{ side: ReviewComment['side']; line: number; endLine?: number } | null>(null);
@@ -290,44 +302,71 @@ function DiffLines({
 		}
 	}, []);
 
-	useEffect(() => {
-		if (!activeTarget) return;
-		if (virtualizer) {
-			const onDone = () => {};
-			virtualizer.scrollSpanIntoView({
-				align: 'nearest',
-				onDone,
-				resolveSpan: () => {
-					const host = diffContainerRef.current?.querySelector('diffs-container');
-					if (!(host instanceof HTMLElement)) return undefined;
-					let rawTop: number | undefined;
-					let rawHeight: number | undefined;
-					const lineEl = host.shadowRoot ? findMountedLineElement(host.shadowRoot, activeTarget, effectiveDiffStyle) : null;
-					const lineRect = lineEl?.getBoundingClientRect();
-					if (lineEl && lineRect && lineRect.height > 0) {
-						rawTop = virtualizer.getOffsetInScrollContainer(lineEl);
-						rawHeight = lineRect.height;
-					} else {
-						const inst = diffInstanceRef.current;
-						if (inst && 'getLinePosition' in inst && typeof inst.getLinePosition === 'function') {
-							const pos = (inst as PierreVirtualizedFileDiffClass<DraftAnnotationGroup>).getLinePosition(activeTarget.lineNumber, activeTarget.side);
-							if (pos) {
-								rawTop = virtualizer.getOffsetInScrollContainer(host) + pos.top;
-								rawHeight = pos.height;
+	const scrollTargetIntoView = useCallback(
+		(target: DiffCommentTarget): (() => void) | undefined => {
+			if (virtualizer) {
+				const onDone = () => {};
+				virtualizer.scrollSpanIntoView({
+					align: 'nearest',
+					onDone,
+					resolveSpan: () => {
+						const host = diffContainerRef.current?.querySelector('diffs-container');
+						if (!(host instanceof HTMLElement)) return undefined;
+						let rawTop: number | undefined;
+						let rawHeight: number | undefined;
+						const lineEl = host.shadowRoot ? findMountedLineElement(host.shadowRoot, target, effectiveDiffStyle) : null;
+						const lineRect = lineEl?.getBoundingClientRect();
+						if (lineEl && lineRect && lineRect.height > 0) {
+							rawTop = virtualizer.getOffsetInScrollContainer(lineEl);
+							rawHeight = lineRect.height;
+						} else {
+							const inst = diffInstanceRef.current;
+							if (inst && 'getLinePosition' in inst && typeof inst.getLinePosition === 'function') {
+								const pos = (inst as PierreVirtualizedFileDiffClass<DraftAnnotationGroup>).getLinePosition(target.lineNumber, target.side);
+								if (pos) {
+									rawTop = virtualizer.getOffsetInScrollContainer(host) + pos.top;
+									rawHeight = pos.height;
+								}
 							}
 						}
-					}
-					if (rawTop === undefined || rawHeight === undefined) return undefined;
-					const top = Math.max(0, rawTop - STICKY_HEADER_HEIGHT);
-					return { top, height: rawHeight + (rawTop - top) };
-				},
-			});
-			return () => virtualizer.cancelScroll(onDone);
-		}
-		const shadow = diffContainerRef.current?.querySelector('diffs-container')?.shadowRoot;
-		if (!shadow) return;
-		findMountedLineElement(shadow, activeTarget, effectiveDiffStyle)?.scrollIntoView?.({ block: 'nearest' });
-	}, [activeTarget, effectiveDiffStyle, virtualizer]);
+						if (rawTop === undefined || rawHeight === undefined) return undefined;
+						const top = Math.max(0, rawTop - STICKY_HEADER_HEIGHT);
+						return { top, height: rawHeight + (rawTop - top) };
+					},
+				});
+				return () => virtualizer.cancelScroll(onDone);
+			}
+			const shadow = diffContainerRef.current?.querySelector('diffs-container')?.shadowRoot;
+			if (!shadow) return undefined;
+			findMountedLineElement(shadow, target, effectiveDiffStyle)?.scrollIntoView?.({ block: 'nearest' });
+			return undefined;
+		},
+		[effectiveDiffStyle, virtualizer],
+	);
+
+	useEffect(() => {
+		if (!activeTarget) return;
+		return scrollTargetIntoView(activeTarget);
+	}, [activeTarget, scrollTargetIntoView]);
+
+	// A jump link from the host discussion scrolls to the comment's line once rendered; positions only exist after the diff mounts, so retry briefly.
+	useEffect(() => {
+		if (!scrollRequest) return;
+		const target: DiffCommentTarget = { side: scrollRequest.side === 'old' ? 'deletions' : 'additions', lineNumber: scrollRequest.line };
+		let cancel: (() => void) | undefined;
+		let attempts = 0;
+		const tryScroll = () => {
+			cancel?.();
+			cancel = scrollTargetIntoView(target);
+			attempts += 1;
+			if (attempts < 6) timer = window.setTimeout(tryScroll, 250);
+		};
+		let timer = window.setTimeout(tryScroll, 150);
+		return () => {
+			window.clearTimeout(timer);
+			cancel?.();
+		};
+	}, [scrollRequest?.at, scrollTargetIntoView]);
 
 	const options = useMemo(
 		() => ({
@@ -411,15 +450,26 @@ function DiffLines({
 			return (
 				<Fragment>
 					{(notes ?? []).map((note, index) => (
-						<div key={`foreign-${index}`} className="in-pop my-1.5 mx-2 flex w-[min(480px,calc(100%-1rem))] flex-col gap-1 px-2.5 py-2 font-sans">
-							<span className="flex items-center gap-1.5 text-micro text-(--text-3)">
-								<Icon icon={MessageSquare} size={11} />
+						<details key={`foreign-${index}`} open={!note.resolved} className="in-pop group/details my-1.5 mx-2 w-[min(480px,calc(100%-1rem))] px-2.5 py-2 font-sans">
+							<summary className="flex cursor-pointer list-none items-center gap-1.5 text-micro text-(--text-3) outline-none">
+								<Icon icon={MessageSquare} size={11} className="shrink-0" />
 								<span className="font-medium text-(--text-2)">{note.author}</span>
 								{note.outdated ? <span>· outdated</span> : null}
+								{note.resolved ? <span className="rounded-control bg-(--ok-soft) px-1 py-px text-(--ok)">resolved</span> : null}
 								<span>· on GitHub</span>
-							</span>
-							<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{note.body}</span>
-						</div>
+								{(note.replies?.length ?? 0) > 0 ? <span>· {note.replies!.length} {note.replies!.length === 1 ? 'reply' : 'replies'}</span> : null}
+								<span className="truncate group-open/details:hidden">{note.body.split('\n')[0]}</span>
+							</summary>
+							<div className="mt-1 flex flex-col gap-2">
+								<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{note.body}</span>
+								{(note.replies ?? []).map((reply, at) => (
+									<div key={at} className="flex flex-col gap-0.5 border-l-2 border-l-(--line) pl-2">
+										<span className="text-micro font-medium text-(--text-2)">{reply.author}</span>
+										<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{reply.body}</span>
+									</div>
+								))}
+							</div>
+						</details>
 					))}
 					{comments.map((item, index) => (
 						<CommentCard key={index} comment={item.comment} outdated={item.outdated} onRemove={() => commenting?.onRemove(item.comment)} />
@@ -828,7 +878,7 @@ export function ChangeList({
 }: {
 	files: FileDiff[];
 	open: OpenFiles;
-	selected?: { path: string; at: number } | null;
+	selected?: { path: string; line?: number; side?: 'old' | 'new' | null; at: number } | null;
 	sessionId?: string;
 	revertTo?: 'base' | 'pushed';
 	review?: ReturnType<typeof useReviewComments>;
@@ -891,6 +941,7 @@ export function ChangeList({
 									narrow={narrow}
 									loadDiffFiles={loadDiffFiles}
 									foreign={foreign?.filter((note) => note.path === file.path)}
+									scrollRequest={selected?.path === file.path && selected.line ? { side: selected.side ?? 'new', line: selected.line, at: selected.at } : null}
 									onJumpFile={(direction) => {
 										const at = files.findIndex((entry) => entry.path === file.path);
 										const next = files[at + direction];
@@ -941,6 +992,7 @@ export function DiffList({
 	branch,
 	base,
 	foreign,
+	selected,
 	loadDiffFiles,
 	bounded = false,
 }: {
@@ -950,6 +1002,7 @@ export function DiffList({
 	branch?: string;
 	base?: string;
 	foreign?: ForeignDiffComment[];
+	selected?: { path: string; line?: number; side?: 'old' | 'new' | null; at: number } | null;
 	loadDiffFiles?: FileDiffContentsLoader;
 	bounded?: boolean;
 }) {
@@ -961,7 +1014,7 @@ export function DiffList({
 	if (files.length === 0) {
 		return <EmptyState art={<ChangesArt className="w-full max-w-[400px]" branch={branch} base={base} />} title="No changes yet" body={empty ?? 'Files the agent edits show up here as a diff.'} />;
 	}
-	const changes = <ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} foreign={foreign} loadDiffFiles={loadDiffFiles} />;
+	const changes = <ChangeList files={files} open={open} sessionId={sessionId} narrow={narrow} foreign={foreign} selected={selected} loadDiffFiles={loadDiffFiles} />;
 	return (
 		<FileIcons>
 			<div ref={wellRef} className={cn('in-well', bounded && 'flex min-h-0 flex-1 flex-col')}>

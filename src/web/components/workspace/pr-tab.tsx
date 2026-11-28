@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Check, ChevronDown, CircleCheck, CircleDot, CircleX, Copy, GitCommitHorizontal, GitPullRequest, MessageSquare } from '@/lib/icons';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { DiffList, type ForeignDiffComment } from '@/components/workspace/diff-list';
+import { focusChange, useFocusedChange } from '@/lib/workspace';
 import { createDiffFilesLoader } from '@/lib/pierre-diffs';
 import { Count, Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Markdown } from '@/components/content/markdown';
@@ -9,7 +10,7 @@ import { MergeBox } from '@/components/workspace/pr-merge';
 import { PR_ICON, prChipStyle, prColor, prTone } from '@/components/marks/pr-status';
 import { Avatar, EmptyState, Icon, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Spinner } from '@/components/kit/signal';
 import { api } from '@/lib/api';
-import type { CheckRun, PullRequestDetail, PullRequestItem, PullRequestState } from '@/lib/api/workspace';
+import type { CheckRun, DiscussionEntry, PullRequestDetail, PullRequestItem, PullRequestState } from '@/lib/api/workspace';
 import { parsePatch } from '@/lib/diff';
 import { age } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -93,6 +94,29 @@ const CHECK_TONE = { passed: prTone('passed'), failed: prTone('failing'), pendin
 
 type Section = 'changes' | 'description' | 'discussion' | 'commits' | 'checks';
 
+/** Line comments grouped into threads: starters carry their replies, so the inline card reads like the host's conversation. */
+function threadsOf(pull: PullRequestDetail): ForeignDiffComment[] {
+	const starters = pull.discussion.filter((entry) => entry.kind === 'line' && entry.path && entry.line && !entry.replyTo);
+	const replies = new Map<string, Array<{ author: string; body: string; at: string }>>();
+	for (const entry of pull.discussion) {
+		if (entry.kind !== 'line' || !entry.replyTo) continue;
+		const list = replies.get(entry.replyTo) ?? [];
+		list.push({ author: entry.author, body: entry.body, at: entry.at });
+		replies.set(entry.replyTo, list);
+	}
+	return starters.map((entry) => ({
+		path: entry.path!,
+		side: entry.side ?? 'new',
+		line: entry.line!,
+		author: entry.author,
+		body: entry.body,
+		at: entry.at,
+		outdated: entry.outdated,
+		resolved: entry.resolved,
+		replies: replies.get(entry.id),
+	}));
+}
+
 function PullChanges({ sessionId, number, bounded = false, foreign = [] }: { sessionId: string; number: number; bounded?: boolean; foreign?: ForeignDiffComment[] }) {
 	const queryClient = useQueryClient();
 	const diff = useQuery({ queryKey: ['pull', sessionId, number, 'diff'], queryFn: () => api.pullDiff(sessionId, number), staleTime: 60_000 });
@@ -104,40 +128,71 @@ function PullChanges({ sessionId, number, bounded = false, foreign = [] }: { ses
 			}),
 		[queryClient, sessionId, number],
 	);
+	const focused = useFocusedChange(sessionId);
 	if (diff.isError) return <EmptyState title="Diff unavailable" body={diff.error.message} />;
 	if (!diff.data) return <Loading>Reading the diff from GitHub</Loading>;
-	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} bounded={bounded} foreign={foreign} />;
+	return <DiffList files={files} empty="This pull request changes no files." loadDiffFiles={loadDiffFiles} bounded={bounded} foreign={foreign} selected={focused} />;
 }
 
-function Discussion({ pull }: { pull: PullRequestDetail }) {
+function Discussion({ pull, onJump }: { pull: PullRequestDetail; onJump?: (entry: DiscussionEntry) => void }) {
 	if (pull.discussion.length === 0) return <EmptyState icon={MessageSquare} title="No discussion yet" body="Comments and reviews on GitHub show up here." />;
+	// Replies nest under their thread starter instead of floating loose in the timeline.
+	const repliesOf = new Map<string, DiscussionEntry[]>();
+	for (const entry of pull.discussion) {
+		if (!entry.replyTo) continue;
+		const list = repliesOf.get(entry.replyTo) ?? [];
+		list.push(entry);
+		repliesOf.set(entry.replyTo, list);
+	}
+	const roots = pull.discussion.filter((entry) => !entry.replyTo || !pull.discussion.some((other) => other.id === entry.replyTo));
+	const orphanReplies = pull.discussion.filter((entry) => entry.replyTo && !roots.includes(entry) && !pull.discussion.some((other) => other.id === entry.replyTo));
+	const timeline = [...roots, ...orphanReplies].sort((a, b) => a.at.localeCompare(b.at));
+	const renderEntry = (entry: DiscussionEntry, nested = false) => (
+		<li key={entry.id} className={cn('flex gap-2.5 px-3 py-2.5', nested ? 'border-t border-(--line) pl-9' : 'border-b border-(--line) last:border-b-0')}>
+			<Avatar name={entry.author} size="xs" />
+			<div className="flex min-w-0 flex-1 flex-col gap-1">
+				<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small">
+					<span className="font-medium text-(--text)">{entry.author}</span>
+					<span className="text-(--text-3)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
+					{entry.path ? (
+						onJump && entry.line ? (
+							<button
+								type="button"
+								onClick={() => onJump(entry)}
+								title="Show in the diff"
+								className="min-w-0 truncate rounded-control text-micro text-(--accent-text) outline-none hover:underline focus-visible:shadow-(--focus)"
+							>
+								{entry.path}:{entry.line}
+							</button>
+						) : (
+							<span className="min-w-0 truncate text-micro text-(--text-2)">
+								{entry.path}
+								{entry.line ? `:${entry.line}` : ''}
+							</span>
+						)
+					) : null}
+					{entry.outdated ? <span className="rounded-control bg-(--warn-soft) px-1 py-px text-micro text-(--warn)">outdated</span> : null}
+					{entry.resolved ? <span className="rounded-control bg-(--ok-soft) px-1 py-px text-micro text-(--ok)">resolved</span> : null}
+					{entry.verdict ? (
+						<span className={cn('rounded-control px-1.5 py-px text-micro', entry.verdict === 'approved' ? 'bg-(--ok-soft) text-(--ok)' : 'bg-(--warn-soft) text-(--warn)')}>{entry.verdict}</span>
+					) : null}
+					<span className="in-num ml-auto text-micro text-(--text-4)">{entry.at ? age(entry.at) : ''}</span>
+				</div>
+				{entry.body ? (
+					<div className="text-body text-(--text-2)">
+						<Markdown text={entry.body} />
+					</div>
+				) : null}
+			</div>
+		</li>
+	);
 	return (
 		<ol className="in-well m-0 flex list-none flex-col p-0">
-			{pull.discussion.map((entry) => (
-				<li key={entry.id} className="flex gap-2.5 border-b border-(--line) px-3 py-2.5 last:border-b-0">
-					<Avatar name={entry.author} size="xs" />
-					<div className="flex min-w-0 flex-1 flex-col gap-1">
-						<div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-small">
-							<span className="font-medium text-(--text)">{entry.author}</span>
-							<span className="text-(--text-3)">{entry.kind === 'review' ? 'reviewed' : entry.kind === 'line' ? 'commented on' : 'commented'}</span>
-							{entry.path ? (
-								<span className="min-w-0 truncate text-micro text-(--text-2)">
-									{entry.path}
-									{entry.line ? `:${entry.line}` : ''}
-								</span>
-							) : null}
-							{entry.verdict ? (
-								<span className={cn('rounded-control px-1.5 py-px text-micro', entry.verdict === 'approved' ? 'bg-(--ok-soft) text-(--ok)' : 'bg-(--warn-soft) text-(--warn)')}>{entry.verdict}</span>
-							) : null}
-							<span className="in-num ml-auto text-micro text-(--text-4)">{entry.at ? age(entry.at) : ''}</span>
-						</div>
-						{entry.body ? (
-							<div className="text-body text-(--text-2)">
-								<Markdown text={entry.body} />
-							</div>
-						) : null}
-					</div>
-				</li>
+			{timeline.map((entry) => (
+				<Fragment key={entry.id}>
+					{renderEntry(entry)}
+					{(repliesOf.get(entry.id) ?? []).map((reply) => renderEntry(reply, true))}
+				</Fragment>
 			))}
 		</ol>
 	);
@@ -286,9 +341,7 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 						sessionId={sessionId}
 						number={pull.number}
 						bounded={!page}
-						foreign={pull.discussion
-							.filter((entry) => entry.kind === 'line' && entry.path && entry.line && !entry.replyTo)
-							.map((entry) => ({ path: entry.path!, side: entry.side ?? 'new', line: entry.line!, author: entry.author, body: entry.body, outdated: entry.outdated }))}
+						foreign={threadsOf(pull)}
 					/>
 				) : null}
 			{section === 'description' ? (
@@ -304,7 +357,13 @@ export function PullView({ sessionId, item, pulls, onSelect, ownWork, page = fal
 			) : null}
 			{section === 'discussion' ? (
 				<PullSection bounded={!page}>
-					<Discussion pull={pull} />
+					<Discussion
+						pull={pull}
+						onJump={(entry) => {
+							setSection('changes');
+							focusChange(sessionId, entry.path!, entry.line ?? undefined, entry.side);
+						}}
+					/>
 				</PullSection>
 			) : null}
 			{section === 'commits' ? (

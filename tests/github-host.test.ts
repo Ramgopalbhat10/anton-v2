@@ -342,3 +342,103 @@ test('review threads read from GraphQL carry the id answers take, their replies 
 		},
 	]);
 });
+
+test('the PR detail merges GraphQL thread state into line comments', async () => {
+	const pull = '/repos/acme/demo/pulls/9';
+	const pages: Record<string, unknown> = {
+		[pull]: {
+			html_url: 'https://github.com/acme/demo/pull/9',
+			number: 9,
+			title: 'Ship it',
+			body: '',
+			user: { login: 'anton-bot' },
+			state: 'open',
+			draft: false,
+			merged_at: null,
+			updated_at: '2026-10-03T00:00:00Z',
+			created_at: '2026-10-01T00:00:00Z',
+			mergeable: true,
+			head: { sha: 'h9', ref: 'anton/ship' },
+			base: { sha: 'b9', ref: 'main' },
+		},
+		[`${pull}/commits?per_page=100`]: [],
+		'/repos/acme/demo/issues/9/comments?per_page=100': [],
+		[`${pull}/comments?per_page=100`]: [
+			{ id: 50, user: { login: 'ana' }, author_association: 'MEMBER', body: 'starter', path: 'src/a.ts', line: 12, original_line: 12, side: 'RIGHT', created_at: '2026-10-02T00:00:00Z' },
+			{ id: 51, user: { login: 'ben' }, author_association: 'MEMBER', body: 'reply', path: 'src/a.ts', line: 12, original_line: 12, side: 'RIGHT', in_reply_to_id: 50, created_at: '2026-10-02T01:00:00Z' },
+			{ id: 52, user: { login: 'ana' }, author_association: 'MEMBER', body: 'moved note', path: 'src/b.ts', line: null, original_line: 30, side: 'RIGHT', created_at: '2026-10-02T02:00:00Z' },
+		],
+		[`${pull}/reviews?per_page=100`]: [],
+		'/repos/acme/demo/commits/h9/check-runs?per_page=100': { check_runs: [] },
+		'/repos/acme/demo/commits/h9/status?per_page=100': { statuses: [] },
+	};
+	globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+		const url = String(input).slice(API.length);
+		if (String(input).endsWith('/graphql')) {
+			return new Response(
+				JSON.stringify({
+					data: {
+						repository: {
+							pullRequest: {
+								reviewThreads: {
+									nodes: [
+										{ id: 't1', isResolved: true, isOutdated: false, path: 'src/a.ts', line: 12, originalLine: 12, comments: { nodes: [{ databaseId: 50, author: { login: 'ana' }, body: 'starter', createdAt: '' }, { databaseId: 51, author: { login: 'ben' }, body: 'reply', createdAt: '' }] } },
+										{ id: 't2', isResolved: false, isOutdated: true, path: 'src/b.ts', line: null, originalLine: 30, comments: { nodes: [{ databaseId: 52, author: { login: 'ana' }, body: 'moved note', createdAt: '' }] } },
+									],
+								},
+							},
+						},
+					},
+				}),
+				{ status: 200 },
+			);
+		}
+		return url in pages ? new Response(JSON.stringify(pages[url]), { status: 200 }) : new Response('missing', { status: 404 });
+	}) as typeof fetch;
+	const host = githubHost({ token: 't', apiUrl: API });
+	const detail = await host.pullRequestDetail('https://github.com/acme/demo/pull/9');
+	const starter = detail.discussion.find((entry) => entry.id === 'line-50');
+	const reply = detail.discussion.find((entry) => entry.id === 'line-51');
+	const moved = detail.discussion.find((entry) => entry.id === 'line-52');
+	assert.equal(starter?.resolved, true, 'the thread the starter belongs to is resolved');
+	assert.equal(starter?.side, 'new');
+	assert.equal(reply?.resolved, true, 'replies inherit their thread state through in_reply_to_id');
+	assert.equal(reply?.replyTo, 'line-50');
+	assert.equal(moved?.outdated, true, 'GraphQL outdated wins over the REST line heuristic');
+	assert.equal(moved?.resolved, undefined, 'unresolved threads carry no resolved flag');
+});
+
+test('the PR detail still works when GraphQL is unreachable', async () => {
+	const pull = '/repos/acme/demo/pulls/9';
+	const pages: Record<string, unknown> = {
+		[pull]: {
+			html_url: 'https://github.com/acme/demo/pull/9',
+			number: 9,
+			title: 'Ship it',
+			user: { login: 'anton-bot' },
+			state: 'open',
+			draft: false,
+			merged_at: null,
+			updated_at: '2026-10-03T00:00:00Z',
+			created_at: '2026-10-01T00:00:00Z',
+			head: { sha: 'h9', ref: 'anton/ship' },
+			base: { sha: 'b9', ref: 'main' },
+		},
+		[`${pull}/commits?per_page=100`]: [],
+		'/repos/acme/demo/issues/9/comments?per_page=100': [],
+		[`${pull}/comments?per_page=100`]: [{ id: 52, user: { login: 'ana' }, author_association: 'MEMBER', body: 'moved note', path: 'src/b.ts', line: null, original_line: 30, created_at: '2026-10-02T02:00:00Z' }],
+		[`${pull}/reviews?per_page=100`]: [],
+		'/repos/acme/demo/commits/h9/check-runs?per_page=100': { check_runs: [] },
+		'/repos/acme/demo/commits/h9/status?per_page=100': { statuses: [] },
+	};
+	globalThis.fetch = (async (input: string | URL) => {
+		if (String(input).endsWith('/graphql')) throw new Error('connect ECONNREFUSED');
+		const url = String(input).slice(API.length);
+		return url in pages ? new Response(JSON.stringify(pages[url]), { status: 200 }) : new Response('missing', { status: 404 });
+	}) as typeof fetch;
+	const host = githubHost({ token: 't', apiUrl: API });
+	const detail = await host.pullRequestDetail('https://github.com/acme/demo/pull/9');
+	const moved = detail.discussion.find((entry) => entry.id === 'line-52');
+	assert.equal(moved?.outdated, true, 'the REST heuristic still marks the line outdated');
+	assert.equal(moved?.resolved, undefined);
+});

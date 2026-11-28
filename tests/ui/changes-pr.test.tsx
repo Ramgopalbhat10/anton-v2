@@ -214,6 +214,70 @@ describe('PR', () => {
 		expect(list.closest('.in-well')?.className).toContain('min-h-0');
 	});
 
+	it('renders GitHub review threads inline in the diff with replies nested', async () => {
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(
+			detail(13, {
+				discussion: [
+					{ id: 'line-50', kind: 'line', author: 'ana', body: 'Why drop the filter?', path: 'src/a.ts', line: 1, at: '2026-10-02T01:00:00Z', verdict: null, side: 'new' },
+					{ id: 'line-51', kind: 'line', author: 'ben', body: 'It was empty after archiving', path: 'src/a.ts', line: 1, at: '2026-10-02T02:00:00Z', verdict: null, side: 'new', replyTo: 'line-50' },
+				],
+			}),
+		);
+		api.pullDiff.mockReset().mockResolvedValue({ patch: patch('src/a.ts', 'new') });
+		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);
+		expect(await screen.findByText('ana')).toBeTruthy();
+		expect(screen.getAllByText('Why drop the filter?').length).toBeGreaterThan(0);
+		expect(screen.getByText('It was empty after archiving')).toBeTruthy();
+		expect(screen.getAllByText(/on GitHub/).length).toBeGreaterThan(0);
+		expect(screen.getByText(/1 reply/)).toBeTruthy();
+	});
+
+	it('collapses resolved threads and marks outdated ones', async () => {
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(
+			detail(13, {
+				discussion: [
+					{ id: 'line-50', kind: 'line', author: 'ana', body: 'Resolved note', path: 'src/a.ts', line: 1, at: '2026-10-02T01:00:00Z', verdict: null, side: 'new', resolved: true },
+					{ id: 'line-52', kind: 'line', author: 'ben', body: 'Stale note', path: 'src/a.ts', line: 1, at: '2026-10-02T02:00:00Z', verdict: null, side: 'new', outdated: true },
+				],
+			}),
+		);
+		api.pullDiff.mockReset().mockResolvedValue({ patch: patch('src/a.ts', 'new') });
+		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);
+		expect((await screen.findAllByText('Resolved note')).length).toBeGreaterThan(0);
+		const resolved = screen.getByText('resolved');
+		expect(resolved).toBeTruthy();
+		// The resolved thread renders collapsed: its details element is closed.
+		expect(resolved.closest('details')?.open).toBe(false);
+		expect(screen.getByText(/outdated/)).toBeTruthy();
+	});
+
+	it('nests replies under their starter in Discussion and jumps to the diff', async () => {
+		api.pulls.mockReset().mockResolvedValue({ pulls: [item(13, 'open', true)] });
+		api.pull.mockReset().mockResolvedValue(
+			detail(13, {
+				discussion: [
+					{ id: 'line-50', kind: 'line', author: 'ana', body: 'Starter body', path: 'src/a.ts', line: 1, at: '2026-10-02T01:00:00Z', verdict: null, side: 'new' },
+					{ id: 'line-51', kind: 'line', author: 'ben', body: 'Reply body', path: 'src/a.ts', line: 1, at: '2026-10-02T03:00:00Z', verdict: null, side: 'new', replyTo: 'line-50' },
+					{ id: 'note-1', kind: 'comment', author: 'grace', body: 'General note', path: null, line: null, at: '2026-10-02T02:00:00Z', verdict: null },
+				],
+			}),
+		);
+		api.pullDiff.mockReset().mockResolvedValue({ patch: patch('src/a.ts', 'new') });
+		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);
+		fireEvent.click(await screen.findByRole('tab', { name: /Discussion/ }));
+		const starter = await screen.findByText('Starter body');
+		expect(screen.getByText('Reply body')).toBeTruthy();
+		// The reply is nested under the starter in the same thread block, before the later general note.
+		const replyItem = screen.getByText('Reply body').closest('li');
+		expect(replyItem?.className).toContain('pl-9');
+		// The path:line reference is a jump link that switches to the Changes tab.
+		const jump = screen.getAllByRole('button', { name: /src\/a\.ts:1/ })[0]!;
+		fireEvent.click(jump);
+		await waitFor(() => expect(screen.getByRole('list', { name: 'Changed files' })).toBeTruthy());
+	});
+
 	it('says so when the thread has opened none', async () => {
 		api.pulls.mockResolvedValue({ pulls: [] });
 		renderWithQueries(<PrTab sessionId="s1" />, [[['session', 's1'], session()]]);

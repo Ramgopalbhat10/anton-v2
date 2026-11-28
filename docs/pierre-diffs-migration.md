@@ -182,6 +182,27 @@ Phase 3 finished moving Anton's patch rendering surfaces to `@pierre/diffs` and 
 
 ---
 
+## 4c. Phase 5, Part 2 Completed — Full Review Thread Fidelity & Discussion Jump Links (This Branch)
+
+### Host Thread State (`src/providers/github/host.ts`, `src/core/ports.ts`)
+- `pullRequestDetail` now fetches the GraphQL `reviewThreads` in parallel with the REST payload and merges per-thread `isResolved`/`isOutdated` into line comments, matching threads by comment database id (replies resolve through `in_reply_to_id`). GraphQL failures degrade gracefully to the REST `line`/`original_line` outdated heuristic, so Enterprise or permission-limited tokens keep working.
+- `PullRequestComment` carries `resolved`; the web API type mirrors it.
+
+### Threaded Inline Annotations (`src/web/components/workspace/diff-list.tsx`, `pr-tab.tsx`)
+- Foreign annotations are now threads: starters carry their `replies`, rendered nested like the host's conversation. Unresolved threads render open; resolved threads render collapsed behind a native `<details>` with a `resolved` badge, a reply count, and a first-line preview.
+- The mock fixture scripts three realistic threads anchored to lines the generated patch really shows (computed at startup), so browser verification exercises the real path.
+
+### Discussion Tab Threading & Jump Links (`src/web/components/workspace/pr-tab.tsx`, `diff-list.tsx`, `src/web/lib/workspace.ts`)
+- Discussion groups replies under their starters instead of floating loose in the timeline, shows `outdated`/`resolved` badges, and renders `path:line` as a jump button.
+- Jumping switches to the Changes section and uses the existing `focusChange` bus extended with line/side; `DiffList`/`ChangeList` forward a `scrollRequest` into the matching file's `DiffLines`, which reuses the virtualized `scrollSpanIntoView` machinery (extracted from the keyboard cursor path) with brief retries while the diff mounts.
+
+### Tests
+- `tests/github-host.test.ts`: GraphQL thread merge (resolved/outdated propagation to starters and replies) and graceful degradation when GraphQL is unreachable — 12/12.
+- `tests/ui/changes-pr.test.tsx`: inline threaded annotations with nested replies, collapsed resolved threads, outdated badges, Discussion nesting, jump-link section switching — 13/13.
+- Chromium fixture check: 3 inline threads (2 open, 1 collapsed-resolved), nested reply, Discussion jump links switching to the diff, zero console errors.
+
+---
+
 ## 5. Remaining Phases — Implementation Plan (Phases 4–5)
 
 Phase 3 completes the migration of existing patch rendering surfaces. The remaining work splits cleanly into two incremental phases:
@@ -239,7 +260,7 @@ Phase 3 completes the migration of existing patch rendering surfaces. The remain
 | **Phase 2** | On-demand context expansion (`loadDiffFiles` + `/diff-files` endpoints + `baseSha`) & all 5 PR #354 review fixes | `files.ts`, `pull-requests.ts`, `sessions.ts`, `host.ts`, `pierre-diffs.ts`, `diff-list.tsx`, `git-tab.tsx`, `pr-tab.tsx`, `history-tab.tsx` | **Done** |
 | **Phase 3** | Thread `show` diff cards, PR/History virtualization, post-hydration annotation sync, remove `highlightDiff` | `show-card.tsx`, `diff-list.tsx`, `pr-tab.tsx`, `history-tab.tsx`, `highlight.ts` | **Done** |
 | **Phase 4** | Shared workspace `DiffWorkerProvider`, Files tab `<File>` + `<Virtualizer>`, artifact source preview evaluation (rejected, invariant documented) | `task-workspace.tsx`, `file-view.tsx`, `diff-scroll-container.tsx`, `diff-list.tsx` | **Done** |
-| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Part 1 done** (ranges, hunk/file nav, `<UnresolvedFile>` rejected); **part 2 mostly done** (GitHub review threads render as read-only inline annotations via REST `side` + the `line`/`original_line` outdated heuristic; Discussion click-to-jump links still open) |
+| **Phase 5** | Multi-line range commenting, inline GitHub PR review threads, hunk/file jump navigation, `<UnresolvedFile>` evaluation | `review.ts`, `diff-list.tsx`, `pr-tab.tsx`, `ports.ts`, `github/host.ts` | **Done** |
 
 ### Standard Verification Gates (Every Remaining Phase)
 - `npm run check:types` and `npm run lint:hooks`
