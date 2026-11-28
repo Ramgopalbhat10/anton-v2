@@ -451,21 +451,23 @@ function DiffLines({
 				<Fragment>
 					{(notes ?? []).map((note, index) => (
 						<details key={`foreign-${index}`} open={!note.resolved} className="in-pop group/details my-1.5 mx-2 w-[min(480px,calc(100%-1rem))] px-2.5 py-2 font-sans">
-							<summary className="flex cursor-pointer list-none items-center gap-1.5 text-micro text-(--text-3) outline-none">
-								<Icon icon={MessageSquare} size={11} className="shrink-0" />
-								<span className="font-medium text-(--text-2)">{note.author}</span>
-								{note.outdated ? <span>· outdated</span> : null}
-								{note.resolved ? <span className="rounded-control bg-(--ok-soft) px-1 py-px text-(--ok)">resolved</span> : null}
-								<span>· on GitHub</span>
-								{(note.replies?.length ?? 0) > 0 ? <span>· {note.replies!.length} {note.replies!.length === 1 ? 'reply' : 'replies'}</span> : null}
+							<summary className="flex cursor-pointer list-none flex-col gap-0.5 text-micro text-(--text-3) outline-none">
+								<span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+									<Icon icon={MessageSquare} size={11} className="shrink-0" />
+									<span className="font-medium text-(--text-2)">{note.author}</span>
+									{note.outdated ? <span className="rounded-control bg-(--warn-soft) px-1 py-px text-(--warn)">outdated</span> : null}
+									{note.resolved ? <span className="rounded-control bg-(--ok-soft) px-1 py-px text-(--ok)">resolved</span> : null}
+									<span>· on GitHub</span>
+									{(note.replies?.length ?? 0) > 0 ? <span>· {note.replies!.length} {note.replies!.length === 1 ? 'reply' : 'replies'}</span> : null}
+								</span>
 								<span className="truncate group-open/details:hidden">{note.body.split('\n')[0]}</span>
 							</summary>
 							<div className="mt-1 flex flex-col gap-2">
-								<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{note.body}</span>
+								<span className="text-small leading-[18px] break-words whitespace-pre-wrap text-(--text)">{note.body}</span>
 								{(note.replies ?? []).map((reply, at) => (
 									<div key={at} className="flex flex-col gap-0.5 border-l-2 border-l-(--line) pl-2">
 										<span className="text-micro font-medium text-(--text-2)">{reply.author}</span>
-										<span className="text-small leading-[18px] whitespace-pre-wrap text-(--text)">{reply.body}</span>
+										<span className="text-small leading-[18px] break-words whitespace-pre-wrap text-(--text)">{reply.body}</span>
 									</div>
 								))}
 							</div>
