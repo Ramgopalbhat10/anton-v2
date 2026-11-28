@@ -445,6 +445,13 @@ export function jobNotice(id: string, now = Date.now()): string {
 	return lines.join('');
 }
 
+/** The reply's jobs that ended with exit 0, each with when it started: one started before a file change ran on older code. */
+export function passedJobs(id: string): Array<{ command: string; at: number }> {
+	const own = tasks.get(id);
+	if (!own) return [];
+	return [...own.jobs.values()].filter((job) => own.reply.has(job.number) && job.status === 'exited' && job.exitCode === 0).map((job) => ({ command: job.command, at: job.startedAt }));
+}
+
 export function startJobsGate(id: string): void {
 	tasks.get(id)?.reply.clear();
 }

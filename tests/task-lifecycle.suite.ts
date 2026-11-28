@@ -948,7 +948,7 @@ test('General settings decide how a new task starts when the launcher does not s
 	await assert.rejects(() => setGeneralSettings({ ...before, titleModel: 'vercel/plain/no-reasoning' }), /not one/);
 	await setGeneralSettings(before);
 	await assert.rejects(() => setGeneralSettings({ ...before, model: 'openrouter/nobody/unknown' }), /Unknown model/);
-	assert.deepEqual(before.backgroundModels, { webDigest: null, vision: null, compaction: null }, 'background work uses its defaults unless a model is chosen');
+	assert.deepEqual(before.backgroundModels, { webDigest: null, vision: null, compaction: null, replyCheck: null }, 'background work uses its defaults unless a model is chosen');
 	await assert.rejects(() => setGeneralSettings({ ...before, backgroundModels: { ...before.backgroundModels, vision: 'openrouter/plain/no-reasoning' } }), /does not read images/);
 	await assert.rejects(() => setGeneralSettings({ ...before, backgroundModels: { ...before.backgroundModels, webDigest: 'openrouter/nobody/unknown' } }), /Unknown model/);
 	await setGeneralSettings({
@@ -965,8 +965,8 @@ test('General settings decide how a new task starts when the launcher does not s
 		compactAt: null,
 		claudeCodeCompactAt: 200_000,
 		agentModels: { explorer: null, tester: null, browser: null, computer: null, reviewer: null },
-		backgroundModels: { webDigest: 'openrouter/plain/no-reasoning', vision: null, compaction: 'openrouter/plain/no-reasoning' },
-		backgroundReasoning: { webDigest: 'low', vision: 'high', compaction: 'medium' },
+		backgroundModels: { webDigest: 'openrouter/plain/no-reasoning', vision: null, compaction: 'openrouter/plain/no-reasoning', replyCheck: null },
+		backgroundReasoning: { webDigest: 'low', vision: 'high', compaction: 'medium', replyCheck: null },
 	});
 	const { backgroundModel, backgroundReasoning } = await import('../src/services/models/general.ts');
 	const { compactionFor } = await import('../src/services/context/context-usage.ts');
@@ -2082,8 +2082,8 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 	assert.match(listing, /^readme-link -> README\.md$/m);
 	assert.equal(await listRepoFiles(session.id, { glob: '*.ts' }), `src/app.ts\n${deep}`);
 	assert.equal(await listRepoFiles(session.id, { path: 'src', glob: 'app.*' }), 'src/app.ts');
-	assert.equal(await readRepoFile(session.id, 'src/app.ts'), '1\timport { answer } from "./deep";\n2\tconsole.log(Answer);\n3\t');
-	assert.match(await readRepoFile(session.id, 'src/app.ts', 2, 1), /^2\tconsole\.log\(Answer\);\n\(lines 2-2 of 3; read on with offset 3\)$/);
+	assert.equal(await readRepoFile(session.id, 'src/app.ts'), '1→import { answer } from "./deep";\n2→console.log(Answer);\n3→');
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 2, 1), /^2→console\.log\(Answer\);\n\(lines 2-2 of 3; read on with offset 3\)$/);
 	assert.match(await readRepoFile(session.id, 'big.bin'), /too large to read without a workspace/);
 	assert.match(await readRepoFile(session.id, 'readme-link'), /link to README\.md/);
 	assert.match(await readRepoFile(session.id, 'missing.ts'), /does not exist/);
@@ -2095,7 +2095,7 @@ test('a task reads the repo without a sandbox, clone or branch', async () => {
 
 	// Another GitHub repository, named by repo, is read the same way, from its own download; a chat reads one too.
 	assert.equal(await listRepoFiles(session.id, { repo: 'acme/other@snapshot-test', glob: '*.ts' }), `src/app.ts\n${deep}`);
-	assert.match(await readRepoFile(session.id, 'src/app.ts', 1, 1, 'acme/other@snapshot-test'), /^1\timport \{ answer \}/);
+	assert.match(await readRepoFile(session.id, 'src/app.ts', 1, 1, 'acme/other@snapshot-test'), /^1→import \{ answer \}/);
 	assert.equal(await searchRepo(session.id, { pattern: 'answer =', repo: 'acme/other@snapshot-test' }), `${deep}:1: export const answer = 42;`);
 	assert.equal(archives.length, before + 2, 'one more download for the other repository, then its reads come from disk');
 	assert.equal(await listRepoFiles(session.id, { repo: 'acme/demo', glob: 'app.*' }), 'src/app.ts', "the task's own repository by name is its own snapshot");

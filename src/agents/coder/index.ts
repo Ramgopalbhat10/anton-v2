@@ -50,6 +50,7 @@ import { noteDelivery } from '../../services/tasks/joins.ts';
 import { checkReply, stallReminder, startStallCheck } from '../../services/replies/reply-check.ts';
 import { startAwaitingRun } from '../../services/replies/asks.ts';
 import { finishReview, isRequest, noteJoined, noteRequest, startFinishReview } from '../../services/replies/finish-review.ts';
+import { startPassedChecks } from '../../services/replies/passed-checks.ts';
 import { openedThisReply, pushGate, startPushGate } from '../../services/replies/push-gate.ts';
 import { prePushReview, startPrePushReview } from '../../services/replies/pre-push-review.ts';
 import { reviewAnswersGate, startReviewAnswers } from '../../services/git/review-answers.ts';
@@ -357,6 +358,7 @@ export function Coder({ id }: AgentProps) {
 			startStallCheck(id);
 			startAwaitingRun(id);
 			startFinishReview(id);
+			startPassedChecks(id);
 			startCompletionGate(id);
 			startJobsGate(id);
 			startCheckGate(id);

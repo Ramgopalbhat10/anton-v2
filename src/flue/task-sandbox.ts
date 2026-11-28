@@ -84,11 +84,11 @@ const READ_MORE = 'To read several files you already know you need, pass the oth
 
 const READ_DESCRIPTION: Record<ToolProfile, string> = {
 	edit:
-		"Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of edit's oldText). " +
+		"Read a file with line numbers: each line comes as its number, →, then the line exactly as in the file (leave the number and the → out of edit's oldText). " +
 		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself. ' +
 		READ_MORE,
 	patch:
-		'Read a file with line numbers: each line comes as its number, a tab, then the line (leave the numbers out of a patch). ' +
+		'Read a file with line numbers: each line comes as its number, →, then the line exactly as in the file (leave the number and the → out of a patch). ' +
 		'Long files come in pages; pass offset to read on. An image (PNG, JPEG, GIF or WebP) comes back as the picture itself. ' +
 		READ_MORE,
 };

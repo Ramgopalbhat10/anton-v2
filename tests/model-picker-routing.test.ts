@@ -57,7 +57,7 @@ test('defaults, projects, helpers, coordinators, background work and automations
 		const settings = { ...before, model: `${first}#via=groq`, reasoning: 'low' as const,
 			titleModel: `${second}#sort=price`,
 			agentModels: { ...before.agentModels, tester: { model: `${vercel}#sort=throughput`, reasoning: 'low' as const } },
-			backgroundModels: { webDigest: `${second}#via=deepinfra`, vision: `${first}#sort=latency`, compaction: `${second}#sort=price` },
+			backgroundModels: { webDigest: `${second}#via=deepinfra`, vision: `${first}#sort=latency`, compaction: `${second}#sort=price`, replyCheck: null },
 			backgroundReasoning: { ...before.backgroundReasoning, compaction: 'low' as const } };
 		await setGeneralSettings(settings);
 		assert.deepEqual(await generalSettings(), settings);

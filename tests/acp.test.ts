@@ -849,7 +849,7 @@ test('the agent\'s file reads become Anton tool steps, and Anton\'s instructions
 		effort: null,
 		callTool: async (_id, name) => {
 			calls.push(name);
-			return { content: [{ type: 'text', text: '1\texport const a = 1;' }], isError: false };
+			return { content: [{ type: 'text', text: '1→export const a = 1;' }], isError: false };
 		},
 	});
 	const seen: RuntimeEvent[] = [];

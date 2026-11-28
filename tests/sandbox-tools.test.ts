@@ -136,3 +136,36 @@ test('edits and writes to one file in the same step wait for each other, so none
 	await Promise.all([write({ path: 'a.ts', content: 'x y' }), edit({ path: 'a.ts', oldText: 'y', newText: 'Y' })]);
 	assert.equal(disk['a.ts'], 'x Y');
 });
+
+test('an edit one tab too deep on every line still lands, at the file\'s own indentation, and says so', async () => {
+	// Prod, Nov 2026: Devin's oldText for a line read as `133→\t\t\t\t<Kbd …` had five tabs to the file's four.
+	const file = 'function Header() {\n\treturn (\n\t\t<div>\n\t\t\t<Kbd keys="esc" />\n\t\t</div>\n\t);\n}\n';
+	const { disk, edit } = editTool({ 'a.tsx': file });
+	const result = await edit({ path: 'a.tsx', oldText: '\t\t\t\t<Kbd keys="esc" />\n\t\t\t</div>', newText: '\t\t\t\t<Expand />\n\t\t\t\t<Kbd keys="esc" />\n\t\t\t</div>' });
+	assert.equal(disk['a.tsx'], 'function Header() {\n\treturn (\n\t\t<div>\n\t\t\t<Expand />\n\t\t\t<Kbd keys="esc" />\n\t\t</div>\n\t);\n}\n');
+	assert.match((result.content[0] as { text: string }).text, /^Successfully edited a\.tsx\nits oldText matched only with one tab less indentation on each line; newText was shifted the same way/);
+});
+
+test('an edit that copied read\'s line numbers still lands', async () => {
+	const { disk, edit } = editTool({ 'a.ts': 'const a = 1;\nconst b = 2;\n' });
+	await edit({ path: 'a.ts', edits: [{ oldText: '2→const b = 2;', newText: '2→const b = 3;' }] });
+	assert.equal(disk['a.ts'], 'const a = 1;\nconst b = 3;\n');
+});
+
+test('a shifted oldText is taken only when it names one place', async () => {
+	const { disk, edit } = editTool({ 'a.ts': '\t\tx();\n\ty();\n\t\tx();\n' });
+	await assert.rejects(edit({ path: 'a.ts', oldText: '\t\t\tx();', newText: 'z();' }), /Could not find the exact text/);
+	await assert.rejects(edit({ path: 'a.ts', oldText: '\t\t\t\tx();', newText: 'z();' }), /Could not find the exact text/);
+	assert.equal(disk['a.ts'], '\t\tx();\n\ty();\n\t\tx();\n');
+	await edit({ path: 'a.ts', oldText: '\t\ty();\n\t\t\tx();', newText: '\t\ty();\n\t\t\tz();' });
+	assert.equal(disk['a.ts'], '\t\tx();\n\ty();\n\t\tz();\n');
+});
+
+test('a miss shows where the file has the text, or which earlier edit in the call took it', async () => {
+	const { edit } = editTool({ 'a.tsx': 'render(<Page />);\nview.rerender(<Page />);\n' });
+	await assert.rejects(
+		edit({ path: 'a.tsx', edits: [{ oldText: 'render(<Page />)', newText: 'show()', replaceAll: true }, { oldText: 'view.rerender(<Page />);', newText: 'view.rerender(show());' }] }),
+		/Edit 2 of 2: .*The file had this text, but edit 1 of this call changed it \(its replaceAll matched here too\)/,
+	);
+	await assert.rejects(edit({ path: 'a.tsx', oldText: 'view.rerender(<Page />)  ;', newText: '' }), /Its first line is line 2 of the file, which reads:\n2→view\.rerender\(<Page \/>\);/);
+});
