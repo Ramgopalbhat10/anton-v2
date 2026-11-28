@@ -10,7 +10,7 @@ import { type FileImages as FileImagesValue } from '@/components/content/markdow
 import { Segmented, SegmentedItem } from '@/components/kit/instrument';
 import { Icon, Spinner } from '@/components/kit/signal';
 import { hashText } from '@/lib/highlight';
-import { AURA_DIFF_THEMES, DiffWorkerProvider } from '@/lib/pierre-diffs';
+import { ANTON_DIFF_UNSAFE_CSS, AURA_DIFF_THEMES, DiffWorkerProvider } from '@/lib/pierre-diffs';
 import { useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
@@ -246,6 +246,7 @@ function SourceView({ path, contents, markedLine }: { path: string; contents: st
 			preferredHighlighter: 'highlights' as const,
 			disableFileHeader: true,
 			overflow: 'scroll' as const,
+			unsafeCSS: ANTON_DIFF_UNSAFE_CSS,
 			tokenizeMaxLineLength: 4_000,
 			onPostRender: handlePostRender,
 		}),

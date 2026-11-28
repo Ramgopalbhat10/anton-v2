@@ -34,6 +34,25 @@ export function ensureAuraDiffThemes(): void {
 }
 
 export const ANTON_DIFF_UNSAFE_CSS = `
+/* The diff's horizontal scroll lives in the shadow root, which document scrollbar rules never reach;
+   mirror the app's own thin-scrollbar treatment so both axes match. */
+* {
+	scrollbar-color: var(--line-strong) transparent;
+	scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--bg-active);
+	border-radius: 999px;
+	border: 3px solid transparent;
+	background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
 [data-separator='line-info'] {
 	font-size: var(--fs-11);
 	color: var(--text-3);
